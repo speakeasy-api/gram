@@ -14,6 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -145,8 +148,28 @@ func createIssuerGatedMintToolset(t *testing.T, ctx context.Context, ti *testIns
 		Slug:                   slug,
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// The mint target's issuer URL comes from the toolset's wrapper
+	// mcp_server endpoint, so publish the toolset through one.
+	wrapperID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:         wrapperID,
+		ProjectID:  *authCtx.ProjectID,
+		Name:       pgtype.Text{String: slug, Valid: true},
+		Slug:       pgtype.Text{String: slug + "-wrapper", Valid: true},
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{},
+		McpServerID:    wrapper.ID,
+		Slug:           slug,
 	})
 	require.NoError(t, err)
 

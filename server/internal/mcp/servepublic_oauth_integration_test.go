@@ -46,7 +46,7 @@ func TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken(t *testing.
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true /* PKCE required */)
 	access := upstream.runFullFlow(t)
@@ -76,7 +76,7 @@ func TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair(t *testing.T) {
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true)
 	upstream.runFullFlow(t)
@@ -118,7 +118,7 @@ func TestServePublic_ExternalOAuth20_RefreshDoesNotRotateUpstreamPair(t *testing
 		IsPublic: true,
 		Metadata: idp.OAuth20Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 
 	upstream := newUpstreamFlow(t, idp.OAuth20URL, false /* no PKCE */)
 	upstream.runFullFlow(t)
@@ -161,7 +161,7 @@ func TestServePublic_ExternalOAuth21_PostRefreshTokenForwards(t *testing.T) {
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true)
 	upstream.runFullFlow(t)
@@ -442,7 +442,7 @@ func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing
 	expiredJWT, err := token.SignedString(idp.SigningKey())
 	require.NoError(t, err)
 
-	w, err := servePublicHTTP(t, t.Context(), ti, result.Toolset.McpSlug.String, makeInitializeBody(), expiredJWT, nil)
+	w, err := servePublicHTTP(t, t.Context(), ti, result.Toolset.Slug, makeInitializeBody(), expiredJWT, nil)
 	require.NoError(t, err, "external/passthrough mode must NOT validate JWT claims; expired upstream JWT should be forwarded")
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
 		"WWW-Authenticate must NOT be set in passthrough mode regardless of bearer freshness")

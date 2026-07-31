@@ -22,8 +22,10 @@ import (
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -64,20 +66,15 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 					ProjectID:              *authCtx.ProjectID,
 					Name:                   "Public Test MCP Server",
 					Slug:                   "public-test-toolset",
-					McpSlug:                conv.ToPGText("public-test-toolset"),
 					Description:            conv.ToPGText("A public test MCP server"),
 					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
 				})
 				require.NoError(t, err)
-
-				// Update to make it public (since CreateToolset doesn't have McpIsPublic field)
-				err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-					McpIsPublic: true,
-					ID:          toolset.ID,
-					ProjectID:   toolset.ProjectID,
+				createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+					toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+					endpointSlug: "public-test-toolset",
+					visibility:   mcpservers.VisibilityPublic,
 				})
-				require.NoError(t, err)
 
 				return authCtx.ActiveOrganizationID
 			},
@@ -94,17 +91,21 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				t.Helper()
 				// Create a private toolset using the same organization from auth context
-				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+				toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 					OrganizationID:         authCtx.ActiveOrganizationID,
 					ProjectID:              *authCtx.ProjectID,
 					Name:                   "Private Test MCP Server",
 					Slug:                   "private-test-toolset",
-					McpSlug:                conv.ToPGText("private-test-toolset"),
 					Description:            conv.ToPGText("A private test MCP server"),
 					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
 				})
 				require.NoError(t, err)
+				createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+					toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+					endpointSlug: "private-test-toolset",
+					visibility:   mcpservers.VisibilityPrivate,
+				})
+
 				// Toolset is private by default (mcp_is_public = false)
 
 				return authCtx.ActiveOrganizationID
@@ -124,17 +125,21 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				t.Helper()
 				// Create a private toolset using the same organization from auth context
-				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+				toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 					OrganizationID:         authCtx.ActiveOrganizationID,
 					ProjectID:              *authCtx.ProjectID,
 					Name:                   "Private Org Test MCP Server",
 					Slug:                   "private-org-toolset",
-					McpSlug:                conv.ToPGText("private-org-toolset"),
 					Description:            conv.ToPGText("A private org test MCP server"),
 					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
 				})
 				require.NoError(t, err)
+				createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+					toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+					endpointSlug: "private-org-toolset",
+					visibility:   mcpservers.VisibilityPrivate,
+				})
+
 				// Toolset is private by default (mcp_is_public = false)
 
 				return authCtx.ActiveOrganizationID
@@ -163,17 +168,21 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				t.Helper()
 				// Create a private toolset using the same organization from auth context
-				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+				toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 					OrganizationID:         authCtx.ActiveOrganizationID,
 					ProjectID:              *authCtx.ProjectID,
 					Name:                   "Wrong Org Test MCP Server",
 					Slug:                   "wrong-org-toolset",
-					McpSlug:                conv.ToPGText("wrong-org-toolset"),
 					Description:            conv.ToPGText("A wrong org test MCP server"),
 					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
 				})
 				require.NoError(t, err)
+				createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+					toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+					endpointSlug: "wrong-org-toolset",
+					visibility:   mcpservers.VisibilityPrivate,
+				})
+
 				// Toolset is private by default (mcp_is_public = false)
 
 				return authCtx.ActiveOrganizationID
@@ -272,20 +281,15 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test MCP Server with Instructions",
 		Slug:                   "test-instructions-toolset",
-		McpSlug:                conv.ToPGText("test-instructions-toolset"),
 		Description:            conv.ToPGText("A test MCP server with instructions"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	// Make it public
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "test-instructions-toolset",
+		visibility:   mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
 
 	// Set metadata with instructions
 	instructions := "Test Hub - Search and analyze test data\n\n## Key Capabilities\n\n- Search test records\n- Filter by status\n\n## Usage Patterns\n\nUse search before filtering"
@@ -338,20 +342,15 @@ func TestServeInstallPage_ToolDetails(t *testing.T) {
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Tool Details Test Server",
 		Slug:                   "tool-details-test",
-		McpSlug:                conv.ToPGText("tool-details-test"),
 		Description:            conv.ToPGText("A test MCP server with tools"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	// Make it public
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "tool-details-test",
+		visibility:   mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
 
 	deploymentID, err := deployments_repo.New(testInstance.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      *authCtx.ProjectID,
@@ -475,35 +474,16 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Custom Domain Install Test",
 		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
 		Description:            conv.ToPGText("toolset linked to a custom domain"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	// Make it public so auth isn't the reason for rejection.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:      uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug:   mcpSlug,
+		visibility:     mcpservers.VisibilityPublic,
+		customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 	})
-	require.NoError(t, err)
-
-	// Link the toolset to the custom domain.
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// Create a different domain belonging to another organization.
 	otherDomain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
@@ -582,34 +562,16 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Correct Domain Install Test",
 		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
 		Description:            conv.ToPGText("toolset linked to a custom domain"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	// Make it public and link it to the custom domain.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:      uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug:   mcpSlug,
+		visibility:     mcpservers.VisibilityPublic,
+		customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 	})
-	require.NoError(t, err)
-
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// Request through the correct custom domain context.
 	correctCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
@@ -631,10 +593,10 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
 }
 
-// TestServeInstallPage_CustomDomain_PlatformDomainStillWorks verifies that a
-// toolset linked to a custom domain can still be accessed via the platform
-// domain (i.e. when no custom domain context is present in the request).
-func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
+// TestServeInstallPage_CustomDomain_PlatformDomainNotFound verifies that a
+// custom-domain endpoint is NOT reachable via the platform domain: endpoint
+// addressing is strictly scoped to the request's domain context.
+func TestServeInstallPage_CustomDomain_PlatformDomainNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
 
@@ -669,34 +631,16 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Platform Domain Install Test",
 		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
 		Description:            conv.ToPGText("toolset linked to a custom domain"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	// Make it public and link it to the custom domain.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:      uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug:   mcpSlug,
+		visibility:     mcpservers.VisibilityPublic,
+		customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 	})
-	require.NoError(t, err)
-
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// Request via the platform domain — no custom domain in context.
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
@@ -708,8 +652,8 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	err = testInstance.service.ServeInstallPage(rr, req)
 
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rr.Code)
-	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Server Not Found")
 }
 
 // TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound verifies that
@@ -754,33 +698,16 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Org A Toolset",
 		Slug:                   "org-a-" + sharedMCPSlug,
-		McpSlug:                conv.ToPGText(sharedMCPSlug),
 		Description:            conv.ToPGText("toolset on org A, will be deleted"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolsetA.ID,
-		ProjectID:   toolsetA.ProjectID,
+	serverA, _ := createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:      uuid.NullUUID{UUID: toolsetA.ID, Valid: true},
+		endpointSlug:   sharedMCPSlug,
+		visibility:     mcpservers.VisibilityPublic,
+		customDomainID: uuid.NullUUID{UUID: domainA.ID, Valid: true},
 	})
-	require.NoError(t, err)
-
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolsetA.Name,
-		Description:            toolsetA.Description,
-		DefaultEnvironmentSlug: toolsetA.DefaultEnvironmentSlug,
-		McpSlug:                toolsetA.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolsetA.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domainA.ID, Valid: true},
-		ToolSelectionMode:      toolsetA.ToolSelectionMode,
-		Slug:                   toolsetA.Slug,
-		ProjectID:              toolsetA.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// --- Org B: the active toolset's org ---
 
@@ -823,37 +750,47 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 		ProjectID:              projectBID,
 		Name:                   "Org B Toolset",
 		Slug:                   "org-b-" + sharedMCPSlug,
-		McpSlug:                conv.ToPGText(sharedMCPSlug),
 		Description:            conv.ToPGText("toolset on org B, stays active"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolsetB.ID,
-		ProjectID:   toolsetB.ProjectID,
+	serverBID, err := uuid.NewV7()
+	require.NoError(t, err)
+	serverB, err := mcpservers_repo.New(testInstance.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                  serverBID,
+		ProjectID:           projectBID,
+		Name:                conv.ToPGText("Org B Server"),
+		Slug:                conv.ToPGText("org-b-server-" + uuid.NewString()[:8]),
+		EnvironmentID:       uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{},
+		ToolsetID:           uuid.NullUUID{UUID: toolsetB.ID, Valid: true},
+		Visibility:          mcpservers.VisibilityPublic,
+	})
+	require.NoError(t, err)
+	_, err = mcpendpoints_repo.New(testInstance.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:      projectBID,
+		CustomDomainID: uuid.NullUUID{UUID: domainB.ID, Valid: true},
+		McpServerID:    serverB.ID,
+		Slug:           sharedMCPSlug,
 	})
 	require.NoError(t, err)
 
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolsetB.Name,
-		Description:            toolsetB.Description,
-		DefaultEnvironmentSlug: toolsetB.DefaultEnvironmentSlug,
-		McpSlug:                toolsetB.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolsetB.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domainB.ID, Valid: true},
-		ToolSelectionMode:      toolsetB.ToolSelectionMode,
-		Slug:                   toolsetB.Slug,
-		ProjectID:              toolsetB.ProjectID,
-	})
-	require.NoError(t, err)
-
-	// Soft-delete toolset A.
+	// Soft-delete toolset A along with its wrapper and endpoints, mirroring
+	// the toolsets service delete path.
 	_, err = testInstance.toolsetRepo.DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{
 		Slug:      toolsetA.Slug,
+		ProjectID: toolsetA.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = mcpendpoints_repo.New(testInstance.conn).SoftDeleteMCPEndpointsByMCPServerID(ctx, mcpendpoints_repo.SoftDeleteMCPEndpointsByMCPServerIDParams{
+		McpServerID: serverA.ID,
+		ProjectID:   toolsetA.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = mcpservers_repo.New(testInstance.conn).DeleteMCPServer(ctx, mcpservers_repo.DeleteMCPServerParams{
+		ID:        serverA.ID,
 		ProjectID: toolsetA.ProjectID,
 	})
 	require.NoError(t, err)
@@ -898,19 +835,15 @@ func TestServeInstallPage_ClaudeDesktop_NoSecurityInputs(t *testing.T) {
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Public Claude Desktop Toolset",
 		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
 		Description:            conv.ToPGText("public toolset with no security inputs"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: mcpSlug,
+		visibility:   mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -943,17 +876,20 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "claude-desktop-private-" + uuid.New().String()[:8]
-	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Claude Desktop Toolset",
 		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
 		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: mcpSlug,
+		visibility:   mcpservers.VisibilityPrivate,
+	})
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -993,7 +929,7 @@ func TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader(t *testing.
 		IsPublic:     false,
 		ProviderType: "",
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -1032,10 +968,13 @@ func TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey(t *testing.T) {
 		Slug:                   "private-usi-ts-" + uuid.NewString()[:8],
 		Description:            conv.ToPGText("Private toolset gated by a user_session_issuer"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: mcpSlug,
+		visibility:   mcpservers.VisibilityPrivate,
+	})
 
 	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 
@@ -1081,10 +1020,13 @@ func TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey(t *testing.T) {
 		Slug:                   "bridged-usi-ts-" + uuid.NewString()[:8],
 		Description:            conv.ToPGText("Private toolset bridged by an issuer-gated mcp_server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("bridged-usi-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "bridged-usi-mcp-" + uuid.NewString()[:8],
+		visibility:   mcpservers.VisibilityPrivate,
+	})
 
 	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 
@@ -1111,11 +1053,11 @@ func TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey(t *testing.T) {
 	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated mcp_server install command must not reference the GRAM_KEY env var")
 }
 
-// TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
-// WITHOUT a custom domain can still be loaded via the platform domain when the
-// logged-in user's organization happens to have a custom domain configured. This
-// guards against a regression where resolveDomainIDFromContext returning the
-// org's domain from auth context would prevent the slug-only fallback.
+// TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a
+// platform-domain endpoint still resolves when the logged-in user's
+// organization happens to have a custom domain configured — endpoint
+// resolution is scoped by the request's domain context, never the auth
+// context's organization domain.
 func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
@@ -1149,24 +1091,20 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 
 	// Create a toolset WITHOUT linking it to any custom domain.
 	mcpSlug := "no-domain-" + uuid.New().String()[:8]
-	_, err = testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "No Domain Toolset",
 		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
 		Description:            conv.ToPGText("toolset with no custom domain"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	// Make the toolset public.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicBySlug(ctx, toolsets_repo.SetToolsetMCPPublicBySlugParams{
-		McpIsPublic: true,
-		McpSlug:     pgtype.Text{String: mcpSlug, Valid: true},
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: mcpSlug,
+		visibility:   mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
 
 	// Build a request through the platform domain (no custom domain context)
 	// but with a valid session token so that auth context is populated.
@@ -1202,19 +1140,15 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 		ProjectID:              projectID,
 		Name:                   "External MCP Filter Test",
 		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
 		Description:            conv.ToPGText("public toolset proxying an external MCP server with header configs"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: mcpSlug,
+		visibility:   mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      projectID,
@@ -1441,22 +1375,13 @@ func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *t
 		Slug:                   "toolset-bridge-" + uuid.NewString()[:8],
 		Description:            conv.ToPGText("Toolset behind an mcp_server bridge"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("toolset-bridge-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
 	})
 	require.NoError(t, err)
 
 	endpointSlug := "bridge-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
 		name:         "Bridged Server",
-		visibility:   mcpservers.VisibilityPrivate, // intentionally private to confirm toolset.McpIsPublic wins
+		visibility:   mcpservers.VisibilityPublic,
 		endpointSlug: endpointSlug,
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
@@ -1468,9 +1393,8 @@ func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *t
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeInstallPage(rr, req))
-	// Toolset is public, so even though the mcp_server is private the install page renders.
 	require.Equal(t, http.StatusOK, rr.Code,
-		"toolset.McpIsPublic should drive the gate when the mcp_server bridges to a toolset")
+		"public mcp_server visibility gates the install page for toolset-backed servers")
 	body := rr.Body.String()
 	assert.Contains(t, body, endpointSlug, "rendered page should reference the mcp_endpoint slug as the install URL")
 }
@@ -1496,16 +1420,13 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 		Slug:                   "prefer-mcp-" + uuid.NewString()[:8],
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("prefer-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "prefer-mcp-" + uuid.NewString()[:8],
+		visibility:   mcpservers.VisibilityPrivate,
 	})
-	require.NoError(t, err)
 
 	endpointSlug := "prefer-endpoint-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1564,16 +1485,13 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		Slug:                   "fallback-" + uuid.NewString()[:8],
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("fallback-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "fallback-" + uuid.NewString()[:8],
+		visibility:   mcpservers.VisibilityPrivate,
 	})
-	require.NoError(t, err)
 
 	endpointSlug := "fallback-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{

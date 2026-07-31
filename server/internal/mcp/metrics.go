@@ -38,40 +38,9 @@ const (
 	oauthFlowStageToken oauthFlowStage = "token"
 )
 
-// toolsetFallbackSurface is the closed set of runtime surfaces that can fall
-// back from mcp_endpoints addressing to the direct toolsets.mcp_slug lookup.
-// It dimensions the `mcp.toolset_slug_fallback` counter — the contraction
-// signal for the toolsets → mcp_servers data-model swap: once the backfill
-// has wrapped every published toolset, this counter trending to zero proves
-// the direct-lookup path is unused and can be removed. Kept as a bounded
-// enum so the metric stays low-cardinality.
-type toolsetFallbackSurface string
-
-const (
-	// toolsetFallbackSurfaceServe: /mcp/{slug} runtime requests (ServePublic).
-	toolsetFallbackSurfaceServe toolsetFallbackSurface = "serve"
-	// toolsetFallbackSurfaceOAuth: issuer-gated OAuth handlers resolving via
-	// LoadResolvedMcpEndpointBySlug (authorize, token, register, revoke,
-	// consent, callbacks).
-	toolsetFallbackSurfaceOAuth toolsetFallbackSurface = "oauth"
-	// toolsetFallbackSurfaceProtectedResource: RFC 9728 well-known
-	// protected-resource metadata.
-	toolsetFallbackSurfaceProtectedResource toolsetFallbackSurface = "wellknown_protected_resource"
-	// toolsetFallbackSurfaceAuthorizationServer: RFC 8414 well-known
-	// authorization-server metadata.
-	toolsetFallbackSurfaceAuthorizationServer toolsetFallbackSurface = "wellknown_authorization_server"
-)
-
 type metrics struct {
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
-
-	// toolsetSlugFallbackCounter counts requests that missed mcp_endpoints
-	// addressing entirely and were served by the direct toolsets.mcp_slug
-	// lookup. After the toolsets → mcp_servers backfill this must trend to
-	// zero; it is the observation gate for contracting the direct-lookup
-	// path and the toolsets MCP-publishing columns.
-	toolsetSlugFallbackCounter metric.Int64Counter
 
 	// oauthFlow{Started,Completed,Failed,Declined}Counter instrument the
 	// user-facing OAuth flow as a unit. They decompose a flow's terminal
@@ -150,38 +119,14 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth flow declined counter", attr.SlogError(err))
 	}
 
-	toolsetSlugFallbackCounter, err := meter.Int64Counter(
-		"mcp.toolset_slug_fallback",
-		metric.WithDescription("Requests resolved by the direct toolsets.mcp_slug lookup after a true mcp_endpoints address miss"),
-		metric.WithUnit("{request}"),
-	)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create toolset slug fallback counter", attr.SlogError(err))
-	}
-
 	return &metrics{
-		mcpToolCallCounter:         mcpToolCallCounter,
-		mcpRequestDuration:         mcpRequestDuration,
-		toolsetSlugFallbackCounter: toolsetSlugFallbackCounter,
-		oauthFlowStartedCounter:    oauthFlowStartedCounter,
-		oauthFlowCompletedCounter:  oauthFlowCompletedCounter,
-		oauthFlowFailedCounter:     oauthFlowFailedCounter,
-		oauthFlowDeclinedCounter:   oauthFlowDeclinedCounter,
+		mcpToolCallCounter:        mcpToolCallCounter,
+		mcpRequestDuration:        mcpRequestDuration,
+		oauthFlowStartedCounter:   oauthFlowStartedCounter,
+		oauthFlowCompletedCounter: oauthFlowCompletedCounter,
+		oauthFlowFailedCounter:    oauthFlowFailedCounter,
+		oauthFlowDeclinedCounter:  oauthFlowDeclinedCounter,
 	}
-}
-
-// RecordToolsetSlugFallback records that a request was served by the direct
-// toolsets.mcp_slug lookup after mcp_endpoints addressing reported a true
-// miss. Dimensions: the runtime surface and the requested slug.
-func (m *metrics) RecordToolsetSlugFallback(ctx context.Context, surface toolsetFallbackSurface, mcpSlug string) {
-	if m.toolsetSlugFallbackCounter == nil {
-		return
-	}
-	kv := []attribute.KeyValue{
-		attr.McpToolsetFallbackSurface(string(surface)),
-		attr.ToolsetMCPSlug(mcpSlug),
-	}
-	m.toolsetSlugFallbackCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
 func (m *metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {

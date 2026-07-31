@@ -156,8 +156,6 @@ func createMcpServerWithEndpoint(
 			Slug:                   "fixture-toolset-" + uuid.NewString()[:8],
 			Description:            conv.ToPGText("Fixture toolset for mcp_server backend"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
 		opts.toolsetID = uuid.NullUUID{UUID: toolset.ID, Valid: true}

@@ -53,10 +53,6 @@ export type Toolset = {
    */
   createdAt: Date;
   /**
-   * The ID of the custom domain to use for the toolset
-   */
-  customDomainId?: string | undefined;
-  /**
    * A short url-friendly label that uniquely identifies a resource.
    */
   defaultEnvironmentSlug?: string | undefined;
@@ -77,18 +73,6 @@ export type Toolset = {
    * The ID of the toolset
    */
   id: string;
-  /**
-   * Whether the toolset is enabled for MCP
-   */
-  mcpEnabled?: boolean | undefined;
-  /**
-   * Whether the toolset is public in MCP
-   */
-  mcpIsPublic?: boolean | undefined;
-  /**
-   * A short url-friendly label that uniquely identifies a resource.
-   */
-  mcpSlug?: string | undefined;
   /**
    * The name of the toolset
    */
@@ -170,7 +154,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    custom_domain_id: z.optional(z.string()),
     default_environment_slug: z.optional(z.string()),
     description: z.optional(z.string()),
     external_mcp_header_definitions: z.optional(
@@ -181,9 +164,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       z.array(FunctionEnvironmentVariable$inboundSchema),
     ),
     id: z.string(),
-    mcp_enabled: z.optional(z.boolean()),
-    mcp_is_public: z.optional(z.boolean()),
-    mcp_slug: z.optional(z.string()),
     name: z.string(),
     oauth_enablement_metadata: OAuthEnablementMetadata$inboundSchema,
     oauth_proxy_server: z.optional(OAuthProxyServer$inboundSchema),
@@ -212,14 +192,10 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     return remap$(v, {
       "account_type": "accountType",
       "created_at": "createdAt",
-      "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
       "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
       "external_oauth_server": "externalOauthServer",
       "function_environment_variables": "functionEnvironmentVariables",
-      "mcp_enabled": "mcpEnabled",
-      "mcp_is_public": "mcpIsPublic",
-      "mcp_slug": "mcpSlug",
       "oauth_enablement_metadata": "oauthEnablementMetadata",
       "oauth_proxy_server": "oauthProxyServer",
       "organization_id": "organizationId",

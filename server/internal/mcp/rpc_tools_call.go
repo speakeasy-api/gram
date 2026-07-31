@@ -232,7 +232,7 @@ func handleToolsCall(
 	// The connection-level check only validates the server; this narrows to the
 	// tool and disposition dimensions. Public MCPs skip this — they're open to
 	// everyone, mirroring the connection-level guard in impl.go.
-	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+	if payload.authenticated && authzEngine != nil && !payload.isPublic {
 		var disposition string
 		if tool != nil {
 			baseTool, err := conv.ToBaseTool(tool)

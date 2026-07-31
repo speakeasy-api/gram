@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/Switch";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
-import { internalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useToolsetMcpServers } from "@/hooks/useToolsetUrl";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
@@ -342,15 +342,16 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
 
   const serverURL = getServerURL();
 
-  // Build MCP server entries for all project toolsets. A toolset without an
-  // MCP slug has no runtime URL and is skipped.
+  // Build MCP server entries for all project toolsets. A toolset without a
+  // platform-domain endpoint has no runtime URL and is skipped.
+  const { byToolsetId } = useToolsetMcpServers(projectSlug);
   const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
     if (isLoadingToolsets || !toolsetsData?.toolsets?.length) {
       return undefined;
     }
 
     return toolsetsData.toolsets.flatMap((toolset) => {
-      const url = internalMcpUrl(toolset);
+      const url = byToolsetId.get(toolset.id)?.platformUrl;
       if (!url) return [];
       return [
         {
@@ -360,7 +361,7 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
         },
       ];
     });
-  }, [toolsetsData?.toolsets, isLoadingToolsets]);
+  }, [toolsetsData?.toolsets, isLoadingToolsets, byToolsetId]);
 
   const auditToolsFilter = useCallback(
     ({ toolName }: { toolName: string }) =>

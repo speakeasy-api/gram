@@ -281,6 +281,101 @@ func (q *Queries) GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx context.Cont
 	return i, err
 }
 
+const getMCPEndpointByProjectAndSlug = `-- name: GetMCPEndpointByProjectAndSlug :one
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE project_id = $1
+  AND slug = $2
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at
+LIMIT 1
+`
+
+type GetMCPEndpointByProjectAndSlugParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+// Management-surface resolution by slug alone (no custom-domain context),
+// preferring the platform-domain endpoint when the same slug also exists
+// under a custom domain.
+func (q *Queries) GetMCPEndpointByProjectAndSlug(ctx context.Context, arg GetMCPEndpointByProjectAndSlugParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, getMCPEndpointByProjectAndSlug, arg.ProjectID, arg.Slug)
+	var i McpEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CustomDomainID,
+		&i.McpServerID,
+		&i.Slug,
+		&i.IsDomainRoot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getMCPEndpointSlugByToolsetID = `-- name: GetMCPEndpointSlugByToolsetID :one
+SELECT e.slug
+FROM mcp_endpoints e
+JOIN mcp_servers ws ON ws.id = e.mcp_server_id AND ws.deleted IS FALSE
+WHERE ws.toolset_id = $1
+  AND ws.project_id = $2
+  AND e.deleted IS FALSE
+ORDER BY (e.custom_domain_id IS NULL) DESC, e.created_at
+LIMIT 1
+`
+
+type GetMCPEndpointSlugByToolsetIDParams struct {
+	ToolsetID uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+// Resolves the public slug for a toolset's wrapper mcp_server, preferring the
+// platform-domain endpoint. Used to build issuer URLs for toolset-gated
+// user sessions.
+func (q *Queries) GetMCPEndpointSlugByToolsetID(ctx context.Context, arg GetMCPEndpointSlugByToolsetIDParams) (string, error) {
+	row := q.db.QueryRow(ctx, getMCPEndpointSlugByToolsetID, arg.ToolsetID, arg.ProjectID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
+}
+
+const getPreferredMCPEndpointByToolsetID = `-- name: GetPreferredMCPEndpointByToolsetID :one
+SELECT e.slug, cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN mcp_servers ws ON ws.id = e.mcp_server_id AND ws.deleted IS FALSE
+LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.deleted IS FALSE
+WHERE ws.toolset_id = $1
+  AND ws.project_id = $2
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
+LIMIT 1
+`
+
+type GetPreferredMCPEndpointByToolsetIDParams struct {
+	ToolsetID uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+type GetPreferredMCPEndpointByToolsetIDRow struct {
+	Slug         string
+	CustomDomain pgtype.Text
+}
+
+// The toolset's wrapper endpoint used for URL construction: custom-domain
+// endpoints (with a live domain) win over platform endpoints, then oldest
+// created_at.
+func (q *Queries) GetPreferredMCPEndpointByToolsetID(ctx context.Context, arg GetPreferredMCPEndpointByToolsetIDParams) (GetPreferredMCPEndpointByToolsetIDRow, error) {
+	row := q.db.QueryRow(ctx, getPreferredMCPEndpointByToolsetID, arg.ToolsetID, arg.ProjectID)
+	var i GetPreferredMCPEndpointByToolsetIDRow
+	err := row.Scan(&i.Slug, &i.CustomDomain)
+	return i, err
+}
+
 const listCustomDomainIDsByMCPServerID = `-- name: ListCustomDomainIDsByMCPServerID :many
 SELECT DISTINCT custom_domain_id::uuid
 FROM mcp_endpoints
@@ -504,6 +599,48 @@ func (q *Queries) ListRootMCPEndpointsByMCPServerID(ctx context.Context, arg Lis
 			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetMCPAddressesByProject = `-- name: ListToolsetMCPAddressesByProject :many
+SELECT DISTINCT t.slug AS toolset_slug, t.name AS toolset_name, e.slug AS mcp_slug
+FROM toolsets t
+JOIN mcp_servers ws
+  ON ws.toolset_id = t.id
+  AND ws.project_id = t.project_id
+  AND ws.deleted IS FALSE
+  AND ws.visibility <> 'disabled'
+JOIN mcp_endpoints e ON e.mcp_server_id = ws.id AND e.deleted IS FALSE
+WHERE t.project_id = $1
+  AND t.deleted IS FALSE
+`
+
+type ListToolsetMCPAddressesByProjectRow struct {
+	ToolsetSlug string
+	ToolsetName string
+	McpSlug     string
+}
+
+// One row per (toolset, endpoint slug) for every toolset in the project whose
+// wrapper mcp_server is live and non-disabled. Used to classify hosted-MCP
+// telemetry traffic by public URL slug.
+func (q *Queries) ListToolsetMCPAddressesByProject(ctx context.Context, projectID uuid.UUID) ([]ListToolsetMCPAddressesByProjectRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetMCPAddressesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetMCPAddressesByProjectRow
+	for rows.Next() {
+		var i ListToolsetMCPAddressesByProjectRow
+		if err := rows.Scan(&i.ToolsetSlug, &i.ToolsetName, &i.McpSlug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

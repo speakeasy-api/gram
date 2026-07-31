@@ -39,8 +39,8 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 	rows := []assistantToolsetRow{
 		{
 			ToolsetSlug:     "billing",
-			McpEnabled:      true,
-			McpSlug:         pgtype.Text{String: "billing-mcp", Valid: true},
+			McpReachable:    true,
+			McpSlug:         "billing-mcp",
 			EnvironmentSlug: pgtype.Text{String: "prod", Valid: true},
 		},
 	}
@@ -59,10 +59,10 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 	)
 }
 
-// A toolset that is attached to an assistant but whose MCP is disabled or
-// has no mcp_slug used to abort the entire bootstrap with a silent 500.
-// We now skip the broken toolset so the rest of the thread admits — the
-// assistant just won't see those tools.
+// A toolset that is attached to an assistant but whose wrapper is disabled
+// or has no Gram-hosted endpoint slug used to abort the entire bootstrap
+// with a silent 500. We now skip the broken toolset so the rest of the
+// thread admits — the assistant just won't see those tools.
 func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) {
 	t.Parallel()
 
@@ -71,19 +71,19 @@ func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) 
 
 	rows := []assistantToolsetRow{
 		{
-			ToolsetSlug: "no-mcp-slug",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{Valid: false},
+			ToolsetSlug:  "no-mcp-slug",
+			McpReachable: true,
+			McpSlug:      "",
 		},
 		{
-			ToolsetSlug: "mcp-disabled",
-			McpEnabled:  false,
-			McpSlug:     pgtype.Text{String: "mcp-disabled-mcp", Valid: true},
+			ToolsetSlug:  "mcp-disabled",
+			McpReachable: false,
+			McpSlug:      "mcp-disabled-mcp",
 		},
 		{
-			ToolsetSlug: "billing",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+			ToolsetSlug:  "billing",
+			McpReachable: true,
+			McpSlug:      "billing-mcp",
 		},
 	}
 
@@ -131,9 +131,9 @@ func TestResolveAssistantMCPServers_AttachedMCPServerAfterToolsetsBeforePlatform
 
 	toolsets := []assistantToolsetRow{
 		{
-			ToolsetSlug: "billing",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+			ToolsetSlug:  "billing",
+			McpReachable: true,
+			McpSlug:      "billing-mcp",
 		},
 	}
 	mcpServers := []assistantMCPServerRow{
@@ -236,9 +236,9 @@ func TestResolveAssistantMCPServers_CollidingServerSlugOmitted(t *testing.T) {
 
 	toolsets := []assistantToolsetRow{
 		{
-			ToolsetSlug: "billing",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+			ToolsetSlug:  "billing",
+			McpReachable: true,
+			McpSlug:      "billing-mcp",
 		},
 	}
 	mcpServers := []assistantMCPServerRow{

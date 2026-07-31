@@ -15,6 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -174,8 +176,9 @@ func seedProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sl
 	return prov.ID, srv.ID
 }
 
-// attachToolsetToProxyServer seeds an MCP-enabled toolset routed through the
-// given oauth_proxy_server under the given MCP slug.
+// attachToolsetToProxyServer seeds an MCP-published toolset (wrapper
+// mcp_server + Gram-hosted endpoint under the given MCP slug) routed through
+// the given oauth_proxy_server.
 func attachToolsetToProxyServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proxyServerID uuid.UUID, mcpSlug string) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -183,15 +186,33 @@ func attachToolsetToProxyServer(t *testing.T, ctx context.Context, conn *pgxpool
 	require.NotNil(t, authCtx.ProjectID)
 
 	q := toolsetsrepo.New(conn)
-	_, err := q.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+	toolset, err := q.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   mcpSlug,
 		Slug:                   mcpSlug,
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	wrapperID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:         wrapperID,
+		ProjectID:  *authCtx.ProjectID,
+		Name:       conv.ToPGText(mcpSlug),
+		Slug:       conv.ToPGText(mcpSlug + "-wrapper"),
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{},
+		McpServerID:    wrapper.ID,
+		Slug:           mcpSlug,
 	})
 	require.NoError(t, err)
 

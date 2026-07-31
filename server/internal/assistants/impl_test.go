@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -170,6 +171,45 @@ func TestServiceCreateAssistantMapsInvalidToolsetToBadRequest(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+// seedToolsetWithWrapper creates a toolset plus its wrapper mcp_server (with
+// the given visibility) and a Gram-hosted endpoint, so MCP reachability flows
+// through the wrapper/endpoint publishing model.
+func seedToolsetWithWrapper(t *testing.T, conn *pgxpool.Pool, projectID uuid.UUID, name, slug, endpointSlug, vis string) (toolsetsRepo.Toolset, uuid.UUID) {
+	t.Helper()
+
+	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         "org-test",
+		ProjectID:              projectID,
+		Name:                   name,
+		Slug:                   slug,
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	wrapperID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
+		ID:         wrapperID,
+		ProjectID:  projectID,
+		Name:       pgtype.Text{String: name, Valid: true},
+		Slug:       pgtype.Text{String: slug + "-wrapper", Valid: true},
+		ToolsetID:  uuid.NullUUID{UUID: ts.ID, Valid: true},
+		Visibility: vis,
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID:      projectID,
+		CustomDomainID: uuid.NullUUID{},
+		McpServerID:    wrapper.ID,
+		Slug:           endpointSlug,
+	})
+	require.NoError(t, err)
+
+	return ts, wrapperID
+}
+
 func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	t.Parallel()
 
@@ -179,21 +219,9 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
 	})
 
-	toolsetsQ := toolsetsRepo.New(conn)
-	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
-		OrganizationID:         "org-test",
-		ProjectID:              projectID,
-		Name:                   "Slack",
-		Slug:                   "slack",
-		Description:            pgtype.Text{},
-		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "org-test-slack-xyz", Valid: true},
-		McpEnabled:             false,
-	})
-	require.NoError(t, err)
-	require.False(t, ts.McpEnabled)
+	ts, wrapperID := seedToolsetWithWrapper(t, conn, projectID, "Slack", "slack", "org-test-slack-xyz", visibility.Disabled)
 
-	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+	_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		Name:             "Assistant",
@@ -208,12 +236,12 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reloaded, err := toolsetsQ.GetToolset(t.Context(), toolsetsRepo.GetToolsetParams{
-		Slug:      ts.Slug,
+	wrapper, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        wrapperID,
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "attaching toolset to assistant must enable MCP")
+	require.Equal(t, visibility.Private, wrapper.Visibility, "attaching toolset to assistant must enable MCP on its wrapper")
 }
 
 func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
@@ -225,18 +253,7 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
 	})
 
-	toolsetsQ := toolsetsRepo.New(conn)
-	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
-		OrganizationID:         "org-test",
-		ProjectID:              projectID,
-		Name:                   "Slack",
-		Slug:                   "slack",
-		Description:            pgtype.Text{},
-		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "org-test-slack-xyz", Valid: true},
-		McpEnabled:             false,
-	})
-	require.NoError(t, err)
+	ts, wrapperID := seedToolsetWithWrapper(t, conn, projectID, "Slack", "slack", "org-test-slack-xyz", visibility.Disabled)
 
 	created, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		SessionToken:     nil,
@@ -267,12 +284,12 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reloaded, err := toolsetsQ.GetToolset(t.Context(), toolsetsRepo.GetToolsetParams{
-		Slug:      ts.Slug,
+	wrapper, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        wrapperID,
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "updating assistant toolsets must enable MCP on newly attached toolsets")
+	require.Equal(t, visibility.Private, wrapper.Visibility, "updating assistant toolsets must enable MCP on newly attached toolset wrappers")
 }
 
 // A remote-backed MCP server (no toolset) can be attached to an assistant and

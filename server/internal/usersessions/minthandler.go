@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -190,11 +191,20 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
-	if toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").LogError(ctx, s.logger)
+
+	// The public slug lives on the wrapper mcp_server's endpoint now.
+	mcpSlug, err := mcpendpointsrepo.New(s.db).GetMCPEndpointSlugByToolsetID(ctx, mcpendpointsrepo.GetMCPEndpointSlugByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeInvariantViolation, err, "issuer-gated toolset has no mcp endpoint").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset mcp endpoint").LogError(ctx, s.logger)
 	}
 
-	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", mcpSlug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}

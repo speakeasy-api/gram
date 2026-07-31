@@ -405,7 +405,6 @@ func (q *Queries) GetToolsetRow(ctx context.Context, arg GetToolsetRowParams) (G
 }
 
 const insertPluginFixture = `-- name: InsertPluginFixture :one
-
 INSERT INTO plugins (organization_id, project_id, name, slug)
 VALUES ($1, $2, $3, $4)
 RETURNING id
@@ -418,7 +417,6 @@ type InsertPluginFixtureParams struct {
 	Slug           string
 }
 
-// Test fixtures and verification reads.
 func (q *Queries) InsertPluginFixture(ctx context.Context, arg InsertPluginFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, insertPluginFixture,
 		arg.OrganizationID,
@@ -474,6 +472,91 @@ func (q *Queries) InsertPluginServerFixture(ctx context.Context, arg InsertPlugi
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const insertPreSwapToolsetFixture = `-- name: InsertPreSwapToolsetFixture :one
+
+INSERT INTO toolsets (
+    organization_id
+  , project_id
+  , name
+  , slug
+  , description
+  , default_environment_slug
+  , mcp_slug
+  , mcp_enabled
+  , mcp_is_public
+  , custom_domain_id
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+)
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertPreSwapToolsetFixtureParams struct {
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
+	McpEnabled             bool
+	McpIsPublic            bool
+	CustomDomainID         uuid.NullUUID
+}
+
+// Test fixtures and verification reads.
+// Seeds a toolset carrying pre-swap publishing columns. The application
+// codebase no longer writes these columns; this command's tests must keep
+// exercising rows that predate the mcp_servers swap, so the fixture lives
+// here with the command's other raw-column queries.
+func (q *Queries) InsertPreSwapToolsetFixture(ctx context.Context, arg InsertPreSwapToolsetFixtureParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, insertPreSwapToolsetFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+		arg.DefaultEnvironmentSlug,
+		arg.McpSlug,
+		arg.McpEnabled,
+		arg.McpIsPublic,
+		arg.CustomDomainID,
+	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

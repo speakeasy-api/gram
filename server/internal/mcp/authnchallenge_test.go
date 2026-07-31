@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -60,14 +62,16 @@ func (m *mockIdentityResolver) HasAccessToOrganization(_ context.Context, _, _ s
 	return m.hasAccessResult, m.hasAccessEmail, m.hasAccessOK
 }
 
-// seedPrivateToolsetWithIssuer creates a private toolset backed by a
-// user_session_issuer and a registered OAuth client. Returns the toolset,
-// issuer, and client rows.
+// seedPrivateToolsetWithIssuer creates a toolset backed by a
+// user_session_issuer, published privately at /mcp/{slug} via a wrapper
+// mcp_server (issuer stays on the toolsets row; the wrapper's own issuer is
+// NULL) and a registered OAuth client. Returns the toolset, issuer, client,
+// and wrapper rows.
 func seedPrivateToolsetWithIssuer(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient) {
+) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, mcpservers_repo.McpServer) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -82,8 +86,6 @@ func seedPrivateToolsetWithIssuer(
 		Slug:                   slug,
 		Description:            conv.ToPGText("private MCP with authn challenge"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
@@ -102,6 +104,8 @@ func seedPrivateToolsetWithIssuer(
 	})
 	require.NoError(t, err)
 
+	mcpServer := publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
 	client, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
 		UserSessionIssuerID: issuer.ID,
 		ClientID:            "test-client-" + uuid.New().String()[:8],
@@ -110,7 +114,7 @@ func seedPrivateToolsetWithIssuer(
 	})
 	require.NoError(t, err)
 
-	return toolset, issuer, client
+	return toolset, issuer, client, mcpServer
 }
 
 func TestHandleAuthorize_PrivateToolset_RedirectsToIDP(t *testing.T) {
@@ -122,9 +126,9 @@ func TestHandleAuthorize_PrivateToolset_RedirectsToIDP(t *testing.T) {
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {client.ClientID},
@@ -153,22 +157,12 @@ func TestHandleAuthorize_PublicToolset_RedirectsToConsent(t *testing.T) {
 	mock := &mockIdentityResolver{}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	// Make it public
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setMcpServerVisibility(t, ctx, ti.conn, mcpServer, mcpservers.VisibilityPublic)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {client.ClientID},
@@ -183,7 +177,7 @@ func TestHandleAuthorize_PublicToolset_RedirectsToConsent(t *testing.T) {
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	err = ti.service.HandleAuthorize(w, req)
+	err := ti.service.HandleAuthorize(w, req)
 	require.NoError(t, err)
 
 	require.Equal(t, http.StatusFound, w.Code)
@@ -209,21 +203,11 @@ func TestHandleAuthorize_PublicToolset_RequireUserIdentity_RedirectsToIDP(t *tes
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setMcpServerVisibility(t, ctx, ti.conn, mcpServer, mcpservers.VisibilityPublic)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {client.ClientID},
@@ -250,9 +234,9 @@ func TestHandleAuthorize_InvalidClientID_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {"bogus-client"},
@@ -280,7 +264,7 @@ func TestHandleConsentGet_RendersCSRFToken(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
 	stateID := uuid.NewString()
 	csrfToken := "csrf-" + uuid.NewString()
@@ -289,8 +273,9 @@ func TestHandleConsentGet_RendersCSRFToken(t *testing.T) {
 		ID:                  stateID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],
@@ -303,9 +288,9 @@ func TestHandleConsentGet_RendersCSRFToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/connect?state="+stateID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.Slug+"/connect?state="+stateID, nil)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", toolset.Slug)
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
@@ -319,7 +304,7 @@ func TestHandleConsentPost_RejectsInvalidCSRFToken(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
 	stateID := uuid.NewString()
 
@@ -327,8 +312,9 @@ func TestHandleConsentPost_RejectsInvalidCSRFToken(t *testing.T) {
 		ID:                  stateID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],
@@ -345,10 +331,10 @@ func TestHandleConsentPost_RejectsInvalidCSRFToken(t *testing.T) {
 	form.Set("state", stateID)
 	form.Set("csrf_token", "wrong-csrf")
 	form.Set("action", "approve")
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", toolset.Slug)
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
@@ -361,7 +347,7 @@ func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
 	stateID := uuid.NewString()
 	csrfToken := "csrf-" + uuid.NewString()
@@ -370,8 +356,9 @@ func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
 		ID:                  stateID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],
@@ -388,10 +375,10 @@ func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
 	form.Set("state", stateID)
 	form.Set("csrf_token", csrfToken)
 	form.Set("action", "approve")
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", toolset.Slug)
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
@@ -412,7 +399,7 @@ func TestHandleConsentPost_PropagatesFlowIDIntoGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
 	stateID := uuid.NewString()
 	csrfToken := "csrf-" + uuid.NewString()
@@ -423,8 +410,9 @@ func TestHandleConsentPost_PropagatesFlowIDIntoGrant(t *testing.T) {
 		FlowID:              flowID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],
@@ -440,10 +428,10 @@ func TestHandleConsentPost_PropagatesFlowIDIntoGrant(t *testing.T) {
 	form.Set("state", stateID)
 	form.Set("csrf_token", csrfToken)
 	form.Set("action", "approve")
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", toolset.Slug)
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
@@ -481,7 +469,7 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	// Seed a challenge state in Redis (simulating HandleAuthorize having run)
 	challengeID := uuid.NewString()
@@ -489,8 +477,9 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -502,7 +491,7 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"state": {challengeID},
 		"code":  {"idp-auth-code-123"},
@@ -550,7 +539,7 @@ func TestHandleIDPCallback_PreservesFlowIDAcrossRotation(t *testing.T) {
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	flowID := "flow-" + uuid.NewString()
 	challengeID := uuid.NewString()
@@ -559,8 +548,9 @@ func TestHandleIDPCallback_PreservesFlowIDAcrossRotation(t *testing.T) {
 		FlowID:              flowID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -571,7 +561,7 @@ func TestHandleIDPCallback_PreservesFlowIDAcrossRotation(t *testing.T) {
 		CreatedAt:           time.Now(),
 	}))
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code-123"}}
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/idp_callback?"+q.Encode(), nil)
 	rctx := chi.NewRouteContext()
@@ -621,7 +611,7 @@ func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	const customDomainBaseURL = "https://gram.custom.example.com"
 	challengeID := uuid.NewString()
@@ -629,8 +619,9 @@ func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 			BaseURL:        customDomainBaseURL,
 			RouteBase:      "mcp",
 		},
@@ -644,7 +635,7 @@ func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"state": {challengeID},
 		"code":  {"idp-auth-code-baseurl"},
@@ -680,15 +671,16 @@ func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	challengeID := uuid.NewString()
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -700,7 +692,7 @@ func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"state": {challengeID},
 		"code":  {"idp-auth-code-456"},
@@ -721,9 +713,9 @@ func TestHandleIDPCallback_MissingState_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/idp_callback?code=abc", nil)
 
 	rctx := chi.NewRouteContext()
@@ -740,15 +732,16 @@ func TestHandleIDPCallback_IDPError_ForwardsToClient(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	challengeID := uuid.NewString()
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -760,7 +753,7 @@ func TestHandleIDPCallback_IDPError_ForwardsToClient(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"state":             {challengeID},
 		"error":             {"access_denied"},
@@ -786,10 +779,10 @@ func TestHandleIDPCallback_ExpiredState_ReturnsUnauthorized(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	// Use a random state ID that was never stored — simulates expiry.
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"state": {uuid.NewString()},
 		"code":  {"some-code"},
@@ -810,7 +803,7 @@ func TestHandleIDPCallback_ToolsetMismatch_ReturnsUnauthorized(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	// Seed challenge state with a different toolset ID than the one in the URL.
 	challengeID := uuid.NewString()
@@ -830,7 +823,7 @@ func TestHandleIDPCallback_ToolsetMismatch_ReturnsUnauthorized(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"state": {challengeID},
 		"code":  {"some-code"},
@@ -851,15 +844,16 @@ func TestHandleIDPCallback_MissingCode_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	challengeID := uuid.NewString()
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -870,7 +864,7 @@ func TestHandleIDPCallback_MissingCode_ReturnsError(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	// state present but no code and no error — should fail
 	q := url.Values{
 		"state": {challengeID},
@@ -895,15 +889,16 @@ func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, mcpServer := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	challengeID := uuid.NewString()
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
+			McpSlug:        toolset.Slug,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -914,7 +909,7 @@ func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	q := url.Values{
 		"state": {challengeID},
 		"code":  {"bad-code"},
@@ -978,18 +973,18 @@ func TestHandleRegister_RemoteBackedIssuerGated_ResolvesViaEndpoints(t *testing.
 	require.NotEmpty(t, resp["client_id"])
 }
 
-// TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback is the regression
-// guard for issuer-gated toolset-backed servers that predate the toolsets →
-// mcp_servers migration: they have no mcp_endpoint row, so the addressing
-// lookup misses and resolution must fall back to toolsets.mcp_slug.
-func TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback(t *testing.T) {
+// TestHandleRegister_ToolsetBackedIssuerGated_ResolvesViaEndpoints is the
+// toolset-backed companion of the remote-backed DCR test: an issuer-gated
+// toolset published via a wrapper mcp_server must complete registration
+// through the mcp_endpoints resolution path.
+func TestHandleRegister_ToolsetBackedIssuerGated_ResolvesViaEndpoints(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	w := httptest.NewRecorder()
-	err := ti.service.HandleRegister(w, newRegisterRequest(t, toolset.McpSlug.String, dcrPublicClientBody))
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, toolset.Slug, dcrPublicClientBody))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, w.Code)
 
@@ -999,8 +994,7 @@ func TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback(t *testing.T) {
 }
 
 // TestHandleRegister_UnknownSlug_ReturnsNotFound confirms a slug matching
-// neither an mcp_endpoint nor a toolset still 404s after the addressing miss
-// falls through the toolset fallback.
+// no mcp_endpoint 404s at DCR.
 func TestHandleRegister_UnknownSlug_ReturnsNotFound(t *testing.T) {
 	t.Parallel()
 

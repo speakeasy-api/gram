@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -42,7 +43,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -263,6 +266,79 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		tunnelRoutes:        tunnelRoutes,
 		features:            features,
 	}
+}
+
+// publishToolset provisions the wrapper mcp_server and mcp_endpoint that
+// publish a toolset at /mcp/{slug} — the same shape the toolsets service
+// creates for real toolsets. visibility is one of the mcpservers.Visibility*
+// constants; a valid customDomainID scopes the address to that custom domain.
+// The wrapper's own issuer stays NULL: toolset-backed auth lives on the
+// toolsets row (user_session_issuer_id) and resolves through the endpoint.
+func publishToolset(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	toolset toolsets_repo.Toolset,
+	slug string,
+	visibility string,
+	customDomainID uuid.NullUUID,
+) mcpservers_repo.McpServer {
+	t.Helper()
+
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                    serverID,
+		ProjectID:             toolset.ProjectID,
+		Name:                  conv.ToPGText(toolset.Name),
+		Slug:                  conv.ToPGText(toolset.Slug + "-wrapper"),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            visibility,
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpoints_repo.New(conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:      toolset.ProjectID,
+		CustomDomainID: customDomainID,
+		McpServerID:    wrapper.ID,
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+	return wrapper
+}
+
+// setMcpServerVisibility flips the publishing state of a wrapper mcp_server,
+// carrying every other column through unchanged. This is the endpoint-model
+// equivalent of the old enable/disable/public toolset column writes.
+func setMcpServerVisibility(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	server mcpservers_repo.McpServer,
+	visibility string,
+) mcpservers_repo.McpServer {
+	t.Helper()
+
+	updated, err := mcpservers_repo.New(conn).UpdateMCPServer(ctx, mcpservers_repo.UpdateMCPServerParams{
+		Name:                  server.Name,
+		Slug:                  server.Slug,
+		EnvironmentID:         server.EnvironmentID,
+		UserSessionIssuerID:   server.UserSessionIssuerID,
+		RemoteMcpServerID:     server.RemoteMcpServerID,
+		TunneledMcpServerID:   server.TunneledMcpServerID,
+		ToolsetID:             server.ToolsetID,
+		ToolVariationsGroupID: server.ToolVariationsGroupID,
+		Visibility:            visibility,
+		ID:                    server.ID,
+		ProjectID:             server.ProjectID,
+	})
+	require.NoError(t, err)
+	return updated
 }
 
 // createTestAPIKey creates an API key for the test context project

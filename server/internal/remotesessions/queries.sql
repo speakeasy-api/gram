@@ -344,14 +344,19 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- name: ListToolsetMCPEndpointsForOAuthProxyServer :many
 -- Finds every MCP server attached to an oauth_proxy_server so the clone
 -- handler can derive the public URLs legacy client registrations were keyed
--- under. A toolset with a custom domain is reachable on both the default
--- domain and the custom domain, so the handler scans both variants.
-SELECT t.mcp_slug, cd.domain AS custom_domain
+-- under. Addresses come from the wrapper mcp_server's endpoints: a toolset
+-- with a custom-domain endpoint is reachable on both the default domain and
+-- the custom domain, so the handler scans both variants.
+SELECT DISTINCT e.slug AS mcp_slug, cd.domain AS custom_domain
 FROM toolsets AS t
-LEFT JOIN custom_domains AS cd ON cd.id = t.custom_domain_id AND cd.deleted IS FALSE
+JOIN mcp_servers AS ws
+  ON ws.toolset_id = t.id
+  AND ws.project_id = t.project_id
+  AND ws.deleted IS FALSE
+JOIN mcp_endpoints AS e ON e.mcp_server_id = ws.id AND e.deleted IS FALSE
+LEFT JOIN custom_domains AS cd ON cd.id = e.custom_domain_id AND cd.deleted IS FALSE
 WHERE t.oauth_proxy_server_id = @oauth_proxy_server_id
   AND t.project_id = @project_id
-  AND t.mcp_slug IS NOT NULL
   AND t.deleted IS FALSE;
 
 -- name: MigrateLegacyUserSessionClient :execrows

@@ -26,18 +26,6 @@ export type ToolsetSummary = {
    */
   id: string;
   /**
-   * Whether the toolset is enabled for MCP
-   */
-  mcpEnabled?: boolean | undefined;
-  /**
-   * Whether the toolset is public in MCP
-   */
-  mcpIsPublic?: boolean | undefined;
-  /**
-   * A short url-friendly label that uniquely identifies a resource.
-   */
-  mcpSlug?: string | undefined;
-  /**
    * The name of the toolset
    */
   name: string;
@@ -79,9 +67,6 @@ export const ToolsetSummary$inboundSchema: z.ZodMiniType<
     ),
     default_environment_slug: z.optional(z.string()),
     id: z.string(),
-    mcp_enabled: z.optional(z.boolean()),
-    mcp_is_public: z.optional(z.boolean()),
-    mcp_slug: z.optional(z.string()),
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
@@ -97,9 +82,6 @@ export const ToolsetSummary$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "default_environment_slug": "defaultEnvironmentSlug",
-      "mcp_enabled": "mcpEnabled",
-      "mcp_is_public": "mcpIsPublic",
-      "mcp_slug": "mcpSlug",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "tool_selection_mode": "toolSelectionMode",

@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -89,7 +91,7 @@ func servePublicHTTP(
 func createPrivateOAuthToolset(
 	t *testing.T,
 	ctx context.Context,
-	conn toolsets_repo.DBTX,
+	conn *pgxpool.Pool,
 	authCtx *contextvalues.AuthContext,
 	slug string,
 ) toolsets_repo.Toolset {
@@ -126,10 +128,10 @@ func createPrivateOAuthToolset(
 		Slug:                   uniqueSlug,
 		Description:            conv.ToPGText("Private MCP with OAuth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(uniqueSlug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+
+	publishToolset(t, ctx, conn, toolset, uniqueSlug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
 
 	toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 		OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
@@ -141,39 +143,28 @@ func createPrivateOAuthToolset(
 	return toolset
 }
 
-// createPublicMCPToolset creates a public MCP toolset for testing.
+// createPublicMCPToolset creates a toolset and publishes it publicly at
+// /mcp/{slug} via a wrapper mcp_server + platform mcp_endpoint.
 func createPublicMCPToolset(
 	t *testing.T,
 	ctx context.Context,
-	toolsetsRepo *toolsets_repo.Queries,
+	conn *pgxpool.Pool,
 	authCtx *contextvalues.AuthContext,
 	slug string,
 ) toolsets_repo.Toolset {
 	t.Helper()
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolset, err := toolsets_repo.New(conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test Public MCP " + slug,
 		Slug:                   slug,
 		Description:            conv.ToPGText("A test public MCP for auth testing"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	publishToolset(t, ctx, conn, toolset, slug, mcpservers.VisibilityPublic, uuid.NullUUID{})
 
 	return toolset
 }
@@ -186,37 +177,14 @@ func TestServePublic_InitializeSucceeds(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Test MCP Server",
-		Slug:                   "test-mcp",
-		Description:            conv.ToPGText("A test MCP server"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("test-mcp"),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "test-mcp")
 
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	w, err := servePublicHTTP(t, ctx, ti, mcpSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -244,41 +212,18 @@ func TestServePublic_InitializeWithMalformedParamsSucceeds(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Malformed Params MCP",
-		Slug:                   "malformed-params-mcp",
-		Description:            conv.ToPGText("A test MCP server"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("malformed-params-mcp"),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "malformed-params-mcp")
 
 	// params is an array rather than the expected object, so decoding into our
 	// recorded shape fails — but the RPC must still succeed.
 	body := []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":["unexpected"]}`)
 
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)
+	w, err := servePublicHTTP(t, ctx, ti, toolset.Slug, body, "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotEmpty(t, w.Header().Get("Mcp-Session-Id"))
@@ -292,7 +237,10 @@ func TestServePublic_InitializeWithMalformedParamsSucceeds(t *testing.T) {
 	require.Equal(t, "2025-03-26", result["protocolVersion"])
 }
 
-func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
+// TestServePublic_UnpublishedToolset_Returns404 verifies that a toolset with
+// no mcp_endpoint row is not addressable at /mcp/{slug}: mcp_endpoints is
+// authoritative for its slug and there is no direct toolset lookup.
+func TestServePublic_UnpublishedToolset_Returns404(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -309,8 +257,6 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 		Slug:                   "private-mcp",
 		Description:            conv.ToPGText("A private MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -319,41 +265,40 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
-// TestServePublic_DisabledPublicLegacyToolset_Returns404 verifies that a
-// legacy toolset-backed MCP server (mcp_slug set, no mcp_endpoints row)
-// stops serving once disabled, even when it was public — mcp_enabled false
-// must surface as not-found on the serve path, not just on the metadata
-// surfaces.
-func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
+// TestServePublic_DisabledMcpServer_Returns404 verifies that a published
+// toolset stops serving once its wrapper mcp_server is disabled, even when it
+// was public — visibility 'disabled' must surface as not-found on the serve
+// path, not just on the metadata surfaces.
+func TestServePublic_DisabledMcpServer_Returns404(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "disabled-public-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Test Public MCP " + slug,
+		Slug:                   slug,
+		Description:            conv.ToPGText("A test public MCP"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	wrapper := publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPublic, uuid.NullUUID{})
 
-	// Serves anonymously while enabled.
+	// Serves anonymously while public.
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 
-	// Disable via the same flag the dashboard/API writes, deliberately
-	// leaving mcp_is_public true — the state that kept serving anonymously
-	// before the fix.
-	err = toolsetsRepo.SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false,
-		ID:         toolset.ID,
-		ProjectID:  *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	setMcpServerVisibility(t, ctx, ti.conn, wrapper, mcpservers.VisibilityDisabled)
 
 	_, err = servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "disabled toolset must not serve")
+	require.Error(t, err, "disabled mcp server must not serve")
 	require.Contains(t, err.Error(), "not found")
 }
 
@@ -361,28 +306,26 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Auth Error MCP",
 		Slug:                   "private-auth-error-mcp",
 		Description:            conv.ToPGText("A private MCP that rejects unauthenticated requests"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-auth-error-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(makeInitializeBody()))
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.Slug, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 
@@ -440,39 +383,16 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 	metadataRepo := metadata_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Test MCP Server with Instructions",
-		Slug:                   "test-mcp-instructions",
-		Description:            conv.ToPGText("A test MCP server"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("test-mcp-instructions"),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "test-mcp-instructions")
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
-	_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
+	_, err := metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
 		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
@@ -481,7 +401,7 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	w, err := servePublicHTTP(t, ctx, ti, mcpSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -506,7 +426,7 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-batch-reject")
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "pub-batch-reject")
 
 	batchBody := []map[string]any{
 		{
@@ -519,7 +439,7 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	unauthCtx := context.Background()
-	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, bodyBytes, "", nil)
+	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.Slug, bodyBytes, "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "batch requests are not supported")
 }
@@ -575,8 +495,7 @@ func setupTagFilterToolset(t *testing.T, ctx context.Context, ti *testInstance) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "tag-filter-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "tag-filter-"+uuid.New().String()[:8])
 
 	urns := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID,
 		"tool_alpha", "tool_beta", "tool_gamma")
@@ -607,7 +526,7 @@ func setupTagFilterToolset(t *testing.T, ctx context.Context, ti *testInstance) 
 	})
 	require.NoError(t, err)
 
-	return toolset.McpSlug.String
+	return toolset.Slug
 }
 
 // setupSourceTagFilterToolset builds a public MCP toolset whose tools carry
@@ -629,8 +548,7 @@ func setupSourceTagFilterToolset(t *testing.T, ctx context.Context, ti *testInst
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "src-tag-filter-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "src-tag-filter-"+uuid.New().String()[:8])
 
 	urns := addHTTPToolsWithSourceTags(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID,
 		map[string][]string{
@@ -668,7 +586,7 @@ func setupSourceTagFilterToolset(t *testing.T, ctx context.Context, ti *testInst
 	})
 	require.NoError(t, err)
 
-	return toolset.McpSlug.String
+	return toolset.Slug
 }
 
 func TestServePublic_ToolsList_SourceTags_NoVariationRequired(t *testing.T) {

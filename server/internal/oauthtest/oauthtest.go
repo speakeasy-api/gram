@@ -13,10 +13,55 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+// publishToolsetForTest provisions the wrapper mcp_server and platform
+// mcp_endpoint that publish a test toolset at /mcp/{slug} — the same shape
+// the toolsets service creates for real toolsets.
+func publishToolsetForTest(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	toolset toolsets_repo.Toolset,
+	slug string,
+	public bool,
+) {
+	t.Helper()
+
+	visibility := mcpservers.VisibilityPrivate
+	if public {
+		visibility = mcpservers.VisibilityPublic
+	}
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                    serverID,
+		ProjectID:             toolset.ProjectID,
+		Name:                  conv.ToPGText(toolset.Name),
+		Slug:                  conv.ToPGText(toolset.Slug + "-wrapper"),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            visibility,
+	})
+	require.NoError(t, err)
+	_, err = mcpendpoints_repo.New(conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:      toolset.ProjectID,
+		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:    wrapper.ID,
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+}
 
 // ProxyToolsetResult holds the objects created by CreateProxyToolset.
 type ProxyToolsetResult struct {
@@ -86,26 +131,10 @@ func CreateProxyToolset(
 		Slug:                   slug,
 		Description:            conv.ToPGText("Test toolset with OAuth proxy"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	if opts.IsPublic {
-		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-			Name:                   toolset.Name,
-			Description:            toolset.Description,
-			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-			McpSlug:                toolset.McpSlug,
-			McpIsPublic:            true,
-			McpEnabled:             toolset.McpEnabled,
-			CustomDomainID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ToolSelectionMode:      "",
-			Slug:                   toolset.Slug,
-			ProjectID:              toolset.ProjectID,
-		})
-		require.NoError(t, err)
-	}
+	publishToolsetForTest(t, ctx, conn, toolset, slug, opts.IsPublic)
 
 	toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 		OauthProxyServerID: uuid.NullUUID{UUID: proxyServer.ID, Valid: true},
@@ -186,26 +215,10 @@ func CreateExternalOAuthToolset(
 		Slug:                   slug,
 		Description:            conv.ToPGText("Test toolset with external OAuth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	if opts.IsPublic {
-		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-			Name:                   toolset.Name,
-			Description:            toolset.Description,
-			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-			McpSlug:                toolset.McpSlug,
-			McpIsPublic:            true,
-			McpEnabled:             toolset.McpEnabled,
-			CustomDomainID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ToolSelectionMode:      "",
-			Slug:                   toolset.Slug,
-			ProjectID:              toolset.ProjectID,
-		})
-		require.NoError(t, err)
-	}
+	publishToolsetForTest(t, ctx, conn, toolset, slug, opts.IsPublic)
 
 	toolset, err = toolsetsRepo.UpdateToolsetExternalOAuthServer(ctx, toolsets_repo.UpdateToolsetExternalOAuthServerParams{
 		ExternalOauthServerID: uuid.NullUUID{UUID: serverMetadata.ID, Valid: true},

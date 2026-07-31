@@ -48,16 +48,8 @@ type Toolset struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplate
-	// The slug of the MCP to use for the toolset
-	McpSlug *Slug
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool
 	// The mode to use for tool selection
 	ToolSelectionMode string
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOrigin
 	// The external OAuth server details

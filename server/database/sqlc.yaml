@@ -708,13 +708,3 @@ sql:
         out: "../internal/admin/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
-
-  - schema: schema.sql
-    queries: ../cmd/tools/migrations/wraptoolsets/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "repo"
-        out: "../cmd/tools/migrations/wraptoolsets/repo"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true

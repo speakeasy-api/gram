@@ -11,11 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // serverEntry extracts one server's raw JSON entry from a pushed MCP config so
@@ -37,11 +33,11 @@ func serverEntry(t *testing.T, files map[string][]byte, path, displayName string
 	return entry
 }
 
-// A wrapped toolset must publish identically whether its plugin_servers row is
-// keyed by toolset_id (direct mcp_slug publishing) or by the wrapper
-// mcp_server_id, and whether its mcp_metadata is toolset- or server-keyed —
-// the states before, during, and after the wraptoolsets backfill and its
-// -move-plugins mode.
+// A wrapped toolset must publish identically whether its plugin_servers row
+// is keyed by toolset_id or by the wrapper mcp_server_id, and whether its
+// mcp_metadata is toolset- or server-keyed — toolset-keyed rows persist in
+// production data until the wraptoolsets backfill's -move-plugins mode
+// re-keys them.
 func TestPluginsService_PublishPlugins_ToolsetBackedWrapperParity(t *testing.T) {
 	t.Parallel()
 
@@ -53,13 +49,10 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperParity(t *testing.T) 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Parity Test"})
 	require.NoError(t, err)
 
-	// A public toolset publishing through its mcp_slug with one user env config.
+	// A public wrapped toolset with one user env config.
 	toolset := createTestToolset(t, ctx, ti.conn, "parity-toolset")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	}))
+	setToolsetWrapperVisibility(t, ctx, ti.conn, toolset, "public")
+	wrapper := getToolsetWrapper(t, ctx, ti.conn, toolset)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
@@ -101,33 +94,10 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperParity(t *testing.T) 
 	cursorBaseline := serverEntry(t, mock.lastPushedFiles, cursorPath, "Parity Server")
 	require.Contains(t, string(claudeBaseline), "${user_config.PARITY_API_KEY}")
 
-	// Phase B: the backfill has created the wrapper (public, endpoint at the
-	// toolset's published slug) and moved metadata server-side, but the
-	// plugin_servers row is still toolset-keyed.
-	wrapperID := uuid.New()
-	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                    wrapperID,
-		ProjectID:             *authCtx.ProjectID,
-		Name:                  pgtype.Text{String: toolset.Name, Valid: true},
-		Slug:                  pgtype.Text{String: toolset.Slug + "-wrap", Valid: true},
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            mcpservers.VisibilityPublic,
-	})
-	require.NoError(t, err)
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:      *authCtx.ProjectID,
-		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    wrapperID,
-		Slug:           toolset.McpSlug.String,
-	})
-	require.NoError(t, err)
+	// Phase B: the backfill has moved metadata server-side onto the wrapper,
+	// but the plugin_servers row is still toolset-keyed.
 	moved, err := mcpRepo.MoveMetadataToMcpServer(ctx, mcpmetarepo.MoveMetadataToMcpServerParams{
-		McpServerID: uuid.NullUUID{UUID: wrapperID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: wrapper.ID, Valid: true},
 		ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:   *authCtx.ProjectID,
 	})
@@ -147,7 +117,7 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperParity(t *testing.T) 
 	}))
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		McpServerID: conv.PtrEmpty(wrapperID.String()),
+		McpServerID: conv.PtrEmpty(wrapper.ID.String()),
 		DisplayName: conv.PtrEmpty("Parity Server"),
 		Policy:      "required",
 		SortOrder:   0,
@@ -168,8 +138,6 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperPrivateParity(t *test
 
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Private Parity"})
 	require.NoError(t, err)
@@ -192,28 +160,7 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperPrivateParity(t *test
 	baseline := serverEntry(t, mock.lastPushedFiles, claudePath, "Private Server")
 	require.Contains(t, string(baseline), "Authorization", "private toolset servers bake a Gram API key header")
 
-	wrapperID := uuid.New()
-	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                    wrapperID,
-		ProjectID:             *authCtx.ProjectID,
-		Name:                  pgtype.Text{String: toolset.Name, Valid: true},
-		Slug:                  pgtype.Text{String: toolset.Slug + "-wrap", Valid: true},
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            mcpservers.VisibilityPrivate,
-	})
-	require.NoError(t, err)
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:      *authCtx.ProjectID,
-		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    wrapperID,
-		Slug:           toolset.McpSlug.String,
-	})
-	require.NoError(t, err)
+	wrapper := getToolsetWrapper(t, ctx, ti.conn, toolset)
 
 	require.NoError(t, ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{
 		ID:       toolsetKeyed.ID,
@@ -221,7 +168,7 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperPrivateParity(t *test
 	}))
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		McpServerID: conv.PtrEmpty(wrapperID.String()),
+		McpServerID: conv.PtrEmpty(wrapper.ID.String()),
 		DisplayName: conv.PtrEmpty("Private Server"),
 		Policy:      "required",
 		SortOrder:   0,

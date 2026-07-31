@@ -68741,9 +68741,6 @@ components:
                     type: string
                     description: When the toolset was created.
                     format: date-time
-                custom_domain_id:
-                    type: string
-                    description: The ID of the custom domain to use for the toolset
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -68767,17 +68764,6 @@ components:
                 id:
                     type: string
                     description: The ID of the toolset
-                mcp_enabled:
-                    type: boolean
-                    description: Whether the toolset is enabled for MCP
-                mcp_is_public:
-                    type: boolean
-                    description: Whether the toolset is public in MCP
-                mcp_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
                 name:
                     type: string
                     description: The name of the toolset
@@ -68879,9 +68865,6 @@ components:
                     type: string
                     description: When the toolset was created.
                     format: date-time
-                custom_domain_id:
-                    type: string
-                    description: The ID of the custom domain to use for the toolset
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -68903,17 +68886,6 @@ components:
                 id:
                     type: string
                     description: The ID of the toolset
-                mcp_enabled:
-                    type: boolean
-                    description: Whether the toolset is enabled for MCP
-                mcp_is_public:
-                    type: boolean
-                    description: Whether the toolset is public in MCP
-                mcp_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
                 name:
                     type: string
                     description: The name of the toolset
@@ -69029,17 +69001,6 @@ components:
                 id:
                     type: string
                     description: The ID of the toolset
-                mcp_enabled:
-                    type: boolean
-                    description: Whether the toolset is enabled for MCP
-                mcp_is_public:
-                    type: boolean
-                    description: Whether the toolset is public in MCP
-                mcp_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
                 name:
                     type: string
                     description: The name of the toolset
@@ -70590,7 +70551,7 @@ components:
             properties:
                 custom_domain_id:
                     type: string
-                    description: 'Deprecated: manage custom-domain addressing through the mcpEndpoints API. Only accepted for toolsets that predate MCP servers.'
+                    description: 'Deprecated: no longer accepted; setting it fails the request. Manage custom-domain addressing through the mcpEndpoints API.'
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -70601,10 +70562,10 @@ components:
                     description: The new description of the toolset
                 mcp_enabled:
                     type: boolean
-                    description: 'Deprecated: manage availability through the mcpServers API (visibility). Only accepted for toolsets that predate MCP servers.'
+                    description: 'Deprecated: no longer accepted; setting it fails the request. Manage availability through the mcpServers API (visibility).'
                 mcp_is_public:
                     type: boolean
-                    description: 'Deprecated: manage visibility through the mcpServers API. Only accepted for toolsets that predate MCP servers.'
+                    description: 'Deprecated: no longer accepted; setting it fails the request. Manage visibility through the mcpServers API.'
                 mcp_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -70645,7 +70606,7 @@ components:
             properties:
                 custom_domain_id:
                     type: string
-                    description: 'Deprecated: manage custom-domain addressing through the mcpEndpoints API. Only accepted for toolsets that predate MCP servers.'
+                    description: 'Deprecated: no longer accepted; setting it fails the request. Manage custom-domain addressing through the mcpEndpoints API.'
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset
@@ -70656,13 +70617,13 @@ components:
                     description: The new description of the toolset
                 mcp_enabled:
                     type: boolean
-                    description: 'Deprecated: manage availability through the mcpServers API (visibility). Only accepted for toolsets that predate MCP servers.'
+                    description: 'Deprecated: no longer accepted; setting it fails the request. Manage availability through the mcpServers API (visibility).'
                 mcp_is_public:
                     type: boolean
-                    description: 'Deprecated: manage visibility through the mcpServers API. Only accepted for toolsets that predate MCP servers.'
+                    description: 'Deprecated: no longer accepted; setting it fails the request. Manage visibility through the mcpServers API.'
                 mcp_slug:
                     type: string
-                    description: 'Deprecated: manage addressing through the mcpEndpoints API. Only accepted for toolsets that predate MCP servers.'
+                    description: 'Deprecated: no longer accepted; setting it fails the request. Manage addressing through the mcpEndpoints API.'
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 name:

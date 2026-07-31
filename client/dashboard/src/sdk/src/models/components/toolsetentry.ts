@@ -37,10 +37,6 @@ export type ToolsetEntry = {
    */
   createdAt: Date;
   /**
-   * The ID of the custom domain to use for the toolset
-   */
-  customDomainId?: string | undefined;
-  /**
    * A short url-friendly label that uniquely identifies a resource.
    */
   defaultEnvironmentSlug?: string | undefined;
@@ -60,18 +56,6 @@ export type ToolsetEntry = {
    * The ID of the toolset
    */
   id: string;
-  /**
-   * Whether the toolset is enabled for MCP
-   */
-  mcpEnabled?: boolean | undefined;
-  /**
-   * Whether the toolset is public in MCP
-   */
-  mcpIsPublic?: boolean | undefined;
-  /**
-   * A short url-friendly label that uniquely identifies a resource.
-   */
-  mcpSlug?: string | undefined;
   /**
    * The name of the toolset
    */
@@ -135,7 +119,6 @@ export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
-      custom_domain_id: z.optional(z.string()),
       default_environment_slug: z.optional(z.string()),
       description: z.optional(z.string()),
       external_mcp_header_definitions: z.optional(
@@ -145,9 +128,6 @@ export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
         z.array(FunctionEnvironmentVariable$inboundSchema),
       ),
       id: z.string(),
-      mcp_enabled: z.optional(z.boolean()),
-      mcp_is_public: z.optional(z.boolean()),
-      mcp_slug: z.optional(z.string()),
       name: z.string(),
       organization_id: z.string(),
       origin: z.optional(ToolsetOrigin$inboundSchema),
@@ -169,13 +149,9 @@ export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
-        "custom_domain_id": "customDomainId",
         "default_environment_slug": "defaultEnvironmentSlug",
         "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
         "function_environment_variables": "functionEnvironmentVariables",
-        "mcp_enabled": "mcpEnabled",
-        "mcp_is_public": "mcpIsPublic",
-        "mcp_slug": "mcpSlug",
         "organization_id": "organizationId",
         "project_id": "projectId",
         "prompt_templates": "promptTemplates",

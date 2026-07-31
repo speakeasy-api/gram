@@ -90,7 +90,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesExternalM
 		},
 	})
 	require.NoError(t, err)
-	initResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, initBody, sessionToken, nil)
+	initResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, initBody, sessionToken, nil)
 	require.NoError(t, err, "initialize must succeed once the resolver supplies the upstream token")
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize response: %s", initResp.Body.String())
 
@@ -104,7 +104,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesExternalM
 		},
 	})
 	require.NoError(t, err)
-	callResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, callBody, sessionToken, nil)
+	callResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, callBody, sessionToken, nil)
 	require.NoError(t, err, "tools/call must succeed once the resolver supplies the upstream token")
 	require.Equal(t, http.StatusOK, callResp.Code, "tools/call response: %s", callResp.Body.String())
 
@@ -153,7 +153,7 @@ func createIssuerGatedExternalMCPFixture(
 	require.NoError(t, err)
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, slug)
 	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuer.ID, Valid: true},
 		Slug:                toolset.Slug,

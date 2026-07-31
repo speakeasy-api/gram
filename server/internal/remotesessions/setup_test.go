@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -529,8 +530,9 @@ func insertProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 }
 
 // attachToolsetToProxyServer seeds a toolset routed through the given
-// oauth_proxy_server under the given MCP slug. When customDomain is non-empty
-// a custom_domains row is created and bound to the toolset, making the MCP
+// oauth_proxy_server, published via a wrapper mcp_server with a Gram-hosted
+// endpoint under the given MCP slug. When customDomain is non-empty a
+// custom_domains row is created with a second endpoint on it, making the MCP
 // server reachable on both the default domain and the custom domain.
 func attachToolsetToProxyServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proxyServerID uuid.UUID, mcpSlug, customDomain string) {
 	t.Helper()
@@ -539,15 +541,34 @@ func attachToolsetToProxyServer(t *testing.T, ctx context.Context, conn *pgxpool
 	require.NotNil(t, authCtx.ProjectID)
 
 	q := toolsetsrepo.New(conn)
-	_, err := q.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+	toolset, err := q.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   mcpSlug,
 		Slug:                   mcpSlug,
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	wrapperID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:         wrapperID,
+		ProjectID:  *authCtx.ProjectID,
+		Name:       conv.ToPGText(mcpSlug),
+		Slug:       conv.ToPGText(mcpSlug + "-wrapper"),
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	endpoints := mcpendpointsrepo.New(conn)
+	_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{},
+		McpServerID:    wrapper.ID,
+		Slug:           mcpSlug,
 	})
 	require.NoError(t, err)
 
@@ -569,10 +590,11 @@ func attachToolsetToProxyServer(t *testing.T, ctx context.Context, conn *pgxpool
 		})
 		require.NoError(t, err)
 
-		err = q.SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
-			CustomDomainID: uuid.NullUUID{UUID: domainRow.ID, Valid: true},
-			Slug:           mcpSlug,
+		_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 			ProjectID:      *authCtx.ProjectID,
+			CustomDomainID: uuid.NullUUID{UUID: domainRow.ID, Valid: true},
+			McpServerID:    wrapper.ID,
+			Slug:           mcpSlug,
 		})
 		require.NoError(t, err)
 	}

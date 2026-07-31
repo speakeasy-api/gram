@@ -13,12 +13,6 @@ SELECT *
 FROM toolsets
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
 
--- name: GetToolsetByMCPSlug :one
--- project_id is required to ensure uniqueness since mcp_slug is only unique within a project
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug AND project_id = @project_id AND deleted IS FALSE;
-
 -- name: CreateToolset :one
 INSERT INTO toolsets (
     organization_id
@@ -27,8 +21,6 @@ INSERT INTO toolsets (
   , slug
   , description
   , default_environment_slug
-  , mcp_slug
-  , mcp_enabled
 ) VALUES (
     @organization_id
   , @project_id
@@ -36,8 +28,6 @@ INSERT INTO toolsets (
   , @slug
   , @description
   , @default_environment_slug
-  , @mcp_slug
-  , @mcp_enabled
 )
 RETURNING *;
 
@@ -95,10 +85,6 @@ SET
     name = COALESCE(@name, name)
   , description = COALESCE(@description, description)
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
-  , mcp_slug = COALESCE(@mcp_slug, mcp_slug)
-  , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
-  , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
-  , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
@@ -111,37 +97,6 @@ WHERE slug = @slug
   AND project_id = @project_id AND deleted IS FALSE
 RETURNING id, name, slug;
 
--- name: SetToolsetCustomDomain :exec
--- Narrow setter used by test fixtures: UpdateToolset's COALESCE pattern can't
--- set custom_domain_id without also supplying every non-nullable column.
-UPDATE toolsets
-SET
-    custom_domain_id = @custom_domain_id
-  , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id;
-
--- name: SetToolsetMCPPublicByID :exec
-UPDATE toolsets
-SET mcp_is_public = @mcp_is_public
-WHERE id = @id AND project_id = @project_id;
-
--- name: SetToolsetMCPPublicBySlug :exec
-UPDATE toolsets
-SET mcp_is_public = @mcp_is_public
-WHERE mcp_slug = @mcp_slug;
-
--- name: SetToolsetMCPEnabledByID :exec
-UPDATE toolsets
-SET mcp_enabled = @mcp_enabled
-WHERE id = @id AND project_id = @project_id;
-
--- name: SetToolsetMCPSlugByID :exec
--- Test fixture: seeds pre-swap publishing columns so translation-path
--- coverage can exercise rows that predate the mcp_servers swap.
-UPDATE toolsets
-SET mcp_slug = @mcp_slug
-WHERE id = @id AND project_id = @project_id;
-
 -- name: GetHTTPSecurityDefinitions :many
 SELECT *
 FROM http_security
@@ -151,35 +106,6 @@ WHERE key = ANY(@security_keys::TEXT[])
     cardinality(@openapiv3_document_ids::UUID[]) = 0
     OR openapiv3_document_id = ANY(@openapiv3_document_ids::UUID[])
   );
-
--- name: GetToolsetByMcpSlug :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND deleted IS FALSE
-ORDER BY (custom_domain_id IS NULL) DESC
-LIMIT 1;
-
--- name: GetToolsetByPlatformMcpSlug :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND custom_domain_id IS NULL
-  AND deleted IS FALSE;
-
--- name: GetToolsetByMcpSlugAndCustomDomain :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND custom_domain_id = @custom_domain_id
-  AND deleted IS FALSE;
-
--- name: GetToolsetByMcpSlugAndProject :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND project_id = @project_id
-  AND deleted IS FALSE;
 
 -- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
@@ -236,14 +162,6 @@ INSERT INTO toolset_prompts (
   , prompt_name
 ) VALUES (@project_id, @toolset_id, @prompt_history_id, @prompt_template_id, @prompt_name);
 
--- name: CheckMCPSlugAvailability :one
-SELECT EXISTS (
-  SELECT 1
-  FROM toolsets
-  WHERE mcp_slug = @mcp_slug
-  AND deleted IS FALSE
-);
-
 -- name: ListToolsetsByOrganization :many
 SELECT t.*
 FROM toolsets t
@@ -262,9 +180,6 @@ SELECT
   t.slug,
   t.description,
   t.default_environment_slug,
-  t.mcp_slug,
-  t.mcp_is_public,
-  t.mcp_enabled,
   t.tool_selection_mode,
   t.created_at,
   t.updated_at,

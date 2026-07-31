@@ -2,7 +2,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { cn, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -78,7 +78,6 @@ function useMCPServers(enabled: boolean) {
     const projectInfo = new Map(
       organization.projects.map((p) => [p.id, { name: p.name, slug: p.slug }]),
     );
-    const baseUrl = getServerURL();
     const groups = new Map<string, ServerGroup>();
     for (const t of data?.toolsets ?? []) {
       const project = projectInfo.get(t.projectId);
@@ -88,10 +87,6 @@ function useMCPServers(enabled: boolean) {
         group = { projectId: t.projectId, projectName, servers: [] };
         groups.set(t.projectId, group);
       }
-      const fullUrl = t.mcpSlug
-        ? `${baseUrl}/mcp/${t.mcpSlug}`
-        : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
-      const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
       // External MCP "proxy" entries (name suffix ":proxy") represent servers
       // whose tools/list requires user auth, so we can't enumerate them at
       // deploy time. They still resolve at call-time via mcp:connect, so the
@@ -119,8 +114,7 @@ function useMCPServers(enabled: boolean) {
       group.servers.push({
         id: t.id,
         name: t.name,
-        slug: mcpUrl,
-        mcpSlug: t.mcpSlug ?? undefined,
+        slug: t.slug,
         tools,
         dynamicTools: false,
         remoteBacked: false,
@@ -1258,11 +1252,11 @@ function useCollectionGroups(
     })),
   });
 
-  const mcpSlugToServer = useMemo(() => {
+  const serverByGrantId = useMemo(() => {
     const map = new Map<string, Server>();
     for (const group of mcpServers) {
       for (const server of group.servers) {
-        if (server.mcpSlug) map.set(server.mcpSlug, server);
+        map.set(server.id, server);
       }
     }
     return map;
@@ -1274,9 +1268,11 @@ function useCollectionGroups(
         const externalServers = serverQueries[i]?.data?.servers ?? [];
         const matchedServers: Server[] = [];
         for (const es of externalServers) {
-          const parts = es.registrySpecifier.split("/");
-          const mcpSlug = parts[parts.length - 1]!;
-          const server = mcpSlugToServer.get(mcpSlug);
+          // Collection attachments carry the backend ids of the server they
+          // publish; `Server.id` is the same grant resource id (see the GRANT
+          // ID INVARIANT in serverMerge.ts).
+          const grantId = es.toolsetId ?? es.mcpServerId;
+          const server = grantId ? serverByGrantId.get(grantId) : undefined;
           if (server) matchedServers.push(server);
         }
         return {
@@ -1287,7 +1283,7 @@ function useCollectionGroups(
         };
       })
       .filter((g) => g.servers.some((s) => s.tools.length > 0));
-  }, [collections, serverQueries, mcpSlugToServer]);
+  }, [collections, serverQueries, serverByGrantId]);
 }
 
 function CollectionGroupPanel({

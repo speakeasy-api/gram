@@ -764,7 +764,14 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, tErr, "verify toolset").LogError(ctx, s.logger)
 		}
-		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+		wrapper, wErr := s.repo.GetToolsetWrapperForPluginServer(ctx, repo.GetToolsetWrapperForPluginServerParams{
+			ToolsetID: uuid.NullUUID{UUID: backend.toolsetID.UUID, Valid: true},
+			ProjectID: *ac.ProjectID,
+		})
+		if wErr != nil && !errors.Is(wErr, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset wrapper mcp server").LogError(ctx, s.logger)
+		}
+		if errors.Is(wErr, pgx.ErrNoRows) || wrapper.Visibility == visibility.Disabled || !wrapper.HasEndpoint {
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
 		}
 		if displayName == "" {
@@ -2642,36 +2649,33 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	for _, r := range rows {
 		pb := ensurePlugin(r.PluginID, r.PluginName, r.PluginSlug, r.PluginDescription)
 
-		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
-			mcpBase := s.serverURL
-			if cd := conv.FromPGText[string](r.ToolsetCustomDomain); cd != nil {
-				mcpBase = fmt.Sprintf("https://%s", *cd)
-			}
-			serverInfo := PluginServerInfo{
-				DisplayName: r.ServerDisplayName,
-				Policy:      r.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, *mcpSlug),
-				IsPublic:    r.ToolsetIsPublic,
-				IsOAuth:     r.ToolsetIsOauth,
-				EnvConfigs:  nil,
-			}
-
-			// For public servers, load user-facing environment configs. A public
-			// toolset without an mcp_metadata row simply has no user-provided
-			// env vars — UpsertMetadata is explicit, not auto-created on publish.
-			// The wrapper mcp_server id covers the transition where metadata
-			// ownership has already moved server-side.
-			if r.ToolsetIsPublic {
-				wrapperID := uuid.NullUUID{UUID: r.WrapperMcpServerID, Valid: r.WrapperMcpServerID != uuid.Nil}
-				envConfigs, err := s.loadUserEnvConfigs(ctx, mcpMeta, wrapperID, r.ToolsetID)
-				if err != nil {
-					return nil, err
-				}
-				serverInfo.EnvConfigs = envConfigs
-			}
-
-			pb.servers = append(pb.servers, serverBuild{info: serverInfo, sortOrder: r.ServerSortOrder})
+		mcpBase := s.serverURL
+		if cd := conv.FromPGText[string](r.ToolsetCustomDomain); cd != nil {
+			mcpBase = fmt.Sprintf("https://%s", *cd)
 		}
+		serverInfo := PluginServerInfo{
+			DisplayName: r.ServerDisplayName,
+			Policy:      r.ServerPolicy,
+			MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, r.ToolsetMcpSlug),
+			IsPublic:    r.ToolsetIsPublic,
+			IsOAuth:     r.ToolsetIsOauth,
+			EnvConfigs:  nil,
+		}
+
+		// For public servers, load user-facing environment configs. A public
+		// toolset without an mcp_metadata row simply has no user-provided
+		// env vars — UpsertMetadata is explicit, not auto-created on publish.
+		// Metadata may be keyed on the wrapper mcp_server or on the toolset.
+		if r.ToolsetIsPublic {
+			wrapperID := uuid.NullUUID{UUID: r.WrapperMcpServerID, Valid: true}
+			envConfigs, err := s.loadUserEnvConfigs(ctx, mcpMeta, wrapperID, r.ToolsetID)
+			if err != nil {
+				return nil, err
+			}
+			serverInfo.EnvConfigs = envConfigs
+		}
+
+		pb.servers = append(pb.servers, serverBuild{info: serverInfo, sortOrder: r.ServerSortOrder})
 	}
 
 	for _, m := range mcpRows {

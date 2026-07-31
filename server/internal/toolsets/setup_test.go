@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -46,7 +45,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -554,42 +552,4 @@ func setWrapperVisibility(t *testing.T, ctx context.Context, ti *testInstance, t
 		Visibility:            visibility,
 	})
 	require.NoError(t, err)
-}
-
-// seedPublishingColumns backdates a toolset to the pre-swap shape by writing
-// its publishing columns directly, so translation-path coverage can exercise
-// rows that predate the mcp_servers swap.
-func seedPublishingColumns(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, mcpSlug string, enabled bool) {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	tr := toolsetsRepo.New(ti.conn)
-	require.NoError(t, tr.SetToolsetMCPSlugByID(ctx, toolsetsRepo.SetToolsetMCPSlugByIDParams{
-		McpSlug:   conv.ToPGText(mcpSlug),
-		ID:        toolsetID,
-		ProjectID: *authCtx.ProjectID,
-	}))
-	require.NoError(t, tr.SetToolsetMCPEnabledByID(ctx, toolsetsRepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: enabled,
-		ID:         toolsetID,
-		ProjectID:  *authCtx.ProjectID,
-	}))
-}
-
-// seedPublishingPublicColumn sets the pre-swap mcp_is_public column directly.
-func seedPublishingPublicColumn(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, public bool) {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	require.NoError(t, toolsetsRepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsRepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: public,
-		ID:          toolsetID,
-		ProjectID:   *authCtx.ProjectID,
-	}))
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -36,15 +37,14 @@ func TestServePublicAuth_NoSecurityDefs_InitializeSucceeds(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-no-sec-init")
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "pub-no-sec-init")
 
 	unauthCtx := context.Background()
-	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.Slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 }
@@ -53,17 +53,16 @@ func TestServePublicAuth_WithSecurityDefs_NoCredentials_Returns401(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-sec-no-creds")
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "pub-sec-no-creds")
 	ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
 	// Initialize without any credentials — should get 401
 	unauthCtx := context.Background()
-	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.Slug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
 }
@@ -72,18 +71,17 @@ func TestServePublicAuth_WithSecurityDefs_ValidMCPHeader_Succeeds(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-sec-valid-hdr")
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "pub-sec-valid-hdr")
 	envVar := ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
 	// Send the matching MCP header — env var is TEST_API_KEY, so header is MCP-Test-Api-Key
 	_ = envVar
 	unauthCtx := context.Background()
-	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", map[string]string{
+	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.Slug, makeInitializeBody(), "", map[string]string{
 		"MCP-Test-Api-Key": "some-secret-value",
 	})
 	require.NoError(t, err)
@@ -94,17 +92,16 @@ func TestServePublicAuth_WithSecurityDefs_WrongMCPHeader_Returns401(t *testing.T
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "pub-sec-wrong-hdr")
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "pub-sec-wrong-hdr")
 	ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
 	// Send an MCP header that doesn't match any security env var
 	unauthCtx := context.Background()
-	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", map[string]string{
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.Slug, makeInitializeBody(), "", map[string]string{
 		"MCP-Wrong-Key": "some-value",
 	})
 	require.Error(t, err)
@@ -127,13 +124,13 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 		Slug:                   "priv-auth-test",
 		Description:            conv.ToPGText("A private MCP for auth testing"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("priv-auth-test"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
 	unauthCtx := context.Background()
-	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.Slug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expired or invalid access token")
 }
@@ -160,7 +157,7 @@ func TestServePublicOAuth_ProxyNoSecurityDefs_NoToken_Returns401(t *testing.T) {
 		IsPublic: true,
 	})
 
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 	_, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized", "should return unauthorized when no token provided for OAuth-configured server")
@@ -182,7 +179,7 @@ func TestServePublicOAuth_ExternalNoSecurityDefs_NoToken_Returns401(t *testing.T
 		IsPublic: true,
 	})
 
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 	_, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized", "should return unauthorized when no token provided for external OAuth server")
@@ -199,9 +196,9 @@ func TestServePublicOAuth_NoOAuth_NoSecurityDefs_Succeeds(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "no-oauth-nosec-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "no-oauth-nosec-"+uuid.New().String()[:8])
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	_, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err, "public MCP without OAuth should succeed without credentials")
 }
@@ -228,11 +225,10 @@ func TestServePublic_DeniesUnauthenticatedAccessToPrivateMCP(t *testing.T) {
 		Slug:                   "private-unauth-mcp",
 		Description:            conv.ToPGText("A private MCP not accessible without auth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-unauth-mcp"),
-		McpEnabled:             true,
-		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
+
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
 
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
@@ -242,7 +238,7 @@ func TestServePublic_DeniesUnauthenticatedAccessToPrivateMCP(t *testing.T) {
 	bodyBytes, err := json.Marshal(reqBody)
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -303,20 +299,20 @@ func TestServePublic_PrivateWithOAuth_InvalidToken_Returns401WithWWWAuthenticate
 		Slug:                   slug,
 		Description:            conv.ToPGText("A private MCP server with OAuth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
+	publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
 	// Link toolset to OAuth proxy server
-	toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+	_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 		OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
 		Slug:               toolset.Slug,
 		ProjectID:          *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -356,13 +352,13 @@ func TestServePublic_PrivateWithoutOAuth_InvalidAPIKey_Returns401(t *testing.T) 
 		Slug:                   "private-no-oauth-mcp-" + uuid.New().String()[:8],
 		Description:            conv.ToPGText("A private MCP server without OAuth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-no-oauth-mcp-" + uuid.New().String()[:8]),
-		McpEnabled:             true,
 		// OauthProxyServerID NOT set - no OAuth
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -400,13 +396,13 @@ func TestServePublic_PrivateWithoutOAuth_BearerTokenFails(t *testing.T) {
 		Slug:                   "private-no-oauth-mcp-" + uuid.New().String()[:8],
 		Description:            conv.ToPGText("A private MCP server without OAuth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-no-oauth-mcp-" + uuid.New().String()[:8]),
-		McpEnabled:             true,
 		// OauthProxyServerID NOT set - no OAuth
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -443,10 +439,10 @@ func TestServePublic_DualSecurity_NoCredentials_Returns401(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "dual-sec-nocreds")
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "dual-sec-nocreds")
 	ti.addToolWithDualSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
-	_, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	_, err := servePublicHTTP(t, context.Background(), ti, toolset.Slug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
 }
@@ -463,10 +459,10 @@ func TestServePublic_DualSecurity_APIKeyOnly_Succeeds(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "dual-sec-apikey")
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "dual-sec-apikey")
 	ti.addToolWithDualSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
-	w, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", map[string]string{
+	w, err := servePublicHTTP(t, context.Background(), ti, toolset.Slug, makeInitializeBody(), "", map[string]string{
 		"MCP-Test-Api-Key": "some-api-key-value",
 	})
 	require.NoError(t, err)
@@ -499,7 +495,7 @@ func TestServePublic_PrivateWithOAuth_WWWAuthenticateMatchesBearerResourceMetada
 
 	toolset := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, "priv-wwwauth-shape")
 
-	w, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "definitely-not-a-real-token", nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, toolset.Slug, makeInitializeBody(), "definitely-not-a-real-token", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expired or invalid access token")
 
@@ -520,7 +516,7 @@ func TestServePublic_PrivateWithOAuth_WWWAuthenticateMatchesBearerResourceMetada
 	require.True(t, rmURL.IsAbs(), "resource_metadata must be an absolute URL: %q", matches[1])
 	require.Contains(t, rmURL.Path, "/.well-known/oauth-protected-resource",
 		"resource_metadata path must point at the well-known protected-resource endpoint")
-	require.Contains(t, rmURL.Path, toolset.McpSlug.String,
+	require.Contains(t, rmURL.Path, toolset.Slug,
 		"resource_metadata path must reference this toolset's mcp slug")
 
 	// Negative: parameters Gram does NOT emit today. If any of these appear,
@@ -543,7 +539,7 @@ func assertMalformedAuthorizationReturns401(t *testing.T, slugPrefix, authHeader
 	require.NotNil(t, authCtx.ProjectID)
 
 	toolset := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, slugPrefix)
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
@@ -643,7 +639,7 @@ func TestServePublic_DualSecurity_OAuthTokenOnly_Succeeds(t *testing.T) {
 	issuer := oauthtest.NewTokenIssuer(t, ti.cacheAdapter, ti.enc)
 	issued := issuer.IssueToken(t, ctx, result.Toolset.ID, "upstream-token", "", &upstreamExpiry, []string{"test_oauth"})
 
-	w, err := servePublicHTTP(t, context.Background(), ti, result.Toolset.McpSlug.String, makeInitializeBody(), issued.AccessToken, nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, result.Toolset.Slug, makeInitializeBody(), issued.AccessToken, nil)
 	if err != nil {
 		require.NotContains(t, err.Error(), "unauthorized", "oauth2 token alone should satisfy the dual-security check")
 	}

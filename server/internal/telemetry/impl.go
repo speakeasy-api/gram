@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -33,7 +34,6 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
-	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -3088,20 +3088,17 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 }
 
 func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
-	toolsets, err := toolsetsRepo.New(s.db).ListToolsetsByProject(ctx, projectID)
+	addresses, err := mcpendpointsRepo.New(s.db).ListToolsetMCPAddressesByProject(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("list project toolsets: %w", err)
+		return nil, fmt.Errorf("list project toolset mcp addresses: %w", err)
 	}
 
-	matchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
-	for _, toolset := range toolsets {
-		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-			continue
-		}
+	matchers := make([]repo.HostedMCPMatcher, 0, len(addresses))
+	for _, address := range addresses {
 		matchers = append(matchers, repo.HostedMCPMatcher{
-			ToolsetSlug: toolset.Slug,
-			ToolsetName: toolset.Name,
-			McpSlug:     toolset.McpSlug.String,
+			ToolsetSlug: address.ToolsetSlug,
+			ToolsetName: address.ToolsetName,
+			McpSlug:     address.McpSlug,
 		})
 	}
 	return matchers, nil

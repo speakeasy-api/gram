@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -91,15 +92,15 @@ func TestService_HandleGetAuthorizationServer(t *testing.T) {
 			Slug:                   slug,
 			Description:            conv.ToPGText("A test MCP without OAuth"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                conv.ToPGText(slug),
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+slug, nil)
 
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		rctx.URLParams.Add("mcpSlug", slug)
 		reqCtx := context.WithValue(t.Context(), chi.RouteCtxKey, rctx)
 		req = req.WithContext(reqCtx)
 
@@ -154,23 +155,23 @@ func TestService_HandleGetAuthorizationServer(t *testing.T) {
 			Slug:                   slug,
 			Description:            conv.ToPGText("A test MCP with OAuth"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                conv.ToPGText(slug),
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
 
+		publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
 		// Link toolset to OAuth proxy server
-		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+		_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
 			Slug:               toolset.Slug,
 			ProjectID:          *authCtx.ProjectID,
 		})
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+slug, nil)
 
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		rctx.URLParams.Add("mcpSlug", slug)
 		reqCtx := context.WithValue(t.Context(), chi.RouteCtxKey, rctx)
 		req = req.WithContext(reqCtx)
 
@@ -232,21 +233,21 @@ func TestService_HandleGetAuthorizationServer_RefreshTokenGrant(t *testing.T) {
 			Slug:                   slug,
 			Description:            conv.ToPGText("test grant_types_supported"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                conv.ToPGText(slug),
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
 
-		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+		publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
+		_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
 			Slug:               toolset.Slug,
 			ProjectID:          *authCtx.ProjectID,
 		})
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+slug, nil)
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		rctx.URLParams.Add("mcpSlug", slug)
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -304,21 +305,21 @@ func TestService_HandleGetAuthorizationServer_RefreshTokenGrant(t *testing.T) {
 			Slug:                   slug,
 			Description:            conv.ToPGText("test scopes_supported"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                conv.ToPGText(slug),
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
 
-		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+		publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
+		_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
 			Slug:               toolset.Slug,
 			ProjectID:          *authCtx.ProjectID,
 		})
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+slug, nil)
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		rctx.URLParams.Add("mcpSlug", slug)
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -376,21 +377,21 @@ func TestService_HandleGetAuthorizationServer_RefreshTokenGrant(t *testing.T) {
 			Slug:                   slug,
 			Description:            conv.ToPGText("test scopes_supported omitted"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                conv.ToPGText(slug),
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
 
-		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+		publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
+		_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
 			Slug:               toolset.Slug,
 			ProjectID:          *authCtx.ProjectID,
 		})
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+toolset.McpSlug.String, nil)
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+slug, nil)
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		rctx.URLParams.Add("mcpSlug", slug)
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -502,23 +503,23 @@ func TestService_HandleGetProtectedResource(t *testing.T) {
 			Slug:                   slug,
 			Description:            conv.ToPGText("A test MCP for protected resource metadata"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                conv.ToPGText(slug),
-			McpEnabled:             true,
 		})
 		require.NoError(t, err)
 
+		publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
 		// Link toolset to OAuth proxy server
-		toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+		_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
 			OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
 			Slug:               toolset.Slug,
 			ProjectID:          *authCtx.ProjectID,
 		})
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+toolset.McpSlug.String, nil)
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+slug, nil)
 
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		rctx.URLParams.Add("mcpSlug", slug)
 		reqCtx := context.WithValue(t.Context(), chi.RouteCtxKey, rctx)
 		req = req.WithContext(reqCtx)
 
@@ -568,7 +569,7 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	require.True(t, ok, "upstream metadata must carry an issuer")
 	require.NotEmpty(t, upstreamIssuer)
 
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 
 	// 3. Send an initialize request WITHOUT a bearer token — expect 401.
 	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
@@ -656,7 +657,7 @@ func TestClientDance_ProxyOAuth_WWWAuthenticateChain(t *testing.T) {
 		IsPublic: true,
 	})
 
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.Toolset.Slug
 
 	// 2. Send an initialize request WITHOUT a bearer token — expect 401.
 	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)

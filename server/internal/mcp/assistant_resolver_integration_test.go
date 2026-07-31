@@ -78,7 +78,7 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 		},
 	})
 	require.NoError(t, err)
-	initResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, initBody, assistantToken, nil)
+	initResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, initBody, assistantToken, nil)
 	require.NoError(t, err, "initialize must succeed via the assistant-token fallback")
 	require.Equal(t, http.StatusOK, initResp.Code, "initialize response: %s", initResp.Body.String())
 
@@ -92,7 +92,7 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 		},
 	})
 	require.NoError(t, err)
-	callResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, callBody, assistantToken, nil)
+	callResp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, callBody, assistantToken, nil)
 	require.NoError(t, err, "tools/call must succeed via the assistant-token fallback")
 	require.Equal(t, http.StatusOK, callResp.Code, "tools/call response: %s", callResp.Body.String())
 
@@ -113,10 +113,10 @@ func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) 
 	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "assistant-resolver-no-session")
 
 	assistantToken := mintAssistantBearerForOwner(t, ti, authCtx)
-	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), assistantToken, nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, makeInitializeBody(), assistantToken, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
-	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.Slug,
 		"assistant-token fallback must still 401 when the owner has no remote_session for the issuer")
 }
 
@@ -148,9 +148,9 @@ func TestServePublic_AssistantTokenFromForeignProjectChallenges(t *testing.T) {
 	}
 	foreignToken := mintAssistantBearerForOwner(t, ti, foreignAuthCtx)
 
-	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), foreignToken, nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, makeInitializeBody(), foreignToken, nil)
 	require.Error(t, err)
-	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.Slug,
 		"assistant token minted for a different project must not resolve this toolset's remote_session")
 }
 

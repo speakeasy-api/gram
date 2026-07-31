@@ -33,7 +33,6 @@ export interface Server {
   id: string;
   name: string;
   slug: string;
-  mcpSlug?: string;
   tools: ServerTool[];
   /**
    * Remote/tunneled backends resolve their tools at call time, so they carry no
@@ -120,7 +119,6 @@ export function mergeMcpServersIntoGroups(
       id,
       name: mcpServerDisplayName(row),
       slug: row.slug ?? "",
-      mcpSlug: undefined,
       tools: [],
       dynamicTools: !row.toolsetId,
       remoteBacked: !!row.remoteMcpServerId,

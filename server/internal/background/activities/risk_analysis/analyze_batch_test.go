@@ -1683,8 +1683,6 @@ func seedHTTPToolset(t *testing.T, conn *pgxpool.Pool, td testData, toolName str
 		Slug:                   "ts-" + uuid.NewString()[:8],
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 

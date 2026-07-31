@@ -479,7 +479,8 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.False(t, *second.McpEnabled)
+	secondWrapper := wrapperForToolset(t, ti, uuid.MustParse(second.ID), *authCtx.ProjectID)
+	require.Equal(t, mcpservers.VisibilityDisabled, secondWrapper.Visibility, "second toolset in an organization is not auto-enabled")
 
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)

@@ -34,10 +34,10 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoValidTokenChallenges(t *tes
 	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, urn.NewUserSubject("resolver-other-"+uuid.NewString()), "other-user-upstream-token", time.Now().Add(time.Hour))
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
-	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, makeInitializeBody(), sessionToken, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
-	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.Slug,
 		"resolver must surface a WWW-Authenticate challenge when no valid remote_session exists for the subject")
 }
 
@@ -60,10 +60,10 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoRowsChallenges(t *testing.T
 	requestSubject := urn.NewUserSubject("resolver-user-" + uuid.NewString())
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
-	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, makeInitializeBody(), sessionToken, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized")
-	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.Slug,
 		"resolver must surface a WWW-Authenticate challenge when the subject has no remote_sessions rows")
 }
 
@@ -94,7 +94,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionValidTokenResolvesOAuthInput(
 	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, urn.NewUserSubject("resolver-other-"+uuid.NewString()), "other-user-upstream-token", time.Now().Add(time.Hour))
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
-	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, makeInitializeBody(), sessionToken, nil)
 	require.NoError(t, err, "initialize should succeed when a valid remote_session resolves for the subject")
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
 		"resolver must satisfy the toolset's oauth2 scheme, so no WWW-Authenticate challenge should be emitted")
@@ -121,7 +121,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionAnonymousSubjectResolves(t *t
 	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, requestSubject, "valid-upstream-token", time.Now().Add(time.Hour))
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
-	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.Slug, makeInitializeBody(), sessionToken, nil)
 	require.NoError(t, err, "initialize should succeed when an anonymous subject has a valid remote_session row")
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
 		"resolver must run for anonymous subjects too, so no WWW-Authenticate challenge should be emitted")
@@ -158,7 +158,7 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, slug)
 	toolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuer.ID, Valid: true},
 		Slug:                toolset.Slug,
@@ -248,7 +248,7 @@ func mintUserSessionBearerForSubject(
 	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
 		Audience: urn.NewToolset(toolset.ID).String(),
-		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String,
+		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.Slug,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)

@@ -239,6 +239,36 @@ WHERE toolset_id = @toolset_id;
 
 -- Test fixtures and verification reads.
 
+-- name: InsertPreSwapToolsetFixture :one
+-- Seeds a toolset carrying pre-swap publishing columns. The application
+-- codebase no longer writes these columns; this command's tests must keep
+-- exercising rows that predate the mcp_servers swap, so the fixture lives
+-- here with the command's other raw-column queries.
+INSERT INTO toolsets (
+    organization_id
+  , project_id
+  , name
+  , slug
+  , description
+  , default_environment_slug
+  , mcp_slug
+  , mcp_enabled
+  , mcp_is_public
+  , custom_domain_id
+) VALUES (
+    @organization_id
+  , @project_id
+  , @name
+  , @slug
+  , @description
+  , @default_environment_slug
+  , @mcp_slug
+  , @mcp_enabled
+  , @mcp_is_public
+  , @custom_domain_id
+)
+RETURNING *;
+
 -- name: InsertPluginFixture :one
 INSERT INTO plugins (organization_id, project_id, name, slug)
 VALUES (@organization_id, @project_id, @name, @slug)

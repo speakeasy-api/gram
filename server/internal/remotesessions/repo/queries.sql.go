@@ -2816,12 +2816,16 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 }
 
 const listToolsetMCPEndpointsForOAuthProxyServer = `-- name: ListToolsetMCPEndpointsForOAuthProxyServer :many
-SELECT t.mcp_slug, cd.domain AS custom_domain
+SELECT DISTINCT e.slug AS mcp_slug, cd.domain AS custom_domain
 FROM toolsets AS t
-LEFT JOIN custom_domains AS cd ON cd.id = t.custom_domain_id AND cd.deleted IS FALSE
+JOIN mcp_servers AS ws
+  ON ws.toolset_id = t.id
+  AND ws.project_id = t.project_id
+  AND ws.deleted IS FALSE
+JOIN mcp_endpoints AS e ON e.mcp_server_id = ws.id AND e.deleted IS FALSE
+LEFT JOIN custom_domains AS cd ON cd.id = e.custom_domain_id AND cd.deleted IS FALSE
 WHERE t.oauth_proxy_server_id = $1
   AND t.project_id = $2
-  AND t.mcp_slug IS NOT NULL
   AND t.deleted IS FALSE
 `
 
@@ -2831,14 +2835,15 @@ type ListToolsetMCPEndpointsForOAuthProxyServerParams struct {
 }
 
 type ListToolsetMCPEndpointsForOAuthProxyServerRow struct {
-	McpSlug      pgtype.Text
+	McpSlug      string
 	CustomDomain pgtype.Text
 }
 
 // Finds every MCP server attached to an oauth_proxy_server so the clone
 // handler can derive the public URLs legacy client registrations were keyed
-// under. A toolset with a custom domain is reachable on both the default
-// domain and the custom domain, so the handler scans both variants.
+// under. Addresses come from the wrapper mcp_server's endpoints: a toolset
+// with a custom-domain endpoint is reachable on both the default domain and
+// the custom domain, so the handler scans both variants.
 func (q *Queries) ListToolsetMCPEndpointsForOAuthProxyServer(ctx context.Context, arg ListToolsetMCPEndpointsForOAuthProxyServerParams) ([]ListToolsetMCPEndpointsForOAuthProxyServerRow, error) {
 	rows, err := q.db.Query(ctx, listToolsetMCPEndpointsForOAuthProxyServer, arg.OauthProxyServerID, arg.ProjectID)
 	if err != nil {

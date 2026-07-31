@@ -21,7 +21,6 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var infra *testenv.Environment
@@ -105,13 +104,12 @@ type candidateSpec struct {
 	customDomainID uuid.NullUUID
 }
 
-func (tn *tenant) newToolset(t *testing.T, spec candidateSpec) toolsetsrepo.Toolset {
+func (tn *tenant) newToolset(t *testing.T, spec candidateSpec) repo.Toolset {
 	t.Helper()
 	ctx := t.Context()
 
 	slug := "ts-" + uuid.NewString()[:8]
-	toolsets := toolsetsrepo.New(tn.pool)
-	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+	toolset, err := repo.New(tn.pool).InsertPreSwapToolsetFixture(ctx, repo.InsertPreSwapToolsetFixtureParams{
 		OrganizationID:         tn.orgID,
 		ProjectID:              tn.projectID,
 		Name:                   "toolset " + slug,
@@ -120,23 +118,10 @@ func (tn *tenant) newToolset(t *testing.T, spec candidateSpec) toolsetsrepo.Tool
 		DefaultEnvironmentSlug: conv.ToPGTextEmpty(spec.defaultEnvSlug),
 		McpSlug:                conv.ToPGTextEmpty(spec.mcpSlug),
 		McpEnabled:             spec.mcpEnabled,
+		McpIsPublic:            spec.mcpIsPublic,
+		CustomDomainID:         spec.customDomainID,
 	})
 	require.NoError(t, err)
-
-	if spec.mcpIsPublic {
-		require.NoError(t, toolsets.SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
-			McpIsPublic: true,
-			ID:          toolset.ID,
-			ProjectID:   tn.projectID,
-		}))
-	}
-	if spec.customDomainID.Valid {
-		require.NoError(t, toolsets.SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
-			CustomDomainID: spec.customDomainID,
-			Slug:           toolset.Slug,
-			ProjectID:      tn.projectID,
-		}))
-	}
 
 	return toolset
 }

@@ -118,17 +118,38 @@ WHERE project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: LoadAssistantToolsets :many
+-- Publishing state lives on the toolset's wrapper mcp_server and its
+-- Gram-hosted endpoint: mcp_reachable requires a non-disabled wrapper, and
+-- mcp_slug is the wrapper's platform endpoint slug ('' when none exists so
+-- the Go resolver can skip the row).
 SELECT
   at.assistant_id,
   at.toolset_id,
   t.slug AS toolset_slug,
-  t.mcp_enabled,
-  t.mcp_slug,
+  (ws.id IS NOT NULL AND ws.visibility <> 'disabled')::bool AS mcp_reachable,
+  COALESCE((
+    SELECT me.slug
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ws.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+    ORDER BY me.created_at
+    LIMIT 1
+  ), '')::text AS mcp_slug,
   t.default_environment_slug,
   at.environment_id,
   e.slug AS environment_slug
 FROM assistant_toolsets at
 JOIN toolsets t ON t.id = at.toolset_id
+LEFT JOIN LATERAL (
+  SELECT ws.id, ws.visibility
+  FROM mcp_servers ws
+  WHERE ws.toolset_id = t.id
+    AND ws.project_id = t.project_id
+    AND ws.deleted IS FALSE
+  ORDER BY ws.created_at
+  LIMIT 1
+) ws ON TRUE
 LEFT JOIN environments e ON e.id = at.environment_id
 WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
@@ -317,18 +338,16 @@ INSERT INTO assistant_toolsets (
 );
 
 -- name: EnableMCPForToolsets :exec
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
--- toolset attached to an assistant must be MCP-reachable for the runtime's
--- startup config to build; we enable on attach so users don't have to do it
--- separately. mcp_slug is required for an MCP-reachable toolset, so we skip
--- rows that lack one.
-UPDATE toolsets
-SET mcp_enabled = TRUE,
+-- Flips disabled wrapper mcp_servers to private for the listed toolsets in a
+-- project. Every toolset attached to an assistant must be MCP-reachable for
+-- the runtime's startup config to build; we enable on attach so users don't
+-- have to do it separately.
+UPDATE mcp_servers
+SET visibility = 'private',
     updated_at = clock_timestamp()
-WHERE id = ANY(@toolset_ids::UUID[])
+WHERE toolset_id = ANY(@toolset_ids::UUID[])
   AND project_id = @project_id
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
+  AND visibility = 'disabled'
   AND deleted IS FALSE;
 
 -- name: LoadAssistantMcpServers :many

@@ -202,6 +202,25 @@ WHERE
   AND s.project_id = @project_id
   AND s.deleted IS FALSE;
 
+-- name: GetToolsetWrapperForPluginServer :one
+-- Resolve a toolset's wrapper mcp_server for plugin-server validation.
+-- Publishing state lives on the wrapper: visibility plus has_endpoint decide
+-- whether the toolset is attachable as a plugin server.
+SELECT
+  ws.id,
+  ws.visibility,
+  EXISTS (
+    SELECT 1 FROM mcp_endpoints e
+    WHERE e.mcp_server_id = ws.id AND e.deleted IS FALSE
+  ) AS has_endpoint
+FROM mcp_servers ws
+WHERE
+  ws.toolset_id = @toolset_id
+  AND ws.project_id = @project_id
+  AND ws.deleted IS FALSE
+ORDER BY ws.created_at
+LIMIT 1;
+
 -- name: ListPluginServers :many
 SELECT *
 FROM plugin_servers
@@ -292,11 +311,11 @@ WHERE plugin_id = @plugin_id;
 
 -- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with
--- their parent plugin and toolset mcp_slug for URL construction. The lateral
--- resolves the toolset's single live wrapper mcp_server (when one exists) so
--- metadata reads can fall back to server-keyed rows after the expand-phase
--- backfill moves mcp_metadata ownership onto the wrapper while plugin_servers
--- rows are still toolset-keyed.
+-- their parent plugin. Publishing state comes from the toolset's wrapper
+-- mcp_server (visibility) and its preferred mcp_endpoint (URL slug + custom
+-- domain): custom-domain endpoints win over platform endpoints, then oldest
+-- created_at. Toolsets whose wrapper is missing, disabled, or endpoint-less
+-- are dropped — they have no serving address.
 SELECT
   p.id AS plugin_id,
   p.name AS plugin_name,
@@ -307,27 +326,40 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
-  t.mcp_slug AS toolset_mcp_slug,
-  t.mcp_is_public AS toolset_is_public,
+  ep.slug AS toolset_mcp_slug,
+  (ws.visibility = 'public')::bool AS toolset_is_public,
   (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth,
-  cd.domain AS toolset_custom_domain,
-  -- COALESCE to the zero uuid (rather than NULL) because sqlc cannot infer
-  -- nullability for a scalar subquery; Go maps uuid.Nil back to "no wrapper".
-  COALESCE((
-    SELECT ws.id
-    FROM mcp_servers ws
-    WHERE ws.toolset_id = t.id
-      AND ws.project_id = p.project_id
-      AND ws.deleted IS FALSE
-    ORDER BY ws.created_at
-    LIMIT 1
-  ), '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_mcp_server_id
+  ep.custom_domain AS toolset_custom_domain,
+  ws.id AS wrapper_mcp_server_id
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
-LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
+JOIN LATERAL (
+  SELECT ws.id, ws.visibility
+  FROM mcp_servers ws
+  WHERE ws.toolset_id = t.id
+    AND ws.project_id = p.project_id
+    AND ws.deleted IS FALSE
+  ORDER BY ws.created_at
+  LIMIT 1
+) ws ON TRUE
+JOIN LATERAL (
+  SELECT e.slug, cd.domain AS custom_domain
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd
+    ON cd.id = e.custom_domain_id
+    AND cd.activated IS TRUE
+    AND cd.verified IS TRUE
+    AND cd.deleted IS FALSE
+  WHERE e.mcp_server_id = ws.id
+    AND e.deleted IS FALSE
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
+  LIMIT 1
+) ep ON TRUE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
+  AND ws.visibility <> 'disabled'
 ORDER BY p.slug, ps.sort_order ASC;
 
 -- name: ListPluginsWithMcpServersForProject :many

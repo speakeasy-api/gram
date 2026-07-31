@@ -33,8 +33,6 @@ func TestService_GetMcpMetadata_WithInstructions(t *testing.T) {
 		Slug:                   "test-mcp-get",
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -93,8 +91,6 @@ func TestService_GetMcpMetadata_WithoutInstructions(t *testing.T) {
 		Slug:                   "test-mcp-get-no-instructions",
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 

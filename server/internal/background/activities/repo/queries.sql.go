@@ -352,14 +352,17 @@ WITH latest_deployments AS (
   ORDER BY project_id, d.created_at DESC
 ),
 toolset_metrics AS (
-  SELECT 
+  -- Publishing state lives on the toolset's wrapper mcp_server: visibility
+  -- classifies public/private, and anything non-disabled counts as enabled.
+  SELECT
     p.organization_id,
-    COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
-    COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    COUNT(CASE WHEN t.mcp_enabled = true THEN 1 END) as total_enabled_servers,
-    COUNT(t.id) as total_toolsets
+    COUNT(CASE WHEN ws.visibility = 'public' THEN 1 END) as public_mcp_servers,
+    COUNT(CASE WHEN ws.visibility = 'private' THEN 1 END) as private_mcp_servers,
+    COUNT(CASE WHEN ws.visibility <> 'disabled' THEN 1 END) as total_enabled_servers,
+    COUNT(DISTINCT t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
+  LEFT JOIN mcp_servers ws ON ws.toolset_id = t.id AND ws.project_id = p.id AND ws.deleted IS FALSE
   GROUP BY p.organization_id
 ),
 tool_metrics AS (
