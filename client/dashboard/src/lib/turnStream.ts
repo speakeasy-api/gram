@@ -155,6 +155,14 @@ export async function streamTurn(args: {
       let buffer = "";
       let done = false;
 
+      // The turn can end while the response is still open (the server closes
+      // after the terminal frame, but the client returns as soon as it reads
+      // one). Cancelling releases the connection rather than leaving an
+      // in-flight request behind for the rest of the session.
+      const release = () => {
+        void reader.cancel().catch(() => {});
+      };
+
       while (!done) {
         const { done: finished, value } = await reader.read();
         if (finished) break;
@@ -254,7 +262,11 @@ export async function streamTurn(args: {
         }
       }
 
-      if (done) return;
+      if (done) {
+        release();
+        return;
+      }
+      release();
       // The server closed without a terminal frame — the turn is still
       // running, so resume from the cursor rather than treating it as over.
       if (++reconnects > MAX_RECONNECTS) {
