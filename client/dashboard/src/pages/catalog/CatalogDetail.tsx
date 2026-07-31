@@ -46,6 +46,17 @@ export function CatalogDetailRoot(): JSX.Element {
   return <Outlet />;
 }
 
+// The endpoint a setup guide is looked up by. Gram installs the streamable-HTTP
+// remote, so that is the URL a guide is most likely keyed on, but guides are
+// published per server rather than per transport: an entry that only lists an
+// SSE endpoint still has one, and would find it under no other key when the
+// guide publishes no registry alias.
+function setupGuideLookupUrl(server: PulseMCPServer): string | undefined {
+  return (
+    filterToHttpRemotes(server).remotes?.[0]?.url ?? server.remotes?.[0]?.url
+  );
+}
+
 export default function CatalogDetail(): JSX.Element {
   const { serverSpecifier } = useParams<{ serverSpecifier: string }>();
   const routes = useRoutes();
@@ -232,7 +243,7 @@ export default function CatalogDetail(): JSX.Element {
       <Page.Body>
         <SetupGuideCallout
           registrySpecifier={server.registrySpecifier}
-          serverUrl={filterToHttpRemotes(server).remotes?.[0]?.url}
+          serverUrl={setupGuideLookupUrl(server)}
           iconUrl={server.iconUrl}
         />
         {/* Container query, not a viewport one: the side panel narrows this

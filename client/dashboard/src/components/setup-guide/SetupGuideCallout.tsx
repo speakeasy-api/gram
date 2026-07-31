@@ -24,7 +24,11 @@ export function SetupGuideCallout({
   iconUrl?: string;
 }): React.JSX.Element | null {
   const guide = useSetupGuide({ registrySpecifier, serverUrl, iconUrl });
-  if (!guide) return null;
+
+  // A banner with nothing to click is just a sentence about work you cannot
+  // start: on mobile the panel is unavailable, and two matched guides have no
+  // single docs page to fall back to.
+  if (!guide || (!guide.openGuide && !guide.only)) return null;
 
   return (
     <StatusBanner tone="warning">

@@ -2,16 +2,15 @@ import { docsUrl, soleGuide } from "@/components/setup-guide/guideDocs";
 import {
   normalizeSetupGuideMarkdown,
   remarkSetupGuide,
+  scopedHeadingId,
 } from "@/components/setup-guide/setupGuideMarkdown";
 import { Type } from "@/components/ui/type";
-import { Markdown } from "@/elements/components/Markdown";
-import type { ResolvedLink } from "@/elements/types";
+import { Markdown, type MarkdownProps } from "@/elements/components/Markdown";
+import type { LinkResolver } from "@/elements/types";
 import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js";
 import { Badge } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
-
-// Module-level so the memoized <Markdown /> isn't handed a new array each render.
-const SETUP_GUIDE_REMARK_PLUGINS = [remarkSetupGuide];
+import { useMemo } from "react";
 
 // Guide headings are sized for a full documentation page; scale them to a
 // panel that is a few hundred pixels wide.
@@ -28,37 +27,53 @@ const GUIDE_PROSE =
 // A guide's two halves are authored as sibling files, so they cross-reference
 // each other by filename: `external.md#create-oauth-client`. Both halves render
 // as sections of this one panel, where that path resolves to nothing.
-const GUIDE_CROSS_REFERENCE = /^(?:\.\/)?[\w.-]+\.md(#[\w-]+)?$/;
+const GUIDE_CROSS_REFERENCE = /^(?:\.\/)?[\w.-]+\.md(?:#([\w-]+))?$/;
+
+// An anchor a half uses within itself: `#create-oauth-client`.
+const GUIDE_ANCHOR = /^#([\w-]+)$/;
 
 /**
- * Decides where each link in a guide points.
+ * Decides where each link in one guide points.
  *
  * Provider consoles and docs open in a new tab, so following one does not
- * abandon a half-finished setup in the panel behind it. Cross-references
- * between the two halves collapse to the heading the remark plugin tagged,
- * which is in this same panel; one that names no heading is dropped to plain
- * text rather than left as a link to nowhere. Anything else, including the
- * `#section` anchors a half uses within itself, is left alone.
+ * abandon a half-finished setup in the panel behind it. Every link naming a
+ * heading, whether a cross-reference to the guide's other half or an anchor
+ * within the current one, lands on that heading's scoped id, so it stays
+ * inside the guide it was written for even when a second guide on the page
+ * repeats the heading. A cross-reference naming no heading is dropped to plain
+ * text rather than left as a link to nowhere.
  *
  * Only http(s) is claimed as external: `Markdown` skips its URL sanitizer for
  * any href a resolver takes responsibility for, and guides are third-party
  * content.
  */
-function resolveGuideLink(href: string): ResolvedLink | null {
-  const crossReference = GUIDE_CROSS_REFERENCE.exec(href);
-  if (crossReference) return { href: crossReference[1] ?? null };
+function guideLinkResolver(guideSlug: string): LinkResolver {
+  const inThisGuide = (id: string) => ({
+    href: `#${scopedHeadingId(guideSlug, id)}`,
+  });
 
-  let url: URL;
-  try {
-    url = new URL(href, window.location.href);
-  } catch {
-    return null;
-  }
+  return (href) => {
+    const anchor = GUIDE_ANCHOR.exec(href)?.[1];
+    if (anchor) return inThisGuide(anchor);
 
-  const isWebLink = url.protocol === "http:" || url.protocol === "https:";
-  if (!isWebLink || url.origin === window.location.origin) return null;
+    const crossReference = GUIDE_CROSS_REFERENCE.exec(href);
+    if (crossReference) {
+      const id = crossReference[1];
+      return id ? inThisGuide(id) : { href: null };
+    }
 
-  return { href, target: "_blank" };
+    let url: URL;
+    try {
+      url = new URL(href, window.location.href);
+    } catch {
+      return null;
+    }
+
+    const isWebLink = url.protocol === "http:" || url.protocol === "https:";
+    if (!isWebLink || url.origin === window.location.origin) return null;
+
+    return { href, target: "_blank" };
+  };
 }
 
 /**
@@ -119,10 +134,12 @@ export function SetupGuidePanel({
             <SetupGuideSection
               heading={`Set up in ${guide.title}`}
               markdown={guide.externalMarkdown}
+              guideSlug={guide.slug}
             />
             <SetupGuideSection
               heading="Set up in Gram"
               markdown={guide.speakeasyMarkdown}
+              guideSlug={guide.slug}
             />
           </div>
         ))}
@@ -134,10 +151,21 @@ export function SetupGuidePanel({
 function SetupGuideSection({
   heading,
   markdown,
+  guideSlug,
 }: {
   heading: string;
   markdown: string;
+  /** Which guide's headings this half links to and answers for. */
+  guideSlug: string;
 }): React.JSX.Element | null {
+  // Memoized because <Markdown /> is: a fresh plugin list or resolver on every
+  // render would defeat it.
+  const remarkPlugins = useMemo<MarkdownProps["extraRemarkPlugins"]>(
+    () => [[remarkSetupGuide, { guideSlug }]],
+    [guideSlug],
+  );
+  const resolveLink = useMemo(() => guideLinkResolver(guideSlug), [guideSlug]);
+
   const body = normalizeSetupGuideMarkdown(markdown);
   if (!body) return null;
 
@@ -148,8 +176,8 @@ function SetupGuideSection({
       </Type>
       <Markdown
         className={GUIDE_PROSE}
-        extraRemarkPlugins={SETUP_GUIDE_REMARK_PLUGINS}
-        resolveLink={resolveGuideLink}
+        extraRemarkPlugins={remarkPlugins}
+        resolveLink={resolveLink}
       >
         {body}
       </Markdown>

@@ -99,8 +99,11 @@ describe("SetupGuidePanel", () => {
     expect(external.getAttribute("rel")).toBe("noopener noreferrer");
 
     const anchor = screen.getByRole("link", { name: "below" });
-    expect(anchor.getAttribute("href")).toBe("#create-app");
+    expect(anchor.getAttribute("href")).toBe("#box--create-app");
     expect(anchor.hasAttribute("target")).toBe(false);
+    expect(screen.getByRole("heading", { name: "Create the app" }).id).toBe(
+      "box--create-app",
+    );
   });
 
   it("points a cross-reference between the two halves at the heading in this panel", () => {
@@ -120,9 +123,9 @@ describe("SetupGuidePanel", () => {
     render(<SetupGuidePanel registrySpecifier="com.pulsemcp.mirror/box" />);
 
     const crossReference = screen.getByRole("link", { name: "add the server" });
-    expect(crossReference.getAttribute("href")).toBe("#add-server");
+    expect(crossReference.getAttribute("href")).toBe("#box--add-server");
     expect(screen.getByRole("heading", { name: "Add the server" }).id).toBe(
-      "add-server",
+      "box--add-server",
     );
 
     // Names no heading, so there is nothing in the panel to point at.
@@ -190,5 +193,50 @@ describe("SetupGuidePanel", () => {
     expect(
       screen.getAllByRole("link", { name: /Open documentation/ }),
     ).toHaveLength(2);
+  });
+
+  it("keeps a stacked guide's anchors inside the guide that authored them", () => {
+    // The heading both guides share, authored with the same id in each.
+    const shared =
+      "## Connect your credentials {#connect-credentials}\n\nPaste the client id.\n";
+    mocks.useGetMCPSetupDocs.mockReturnValue({
+      data: {
+        guides: [
+          guide({
+            slug: "asana",
+            title: "Asana",
+            matchKind: "endpoint",
+            externalMarkdown: "First, [connect](#connect-credentials).\n",
+            speakeasyMarkdown: shared,
+          }),
+          guide({
+            externalMarkdown:
+              "First, [connect](speakeasy.md#connect-credentials).\n",
+            speakeasyMarkdown: shared,
+          }),
+        ],
+      },
+    });
+
+    render(
+      <SetupGuidePanel
+        registrySpecifier="com.pulsemcp.mirror/box"
+        serverUrl="https://mcp.asana.com/sse"
+      />,
+    );
+
+    const [asanaLink, boxLink] = screen.getAllByRole("link", {
+      name: "connect",
+    });
+    expect(asanaLink?.getAttribute("href")).toBe("#asana--connect-credentials");
+    expect(boxLink?.getAttribute("href")).toBe("#box--connect-credentials");
+
+    const headings = screen.getAllByRole("heading", {
+      name: "Connect your credentials",
+    });
+    expect(headings.map((heading) => heading.id)).toEqual([
+      "asana--connect-credentials",
+      "box--connect-credentials",
+    ]);
   });
 });

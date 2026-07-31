@@ -7,10 +7,16 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const mocks = vi.hoisted(() => ({ useIsMobile: vi.fn() }));
+
 vi.mock("./panel-kinds", () => ({
   SidePanelKind: ({ descriptor }: { descriptor: { kind: string } }) => (
     <div data-testid="panel-body">rendered {descriptor.kind}</div>
   ),
+}));
+
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: mocks.useIsMobile,
 }));
 
 import { SidePanelProvider, SidePanelSurface } from "./SidePanel";
@@ -69,6 +75,7 @@ afterEach(cleanup);
 beforeEach(() => {
   window.localStorage.clear();
   setViewportWidth(1600);
+  mocks.useIsMobile.mockReturnValue(false);
 });
 
 describe("clampSidePanelWidth", () => {
@@ -246,6 +253,43 @@ describe("SidePanelSurface", () => {
     expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBe(
       String(narrowed),
     );
+  });
+
+  it("drops a drag the browser takes over, without committing its width", () => {
+    harness();
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    const handle = screen.getByRole("separator", { name: "Resize panel" });
+    handle.setPointerCapture = () => {};
+    handle.releasePointerCapture = () => {};
+
+    fireEvent.pointerDown(handle, { clientX: 800, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
+    fireEvent.pointerCancel(handle, { clientX: 900, pointerId: 1 });
+
+    const panelWidth = () =>
+      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
+        .width;
+
+    // Back to the stored width, and nothing persisted.
+    expect(panelWidth()).toBe(`${SIDE_PANEL_MAX_WIDTH}px`);
+    expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBeNull();
+
+    // The drag is over: a pointer merely passing over the grip afterwards must
+    // not carry on resizing from where it left off.
+    fireEvent.pointerMove(handle, { clientX: 1000, pointerId: 1 });
+
+    expect(panelWidth()).toBe(`${SIDE_PANEL_MAX_WIDTH}px`);
+  });
+
+  it("gives the viewport back on mobile, keeping the panel for when it widens", () => {
+    mocks.useIsMobile.mockReturnValue(true);
+    harness();
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    // A phone viewport has no room to split: the panel's own minimum would
+    // leave the page a sliver.
+    expect(screen.queryByRole("complementary")).toBeNull();
   });
 
   it("will not let the keyboard push the panel past its bounds", () => {

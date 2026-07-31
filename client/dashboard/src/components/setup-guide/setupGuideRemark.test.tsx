@@ -9,9 +9,11 @@ afterEach(cleanup);
 // Exercised through <Markdown /> rather than a bare unified pipeline: the
 // unified toolchain is not a declared dependency of the dashboard, and this is
 // the path the panel actually renders through.
-function renderGuide(markdown: string): HTMLElement {
+function renderGuide(markdown: string, guideSlug = "box"): HTMLElement {
   const { container } = render(
-    <Markdown extraRemarkPlugins={[remarkSetupGuide]}>{markdown}</Markdown>,
+    <Markdown extraRemarkPlugins={[[remarkSetupGuide, { guideSlug }]]}>
+      {markdown}
+    </Markdown>,
   );
   return container;
 }
@@ -19,14 +21,28 @@ function renderGuide(markdown: string): HTMLElement {
 describe("remarkSetupGuide", () => {
   it("lifts a trailing custom id onto the heading so in-page links resolve", () => {
     const container = renderGuide(
-      "### Add the server in Speakeasy {#add-server-in-speakeasy}\n\n[jump](#add-server-in-speakeasy)\n",
+      "### Add the server in Speakeasy {#add-server-in-speakeasy}\n",
     );
 
     const heading = container.querySelector("h3");
-    expect(heading?.id).toBe("add-server-in-speakeasy");
+    expect(heading?.id).toBe("box--add-server-in-speakeasy");
     expect(heading?.textContent).toBe("Add the server in Speakeasy");
-    expect(container.querySelector("a")?.getAttribute("href")).toBe(
-      "#add-server-in-speakeasy",
+  });
+
+  it("scopes the id to its guide, so stacked guides do not answer for each other", () => {
+    // Both halves of every guide are templated from the same canonical
+    // section, so this id is authored identically in all of them.
+    const box = renderGuide("## Connect {#connect-speakeasy-credentials}\n");
+    const asana = renderGuide(
+      "## Connect {#connect-speakeasy-credentials}\n",
+      "asana",
+    );
+
+    expect(box.querySelector("h2")?.id).toBe(
+      "box--connect-speakeasy-credentials",
+    );
+    expect(asana.querySelector("h2")?.id).toBe(
+      "asana--connect-speakeasy-credentials",
     );
   });
 
@@ -36,7 +52,7 @@ describe("remarkSetupGuide", () => {
     );
 
     const heading = container.querySelector("h2");
-    expect(heading?.id).toBe("enable-box-ai-api");
+    expect(heading?.id).toBe("box--enable-box-ai-api");
     expect(heading?.textContent).toBe("Enable Box AI API");
     expect(container.querySelector("strong")?.textContent).toBe("Box AI");
   });

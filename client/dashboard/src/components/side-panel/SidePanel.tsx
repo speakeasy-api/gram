@@ -1,4 +1,5 @@
 import { Type } from "@/components/ui/type";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { cn } from "@/lib/utils";
 import { BookOpen, ExternalLink, GripVertical, X } from "lucide-react";
@@ -65,6 +66,7 @@ export function SidePanelProvider({
  */
 export function SidePanelSurface(): React.JSX.Element | null {
   const { descriptor, closePanel } = useSidePanel();
+  const isMobile = useIsMobile();
   // Trails the descriptor by one exit animation, so a closed panel keeps
   // rendering its last contents while it collapses.
   const [shown, setShown] = useState(descriptor);
@@ -94,7 +96,11 @@ export function SidePanelSurface(): React.JSX.Element | null {
     return () => clearTimeout(timer);
   }, [descriptor]);
 
-  if (!shown) return null;
+  // Nothing opens the panel on mobile, but a window narrowed after it opened
+  // would leave the page a sliver: the panel's own minimum is wider than what
+  // is left of a phone viewport. The descriptor is kept, so widening the window
+  // brings the panel back where it was.
+  if (isMobile || !shown) return null;
 
   const closing = !descriptor;
 
@@ -194,7 +200,7 @@ export function SidePanelSurface(): React.JSX.Element | null {
  * Reports a width twice over a drag: `onPreview` for every frame in flight and
  * `onCommit` once on release, so the panel repaints continuously while only
  * the settled width is worth persisting. Keyboard steps land settled, so they
- * only commit.
+ * only commit. A preview of `null` discards a drag the browser took away.
  */
 function SidePanelResizeHandle({
   width,
@@ -202,7 +208,7 @@ function SidePanelResizeHandle({
   onCommit,
 }: {
   width: number;
-  onPreview: (width: number) => void;
+  onPreview: (width: number | null) => void;
   onCommit: (width: number) => void;
 }): React.JSX.Element {
   const [dragging, setDragging] = useState(false);
@@ -243,6 +249,17 @@ function SidePanelResizeHandle({
         onCommit(draggedTo(start, event.clientX));
         drag.current = null;
         setDragging(false);
+      }}
+      // A drag the browser takes over (a touch that becomes a scroll, a device
+      // that goes away) ends here rather than at pointerup. Left unhandled, the
+      // handle keeps its start point, and the next pointer merely passing over
+      // the grip would carry on resizing with nothing held down. The in-flight
+      // width is dropped rather than committed: a canceled drag is not a width
+      // anyone chose.
+      onPointerCancel={() => {
+        drag.current = null;
+        setDragging(false);
+        onPreview(null);
       }}
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;

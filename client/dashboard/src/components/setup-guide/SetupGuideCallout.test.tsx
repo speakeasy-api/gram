@@ -220,4 +220,24 @@ describe("SetupGuideCallout", () => {
     expect(screen.queryByRole("link", { name: /Open the Docs/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Read the guide" })).toBeTruthy();
   });
+
+  it("renders nothing when neither way of reading the guide is open", () => {
+    mocks.useIsMobile.mockReturnValue(true);
+    mocks.useGetMCPSetupDocs.mockReturnValue({
+      data: {
+        guides: [
+          guide({ slug: "asana", title: "Asana", matchKind: "endpoint" }),
+          guide(),
+        ],
+      },
+    });
+
+    // No panel on mobile, and no single docs page for two guides: a banner
+    // about work that cannot be started here is just noise.
+    const { container } = render(
+      <SetupGuideCallout registrySpecifier="com.pulsemcp.mirror/box" />,
+    );
+
+    expect(container.innerHTML).toBe("");
+  });
 });
