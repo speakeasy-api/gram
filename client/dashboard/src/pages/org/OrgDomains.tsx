@@ -60,7 +60,7 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -342,23 +342,23 @@ function DefaultMcpServerControl({
   let content: React.ReactNode;
   if (isLoading) {
     content = (
-      <Type variant="body" className="text-muted-foreground text-sm">
+      <Text variant="body" className="text-muted-foreground text-sm">
         Loading MCP servers…
-      </Type>
+      </Text>
     );
   } else if (endpoints.length === 0) {
     content = (
       <div className="border-border rounded-md border border-dashed p-4">
-        <Type variant="body" className="font-medium">
+        <Text variant="body" className="font-medium">
           No MCP endpoints on this domain
-        </Type>
-        <Type
+        </Text>
+        <Text
           variant="body"
           className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
         >
           Attach an MCP endpoint to this custom domain before choosing a default
           MCP server.
-        </Type>
+        </Text>
       </div>
     );
   } else {
@@ -411,14 +411,14 @@ function DefaultMcpServerControl({
             <code>{`/mcp/${currentEndpoint.slug}`}</code>
           </div>
         ) : (
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             Requests to the custom-domain root are not mapped.
-          </Type>
+          </Text>
         )}
         {!canManage && (
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             Organization admin permission is required to change this mapping.
-          </Type>
+          </Text>
         )}
       </div>
     );
@@ -426,15 +426,15 @@ function DefaultMcpServerControl({
 
   return (
     <div className="border-border mt-4 border-t pt-4">
-      <Type variant="body" className="font-medium">
+      <Text variant="body" className="font-medium">
         Default MCP server
-      </Type>
-      <Type
+      </Text>
+      <Text
         variant="body"
         className="text-muted-foreground mt-1 mb-3 max-w-[65ch] text-sm"
       >
         Route requests to the custom-domain root to one MCP server.
-      </Type>
+      </Text>
       {content}
     </div>
   );
@@ -494,16 +494,16 @@ function ChatGPTAppVerificationControl({
 
   return (
     <div className="border-border mt-4 border-t pt-4">
-      <Type variant="body" className="font-medium">
+      <Text variant="body" className="font-medium">
         ChatGPT app verification
-      </Type>
-      <Type
+      </Text>
+      <Text
         variant="body"
         className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
       >
         OpenAI&apos;s app-submission flow fetches this token to verify ownership
         of your custom domain.
-      </Type>
+      </Text>
       <div className="mt-3 max-w-xl space-y-3">
         <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
           <code className="min-w-0 flex-1 text-xs break-all">
@@ -511,7 +511,7 @@ function ChatGPTAppVerificationControl({
           </code>
           <CopyButton
             text={verificationURL}
-            size="inline"
+            size="xs"
             tooltip="Copy verification URL"
             className="shrink-0"
           />
@@ -559,9 +559,9 @@ function ChatGPTAppVerificationControl({
           </div>
         </div>
         {error && (
-          <Type variant="body" className="text-destructive text-sm">
+          <Text variant="body" className="text-destructive text-sm">
             {error}
-          </Type>
+          </Text>
         )}
         {domain.ipAllowlist.length > 0 && (
           <div className="text-muted-foreground flex items-start gap-2 text-sm">
@@ -573,9 +573,9 @@ function ChatGPTAppVerificationControl({
           </div>
         )}
         {!canManage && (
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             Organization admin permission is required to change this token.
-          </Type>
+          </Text>
         )}
       </div>
     </div>
@@ -991,7 +991,7 @@ function OrgDomainsInner() {
               <span className="font-bold italic">{domain?.domain}</span>? This
               will delete the associated ingress and TLS certificate.
             </Text>
-            {impactQuery.isLoading ? (
+            {domainEndpointsQuery.isLoading ? (
               <Text variant="small" muted>
                 Checking for MCP endpoints under this domain&hellip;
               </Text>
