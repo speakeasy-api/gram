@@ -61,7 +61,7 @@ export function Alert({
   variant = "default",
   children,
   inline = false,
-  dismissible = true,
+  dismissible = false,
   onDismiss,
   iconName,
   useContainer = false,
@@ -85,6 +85,8 @@ export function Alert({
   const dismissableContent = dismissible && (
     <div className="ml-auto self-start">
       <button
+        type="button"
+        aria-label="Dismiss"
         className="p-2 hover:rounded-lg hover:bg-accent/10"
         onClick={handleDismiss}
       >
@@ -124,9 +126,9 @@ export function Alert({
 export function AlertTitle({
   className,
   ...props
-}: React.HTMLAttributes<HTMLParagraphElement>): React.JSX.Element {
+}: React.HTMLAttributes<HTMLHeadingElement>): React.JSX.Element {
   return (
-    <div
+    <h5
       className={cn("mb-1 leading-none font-medium tracking-tight", className)}
       {...props}
     />

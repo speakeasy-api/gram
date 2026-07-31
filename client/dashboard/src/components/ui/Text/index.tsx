@@ -1,26 +1,26 @@
 import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 export type TextVariant = "lg" | "md" | "sm" | "xs";
 type TextElement = "p" | "span" | "div" | "label";
 type TextWhitespace = "normal" | "nowrap";
 
-export type TextProps = {
+export type TextProps = Omit<HTMLAttributes<HTMLElement>, "color"> & {
   children: ReactNode;
   variant?: TextVariant;
   muted?: boolean;
   whiteSpace?: TextWhitespace;
   className?: string;
 } & (
-  | {
-      as?: Exclude<TextElement, "label">;
-      htmlFor?: never;
-    }
-  | {
-      as: "label";
-      htmlFor?: string;
-    }
-);
+    | {
+        as?: Exclude<TextElement, "label">;
+        htmlFor?: never;
+      }
+    | {
+        as: "label";
+        htmlFor?: string;
+      }
+  );
 
 const variantStyles: Record<TextVariant, string> = {
   lg: "text-body-lg",
@@ -42,10 +42,12 @@ export function Text({
   whiteSpace = "normal",
   className,
   htmlFor,
+  ...rest
 }: TextProps): React.JSX.Element {
   return (
     <Component
       htmlFor={htmlFor}
+      {...rest}
       className={cn(
         variantStyles[variant],
         whitespaceStyles[whiteSpace],

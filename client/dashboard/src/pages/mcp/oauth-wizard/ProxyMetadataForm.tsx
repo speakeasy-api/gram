@@ -29,7 +29,10 @@ export function ProxyMetadataForm(): JSX.Element {
           </Type>
           <Type muted small className="mb-4 font-medium">
             Getting proxy settings correct can be tricky. Need help?
-            <Link href="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call">
+            <Link
+              href="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
+              target="_blank"
+            >
               Book a meeting
             </Link>
           </Type>

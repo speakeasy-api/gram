@@ -76,7 +76,7 @@ function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
           >
             {`${mcpUrl}/install`}
           </CodeBlock>
-          <Link href={`${mcpUrl}/install`} asChild>
+          <Link href={`${mcpUrl}/install`} target="_blank" asChild>
             <Button variant="primary" className="px-4">
               <Button.LeftIcon>
                 <Icon name="external-link" className="h-4 w-4" />

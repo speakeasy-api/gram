@@ -13,6 +13,7 @@ const iconNode: IconNode = [
 
 const icon = createCustomLucideIcon("pypi", iconNode, {
   viewBox: "0 0 128 128",
+  fill: "currentColor",
 });
 
 export { icon as default };

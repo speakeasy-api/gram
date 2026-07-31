@@ -1,8 +1,8 @@
-import { useState, useLayoutEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { Breakpoint } from "@/components/ui/lib/types";
 import debounce from "@/components/ui/lib/debounce";
 
-// Define breakpoints in pixels matching Tailwind's default breakpoints
+// Matches Tailwind's default breakpoints.
 const breakpointValues = {
   xs: 0, // Default/mobile first
   sm: 640, // @media (min-width: 640px)
@@ -12,36 +12,45 @@ const breakpointValues = {
   "2xl": 1536, // @media (min-width: 1536px)
 } as const;
 
+const descending = Object.entries(breakpointValues).sort(
+  (a, b) => b[1] - a[1],
+) as [Breakpoint, number][];
+
 const getBreakpoint = (width: number): Breakpoint => {
-  const breakpoints = Object.entries(breakpointValues).sort(
-    (a, b) => b[1] - a[1],
-  );
-
-  for (const [key, minWidth] of breakpoints) {
-    if (width >= minWidth) {
-      return key as Breakpoint;
-    }
+  for (const [key, minWidth] of descending) {
+    if (width >= minWidth) return key;
   }
-
   return "xs";
 };
 
-const useTailwindBreakpoint = (): Breakpoint => {
-  const [breakpoint, setBreakpoint] = useState<Breakpoint>(
-    getBreakpoint(window.innerWidth),
-  );
+// One resize listener for the whole app rather than one per subscriber. Icon
+// alone mounts in the hundreds on a busy page, and a listener each turned every
+// resize into O(icons) redundant breakpoint recalculations.
+const listeners = new Set<() => void>();
+let current: Breakpoint =
+  typeof window === "undefined" ? "xs" : getBreakpoint(window.innerWidth);
 
-  useLayoutEffect(() => {
-    const handleResize = debounce(() => {
-      const newBreakpoint = getBreakpoint(window.innerWidth);
-      setBreakpoint(newBreakpoint);
-    }, 100);
-    window.addEventListener("resize", handleResize);
-    handleResize();
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+const onResize = debounce(() => {
+  const next = getBreakpoint(window.innerWidth);
+  if (next === current) return;
+  current = next;
+  for (const listener of listeners) listener();
+}, 100);
 
-  return breakpoint;
-};
+function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0) window.addEventListener("resize", onResize);
+  listeners.add(listener);
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) window.removeEventListener("resize", onResize);
+  };
+}
+
+const getSnapshot = (): Breakpoint => current;
+const getServerSnapshot = (): Breakpoint => "xs";
+
+const useTailwindBreakpoint = (): Breakpoint =>
+  useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
 export default useTailwindBreakpoint;

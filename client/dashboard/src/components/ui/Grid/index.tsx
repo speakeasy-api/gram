@@ -58,7 +58,7 @@ export interface GridProps {
 
   /**
    * If true, the grid will wrap its children.
-   * @default false
+   * @default true
    */
   wrap?: boolean;
 

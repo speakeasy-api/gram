@@ -71,7 +71,10 @@ export const Modal = ({
                 {currentScreen.title}
               </DialogTitle>
             )}
-            <DialogDescription>{currentScreen.component}</DialogDescription>
+            <DialogDescription className="sr-only">
+              {currentScreen.title}
+            </DialogDescription>
+            <div>{currentScreen.component}</div>
           </DialogContent>
         ) : (
           <DialogContent
@@ -95,6 +98,7 @@ export const Modal = ({
                 />
               </DialogClose>
             )}
+            <DialogTitle className="sr-only">{currentScreen.title}</DialogTitle>
             {currentScreen.component}
           </DialogContent>
         )}

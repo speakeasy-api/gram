@@ -70,7 +70,6 @@ export const Link = forwardRef<HTMLAnchorElement, LinkProps>(
       variant = "primary",
       size = "md",
       underline = true,
-      target = "_blank",
       iconPrefixName,
       iconSuffixName,
       className,
@@ -90,7 +89,6 @@ export const Link = forwardRef<HTMLAnchorElement, LinkProps>(
     return (
       <Comp
         ref={ref}
-        target={target}
         className={cn(
           linkVariants({ size, variant }),
           underlineClasses,

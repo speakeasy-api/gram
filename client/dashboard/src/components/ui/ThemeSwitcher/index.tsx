@@ -66,6 +66,7 @@ export function ThemeSwitcher({
                 tabIndex={checked ? -1 : 0}
                 className="peer absolute appearance-none outline-0"
                 aria-label={key}
+                name={`theme-toggle-${rId}`}
                 checked={checked}
                 id={id}
                 onChange={(): void => {

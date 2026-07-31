@@ -13,7 +13,7 @@ export const ExpandChevron = ({
 }): React.JSX.Element => {
   return (
     <motion.div
-      initial="up"
+      initial={isCollapsed ? "down" : "up"}
       animate={isCollapsed ? "down" : "up"}
       variants={chevronVariants}
       transition={{

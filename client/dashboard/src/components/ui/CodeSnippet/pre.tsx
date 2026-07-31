@@ -43,9 +43,12 @@ export const Pre = forwardRef<HTMLPreElement, PreProps>(
                     key={tokenIndex}
                     style={{
                       color: token.color,
-                      fontStyle: token.fontStyle ? "italic" : undefined,
-                      fontWeight:
+                      fontStyle:
                         token.fontStyle && token.fontStyle & 1
+                          ? "italic"
+                          : undefined,
+                      fontWeight:
+                        token.fontStyle && token.fontStyle & 2
                           ? "bold"
                           : undefined,
                     }}

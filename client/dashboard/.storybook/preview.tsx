@@ -5,13 +5,18 @@ import type { Decorator, Preview } from "@storybook/react-vite";
 
 import { DesignSystemProviders } from "./providers";
 
-const withDesignSystem: Decorator = (Story, context) => (
-  <DesignSystemProviders
-    initialTheme={context.globals["theme"] === "dark" ? "dark" : "light"}
-  >
-    <Story />
-  </DesignSystemProviders>
-);
+const withDesignSystem: Decorator = (Story, context) => {
+  const theme = context.globals["theme"] === "dark" ? "dark" : "light";
+
+  // Keyed so switching the toolbar theme remounts the provider; without it the
+  // context keeps its initial value and anything reading `useConfig().theme`
+  // (CodeSnippet, ThemeSwitcher) goes stale.
+  return (
+    <DesignSystemProviders key={theme} initialTheme={theme}>
+      <Story />
+    </DesignSystemProviders>
+  );
+};
 
 const preview: Preview = {
   parameters: {
