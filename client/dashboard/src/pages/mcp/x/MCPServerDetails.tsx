@@ -1,60 +1,53 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { cn } from "@/lib/utils";
-import { useRBAC } from "@/hooks/useRBAC";
+import { useToolset } from "@/hooks/toolTypes";
 import { getMcpServerArgs } from "@/lib/sources";
+import { MCPAuthenticationTab } from "@/pages/mcp/MCPEnvironmentSettings";
+import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
 import { useRoutes } from "@/routes";
-import type {
-  McpServer,
-  McpServerVisibility,
-} from "@gram/client/models/components/mcpserver.js";
-import {
-  invalidateAllGetMcpServer,
-  useGetMcpServer,
-} from "@gram/client/react-query/getMcpServer.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
-import { getTunneledMcpServerArgs } from "@/lib/sources";
-import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
-import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
-import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/Dropdown";
-import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown } from "lucide-react";
+import { Stack } from "@/components/ui/Stack";
 import { Navigate, useLocation, useParams } from "react-router";
-import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
-  isLegacyAuthenticationTabPath,
-  isLegacyToolsTabPath,
+  MCP_SERVER_TAB_URLS,
   mcpServerTabHref,
+  resolveTabForBackend,
+  type TabValue,
 } from "./MCPServerDetailsRouting";
 import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { InspectTab } from "./tabs/InspectTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
+import { ToolsetPromptsTab } from "./tabs/toolset/ToolsetPromptsTab";
+import { ToolsetResourcesTab } from "./tabs/toolset/ToolsetResourcesTab";
+import { ToolsetToolsTab } from "./tabs/toolset/ToolsetToolsTab";
 
-const MCP_X_TAB_URLS = ["overview", "inspect", "team-access", "settings"];
+function isToolsetBackedServer(server: McpServer): boolean {
+  return server.backendKind === "toolset";
+}
+
+// Placeholder while the backing toolset (or the server itself) loads: rough
+// shape of a details tab, only visible for a brief flash.
+function DetailsTabLoading() {
+  return (
+    <Stack gap={6} className="mb-4">
+      <div className="bg-muted/30 h-40 w-full animate-pulse rounded-xl" />
+      <div className="bg-muted/30 h-64 w-full animate-pulse rounded-lg" />
+      <div className="bg-muted/30 h-48 w-full animate-pulse rounded-lg" />
+    </Stack>
+  );
+}
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
   const idOrSlug = mcpServerSlug ?? "";
-  const activeTab = activeTabFromPath(location.pathname, idOrSlug);
-  const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
-    location.pathname,
-    idOrSlug,
-  );
-  const legacyToolsPath = isLegacyToolsTabPath(location.pathname, idOrSlug);
 
   const {
     data: mcpServer,
@@ -65,6 +58,8 @@ export default function MCPServerDetails(): JSX.Element {
   });
 
   const mcpServerId = mcpServer?.id ?? "";
+  const isToolsetBacked = !!mcpServer && isToolsetBackedServer(mcpServer);
+  const toolsetSlug = mcpServer?.toolsetSummary?.slug;
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
@@ -72,29 +67,45 @@ export default function MCPServerDetails(): JSX.Element {
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
 
+  // Toolset-backed servers hydrate their tool bundle for the toolset-owned
+  // tabs (tools, resources, prompts, authentication, performance).
+  const { data: toolset } = useToolset(
+    isToolsetBacked ? toolsetSlug : undefined,
+  );
+
   if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
-  if (legacyAuthenticationPath) {
+
+  const rawTab = activeTabFromPath(location.pathname, idOrSlug);
+
+  // Tab redirects depend on the backend kind, so hold routing decisions until
+  // the server record resolves.
+  if (!mcpServer) {
     return (
-      <Navigate
-        to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
-        replace
-      />
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs
+            skipSegments={["x", ...MCP_SERVER_TAB_URLS]}
+          />
+        </Page.Header>
+        <Page.Body fullWidth className="gap-0">
+          <div className="mx-auto w-full max-w-[1270px] flex-1">
+            <DetailsTabLoading />
+          </div>
+        </Page.Body>
+      </Page>
     );
   }
-  if (legacyToolsPath) {
-    return (
-      <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
-    );
-  }
-  if (!activeTab) {
-    const initialTab = initialTabFromHash(location.hash);
+
+  if (!rawTab) {
+    const initialTab = initialTabFromHash(location.hash, isToolsetBacked);
     const hash =
-      location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
+      location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}` &&
+      initialTab === "settings"
         ? `#${MCP_AUTHENTICATION_SECTION_ID}`
         : "";
 
@@ -105,11 +116,47 @@ export default function MCPServerDetails(): JSX.Element {
       />
     );
   }
+
+  const resolved = resolveTabForBackend(rawTab, isToolsetBacked);
+  if (resolved.tab !== rawTab) {
+    const hash = resolved.hash ? `#${resolved.hash}` : "";
+    return (
+      <Navigate
+        to={`${mcpServerTabHref(routes, idOrSlug, resolved.tab)}${hash}`}
+        replace
+      />
+    );
+  }
+  const activeTab: TabValue = resolved.tab;
+
+  const renderToolsetTab = (
+    render: (loaded: NonNullable<typeof toolset>) => React.ReactNode,
+  ) => {
+    if (!toolset) return <DetailsTabLoading />;
+    return render(toolset);
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case "overview":
+        // Telemetry and plugin membership for toolset-backed servers still
+        // attribute by the backing toolset, so the overview keys off it.
+        if (isToolsetBacked && mcpServer.toolsetId && toolsetSlug) {
+          return (
+            <MCPOverviewTab
+              server={{
+                kind: "toolset",
+                id: mcpServer.toolsetId,
+                slug: toolsetSlug,
+                name:
+                  mcpServer.name ??
+                  mcpServer.toolsetSummary?.name ??
+                  "MCP Server",
+              }}
+            />
+          );
+        }
         return (
-          mcpServer &&
           mcpServer.slug && (
             <MCPOverviewTab
               server={{
@@ -123,43 +170,74 @@ export default function MCPServerDetails(): JSX.Element {
         );
       case "inspect":
         return (
-          mcpServer && (
-            <InspectTab
-              mcpServer={mcpServer}
-              endpoints={endpoints}
-              isLoadingEndpoints={isLoadingEndpoints}
-            />
-          )
+          <InspectTab
+            mcpServer={mcpServer}
+            endpoints={endpoints}
+            isLoadingEndpoints={isLoadingEndpoints}
+          />
         );
+      case "tools":
+        return renderToolsetTab((loaded) => (
+          <ToolsetToolsTab toolset={loaded} />
+        ));
+      case "resources":
+        return renderToolsetTab((loaded) => (
+          <ToolsetResourcesTab toolset={loaded} />
+        ));
+      case "prompts":
+        return renderToolsetTab((loaded) => (
+          <ToolsetPromptsTab toolset={loaded} />
+        ));
+      case "authentication":
+        return renderToolsetTab((loaded) => (
+          <RequireScope scope="mcp:write" level="page">
+            <MCPAuthenticationTab toolset={loaded} />
+          </RequireScope>
+        ));
+      case "performance":
+        return renderToolsetTab((loaded) => (
+          <RequireScope scope="mcp:write" level="page">
+            <MCPPerformanceTab toolset={loaded} />
+          </RequireScope>
+        ));
       case "team-access":
         return (
-          mcpServer && (
-            <RequireScope scope="org:read" level="page">
-              <RequireScope
-                scope="mcp:read"
+          <RequireScope scope="org:read" level="page">
+            <RequireScope
+              scope="mcp:read"
+              resourceId={mcpServer.id}
+              level="page"
+            >
+              {/* mcp_servers-backed servers grant under the same `mcp:*`
+                  scope kind as toolset-backed ones (see selector.go). The
+                  backing toolset's tools are passed when available so
+                  toolset-backed servers keep per-tool grant display. */}
+              <MCPTeamAccessTab
                 resourceId={mcpServer.id}
-                level="page"
-              >
-                {/* mcp_servers-backed servers grant under the same `mcp:*`
-                  scope kind as toolset-backed ones (see selector.go), so
-                  MCPTeamAccessTab is reused as-is with the mcp_server's
-                  id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Gram-side tool
-                  catalog. */}
-                <MCPTeamAccessTab resourceId={mcpServer.id} />
-              </RequireScope>
+                tools={isToolsetBacked ? toolset?.tools : undefined}
+              />
             </RequireScope>
-          )
+          </RequireScope>
         );
       case "settings":
-        return (
-          mcpServer && (
+        // Hold for the backing toolset so toolset-owned settings (tool
+        // filtering, delete cascade) never mount without their write target.
+        if (isToolsetBacked) {
+          return renderToolsetTab((loaded) => (
             <SettingsTab
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
+              backingToolset={loaded}
             />
-          )
+          ));
+        }
+        return (
+          <SettingsTab
+            mcpServer={mcpServer}
+            endpoints={endpoints}
+            isLoadingEndpoints={isLoadingEndpoints}
+          />
         );
     }
   };
@@ -169,7 +247,8 @@ export default function MCPServerDetails(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs
           substitutions={{
-            [idOrSlug]: mcpServer?.name || "MCP Server",
+            [idOrSlug]:
+              mcpServer.name ?? mcpServer.toolsetSummary?.name ?? "MCP Server",
           }}
           skipSegments={[
             "x",
@@ -177,7 +256,7 @@ export default function MCPServerDetails(): JSX.Element {
             // server's own slug happens to collide with a tab name (e.g. a
             // server slugged "settings"), guard against also skipping the
             // server's own breadcrumb crumb.
-            ...MCP_X_TAB_URLS.filter((tab) => tab !== idOrSlug),
+            ...MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
           ]}
         />
       </Page.Header>
@@ -188,192 +267,5 @@ export default function MCPServerDetails(): JSX.Element {
         </div>
       </Page.Body>
     </Page>
-  );
-}
-
-type VisibilityOption = {
-  value: McpServerVisibility;
-  label: string;
-  description: string;
-  dotClass: string;
-  hoverDotClass: string;
-};
-
-const VISIBILITY_OPTIONS: VisibilityOption[] = [
-  {
-    value: "disabled",
-    label: "Disabled",
-    description: "This server is offline. No users can connect to it",
-    dotClass: "bg-amber-400",
-    hoverDotClass: "group-hover:bg-amber-400",
-  },
-  {
-    value: "private",
-    label: "Private",
-    description: "The server serves traffic.",
-    dotClass: "bg-blue-400",
-    hoverDotClass: "group-hover:bg-blue-400",
-  },
-];
-
-// Public visibility is only offered for tunneled-backed servers, and only
-// once the tunnel source owner has consented (double opt-in).
-const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
-  value: "public",
-  label: "Public",
-  description:
-    "Anyone can connect anonymously — no login. Every tool is exposed to the public internet.",
-  dotClass: "bg-green-400",
-  hoverDotClass: "group-hover:bg-green-400",
-};
-
-export function MCPServerStatusDropdown({
-  server,
-}: {
-  server: McpServer;
-}): JSX.Element {
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
-  const queryClient = useQueryClient();
-  const update = useUpdateMcpServerMutation({
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        // Enabling a disabled server (e.g. disabled -> private) auto-attaches
-        // it to the Default plugin server-side, which the plugin banner's
-        // membership check and publish-freshness state need to pick up.
-        invalidateAllPlugins(queryClient, { refetchType: "all" }),
-        invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
-      ]);
-      const next = variables.request.updateMcpServerForm.visibility;
-      toast.success(
-        next === "disabled"
-          ? "MCP server disabled"
-          : next === "public"
-            ? "MCP server set to public"
-            : "MCP server set to private",
-      );
-    },
-    onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update server visibility",
-      );
-    },
-  });
-
-  const handleSelect = (next: McpServerVisibility) => {
-    if (next === server.visibility) return;
-    update.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: server.id,
-          name: server.name ?? undefined,
-          remoteMcpServerId: server.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
-          toolsetId: server.toolsetId ?? undefined,
-          environmentId: server.environmentId ?? undefined,
-          // updateMcpServer is a full-record replace for the optional UUID
-          // references. Forwarding them keeps stored values intact across a
-          // visibility-only update.
-          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
-          visibility: next,
-        },
-      },
-    });
-  };
-
-  const currentLabel =
-    server.visibility === "disabled"
-      ? "Disabled"
-      : server.visibility === "public"
-        ? "Public"
-        : "Private";
-
-  const isTunneled = Boolean(server.tunneledMcpServerId);
-  const { data: tunneledSource } = useGetTunneledMcpServer(
-    getTunneledMcpServerArgs(server.tunneledMcpServerId ?? ""),
-    undefined,
-    { enabled: isTunneled },
-  );
-  const sourceAllowsPublic = tunneledSource?.allowPublic ?? false;
-
-  const options = isTunneled
-    ? [...VISIBILITY_OPTIONS, PUBLIC_VISIBILITY_OPTION]
-    : VISIBILITY_OPTIONS;
-
-  const currentDotClass =
-    options.find((option) => option.value === server.visibility)?.dotClass ??
-    "bg-green-400";
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={!canWrite || update.isPending}>
-        <button
-          type="button"
-          disabled={!canWrite || update.isPending}
-          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span
-            className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
-          />
-          {currentLabel}
-          <ChevronDown className="text-muted-foreground h-3 w-3" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[320px] p-1">
-        {options.map((option) => {
-          // Public is gated on the source's consent; render it disabled with
-          // a hint rather than hiding it, so owners know the toggle exists.
-          const publicBlocked =
-            option.value === "public" && !sourceAllowsPublic;
-          return (
-            <DropdownMenuItem
-              key={option.value}
-              disabled={publicBlocked}
-              onSelect={() => {
-                if (publicBlocked) return;
-                handleSelect(option.value);
-              }}
-              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
-            >
-              {option.value === server.visibility ? (
-                <span
-                  className={cn(
-                    "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
-                    option.dotClass,
-                  )}
-                >
-                  <Check
-                    className="text-background h-2.5 w-2.5"
-                    strokeWidth={4}
-                  />
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
-                    "bg-muted",
-                    option.hoverDotClass,
-                  )}
-                />
-              )}
-              <div className="flex-1">
-                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
-                  {option.label}
-                </span>
-                <span className="text-muted-foreground text-xs">
-                  {publicBlocked
-                    ? "Enable public access on the tunnel source first to allow anonymous serving."
-                    : option.description}
-                </span>
-              </div>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

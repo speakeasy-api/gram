@@ -11,42 +11,34 @@ import { buildCollectionsListServersQuery } from "@gram/client/react-query/colle
 import { useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-// PublishingTarget identifies the server being published, parametrized on the
-// attachment backend. Toolset-backed servers match on toolset_id (or the
-// registry-specifier slug for older attachments); mcp_server-backed servers
-// match on mcp_server_id.
-export type PublishingTarget =
-  | { kind: "toolset"; toolsetId: string; mcpSlug: string | undefined }
-  | { kind: "mcpServer"; mcpServerId: string };
+// PublishingTarget identifies the mcp_server being published. A toolset-backed
+// wrapper also carries its backing toolset id so attachments recorded against
+// the toolset before the mcp_servers cutover still read as published; writes
+// always key on mcp_server_id (the backend resolves either key to the same
+// attachment row).
+export type PublishingTarget = {
+  kind: "mcpServer";
+  mcpServerId: string;
+  backingToolsetId?: string;
+};
 
 function serverMatchesTarget(
   server: ExternalMCPServer,
   target: PublishingTarget,
 ): boolean {
-  switch (target.kind) {
-    case "mcpServer":
-      return server.mcpServerId === target.mcpServerId;
-    case "toolset": {
-      if (server.toolsetId === target.toolsetId) {
-        return true;
-      }
-      const parts = server.registrySpecifier?.split("/") ?? [];
-      const slug = parts[parts.length - 1];
-      return !!target.mcpSlug && slug === target.mcpSlug;
-    }
+  if (server.mcpServerId === target.mcpServerId) {
+    return true;
   }
+  return (
+    !!target.backingToolsetId && server.toolsetId === target.backingToolsetId
+  );
 }
 
 function attachBodyForTarget(
   collectionId: string,
   target: PublishingTarget,
 ): AttachServerRequestBody {
-  switch (target.kind) {
-    case "mcpServer":
-      return { collectionId, mcpServerId: target.mcpServerId };
-    case "toolset":
-      return { collectionId, toolsetId: target.toolsetId };
-  }
+  return { collectionId, mcpServerId: target.mcpServerId };
 }
 
 export type UsePublishingResult = {
@@ -62,10 +54,9 @@ export type UsePublishingResult = {
 
 // usePublishing owns the collection-publishing logic: which collections already
 // serve this target, the user's pending selection, and committing attach/detach
-// mutations. It deliberately holds no chrome so each host page can render its
-// own section/footer (the toolset details page and the Remote MCP server
-// settings page differ visually). Callers that aren't org:admin should still
-// gate the surrounding UI, since attach/detach authorize as org:admin.
+// mutations. It deliberately holds no chrome so a host page can render its own
+// section/footer. Callers that aren't org:admin should still gate the
+// surrounding UI, since attach/detach authorize as org:admin.
 export function usePublishing(target: PublishingTarget): UsePublishingResult {
   const client = useSdkClient();
   const { data: collections, isLoading: collectionsLoading } = useCollections();

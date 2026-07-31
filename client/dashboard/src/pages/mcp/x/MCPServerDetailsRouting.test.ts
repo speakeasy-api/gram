@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   activeTabFromPath,
   initialTabFromHash,
-  isLegacyAuthenticationTabPath,
-  isLegacyToolsTabPath,
+  resolveTabForBackend,
+  tabsForBackend,
 } from "./MCPServerDetailsRouting";
 
 describe("activeTabFromPath", () => {
@@ -46,49 +46,19 @@ describe("activeTabFromPath", () => {
     ).toBe("settings");
   });
 
-  it("does not treat the legacy authentication path as an active tab", () => {
+  it.each([
+    "tools",
+    "resources",
+    "prompts",
+    "authentication",
+    "performance",
+  ] as const)("reads the toolset-backed %s tab", (tab) => {
     expect(
       activeTabFromPath(
-        "/acme/projects/default/mcp/x/my-server/authentication",
+        `/acme/projects/default/mcp/x/my-server/${tab}`,
         "my-server",
       ),
-    ).toBeUndefined();
-  });
-
-  it("detects the legacy authentication path for redirects", () => {
-    expect(
-      isLegacyAuthenticationTabPath(
-        "/acme/projects/default/mcp/x/my-server/authentication",
-        "my-server",
-      ),
-    ).toBe(true);
-  });
-
-  it("does not treat the legacy tools path as an active tab", () => {
-    expect(
-      activeTabFromPath(
-        "/acme/projects/default/mcp/x/my-server/tools",
-        "my-server",
-      ),
-    ).toBeUndefined();
-  });
-
-  it("detects the legacy tools path for redirects", () => {
-    expect(
-      isLegacyToolsTabPath(
-        "/acme/projects/default/mcp/x/my-server/tools",
-        "my-server",
-      ),
-    ).toBe(true);
-  });
-
-  it("does not confuse the inspect tab with the legacy tools path", () => {
-    expect(
-      isLegacyToolsTabPath(
-        "/acme/projects/default/mcp/x/my-server/inspect",
-        "my-server",
-      ),
-    ).toBe(false);
+    ).toBe(tab);
   });
 
   it("matches decoded server slug segments", () => {
@@ -110,16 +80,80 @@ describe("activeTabFromPath", () => {
   });
 });
 
-describe("initialTabFromHash", () => {
-  it("maps the legacy authentication hash to settings", () => {
-    expect(initialTabFromHash("#authentication")).toBe("settings");
+describe("resolveTabForBackend", () => {
+  it("folds authentication into settings for source-backed servers", () => {
+    expect(resolveTabForBackend("authentication", false)).toEqual({
+      tab: "settings",
+      hash: "authentication",
+    });
   });
 
-  it("maps the legacy tools hash to inspect", () => {
-    expect(initialTabFromHash("#tools")).toBe("inspect");
+  it("folds tools into inspect for source-backed servers", () => {
+    expect(resolveTabForBackend("tools", false)).toEqual({ tab: "inspect" });
+  });
+
+  it.each(["resources", "prompts", "performance"] as const)(
+    "folds %s into overview for source-backed servers",
+    (tab) => {
+      expect(resolveTabForBackend(tab, false)).toEqual({ tab: "overview" });
+    },
+  );
+
+  it("keeps toolset-only tabs for toolset-backed servers", () => {
+    expect(resolveTabForBackend("tools", true)).toEqual({ tab: "tools" });
+    expect(resolveTabForBackend("authentication", true)).toEqual({
+      tab: "authentication",
+    });
+  });
+
+  it("folds inspect into tools for toolset-backed servers", () => {
+    expect(resolveTabForBackend("inspect", true)).toEqual({ tab: "tools" });
+  });
+
+  it("keeps shared tabs for both backend kinds", () => {
+    expect(resolveTabForBackend("settings", true)).toEqual({ tab: "settings" });
+    expect(resolveTabForBackend("settings", false)).toEqual({
+      tab: "settings",
+    });
+  });
+});
+
+describe("tabsForBackend", () => {
+  it("excludes inspect for toolset-backed servers", () => {
+    expect(tabsForBackend(true)).not.toContain("inspect");
+    expect(tabsForBackend(true)).toContain("tools");
+    expect(tabsForBackend(true)).toContain("prompts");
+  });
+
+  it("excludes toolset-only tabs for source-backed servers", () => {
+    expect(tabsForBackend(false)).toEqual([
+      "overview",
+      "inspect",
+      "team-access",
+      "settings",
+    ]);
+  });
+});
+
+describe("initialTabFromHash", () => {
+  it("maps the authentication hash to settings for source-backed servers", () => {
+    expect(initialTabFromHash("#authentication", false)).toBe("settings");
+  });
+
+  it("maps the authentication hash to the authentication tab for toolset-backed servers", () => {
+    expect(initialTabFromHash("#authentication", true)).toBe("authentication");
+  });
+
+  it("maps the tools hash to inspect for source-backed servers", () => {
+    expect(initialTabFromHash("#tools", false)).toBe("inspect");
   });
 
   it("supports team access", () => {
-    expect(initialTabFromHash("#team-access")).toBe("team-access");
+    expect(initialTabFromHash("#team-access", false)).toBe("team-access");
+  });
+
+  it("defaults to overview", () => {
+    expect(initialTabFromHash("", true)).toBe("overview");
+    expect(initialTabFromHash("#nope", false)).toBe("overview");
   });
 });

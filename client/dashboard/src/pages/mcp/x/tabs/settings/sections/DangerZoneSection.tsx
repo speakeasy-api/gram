@@ -2,6 +2,8 @@ import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type {
@@ -9,12 +11,16 @@ import type {
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpServerMutation } from "@gram/client/react-query/deleteMcpServer.js";
+import { invalidateAllGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import {
   buildGetMcpServerQuery,
   invalidateAllGetMcpServer,
 } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Alert } from "@/components/ui/Alert";
@@ -84,9 +90,16 @@ function ServerControlRow({
 export function DangerZoneSection({
   mcpServer,
   endpoints,
+  backingToolset,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
+  /**
+   * When set, deleting removes the backing toolset too — the toolset is this
+   * server's tool bundle and deleting it tombstones the wrapper server and
+   * its endpoints server-side.
+   */
+  backingToolset?: Toolset;
 }): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
@@ -189,7 +202,11 @@ export function DangerZoneSection({
 
               <ServerControlRow
                 title="Delete MCP Server"
-                description="Permanently remove this server and all of its endpoints. This action cannot be undone."
+                description={
+                  backingToolset
+                    ? "Permanently remove this server, its endpoints, and its tool bundle. This action cannot be undone."
+                    : "Permanently remove this server and all of its endpoints. This action cannot be undone."
+                }
               >
                 <RequireScope scope="mcp:write" level="component">
                   <Button
@@ -218,6 +235,7 @@ export function DangerZoneSection({
           <DeleteMcpServerDialogContent
             mcpServer={mcpServer}
             endpoints={endpoints}
+            backingToolset={backingToolset}
             onClose={() => setDeleteDialogOpen(false)}
             onSuccess={() => {
               setDeleteDialogOpen(false);
@@ -291,15 +309,27 @@ function ServerAvailabilityDialog({
 function DeleteMcpServerDialogContent({
   mcpServer,
   endpoints,
+  backingToolset,
   onClose,
   onSuccess,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
+  backingToolset?: Toolset;
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const queryClient = useQueryClient();
+  const client = useSdkClient();
+  const telemetry = useTelemetry();
+  const { data: deploymentResult } = useLatestDeployment(undefined, undefined, {
+    enabled: !!backingToolset,
+    throwOnError: false,
+  });
+  const [isDeletingToolset, setIsDeletingToolset] = useState(false);
+  const [toolsetDeleteError, setToolsetDeleteError] = useState<string | null>(
+    null,
+  );
   const remove = useDeleteMcpServerMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -317,12 +347,69 @@ function DeleteMcpServerDialogContent({
     },
   });
 
+  // Deleting the backing toolset tombstones the wrapper server and its
+  // endpoints server-side, so the toolset delete is the whole operation. A
+  // toolset holding an external MCP source also evicts that source from the
+  // deployment first, mirroring the removal flow the toolset page used.
+  const handleToolsetDelete = async (toolset: Toolset) => {
+    setIsDeletingToolset(true);
+    setToolsetDeleteError(null);
+    try {
+      const externalMcpUrn = toolset.toolUrns?.find((urn) =>
+        urn.includes(":externalmcp:"),
+      );
+      const deployment = deploymentResult?.deployment;
+      const externalMcpSlug = externalMcpUrn?.split(":")[2];
+      if (externalMcpSlug && deployment) {
+        await client.deployments.evolveDeployment({
+          evolveForm: {
+            deploymentId: deployment.id,
+            nonBlocking: true,
+            excludeExternalMcps: [externalMcpSlug],
+          },
+        });
+      }
+
+      await client.toolsets.deleteBySlug({ slug: toolset.slug });
+
+      telemetry.capture("mcp_event", {
+        action: "mcp_server_deleted",
+        slug: toolset.slug,
+      });
+
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllToolset(queryClient, { refetchType: "none" }),
+        invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+        invalidateAllGetPeriodUsage(queryClient, { refetchType: "all" }),
+      ]);
+
+      toast.success("MCP server deleted");
+      onSuccess();
+    } catch (error) {
+      setToolsetDeleteError(
+        error instanceof Error ? error.message : "Failed to delete MCP server",
+      );
+    } finally {
+      setIsDeletingToolset(false);
+    }
+  };
+
+  const isPending = remove.isPending || isDeletingToolset;
+  const errorMessage =
+    toolsetDeleteError ?? (remove.isError ? remove.error.message : null);
+
   const handleConfirm = () => {
+    if (backingToolset) {
+      void handleToolsetDelete(backingToolset);
+      return;
+    }
     remove.mutate({ request: { id: mcpServer.id } });
   };
 
   let deleteButtonContent = <Button.Text>Delete MCP server</Button.Text>;
-  if (remove.isPending) {
+  if (isPending) {
     deleteButtonContent = (
       <>
         <Button.LeftIcon>
@@ -340,8 +427,9 @@ function DeleteMcpServerDialogContent({
       </Dialog.Header>
       <Stack gap={3}>
         <Text>
-          This will soft-delete the MCP server <strong>{mcpServer.name}</strong>{" "}
-          and the following endpoints. The action cannot be undone.
+          This will soft-delete the MCP server <strong>{mcpServer.name}</strong>
+          {backingToolset ? ", its tool bundle," : ""} and the following
+          endpoints. The action cannot be undone.
         </Text>
         {endpoints.length > 0 ? (
           <ul className="list-disc pl-6">
@@ -361,24 +449,20 @@ function DeleteMcpServerDialogContent({
             No endpoints are currently associated with this MCP server.
           </Text>
         )}
-        {remove.isError && (
+        {errorMessage && (
           <Alert variant="error" dismissible={false}>
-            {remove.error.message}
+            {errorMessage}
           </Alert>
         )}
         <Stack direction="horizontal" gap={2}>
           <Button
             variant="destructive-primary"
-            disabled={remove.isPending}
+            disabled={isPending}
             onClick={handleConfirm}
           >
             {deleteButtonContent}
           </Button>
-          <Button
-            variant="secondary"
-            disabled={remove.isPending}
-            onClick={onClose}
-          >
+          <Button variant="secondary" disabled={isPending} onClick={onClose}>
             <Button.Text>Cancel</Button.Text>
           </Button>
         </Stack>

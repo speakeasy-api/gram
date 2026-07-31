@@ -3,7 +3,7 @@ import type { Toolset } from "@/lib/toolTypes";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { PageSection } from "./MCPDetails";
+import { PageSection } from "./PageSection";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";

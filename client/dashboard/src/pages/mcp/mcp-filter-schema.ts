@@ -1,6 +1,5 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import {
   defineFilters,
   type FilterOption,
@@ -75,14 +74,13 @@ export function pluginFilterOptions(plugins: Plugin[]): FilterOption[] {
 }
 
 // A toolset-backed wrapper keeps the hosted catalog/custom classification;
-// origin.registrySpecifier on the backing toolset is the only list-row signal
+// the toolset summary's origin registry specifier is the only list-row signal
 // that a hosted MCP came from catalog.
-function mcpServerSource(
-  server: McpServer,
-  backingToolset: ToolsetEntry | undefined,
-): McpFacets["source"] {
+function mcpServerSource(server: McpServer): McpFacets["source"] {
   if (server.toolsetId) {
-    return backingToolset?.origin?.registrySpecifier ? "catalog" : "custom";
+    return server.toolsetSummary?.originRegistrySpecifier
+      ? "catalog"
+      : "custom";
   }
   return server.tunneledMcpServerId ? "tunneled" : "remote";
 }
@@ -117,11 +115,10 @@ function mcpServerStatus(
 export function mcpServerFacets(
   server: McpServer,
   membership: PluginMembership,
-  backingToolset?: ToolsetEntry,
 ): McpFacets {
   return {
     status: mcpServerStatus(server.visibility),
-    source: mcpServerSource(server, backingToolset),
+    source: mcpServerSource(server),
     pluginIds: mcpServerPluginIds(server, membership),
   };
 }

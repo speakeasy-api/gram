@@ -37,13 +37,9 @@ import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
-import {
-  ConnectOAuthModal,
-  EditOAuthProxyModal,
-  GramOAuthProxyModal,
-  OAuthDetailsModal,
-  PageSection,
-} from "./MCPDetails";
+import { ConnectOAuthModal, EditOAuthProxyModal } from "./oauth-wizard";
+import { PageSection } from "./PageSection";
+import { GramOAuthProxyModal, OAuthDetailsModal } from "./ToolsetOAuthModals";
 import {
   EnvVarState,
   EnvironmentVariable,

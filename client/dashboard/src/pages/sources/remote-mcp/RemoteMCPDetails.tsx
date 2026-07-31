@@ -28,6 +28,7 @@ import {
 import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { useGramContext } from "@gram/client/react-query/_context";
@@ -133,18 +134,18 @@ export default function RemoteMCPDetails(): JSX.Element {
 
   // Mirror the MCP listing page pattern: fetch all endpoints once and bucket
   // by mcp_server_id rather than N+1 lookups per card.
-  const { data: endpointsResult } = useMcpEndpoints({}, undefined, {
-    enabled: remoteMcpServerId !== "",
-  });
-  const endpointCountByServerId = useMemo(() => {
-    const counts = new Map<string, number>();
+  const { data: endpointsResult, isLoading: isLoadingEndpoints } =
+    useMcpEndpoints({}, undefined, {
+      enabled: remoteMcpServerId !== "",
+    });
+  const endpointsByServerId = useMemo(() => {
+    const grouped = new Map<string, McpEndpoint[]>();
     for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
-      counts.set(
-        endpoint.mcpServerId,
-        (counts.get(endpoint.mcpServerId) ?? 0) + 1,
-      );
+      const existing = grouped.get(endpoint.mcpServerId);
+      if (existing) existing.push(endpoint);
+      else grouped.set(endpoint.mcpServerId, [endpoint]);
     }
-    return counts;
+    return grouped;
   }, [endpointsResult]);
 
   if (isError || (!isLoading && !remoteMcpServer)) {
@@ -211,7 +212,8 @@ export default function RemoteMCPDetails(): JSX.Element {
             <McpServersTab
               isLoading={isLoadingMcpServers}
               mcpServers={linkedMcpServers}
-              endpointCountByServerId={endpointCountByServerId}
+              endpointsByServerId={endpointsByServerId}
+              isLoadingEndpoints={isLoadingEndpoints}
               remoteMcpServer={remoteMcpServer}
             />
           </TabsContent>
@@ -409,12 +411,14 @@ function OverviewTab({
 function McpServersTab({
   isLoading,
   mcpServers,
-  endpointCountByServerId,
+  endpointsByServerId,
+  isLoadingEndpoints,
   remoteMcpServer,
 }: {
   isLoading: boolean;
   mcpServers: McpServer[];
-  endpointCountByServerId: Map<string, number>;
+  endpointsByServerId: Map<string, McpEndpoint[]>;
+  isLoadingEndpoints: boolean;
   remoteMcpServer: RemoteMcpServer | undefined;
 }) {
   return (
@@ -427,7 +431,8 @@ function McpServersTab({
             <MCPServerCard
               key={server.id}
               server={server}
-              endpointCount={endpointCountByServerId.get(server.id) ?? 0}
+              endpoints={endpointsByServerId.get(server.id) ?? []}
+              isLoadingEndpoints={isLoadingEndpoints}
             />
           ))}
         </div>
