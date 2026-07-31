@@ -87,6 +87,27 @@ services:
     depends_on:
       - otel-collector
 
+  litellm:
+    profiles: [litellm]
+    image: ghcr.io/berriai/litellm:v1.94.0@sha256:65d84a2282137b4dc73bbe184650a7c807177c533e4223b3bfbc87963fe3fabe
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_DEV_KEY}
+    volumes:
+      - ./local/litellm/config.yaml:/app/config.yaml:ro
+    ports:
+      - "${LITELLM_PORT}:4000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python3 -c "import urllib.request; urllib.request.urlopen(''http://localhost:4000/health/liveliness'')"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   clickhouse:
     build:
       context: ./local/clickhouse
