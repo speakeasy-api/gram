@@ -37,7 +37,7 @@ for arg in "${args[@]}"; do
 done
 
 if [ "$has_timeout" = false ]; then
-  args=("-timeout=25m" "${args[@]}")
+  args=("-timeout=20m" "${args[@]}")
 fi
 
 if [ "$cover" = true ]; then
