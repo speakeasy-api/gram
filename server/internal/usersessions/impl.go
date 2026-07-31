@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -43,7 +42,7 @@ type Service struct {
 	db           *pgxpool.Pool
 	auth         *auth.Auth
 	authz        *authz.Engine
-	chatSessions *chatsessions.Manager
+	chatSessions TokenRevoker
 	audit        *audit.Logger
 	// signer mints the user-session JWT returned by mintUserSession. Same
 	// signer the /mcp/{slug}/token handler uses, so the resulting JWTs
@@ -73,11 +72,13 @@ var (
 
 // NewService constructs a Service ready to be Attached against each of the
 // four user_session* Goa services. chatSessionsManager is used by the
-// userSessions revoke handler to push revoked jtis into the revocation cache.
+// userSessions and userSessionClients revoke handlers to push revoked jtis
+// into the revocation cache; it is held as a TokenRevoker so tests can
+// substitute a failing revoker.
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager *chatsessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger, signer *Signer, serverURL string, remoteSessions *remotesessions.Service) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, signer *Signer, serverURL string, remoteSessions *remotesessions.Service) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
