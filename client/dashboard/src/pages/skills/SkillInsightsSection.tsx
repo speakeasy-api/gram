@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/Collapsible";
 import { Dialog } from "@/components/ui/Dialog";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -188,7 +188,7 @@ function InsightsContent({
   versionLabels: Map<string, string>;
 }): JSX.Element {
   if (!insight) {
-    return <Type muted>No insight data is available for this skill.</Type>;
+    return <Text muted>No insight data is available for this skill.</Text>;
   }
 
   const efficacy = insight.metrics.efficacy;
@@ -314,12 +314,12 @@ function ScoredSessions({
     >
       <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-4 text-left">
         <span className="block">
-          <Type as="span" variant="subheading" className="block">
+          <Text as="span" variant="subheading" className="block">
             Scored sessions
-          </Type>
-          <Type as="span" small muted className="block">
+          </Text>
+          <Text as="span" small muted className="block">
             Judge rationale and raw flags for recent sampled sessions.
-          </Type>
+          </Text>
         </span>
         <Icon
           name="chevron-right"
@@ -341,10 +341,10 @@ function ScoredSessions({
             </div>
           )}
           {!canReadChats && (
-            <Type small muted>
+            <Text small muted>
               The <code className="font-mono">chat:read</code> scope is required
               to view session rationale and links.
-            </Type>
+            </Text>
           )}
           {canReadChats && query.isPending && <SkeletonTable />}
           {canReadChats && query.error && (
@@ -378,9 +378,9 @@ function ScoredSessions({
               >
                 Previous
               </Button>
-              <Type small muted className="tabular-nums">
+              <Text small muted className="tabular-nums">
                 Page {pageIndex + 1}
-              </Type>
+              </Text>
               <Button
                 size="sm"
                 variant="secondary"
@@ -555,9 +555,9 @@ function TrendChart({
     >
       {timestamps.length === 0 ? (
         <div className="flex h-48 items-center justify-center">
-          <Type small muted>
+          <Text small muted>
             No trend data in this window.
-          </Type>
+          </Text>
         </div>
       ) : (
         <div className="h-56">
@@ -578,9 +578,9 @@ function ScoredSessionsTable({
   const routes = useRoutes();
   if (sessions.length === 0) {
     return (
-      <Type small muted>
+      <Text small muted>
         No scored sessions in the last 30 days.
-      </Type>
+      </Text>
     );
   }
   const columns: Column<SkillEfficacyScoredSession>[] = [
@@ -589,9 +589,9 @@ function ScoredSessionsTable({
       header: "Score",
       width: "90px",
       render: (session) => (
-        <Type className="font-medium tabular-nums">
+        <Text className="font-medium tabular-nums">
           {formatPercent(session.score)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -599,10 +599,10 @@ function ScoredSessionsTable({
       header: "Version",
       width: "150px",
       render: (session) => (
-        <Type small mono>
+        <Text small mono>
           {versionLabels.get(session.skillVersionId) ??
             session.skillVersionId.slice(0, 8)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -611,7 +611,7 @@ function ScoredSessionsTable({
       width: "2fr",
       render: (session) => (
         <div className="space-y-1">
-          <Type small>{session.rationale}</Type>
+          <Text small>{session.rationale}</Text>
           {session.flags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {session.flags.map((flag) => (
@@ -629,13 +629,13 @@ function ScoredSessionsTable({
       header: "Activated",
       width: "130px",
       render: (session) => (
-        <Type
+        <Text
           small
           muted
           title={dateTimeFormatters.full.format(session.activatedAt)}
         >
           <HumanizeDateTime date={session.activatedAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -651,9 +651,9 @@ function ScoredSessionsTable({
             Open
           </Link>
         ) : (
-          <Type small muted>
+          <Text small muted>
             Dev
-          </Type>
+          </Text>
         ),
     },
   ];

@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Badge } from "@/components/ui/Badge";
@@ -115,13 +115,13 @@ function SkillsComingSoon(): JSX.Element {
           <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
             <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
           </div>
-          <Type variant="subheading" className="mb-1">
+          <Text variant="subheading" className="mb-1">
             No skills yet
-          </Type>
-          <Type small muted className="max-w-md text-center">
+          </Text>
+          <Text small muted className="max-w-md text-center">
             Build and distribute skills to your team. Track usage, enable
             discovery and improve performance.
-          </Type>
+          </Text>
           <Badge variant="neutral" className="mt-3">
             Coming Soon
           </Badge>

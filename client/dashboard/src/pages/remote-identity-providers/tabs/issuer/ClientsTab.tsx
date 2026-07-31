@@ -3,7 +3,7 @@ import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import type { Action } from "@/components/ui/MoreActions";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionClient } from "@gram/client/models/components/organizationremotesessionclient.js";
@@ -43,15 +43,15 @@ export function ClientsTab({
   let body: JSX.Element;
   if (isError) {
     body = (
-      <Type className="text-destructive py-8 text-center">
+      <Text className="text-destructive py-8 text-center">
         Failed to load clients.
-      </Type>
+      </Text>
     );
   } else if (!isLoading && items.length === 0) {
     body = (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         No clients registered with this provider.
-      </Type>
+      </Text>
     );
   } else {
     body = (
@@ -87,25 +87,25 @@ export function ClientsTab({
                 ariaLabel={`View client ${remoteSessionClientDisplayName(item.client)}`}
               >
                 <td className="px-3 py-3">
-                  <Type
+                  <Text
                     variant="subheading"
                     as="div"
                     className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
                   >
                     {remoteSessionClientDisplayName(item.client)}
-                  </Type>
+                  </Text>
                 </td>
                 <td className="px-3 py-3">
-                  <Type small muted>
+                  <Text small muted>
                     {item.mcpServerCount}{" "}
                     {item.mcpServerCount === 1 ? "server" : "servers"}
-                  </Type>
+                  </Text>
                 </td>
                 <td className="px-3 py-3">
-                  <Type small muted>
+                  <Text small muted>
                     {item.activeSessionCount}{" "}
                     {item.activeSessionCount === 1 ? "session" : "sessions"}
-                  </Type>
+                  </Text>
                 </td>
                 <td className="px-3 py-3 text-right">
                   <RequireScope scope="org:admin" level="section">

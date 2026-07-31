@@ -1,6 +1,6 @@
 import { Expandable } from "@/components/expandable";
 import { SkeletonParagraph } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { FileJson2, X } from "lucide-react";
@@ -34,9 +34,9 @@ export const UploadedDocument = ({
       <Expandable.Trigger>
         <Stack direction={"horizontal"} gap={2} align={"center"}>
           <FileJson2 className="text-muted-foreground/70 h-4 w-4" />
-          <Type small mono>
+          <Text small mono>
             {file.name}
-          </Type>
+          </Text>
           <Button
             variant="tertiary"
             onClick={onReset}

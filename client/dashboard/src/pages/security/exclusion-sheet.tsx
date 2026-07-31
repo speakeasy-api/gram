@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/Sheet";
 import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
@@ -323,10 +323,10 @@ function ExclusionForm({
             placeholder="e.g. stop flagging our shared test account jane.doe@acme.com in email findings"
           />
           <div className="flex items-center justify-between gap-3">
-            <Type className="text-muted-foreground" small>
+            <Text className="text-muted-foreground" small>
               Describe what to stop flagging. We'll write the criteria
               expression, you tweak before saving.
-            </Type>
+            </Text>
             <Button
               variant="secondary"
               size="sm"
@@ -356,7 +356,7 @@ function ExclusionForm({
             placeholder={'e.g. match == "jane.doe@acme.com"'}
             className="font-mono text-sm"
           />
-          {error && <Type className="text-destructive text-sm">{error}</Type>}
+          {error && <Text className="text-destructive text-sm">{error}</Text>}
           <ExclusionExamples />
         </div>
 
@@ -394,9 +394,9 @@ function ExclusionExamples() {
   ];
   return (
     <div className="bg-muted/40 text-muted-foreground space-y-1 rounded-md p-3 text-xs">
-      <Type className="font-medium" small>
+      <Text className="font-medium" small>
         Examples
-      </Type>
+      </Text>
       <ul className="space-y-1">
         {examples.map(([code, desc]) => (
           <li key={code}>
@@ -404,10 +404,10 @@ function ExclusionExamples() {
           </li>
         ))}
       </ul>
-      <Type className="text-muted-foreground" small>
+      <Text className="text-muted-foreground" small>
         Combine with <code className="font-mono">&amp;&amp;</code> to scope by
         rule or source.
-      </Type>
+      </Text>
     </div>
   );
 }

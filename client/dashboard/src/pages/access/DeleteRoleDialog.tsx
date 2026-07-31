@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import { Button } from "@/components/ui/Button";
@@ -42,7 +42,7 @@ export const DeleteRoleDialog = ({
         </Dialog.Header>
         <div className="space-y-4 py-4">
           {hasMembers ? (
-            <Type variant="body">
+            <Text variant="body">
               Are you sure?{" "}
               {soleRoleMembers.length > 0 && defaultRole ? (
                 <>
@@ -65,14 +65,14 @@ export const DeleteRoleDialog = ({
                   {members.length === 1 ? "" : "s"}.
                 </>
               )}
-            </Type>
+            </Text>
           ) : (
-            <Type variant="body">
+            <Text variant="body">
               <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                 {role?.name}
               </code>{" "}
               will be permanently deleted. This action cannot be undone.
-            </Type>
+            </Text>
           )}
 
           {hasMembers && (
@@ -99,9 +99,9 @@ export const DeleteRoleDialog = ({
                     </Avatar>
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <Type variant="body" className="text-sm font-medium">
+                        <Text variant="body" className="text-sm font-medium">
                           {member.name}
-                        </Type>
+                        </Text>
                         {role && isOnlyRole && defaultRole && (
                           <div className="flex items-center gap-1">
                             <Badge
@@ -122,12 +122,12 @@ export const DeleteRoleDialog = ({
                           </div>
                         )}
                       </div>
-                      <Type
+                      <Text
                         variant="body"
                         className="text-muted-foreground text-xs"
                       >
                         {member.email}
-                      </Type>
+                      </Text>
                     </div>
                   </div>
                 );

@@ -1,5 +1,5 @@
 import { GramLogo } from "@/components/gram-logo";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSessionData } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskAcknowledgePolicyChallengeMutation } from "@gram/client/react-query/riskAcknowledgePolicyChallenge.js";
@@ -214,24 +214,24 @@ function ChallengeReview({
         <div className="bg-warning/10 flex h-11 w-11 items-center justify-center rounded-full">
           <Icon name="shield-alert" className="text-warning h-5 w-5" />
         </div>
-        <Type variant="subheading" className="text-center">
+        <Text variant="subheading" className="text-center">
           Approval required
-        </Type>
-        <Type muted small className="text-center">
+        </Text>
+        <Text muted small className="text-center">
           {policyName
             ? `This action was held for review by risk policy "${policyName}".`
             : "This action was held for review by a risk policy."}
           {toolName ? ` Tool: ${toolName}.` : ""}
-        </Type>
+        </Text>
       </Stack>
 
       <div className="border-border bg-muted/40 w-full rounded-md border p-3">
-        <Type
+        <Text
           small
           className="text-foreground/90 whitespace-pre-wrap break-words font-mono"
         >
           {message}
-        </Type>
+        </Text>
       </div>
 
       <Stack direction="horizontal" gap={2} className="w-full justify-center">
@@ -242,10 +242,10 @@ function ChallengeReview({
           <Button.Text>{approving ? "Approving..." : "Approve"}</Button.Text>
         </Button>
       </Stack>
-      <Type muted small className="text-center">
+      <Text muted small className="text-center">
         Approving lets the agent retry this exact action. Denying keeps it
         blocked.
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -320,9 +320,9 @@ function SpinnerView({ label }: { label: string }) {
         name="loader-circle"
         className="text-muted-foreground h-6 w-6 animate-spin"
       />
-      <Type muted small className="text-center">
+      <Text muted small className="text-center">
         {label}
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -358,12 +358,12 @@ function StatusView({
         <Icon name={icon} className={`h-5 w-5 ${fg}`} />
       </div>
       <Stack gap={1} align="center">
-        <Type variant="subheading" className="text-center">
+        <Text variant="subheading" className="text-center">
           {title}
-        </Type>
-        <Type muted small className="text-center">
+        </Text>
+        <Text muted small className="text-center">
           {body}
-        </Type>
+        </Text>
       </Stack>
     </Stack>
   );

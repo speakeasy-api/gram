@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Action } from "@/components/ui/MoreActions";
 import { TextArea } from "@/components/ui/Textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool } from "@/lib/toolTypes";
@@ -253,12 +253,12 @@ export function useSourceToolActions({
                       size="small"
                       className="text-muted-foreground/70"
                     />
-                    <Type small muted>
+                    <Text small muted>
                       Original name:
-                    </Type>
-                    <Type small muted>
+                    </Text>
+                    <Text small muted>
                       {tool.canonical?.name}
-                    </Type>
+                    </Text>
                   </Stack>
                 )}
             </Stack>
@@ -274,17 +274,17 @@ export function useSourceToolActions({
               {tool.variation?.description &&
                 tool.variation?.description !== tool.canonical?.description && (
                   <Stack className="border-border/70 rounded-md border p-2">
-                    <Type small muted className="inline font-medium">
+                    <Text small muted className="inline font-medium">
                       <Icon
                         name="layers-2"
                         size="small"
                         className="text-muted-foreground/70 inline align-text-bottom"
                       />{" "}
                       Original Description
-                    </Type>
-                    <Type small muted>
+                    </Text>
+                    <Text small muted>
                       {tool.canonical?.description}
-                    </Type>
+                    </Text>
                   </Stack>
                 )}
             </Stack>

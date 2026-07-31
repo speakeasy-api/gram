@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Combobox } from "@/components/ui/Combobox";
 import { capitalize } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
@@ -61,9 +61,9 @@ export function ToolsetDropdown({
       disabledMessage={disabledMessage}
       className="max-w-fit"
     >
-      <Type variant="small" className="font-medium">
+      <Text variant="small" className="font-medium">
         {capitalize(selectedToolset?.name ?? placeholder)}
-      </Type>
+      </Text>
     </Combobox>
   );
 }

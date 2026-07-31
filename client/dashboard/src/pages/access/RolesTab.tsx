@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
   invalidateAllRoles,
@@ -157,19 +157,19 @@ function RoleRow({
         )}
       >
         <div className="flex items-center gap-2">
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             {role.name}
-          </Type>
+          </Text>
           {role.isSystem && (
             <Badge variant="neutral" size="sm">
               System
             </Badge>
           )}
         </div>
-        <Type variant="body" className="text-muted-foreground min-w-0 truncate">
+        <Text variant="body" className="text-muted-foreground min-w-0 truncate">
           {role.description}
-        </Type>
-        <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
+        </Text>
+        <Text variant="body">{visiblePermissionCount(role.grants)}</Text>
         <MemberFacepile members={roleMembers} />
         <div aria-hidden />
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
@@ -235,9 +235,9 @@ export function RolesTab(): JSX.Element {
       <div className="mb-1 flex items-center justify-between">
         <div>
           <Heading variant="h4">Roles</Heading>
-          <Type muted small className="mt-1">
+          <Text muted small className="mt-1">
             Define roles and their associated permissions.
-          </Type>
+          </Text>
         </div>
         <RequireScope scope="org:admin" level="component">
           <Button onClick={() => setIsCreateOpen(true)}>
@@ -287,9 +287,9 @@ export function RolesTab(): JSX.Element {
       )}
 
       <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
-        <Type variant="subheading" className="mb-4">
+        <Text variant="subheading" className="mb-4">
           About System roles
-        </Type>
+        </Text>
         <div className="flex items-start gap-3 text-sm">
           <Badge
             variant="neutral"
@@ -298,11 +298,11 @@ export function RolesTab(): JSX.Element {
           >
             Member
           </Badge>
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             The default role for most users. Grants read access across the
             organization and projects. Gives the ability to connect to MCP
             servers and other resources.
-          </Type>
+          </Text>
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
@@ -312,10 +312,10 @@ export function RolesTab(): JSX.Element {
           >
             Admin
           </Badge>
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             Full access to all organization settings, billing, member
             management, every project, MCP server, skills and assistants.
-          </Type>
+          </Text>
         </div>
       </div>
 

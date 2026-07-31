@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CreateResourceCard } from "@/components/create-resource-card";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
 import { Search, X } from "lucide-react";
@@ -100,7 +100,7 @@ function CollectionGrid({
     return (
       <div className="space-y-4">
         {searchQuery ? (
-          <Type muted>No collections matching &ldquo;{searchQuery}&rdquo;</Type>
+          <Text muted>No collections matching &ldquo;{searchQuery}&rdquo;</Text>
         ) : null}
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {createCard}

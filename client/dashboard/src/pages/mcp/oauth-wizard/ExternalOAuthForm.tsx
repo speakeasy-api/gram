@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Link } from "@/components/ui/Link";
 import { TextArea } from "@/components/ui/Textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
@@ -295,14 +295,14 @@ export function ExternalOAuthForm({
         {discovered && !external.prefilled && (
           <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
             <div>
-              <Type small className="font-medium">
+              <Text small className="font-medium">
                 OAuth detected from {discovered.name}
-              </Type>
+              </Text>
 
-              <Type muted small className="mt-1">
+              <Text muted small className="mt-1">
                 We discovered OAuth {discovered.version} metadata from this
                 server. You can use it to pre-fill the form below.
-              </Type>
+              </Text>
             </div>
             <Button
               size="sm"
@@ -315,22 +315,22 @@ export function ExternalOAuthForm({
         )}
         {external.prefilled && (
           <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
-            <Type small className="font-medium">
+            <Text small className="font-medium">
               Pre-filled from detected OAuth metadata
-            </Type>
-            <Type muted small className="mt-1">
+            </Text>
+            <Text muted small className="mt-1">
               This form has been pre-filled with information Speakeasy detected
               about this server's OAuth requirements. Please review carefully
               and refer to the MCP server or API's documentation to confirm
               these values are correct.
-            </Type>
+            </Text>
           </div>
         )}
         <div>
-          <Type className="mb-2 font-medium">
+          <Text className="mb-2 font-medium">
             External OAuth Server Configuration
-          </Type>
-          <Type muted small className="mb-4">
+          </Text>
+          <Text muted small className="mb-4">
             Configure your MCP server to use an external authorization server if
             your API fits the very specific MCP OAuth requirements.{" "}
             <Link
@@ -339,7 +339,7 @@ export function ExternalOAuthForm({
             >
               Docs
             </Link>
-          </Type>
+          </Text>
 
           <Stack gap={4}>
             <Stack gap={2}>
@@ -352,10 +352,10 @@ export function ExternalOAuthForm({
                 validate={(value) => validateIssuerUrl(value) ?? true}
                 autoFocus
               />
-              <Type muted small>
+              <Text muted small>
                 Metadata is fetched automatically from this authorization
                 server.
-              </Type>
+              </Text>
             </Stack>
 
             <Stack gap={2}>
@@ -430,24 +430,24 @@ export function ExternalOAuthForm({
                     className="font-mono text-sm"
                   />
                   {!metadataValidation.ok && external.metadataJson && (
-                    <Type className="text-destructive! text-sm">
+                    <Text className="text-destructive! text-sm">
                       {metadataValidation.reason}
-                    </Type>
+                    </Text>
                   )}
                   {external.jsonError && (
-                    <Type className="text-destructive! text-sm">
+                    <Text className="text-destructive! text-sm">
                       {external.jsonError}
-                    </Type>
+                    </Text>
                   )}
                 </Stack>
               </CollapsibleContent>
             </Collapsible>
 
             <div className="flex items-center justify-between gap-3">
-              <Type muted small>
+              <Text muted small>
                 Checks issuer discovery. Endpoint URL format is validated
                 locally; endpoint reachability is not tested.
-              </Type>
+              </Text>
               <Button
                 variant="secondary"
                 onClick={handleTest}

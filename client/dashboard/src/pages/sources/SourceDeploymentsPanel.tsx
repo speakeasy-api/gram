@@ -1,6 +1,6 @@
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
@@ -220,9 +220,9 @@ export function SourceDeploymentsPanel({
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <div>
           <Heading variant="h4">Deployments</Heading>
-          <Type muted small>
+          <Text muted small>
             {deployments.length} total
-          </Type>
+          </Text>
         </div>
         <routes.deployments.Link className="hover:no-underline">
           <Button variant="tertiary" size="sm">

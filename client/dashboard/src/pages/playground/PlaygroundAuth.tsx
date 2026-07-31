@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { PrivateInput } from "@/components/ui/PrivateInput";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
@@ -60,9 +60,9 @@ function IssuerLoginConnection({
           align="center"
           className="justify-between"
         >
-          <Type variant="small" className="font-medium">
+          <Text variant="small" className="font-medium">
             Login
-          </Type>
+          </Text>
           {isLoading ? (
             <Loader2 className="text-muted-foreground size-4 animate-spin" />
           ) : connected ? (
@@ -75,9 +75,9 @@ function IssuerLoginConnection({
           )}
         </Stack>
 
-        <Type variant="small" className="text-muted-foreground">
+        <Text variant="small" className="text-muted-foreground">
           {providerName}
-        </Type>
+        </Text>
 
         {!connected && !isLoading && (
           <Button
@@ -198,9 +198,9 @@ export function PlaygroundAuth({
   if (envVars.length === 0 && !loginSecured) {
     return (
       <div className="py-4 text-center">
-        <Type variant="small" className="text-muted-foreground">
+        <Text variant="small" className="text-muted-foreground">
           No authentication required
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -210,9 +210,9 @@ export function PlaygroundAuth({
       {/* Environment indicator */}
       {defaultEnvironmentName && (
         <div className="flex items-center gap-1.5">
-          <Type variant="small" className="text-muted-foreground">
+          <Text variant="small" className="text-muted-foreground">
             Environment:
-          </Type>
+          </Text>
           <Badge variant="neutral">{defaultEnvironmentName}</Badge>
         </div>
       )}
@@ -313,12 +313,12 @@ export function PlaygroundAuth({
         </Button>
       )}
       {missingRequiredCount > 0 && (
-        <Type variant="small" className="text-warning pt-2">
+        <Text variant="small" className="text-warning pt-2">
           {missingRequiredCount} required variable
           {missingRequiredCount !== 1 ? "s" : ""} not configured
-        </Type>
+        </Text>
       )}
-      <Type variant="small" className="text-muted-foreground pt-2">
+      <Text variant="small" className="text-muted-foreground pt-2">
         <routes.mcp.details.Link
           params={[toolset.slug]}
           hash="authentication"
@@ -326,7 +326,7 @@ export function PlaygroundAuth({
         >
           Configure auth
         </routes.mcp.details.Link>
-      </Type>
+      </Text>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { SkeletonCode } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -38,9 +38,9 @@ export function ViewSourceDialogContent({
           {isOpenAPI ? "OpenAPI Specification" : "Tool Manifest"}
         </Dialog.Title>
         {!isOpenAPI && (
-          <Type className="text-muted-foreground mt-1 text-sm">
+          <Text className="text-muted-foreground mt-1 text-sm">
             Shows the tool definitions extracted from the function bundle
-          </Type>
+          </Text>
         )}
       </Dialog.Header>
       <div className="flex-1 overflow-auto">
@@ -48,11 +48,11 @@ export function ViewSourceDialogContent({
           <SkeletonCode lines={20} />
         ) : error ? (
           <div className="py-8 text-center">
-            <Type className="text-destructive">
+            <Text className="text-destructive">
               {error instanceof Error
                 ? error.message
                 : "Failed to fetch content"}
-            </Type>
+            </Text>
             <Button
               variant="secondary"
               size="sm"
@@ -71,9 +71,9 @@ export function ViewSourceDialogContent({
             height="calc(90vh - 120px)"
           />
         ) : (
-          <Type className="text-muted-foreground py-8 text-center">
+          <Text className="text-muted-foreground py-8 text-center">
             No content available
-          </Type>
+          </Text>
         )}
       </div>
     </>

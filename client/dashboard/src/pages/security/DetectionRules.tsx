@@ -13,7 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { TextArea } from "@/components/ui/Textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
@@ -242,9 +242,9 @@ function CustomRulesSection({
   const meta = RULE_CATEGORY_META.custom;
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
+      <Text variant="subheading" className="mb-3">
         Custom
-      </Type>
+      </Text>
       <div className="border-border divide-border divide-y rounded-lg border">
         <CategoryHeader
           icon={meta.icon as IconName}
@@ -286,9 +286,9 @@ function BuiltinRulesSection({
 }) {
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
+      <Text variant="subheading" className="mb-3">
         Built-in
-      </Type>
+      </Text>
       <div className="border-border divide-border divide-y rounded-lg border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];

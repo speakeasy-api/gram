@@ -1,5 +1,5 @@
 import { SkeletonCode } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -117,9 +117,9 @@ export function ViewAssetDialogContent({
           {asset.type === "openapi" ? "OpenAPI Specification" : "Tool Manifest"}
         </Dialog.Title>
         {asset.type !== "openapi" && (
-          <Type className="text-muted-foreground mt-1 text-sm">
+          <Text className="text-muted-foreground mt-1 text-sm">
             Shows the tool definitions extracted from the function bundle
-          </Type>
+          </Text>
         )}
       </Dialog.Header>
       <div className="flex-1 overflow-auto">
@@ -127,11 +127,11 @@ export function ViewAssetDialogContent({
           <SkeletonCode lines={20} />
         ) : error ? (
           <div className="py-8 text-center">
-            <Type className="text-destructive">
+            <Text className="text-destructive">
               {error instanceof Error
                 ? error.message
                 : "Failed to fetch content"}
-            </Type>
+            </Text>
             <Button
               variant="secondary"
               size="sm"
@@ -150,9 +150,9 @@ export function ViewAssetDialogContent({
             height="calc(90vh - 120px)"
           />
         ) : (
-          <Type className="text-muted-foreground py-8 text-center">
+          <Text className="text-muted-foreground py-8 text-center">
             No content available
-          </Type>
+          </Text>
         )}
       </div>
     </>

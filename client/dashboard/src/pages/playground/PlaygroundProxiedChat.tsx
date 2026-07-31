@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { PlugZap } from "lucide-react";
 import { useEffect } from "react";
 import { PlaygroundChat } from "./PlaygroundChat";
@@ -63,7 +63,7 @@ export function PlaygroundProxiedChat({
   if (!mcpUrl || isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Type muted>Connecting to MCP server…</Type>
+        <Text muted>Connecting to MCP server…</Text>
       </div>
     );
   }
@@ -98,9 +98,9 @@ function ProxiedStatusNotice({
     <div className="flex h-full items-center justify-center">
       <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
         <PlugZap className="text-muted-foreground/70 size-8" />
-        <Type muted className="text-sm">
+        <Text muted className="text-sm">
           {message}
-        </Type>
+        </Text>
         {children}
       </div>
     </div>
@@ -120,11 +120,11 @@ function ProxiedConnectPrompt({
     <div className="flex h-full items-center justify-center">
       <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
         <PlugZap className="text-muted-foreground/70 size-8" />
-        <Type className="font-medium">Connection Required</Type>
-        <Type muted className="text-sm">
+        <Text className="font-medium">Connection Required</Text>
+        <Text muted className="text-sm">
           Connect to this MCP server to authorize access before chatting with
           its tools.
-        </Type>
+        </Text>
         {connectUrl ? (
           <Button variant="secondary" onClick={handleConnect}>
             Connect

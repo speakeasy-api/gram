@@ -1,6 +1,6 @@
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror";
@@ -163,13 +163,13 @@ export function PlaygroundLogsPanel({
       <div className="flex-1 overflow-y-auto">
         {logs.length === 0 ? (
           <div className="px-4 py-6 text-center">
-            <Type variant="small" className="text-muted-foreground">
+            <Text variant="small" className="text-muted-foreground">
               {isPending
                 ? "Loading logs..."
                 : logsDisabled
                   ? "Logs are not enabled for this organization"
                   : "No logs yet"}
-            </Type>
+            </Text>
           </div>
         ) : (
           <div>

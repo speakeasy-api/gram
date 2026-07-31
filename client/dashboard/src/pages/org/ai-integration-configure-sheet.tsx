@@ -17,7 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
@@ -115,9 +115,9 @@ export function ConfigureSheet({
               disabled={form.isLoading || form.isMutating}
             />
             {provider.helpText ? (
-              <Type variant="body" className="text-muted-foreground text-xs">
+              <Text variant="body" className="text-muted-foreground text-xs">
                 {provider.helpText}
-              </Type>
+              </Text>
             ) : null}
           </Stack>
 
@@ -154,11 +154,11 @@ export function ConfigureSheet({
                 </SelectItem>
               </SelectContent>
             </Select>
-            <Type variant="body" className="text-muted-foreground text-xs">
+            <Text variant="body" className="text-muted-foreground text-xs">
               Dashboard cost is estimated from token usage at API rates. Only
               "Metered" accounts are billed per token, so their cost is shown as
               real spend; subscription plans show it as an estimate.
-            </Type>
+            </Text>
           </Stack>
         </Stack>
 

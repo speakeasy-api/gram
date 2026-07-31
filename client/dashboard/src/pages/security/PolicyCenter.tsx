@@ -20,7 +20,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/Sheet";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   PageTabsList,
   PageTabsTrigger,
@@ -646,13 +646,13 @@ function PolicyCenterContent() {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Shield className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No Risk Policies
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Risk policies scan your chat messages for secrets and sensitive data.
         Create your first policy to get started.
-      </Type>
+      </Text>
       <Button
         onClick={() => {
           const {
@@ -1000,23 +1000,23 @@ function PolicyCenterContent() {
               <Dialog.Title>Delete Policy</Dialog.Title>
             </Dialog.Header>
             <Stack gap={4}>
-              <Type variant="body">
+              <Text variant="body">
                 <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
                 policy will be permanently deleted.
-              </Type>
+              </Text>
               {policyDeleteImpactText && (
-                <Type variant="body">{policyDeleteImpactText}</Type>
+                <Text variant="body">{policyDeleteImpactText}</Text>
               )}
               {policyDeleteRuleListItems.length > 0 && (
                 <div className="space-y-2">
                   <ul className="list-disc space-y-1 pl-5">
                     {policyDeleteRuleListItems.map((ruleName, index) => (
                       <li key={`${ruleName}-${index}`}>
-                        <Type variant="body" muted as="span">
+                        <Text variant="body" muted as="span">
                           {ruleName}
-                        </Type>
+                        </Text>
                       </li>
                     ))}
                   </ul>

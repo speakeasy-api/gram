@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -245,13 +245,13 @@ export function SkillSharingCardBlocks({
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>Public link</McpSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {shareUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={shareUrl}
               size="xs"

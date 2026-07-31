@@ -1,6 +1,6 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Loader2, SaveIcon } from "lucide-react";
@@ -87,9 +87,9 @@ function SettingsSectionDescription({
   className,
 }: SettingsSectionSlotProps) {
   return (
-    <Type muted small className={cn("max-w-3xl", className)}>
+    <Text muted small className={cn("max-w-3xl", className)}>
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -143,9 +143,9 @@ function SettingsSectionFooterHint({
   className,
 }: SettingsSectionSlotProps) {
   return (
-    <Type muted small className={className}>
+    <Text muted small className={className}>
       {children}
-    </Type>
+    </Text>
   );
 }
 

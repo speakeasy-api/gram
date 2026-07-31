@@ -2,7 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import type { SkillEditSuggestion } from "@gram/client/models/components/skilleditsuggestion.js";
 import { useApproveAllSkillSuggestionsMutation } from "@gram/client/react-query/approveAllSkillSuggestions.js";
@@ -133,7 +133,7 @@ export function ApproveAllSkillSuggestions({
             <ul className="space-y-2">
               {confirmedSuggestions.map((suggestion) => (
                 <li key={suggestion.id}>
-                  <Type small>{suggestion.skillDisplayName}</Type>
+                  <Text small>{suggestion.skillDisplayName}</Text>
                 </li>
               ))}
             </ul>

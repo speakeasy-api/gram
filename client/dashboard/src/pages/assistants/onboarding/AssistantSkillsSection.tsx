@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import type { AssistantSkillRef } from "@gram/client/models/components/assistantskillref.js";
@@ -141,9 +141,9 @@ export function AssistantSkillsSection(): JSX.Element {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <Type variant="body" className="text-xs font-semibold uppercase">
+        <Text variant="body" className="text-xs font-semibold uppercase">
           Skills ({attached.length})
-        </Type>
+        </Text>
         <RequireScope
           scope={["skill:read", "project:write"]}
           all
@@ -172,9 +172,9 @@ export function AssistantSkillsSection(): JSX.Element {
       )}
 
       {attached.length === 0 ? (
-        <Type small muted>
+        <Text small muted>
           No skills attached.
-        </Type>
+        </Text>
       ) : (
         <Stack gap={2}>
           {attached.map((ref) => (
@@ -257,12 +257,12 @@ function AttachedSkillRow({
     <div className="border-border rounded-md border px-3 py-2">
       <div className="flex items-start justify-between gap-2">
         <Stack gap={0} className="min-w-0">
-          <Type small className="truncate font-medium">
+          <Text small className="truncate font-medium">
             {skill?.displayName ?? `Unknown skill (${skillRef.skillId})`}
-          </Type>
-          <Type small muted mono className="truncate text-[11px]">
+          </Text>
+          <Text small muted mono className="truncate text-[11px]">
             {skill?.name ?? skillRef.skillId}
-          </Type>
+          </Text>
         </Stack>
         <Badge variant={skillRef.pinnedVersionId ? "neutral" : "information"}>
           {skillRef.pinnedVersionId ? "Pinned" : "Latest"}
@@ -311,9 +311,9 @@ function AttachedSkillRow({
               </SelectContent>
             </Select>
           ) : (
-            <Type small muted className="flex-1">
+            <Text small muted className="flex-1">
               Version unavailable
-            </Type>
+            </Text>
           )}
           <Button
             variant="tertiary"

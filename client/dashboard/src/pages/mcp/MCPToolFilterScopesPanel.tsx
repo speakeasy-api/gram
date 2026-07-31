@@ -5,7 +5,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/Accordion";
 import { Badge } from "@/components/ui/Badge";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
 import { ListToolFiltersResult } from "@gram/client/models/components/listtoolfiltersresult.js";
@@ -41,21 +41,21 @@ export function MCPToolFilterScopesPanel({
       className="border-border bg-muted/20 mb-4 rounded-lg border p-4"
     >
       <Stack direction="horizontal" justify="space-between" align="center">
-        <Type variant="small" className="font-medium">
+        <Text variant="small" className="font-medium">
           Tool filtering
-        </Type>
+        </Text>
         {filters.toolVariationsGroupName && (
-          <Type variant="small" muted>
+          <Text variant="small" muted>
             Group:{" "}
             {toolVariationsGroupDisplayName(filters.toolVariationsGroupName)}
-          </Type>
+          </Text>
         )}
       </Stack>
 
-      <Type variant="small" muted>
+      <Text variant="small" muted>
         Clients can request a subset of tools with the <code>?tags=</code> query
         parameter. Select a scope to preview the tools it exposes.
-      </Type>
+      </Text>
 
       {/* Filter chips: clicking one scopes the tool list below to its tools. */}
       <Stack direction="horizontal" gap={2} className="flex-wrap">

@@ -19,7 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { TextArea } from "@/components/ui/Textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Archive, Check, Loader2, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
@@ -381,9 +381,9 @@ function RuleForm({
         {/* Usage preview */}
         <div className="bg-muted/30 space-y-2 rounded-lg border p-4">
           <div className="flex items-center justify-between">
-            <Type variant="small" className="font-medium">
+            <Text variant="small" className="font-medium">
               Current usage this {draft.windowKind} window
-            </Type>
+            </Text>
             {previewLoading && (
               <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
             )}

@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import type { Toolset } from "@/lib/toolTypes";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ToolFallback } from "@/elements";
@@ -246,16 +246,16 @@ function PlaygroundMcpAppRenderer({
   if (resourceQuery.isError) {
     return (
       <div className="border-border border-t px-4 py-4">
-        <Type variant="small" className="font-medium">
+        <Text variant="small" className="font-medium">
           MCP app failed to load
-        </Type>
-        <Type muted className="mt-1 text-xs">
+        </Text>
+        <Text muted className="mt-1 text-xs">
           {String(
             resourceQuery.error instanceof Error
               ? resourceQuery.error.message
               : resourceQuery.error,
           )}
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -265,12 +265,12 @@ function PlaygroundMcpAppRenderer({
   if (!resource || mimeType !== MCP_APP_MIME_TYPE) {
     return (
       <div className="border-border border-t px-4 py-4">
-        <Type variant="small" className="font-medium">
+        <Text variant="small" className="font-medium">
           Unsupported MCP app resource
-        </Type>
-        <Type muted className="mt-1 text-xs">
+        </Text>
+        <Text muted className="mt-1 text-xs">
           Playground currently expects `{MCP_APP_MIME_TYPE}`.
-        </Type>
+        </Text>
       </div>
     );
   }

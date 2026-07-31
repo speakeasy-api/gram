@@ -7,7 +7,7 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
@@ -86,10 +86,10 @@ function AccessInner() {
         <Heading variant="h4" className="mb-2">
           Roles &amp; Permissions
         </Heading>
-        <Type variant="body" className="text-muted-foreground mb-2">
+        <Text variant="body" className="text-muted-foreground mb-2">
           Manage access control for your team by defining roles and assigning
           permissions. View past authorization challenges.
-        </Type>
+        </Text>
       </div>
 
       {organization.scimEnabled && (

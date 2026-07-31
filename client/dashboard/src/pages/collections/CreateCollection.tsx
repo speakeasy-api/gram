@@ -3,7 +3,7 @@ import { Textarea } from "@/components/moon/textarea";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -354,11 +354,11 @@ function CreateCollectionForm() {
                   ) : filteredServers.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                       <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                      <Type small muted>
+                      <Text small muted>
                         {serverSearch
                           ? "No servers match your search."
                           : "No MCP servers available."}
-                      </Type>
+                      </Text>
                     </div>
                   ) : (
                     filteredServers.map((server) => (

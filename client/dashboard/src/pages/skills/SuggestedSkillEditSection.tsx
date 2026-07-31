@@ -3,7 +3,7 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
@@ -142,10 +142,10 @@ export function SuggestedSkillEditSection({
             </div>
           )}
           {suggestion && !suggestion.appliesCleanly && (
-            <Type small muted>
+            <Text small muted>
               This suggestion no longer lines up with the current manifest. It
               will be retired on the next analysis pass.
-            </Type>
+            </Text>
           )}
           {review.actionError && (
             <div className="space-y-2">
@@ -172,9 +172,9 @@ export function SuggestedSkillEditSection({
               reason="You need write access to review suggested edits."
             >
               <div className="border-border bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-                <Type small muted>
+                <Text small muted>
                   {`${selectedIds.length} of ${anchors.length} changes selected`}
-                </Type>
+                </Text>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"

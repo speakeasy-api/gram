@@ -6,7 +6,7 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
@@ -240,9 +240,9 @@ export default function SkillsList(): JSX.Element {
               Suggested edit
             </Badge>
           )}
-          <Type small muted className="truncate font-mono">
+          <Text small muted className="truncate font-mono">
             {skill.name}
-          </Type>
+          </Text>
         </div>
       ),
     },
@@ -251,9 +251,9 @@ export default function SkillsList(): JSX.Element {
       header: "Summary",
       width: "2fr",
       render: (skill) => (
-        <Type small muted className="line-clamp-2">
+        <Text small muted className="line-clamp-2">
           {skill.summary || "No summary"}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -274,17 +274,17 @@ export default function SkillsList(): JSX.Element {
       key: "versions",
       header: "Versions",
       width: "90px",
-      render: (skill) => <Type small>{skill.versionCount}</Type>,
+      render: (skill) => <Text small>{skill.versionCount}</Text>,
     },
     {
       key: "activations",
       header: "Activations (30d)",
       width: "130px",
       render: (skill) => (
-        <Type small className="tabular-nums">
+        <Text small className="tabular-nums">
           {metricsBySkill.get(skill.id)?.activations.toLocaleString() ??
             (insightsQuery.data ? "0" : "-")}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -294,7 +294,7 @@ export default function SkillsList(): JSX.Element {
       render: (skill) => {
         const efficacy = metricsBySkill.get(skill.id)?.efficacy;
         return (
-          <Type
+          <Text
             small
             className="tabular-nums"
             title={
@@ -304,7 +304,7 @@ export default function SkillsList(): JSX.Element {
             }
           >
             {efficacy ? formatEfficacy(efficacy.averageScore) : "-"}
-          </Type>
+          </Text>
         );
       },
     },
@@ -315,11 +315,11 @@ export default function SkillsList(): JSX.Element {
       render: (skill) => {
         const efficacy = metricsBySkill.get(skill.id)?.efficacy;
         return (
-          <Type small className="tabular-nums">
+          <Text small className="tabular-nums">
             {efficacy
               ? formatSavings(efficacy.estimatedMinutesSavedTotal)
               : "-"}
-          </Type>
+          </Text>
         );
       },
     },
@@ -328,13 +328,13 @@ export default function SkillsList(): JSX.Element {
       header: "Updated",
       width: "150px",
       render: (skill) => (
-        <Type
+        <Text
           small
           muted
           title={dateTimeFormatters.full.format(skill.updatedAt)}
         >
           <HumanizeDateTime date={skill.updatedAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -459,9 +459,9 @@ export default function SkillsList(): JSX.Element {
               )}
 
               {draining && (
-                <Type small muted role="status" aria-live="polite">
+                <Text small muted role="status" aria-live="polite">
                   Loading all skills to finish this view...
-                </Type>
+                </Text>
               )}
 
               {openSuggestions.query.error && (
@@ -483,9 +483,9 @@ export default function SkillsList(): JSX.Element {
               {openSuggestions.total > 0 &&
                 !openSuggestions.fullyLoaded &&
                 !openSuggestions.query.error && (
-                  <Type small muted role="status" aria-live="polite">
+                  <Text small muted role="status" aria-live="polite">
                     Loading all suggested edits...
-                  </Type>
+                  </Text>
                 )}
 
               {insightsUnavailable && (
@@ -542,11 +542,11 @@ export default function SkillsList(): JSX.Element {
 
               {!draining && totalPages > 1 && (
                 <div className="flex items-center justify-between border-t px-4 py-3">
-                  <Type small muted>
+                  <Text small muted>
                     {page * RESULT_PAGE_SIZE + 1}-
                     {Math.min((page + 1) * RESULT_PAGE_SIZE, totalCount)} of{" "}
                     {totalCount}
-                  </Type>
+                  </Text>
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
@@ -605,13 +605,13 @@ function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No skills yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Skills are reusable instructions your agents can load on demand. Add
         your first skill to start versioning it here.
-      </Type>
+      </Text>
       <AddSkillButton onClick={onAdd} />
     </div>
   );
@@ -620,9 +620,9 @@ function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
     <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-      <Type small className="text-destructive">
+      <Text small className="text-destructive">
         Unable to load more skills.
-      </Type>
+      </Text>
       <Button size="sm" variant="secondary" onClick={onRetry}>
         Retry
       </Button>

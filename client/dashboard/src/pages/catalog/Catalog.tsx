@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
 import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
@@ -323,11 +323,11 @@ function EmptySearchResult({
         <Heading variant="h5" className="font-medium">
           No matching servers
         </Heading>
-        <Type small muted className="mb-4 text-center">
+        <Text small muted className="mb-4 text-center">
           {hasFilters
             ? "No MCP servers match your current filters. Try adjusting or clearing your filters."
             : "No MCP servers found. Check back later for new additions."}
-        </Type>
+        </Text>
         {hasFilters && (
           <Button onClick={onClear} size="sm">
             <Button.Text>Clear Filters</Button.Text>

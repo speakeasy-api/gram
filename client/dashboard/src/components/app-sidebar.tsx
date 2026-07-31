@@ -40,7 +40,7 @@ import { Link } from "react-router";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -349,10 +349,10 @@ const FreeTierExceededNotification = () => {
     return (
       <PersistentNotification variant="error">
         <Stack direction="vertical" gap={3} className="h-full">
-          <Type variant="subheading">Limits exceeded</Type>
-          <Type small>
+          <Text variant="subheading">Limits exceeded</Text>
+          <Text small>
             Free tier limits exceeded. Upgrade to continue using the platform.
-          </Type>
+          </Text>
           <orgRoutes.billing.Link className="mt-auto w-full">
             <Button size="sm" className="w-full">
               Billing →
@@ -415,7 +415,7 @@ const PersistentNotification = ({
           size="md"
           className="flex h-full w-full items-center justify-center"
         >
-          <Type>?</Type>
+          <Text>?</Text>
         </Button>
       )}
     </div>

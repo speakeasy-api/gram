@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { ScheduleStatusBadge } from "@/components/schedule-status-badge";
 import { Switch } from "@/components/ui/Switch";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { DeviceIntegrationProviderSchedule } from "@gram/client/models/components/deviceintegrationproviderschedule.js";
@@ -44,9 +44,9 @@ function scheduleColumns(
       key: "name",
       header: "Schedule",
       render: (row) => (
-        <Type variant="small" className="w-fit font-mono text-xs font-medium">
+        <Text variant="small" className="w-fit font-mono text-xs font-medium">
           {row.schedule.schedule}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -56,9 +56,9 @@ function scheduleColumns(
       render: (row) => (
         <Stack direction="horizontal" align="center" gap={1.5}>
           <Clock3 className="text-muted-foreground size-3.5 shrink-0" />
-          <Type muted small className="whitespace-nowrap">
+          <Text muted small className="whitespace-nowrap">
             {formatCadence(row.schedule.intervalMinutes)}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -67,9 +67,9 @@ function scheduleColumns(
       header: ROLE_COPY[role].lastRunHeader,
       width: "110px",
       render: (row) => (
-        <Type muted small className="whitespace-nowrap">
+        <Text muted small className="whitespace-nowrap">
           {lastSyncedLabel(row)}
-        </Type>
+        </Text>
       ),
     },
     {

@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
@@ -35,12 +35,12 @@ export function SettingsInlineEmptyState({
   return (
     <div className="bg-muted/20 flex min-h-[88px] flex-col items-start justify-between gap-3 rounded-md border border-dashed px-4 py-3 sm:flex-row sm:items-center">
       <div className="min-w-0 space-y-1">
-        <Type small className="font-medium">
+        <Text small className="font-medium">
           {title}
-        </Type>
-        <Type muted small className="max-w-xl">
+        </Text>
+        <Text muted small className="max-w-xl">
           {description}
-        </Type>
+        </Text>
       </div>
       {renderedAction && <div className="shrink-0">{renderedAction}</div>}
     </div>

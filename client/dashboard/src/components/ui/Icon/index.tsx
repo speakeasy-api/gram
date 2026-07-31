@@ -7,7 +7,6 @@ import { ResponsiveValue, Size } from "@/components/ui/lib/types";
 import useTailwindBreakpoint from "@/components/ui/hooks/useTailwindBreakpoint";
 import { resolveSizeForBreakpoint } from "@/components/ui/lib/responsiveUtils";
 
-import customDynamicIconImports from "./customIcons";
 import { IconName } from "./names";
 
 // TODO: Use skeleton
@@ -57,13 +56,9 @@ function tryGetIcon(
     >;
   }
 
-  const LucideIcon = customDynamicIconImports[
-    name as keyof typeof customDynamicIconImports
-  ]
-    ? lazy(
-        customDynamicIconImports[name as keyof typeof customDynamicIconImports],
-      )
-    : lazy(dynamicIconImports[name as keyof typeof dynamicIconImports]);
+  const LucideIcon = lazy(
+    dynamicIconImports[name as keyof typeof dynamicIconImports],
+  );
 
   iconCache.set(name, LucideIcon);
   return LucideIcon;

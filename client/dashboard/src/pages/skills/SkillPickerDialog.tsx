@@ -3,7 +3,7 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { Skill } from "@gram/client/models/components/skill.js";
@@ -157,15 +157,15 @@ export function SkillPickerDialog({
     );
   } else if (availableSkills.length > 0) {
     pickerContent = (
-      <Type muted small>
+      <Text muted small>
         No skills match your search.
-      </Type>
+      </Text>
     );
   } else {
     pickerContent = (
-      <Type muted small>
+      <Text muted small>
         {emptyMessage}
-      </Type>
+      </Text>
     );
   }
 
@@ -186,9 +186,9 @@ export function SkillPickerDialog({
             className="w-full"
           />
           {!isLoading && listSummary && (
-            <Type muted small>
+            <Text muted small>
               {listSummary}
-            </Type>
+            </Text>
           )}
           {pickerContent}
           {renderSelectionNotice?.(selectedSkillIds.length)}

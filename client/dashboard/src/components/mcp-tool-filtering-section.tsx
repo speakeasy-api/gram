@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useCreateGlobalToolVariationGroupMutation } from "@gram/client/react-query/createGlobalToolVariationGroup.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -135,12 +135,12 @@ export function MCPToolFilteringSection({
     <div className={cn("space-y-4", className)}>
       <div>
         <Heading variant="h4">Enable Tool Filtering</Heading>
-        <Type muted small className="mt-2 max-w-2xl">
+        <Text muted small className="mt-2 max-w-2xl">
           Enable tool filtering based on underlying tool tags. All tools are
           returned by default unless enabled and{" "}
           <code className="font-mono">tags</code> URL query parameter is
           provided.
-        </Type>
+        </Text>
       </div>
 
       {groups.length === 0 ? (

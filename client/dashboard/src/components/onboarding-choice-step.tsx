@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Stack } from "@/components/ui/Stack";
@@ -30,10 +30,10 @@ const ChoiceCard = ({
     >
       <Icon className="text-primary mb-2 h-6 w-6 shrink-0" strokeWidth={1.5} />
       <div className="flex flex-col gap-1">
-        <Type className="text-heading-sm">{title}</Type>
-        <Type small className="text-muted">
+        <Text className="text-heading-sm">{title}</Text>
+        <Text small className="text-muted">
           {description}
-        </Type>
+        </Text>
       </div>
     </button>
   );

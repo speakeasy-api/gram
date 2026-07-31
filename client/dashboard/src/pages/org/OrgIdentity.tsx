@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
@@ -240,21 +240,21 @@ function IdentitySection({
         <Heading variant="h5" className="mb-1">
           {heading}
         </Heading>
-        <Type as="div" muted small className="mb-4">
+        <Text as="div" muted small className="mb-4">
           {description}
-        </Type>
+        </Text>
         <div className="border-border overflow-hidden rounded-lg border">
           <div className="flex items-center gap-4 p-4">
             <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
               {providerIcon}
             </div>
             <div className="min-w-0 flex-1">
-              <Type variant="body" className="font-medium">
+              <Text variant="body" className="font-medium">
                 {providerTitle}
-              </Type>
-              <Type muted small>
+              </Text>
+              <Text muted small>
                 {providerSubtitle}
-              </Type>
+              </Text>
               {active && (
                 <Badge variant="success" className="mt-1.5">
                   <Badge.Text>Connected</Badge.Text>

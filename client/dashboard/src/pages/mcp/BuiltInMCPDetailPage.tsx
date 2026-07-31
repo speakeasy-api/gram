@@ -2,7 +2,7 @@ import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { Link } from "@/components/ui/Link";
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -137,9 +137,9 @@ function PageSection({
   return (
     <Stack gap={2} className="mb-8">
       <Heading variant="h3">{heading}</Heading>
-      <Type muted small className="max-w-2xl">
+      <Text muted small className="max-w-2xl">
         {description}
-      </Type>
+      </Text>
       {children}
     </Stack>
   );

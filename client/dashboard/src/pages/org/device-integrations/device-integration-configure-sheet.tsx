@@ -15,7 +15,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import type { DeviceIntegrationProviderField } from "@gram/client/models/components/deviceintegrationproviderfield.js";
@@ -145,9 +145,9 @@ export function DeviceIntegrationConfigureSheet({
           {form.isConfigured ? (
             <TestConnectionRow form={form} />
           ) : (
-            <Type variant="body" className="text-muted-foreground text-xs">
+            <Text variant="body" className="text-muted-foreground text-xs">
               Save the connection first to enable the connection test.
-            </Type>
+            </Text>
           )}
         </Stack>
 
@@ -321,11 +321,11 @@ function TestConnectionRow({ form }: { form: DeviceIntegrationConfigForm }) {
         </Button>
         <TestResultBadge form={form} />
       </Stack>
-      <Type variant="body" className="text-muted-foreground text-xs">
+      <Text variant="body" className="text-muted-foreground text-xs">
         {dirty
           ? "Unsaved changes — save first. The test always runs against the saved credentials."
           : "Runs a real request against the vendor using the saved credentials."}
-      </Type>
+      </Text>
     </Stack>
   );
 }

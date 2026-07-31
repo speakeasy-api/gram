@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
@@ -267,9 +267,9 @@ function UserSessionsInner(): JSX.Element {
       <Page.Section.Body>
         <div className="space-y-4">
           <div className="flex flex-col gap-1.5">
-            <Type small muted>
+            <Text small muted>
               Project
-            </Type>
+            </Text>
             <Select value={projectSlug} onValueChange={handleProjectChange}>
               <SelectTrigger size="sm" className="bg-background w-[260px]">
                 <SelectValue placeholder="Select project" />
@@ -313,7 +313,7 @@ function UserSessionsInner(): JSX.Element {
 
           {selectionEnabled && selectedIds.length > 0 && (
             <div className="border-border bg-muted/30 flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-              <Type small>{selectedIds.length} selected</Type>
+              <Text small>{selectedIds.length} selected</Text>
               <div className="flex items-center gap-2">
                 <Button
                   variant="tertiary"

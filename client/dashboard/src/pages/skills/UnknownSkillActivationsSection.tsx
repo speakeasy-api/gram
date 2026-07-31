@@ -1,6 +1,6 @@
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { UnknownSkillActivation } from "@gram/client/models/components/unknownskillactivation.js";
 import { useUnknownSkillActivationsInfinite } from "@gram/client/react-query/unknownSkillActivations.js";
@@ -43,9 +43,9 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
       key: "skill",
       header: "Reported skill",
       render: (activation) => (
-        <Type small mono>
+        <Text small mono>
           {activation.skillName}
-        </Type>
+        </Text>
       ),
     },
     { key: "provider", header: "Provider", render: (row) => row.provider },
@@ -68,9 +68,9 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
       header: "Activated",
       width: "150px",
       render: (row) => (
-        <Type small muted title={dateTimeFormatters.full.format(row.seenAt)}>
+        <Text small muted title={dateTimeFormatters.full.format(row.seenAt)}>
           <HumanizeDateTime date={row.seenAt} />
-        </Type>
+        </Text>
       ),
     },
   ];
@@ -93,7 +93,7 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
           columns={columns}
           data={activations}
           rowKey={(row) => row.id}
-          noResultsMessage={<Type>No unknown activations found.</Type>}
+          noResultsMessage={<Text>No unknown activations found.</Text>}
         />
       )}
       {query.isFetchNextPageError && (
@@ -122,12 +122,12 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
 function UnknownActivationsHeading(): JSX.Element {
   return (
     <div>
-      <Type id="unknown-skills-title" variant="subheading" as="h3">
+      <Text id="unknown-skills-title" variant="subheading" as="h3">
         Unknown activations
-      </Type>
-      <Type small muted>
+      </Text>
+      <Text small muted>
         Activations whose manifest could not be matched to one skill version.
-      </Type>
+      </Text>
     </div>
   );
 }

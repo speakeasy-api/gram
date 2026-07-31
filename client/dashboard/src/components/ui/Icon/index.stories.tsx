@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Icon } from ".";
-import { customIconNames, iconNames } from "./names";
+import { iconNames } from "./names";
 import { sizes } from "@/components/ui/lib/types";
 
 type Story = StoryObj<typeof Icon>;
@@ -62,18 +62,5 @@ export const WithCustomSize: Story = {
   args: {
     name: "chevron-right",
     size: "2xl",
-  },
-};
-
-export const CustomIcons: Story = {
-  argTypes: {
-    name: {
-      control: "select",
-      options: customIconNames,
-    },
-  },
-  args: {
-    name: "npm",
-    size: "large",
   },
 };

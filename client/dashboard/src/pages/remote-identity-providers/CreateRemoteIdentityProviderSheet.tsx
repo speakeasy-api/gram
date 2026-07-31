@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
@@ -225,10 +225,10 @@ export function CreateRemoteIdentityProviderSheet({
                   ))}
                 </SelectContent>
               </Select>
-              <Type muted small>
+              <Text muted small>
                 Organizational providers are inherited by every project. Choose
                 a project to scope the provider to it.
-              </Type>
+              </Text>
             </Stack>
 
             <IssuerUrlField
@@ -265,10 +265,10 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="my-identity-provider"
               />
-              <Type muted small>
+              <Text muted small>
                 Identifier for this identity provider. Auto-derived from the
                 Issuer URL until you edit it.
-              </Type>
+              </Text>
             </Stack>
 
             <Stack gap={2}>
@@ -283,11 +283,11 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="My Identity Provider"
               />
-              <Type muted small>
+              <Text muted small>
                 Friendly label shown in the dashboard. Auto-derived from the
                 Issuer URL until you edit it; falls back to the Issuer URL when
                 left blank.
-              </Type>
+              </Text>
             </Stack>
 
             <Stack gap={2}>
@@ -299,10 +299,10 @@ export function CreateRemoteIdentityProviderSheet({
                 onChange={setClientSetupDocumentationUrl}
                 placeholder="https://docs.example.com/oauth/apps"
               />
-              <Type muted small>
+              <Text muted small>
                 Linked from the New Client sheet so operators can set up an
                 OAuth client with this provider themselves.
-              </Type>
+              </Text>
             </Stack>
 
             <EndpointsFields

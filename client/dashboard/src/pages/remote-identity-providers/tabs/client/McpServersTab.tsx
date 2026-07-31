@@ -3,7 +3,7 @@ import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import type { Action } from "@/components/ui/MoreActions";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -70,17 +70,17 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
 
   if (isError) {
     return (
-      <Type className="text-destructive py-8 text-center">
+      <Text className="text-destructive py-8 text-center">
         Failed to load attached MCP servers.
-      </Type>
+      </Text>
     );
   }
 
   if (!isLoading && items.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         This client is not attached to any MCP servers.
-      </Type>
+      </Text>
     );
   }
 
@@ -124,7 +124,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
               ariaLabel={href ? `View MCP server ${label}` : undefined}
             >
               <td className="px-3 py-3">
-                <Type
+                <Text
                   variant="subheading"
                   as="div"
                   className={cn(
@@ -134,7 +134,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
                   )}
                 >
                   {label}
-                </Type>
+                </Text>
               </td>
               <td className="px-3 py-3 text-right">
                 <RequireScope scope="org:admin" level="section">

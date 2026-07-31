@@ -8,7 +8,7 @@ import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/Heading";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Switch } from "@/components/ui/Switch";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -785,10 +785,10 @@ function OrgAuditLogsInner() {
         <Heading variant="h4" className="mb-2">
           Recent activity across your organization
         </Heading>
-        <Type muted small className="mt-1">
+        <Text muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
           order. Search by project, actions, or actor.
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -826,9 +826,9 @@ function OrgAuditLogsInner() {
           options={actorOptions}
         />
         <div className="flex flex-col gap-1.5">
-          <Type small muted>
+          <Text small muted>
             Filters
-          </Type>
+          </Text>
           <Button
             variant="secondary"
             size="sm"
@@ -845,18 +845,18 @@ function OrgAuditLogsInner() {
           </Button>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Type small muted>
+          <Text small muted>
             Timestamp
-          </Type>
+          </Text>
           <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
-            <Type
+            <Text
               small
               className={
                 tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
               }
             >
               UTC
-            </Type>
+            </Text>
             <Switch
               checked={tsMode === "local"}
               onCheckedChange={(checked) => {
@@ -864,14 +864,14 @@ function OrgAuditLogsInner() {
               }}
               aria-label="Toggle timestamp timezone"
             />
-            <Type
+            <Text
               small
               className={
                 tsMode === "local" ? "text-foreground" : "text-muted-foreground"
               }
             >
               Local
-            </Type>
+            </Text>
           </div>
         </div>
       </div>
@@ -997,21 +997,21 @@ function OrgAuditLogsInner() {
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Type className="font-medium">Error loading audit logs</Type>
-              <Type muted small>
+              <Text className="font-medium">Error loading audit logs</Text>
+              <Text muted small>
                 {error.message}
-              </Type>
+              </Text>
             </div>
           ) : logs.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Type className="font-medium">No audit logs found</Type>
-              <Type muted small>
+              <Text className="font-medium">No audit logs found</Text>
+              <Text muted small>
                 {selectedProjectSlug === "all" &&
                 selectedAction === "all" &&
                 selectedActor === "all"
                   ? "Activity will appear here as changes are made across your organization."
                   : "No audit logs match the selected filters."}
-              </Type>
+              </Text>
             </div>
           ) : (
             <div>

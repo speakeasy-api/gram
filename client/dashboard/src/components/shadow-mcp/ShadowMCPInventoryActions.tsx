@@ -9,7 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import {
   ALLOW_RULE_POLICY_REQUIRED,
@@ -236,14 +236,14 @@ function PolicySelection({
 
   return (
     <section className="border-border space-y-3 rounded-md border p-3">
-      <Type variant="small" className="font-medium">
+      <Text variant="small" className="font-medium">
         Policies
-      </Type>
+      </Text>
       <div className="space-y-2">
         {policies.length === 0 && (
-          <Type muted small>
+          <Text muted small>
             {emptyMessage}
-          </Type>
+          </Text>
         )}
         {policies.map((policy) => {
           const checked = selectedPolicyIDSet.has(policy.id);
@@ -268,13 +268,13 @@ function PolicySelection({
                 }}
               />
               <span className="min-w-0 flex-1">
-                <Type variant="small" className="truncate font-medium">
+                <Text variant="small" className="truncate font-medium">
                   {policy.name}
-                </Type>
-                <Type muted small>
+                </Text>
+                <Text muted small>
                   Policy applies to{" "}
                   {policyAudienceLabel(policy, roles, members)}
-                </Type>
+                </Text>
               </span>
             </label>
           );
@@ -347,29 +347,29 @@ export function ShadowMCPInventoryActionSheet({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
           <section className="border-border rounded-md border px-4 py-3">
-            <Type variant="small" className="font-medium">
+            <Text variant="small" className="font-medium">
               {server.serverName || server.urlHost}
-            </Type>
-            <Type muted small className="mt-1 break-all">
+            </Text>
+            <Text muted small className="mt-1 break-all">
               {server.canonicalServerUrl}
-            </Type>
+            </Text>
             {server.latestRequest && action.mode === "review" && (
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div className="min-w-0">
-                  <Type muted small>
+                  <Text muted small>
                     Requester
-                  </Type>
-                  <Type variant="body" className="mt-1 truncate text-sm">
+                  </Text>
+                  <Text variant="body" className="mt-1 truncate text-sm">
                     {server.latestRequest.requesterEmail}
-                  </Type>
+                  </Text>
                 </div>
                 <div>
-                  <Type muted small>
+                  <Text muted small>
                     Requested
-                  </Type>
-                  <Type variant="body" className="mt-1 text-sm">
+                  </Text>
+                  <Text variant="body" className="mt-1 text-sm">
                     {formatShortDate(server.latestRequest.requestedAt)}
-                  </Type>
+                  </Text>
                 </div>
               </div>
             )}
@@ -392,9 +392,9 @@ export function ShadowMCPInventoryActionSheet({
                   <Badge variant="success">
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
-                  <Type muted small>
+                  <Text muted small>
                     Add an allow decision.
-                  </Type>
+                  </Text>
                 </span>
               </label>
               <label
@@ -408,9 +408,9 @@ export function ShadowMCPInventoryActionSheet({
                   <Badge variant="destructive">
                     <Badge.Text>Deny</Badge.Text>
                   </Badge>
-                  <Type muted small>
+                  <Text muted small>
                     Resolve the request.
-                  </Type>
+                  </Text>
                 </span>
               </label>
             </RadioGroup>
@@ -429,9 +429,9 @@ export function ShadowMCPInventoryActionSheet({
           )}
 
           {action.mode === "delete" && (
-            <Type muted small>
+            <Text muted small>
               This removes the current allow decision for the URL.
-            </Type>
+            </Text>
           )}
         </div>
 

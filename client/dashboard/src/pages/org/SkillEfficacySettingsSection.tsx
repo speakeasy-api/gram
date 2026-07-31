@@ -9,7 +9,7 @@ import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { SkillEfficacySettings } from "@gram/client/models/components/skillefficacysettings.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -142,9 +142,9 @@ function SettingsShell({ children }: { children: ReactNode }): JSX.Element {
       <Heading variant="h4" className="mb-2">
         Skill efficacy sampling
       </Heading>
-      <Type muted small className="mb-6 max-w-2xl">
+      <Text muted small className="mb-6 max-w-2xl">
         Control how many skill sessions are scored across the organization.
-      </Type>
+      </Text>
       {children}
     </section>
   );
@@ -210,12 +210,12 @@ function SkillEfficacySettingsForm({
       <Stack gap={6}>
         <Stack direction="horizontal" justify="space-between" align="center">
           <div>
-            <Type variant="body" className="font-medium">
+            <Text variant="body" className="font-medium">
               Enable scoring
-            </Type>
-            <Type muted small>
+            </Text>
+            <Text muted small>
               Sample completed skill sessions for efficacy insights.
-            </Type>
+            </Text>
           </div>
           <Switch
             checked={enabled}
@@ -258,18 +258,18 @@ function SkillEfficacySettingsForm({
         </div>
 
         <div className="bg-muted/40 rounded-md border p-4">
-          <Type muted small>
+          <Text muted small>
             Daily caps reset at 00:00 UTC. The new-version burst bypasses the
             per-skill daily cap until exhausted, but it never bypasses the
             organization daily ceiling.
-          </Type>
+          </Text>
         </div>
 
         {settings.isDefault && (
-          <Type muted small>
+          <Text muted small>
             These are the current platform defaults. Saving creates settings for
             this organization.
-          </Type>
+          </Text>
         )}
 
         {saveError && (

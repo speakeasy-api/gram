@@ -1,5 +1,5 @@
 import { Switch } from "@/components/ui/Switch";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   Assistant,
@@ -66,9 +66,9 @@ export function AssistantStatusToggle({
           aria-label={`${isActive ? "Pause" : "Activate"} assistant ${assistant.name}`}
         />
       </div>
-      <Type small muted>
+      <Text small muted>
         {isActive ? "Active" : "Paused"}
-      </Type>
+      </Text>
     </Stack>
   );
 }

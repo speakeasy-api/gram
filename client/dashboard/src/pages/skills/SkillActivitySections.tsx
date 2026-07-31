@@ -1,6 +1,6 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { CHART_COLORS } from "@/components/stacked-time-series";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
@@ -149,7 +149,7 @@ export function SkillActivitySections({
                 value={metricValue(drift.driftedMachines)}
               />
             </dl>
-            <Type small muted>
+            <Text small muted>
               {drift.targetState === "single" && (
                 <>
                   {metricValue(drift.onTargetMachines)}{" "}
@@ -166,7 +166,7 @@ export function SkillActivitySections({
                 "No plugin distribution target is configured, so drift is indeterminate."}
               {drift.targetState === "ambiguous" &&
                 "Multiple plugin distribution targets are configured, so drift is indeterminate."}
-            </Type>
+            </Text>
           </SettingsSection.Body>
           {(skill.firstSeenAt || skill.lastSeenAt) && (
             <SettingsSection.Footer>
@@ -209,9 +209,9 @@ export function SkillActivitySections({
             >
               {sightingTimeline.length === 0 ? (
                 <div className="flex h-56 items-center justify-center">
-                  <Type small muted>
+                  <Text small muted>
                     No activations captured in the last 30 days.
-                  </Type>
+                  </Text>
                 </div>
               ) : (
                 <div className="h-64">

@@ -6,7 +6,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { Spinner } from "@/components/ui/Spinner";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { ClientIconFan } from "@/pages/mcp/overview/PluginStatusBanner";
@@ -209,28 +209,28 @@ export function SkillPluginBanner({
     headline = (
       <>
         <CircleAlert className="text-destructive h-4 w-4 shrink-0" />
-        <Type className="text-destructive text-base font-semibold">
+        <Text className="text-destructive text-base font-semibold">
           Distribution blocked
-        </Type>
+        </Text>
       </>
     );
   } else if (isDistributed) {
     headline = (
       <>
         <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
-        <Type className="text-emerald-500 text-base font-semibold">
+        <Text className="text-emerald-500 text-base font-semibold">
           Distributed to {distributions.length} plugin
           {distributions.length > 1 ? "s" : ""}
-        </Type>
+        </Text>
       </>
     );
   } else {
     headline = (
       <>
         <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
-        <Type className="text-warning-foreground text-base font-semibold">
+        <Text className="text-warning-foreground text-base font-semibold">
           Not distributed to any plugin
-        </Type>
+        </Text>
       </>
     );
   }
@@ -266,11 +266,11 @@ export function SkillPluginBanner({
               <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
             )}
           </div>
-          <Type variant="small" className="text-muted-foreground/90">
+          <Text variant="small" className="text-muted-foreground/90">
             {isBlocked
               ? blockedReason
               : "Plugins are the preferred way to distribute skills to your organization's users. Skills distributed to a plugin ship inside the plugin package and reach everyone who installs it."}
-          </Type>
+          </Text>
           {!isBlocked && plugins.length > 0 && (
             <RequireScope
               scope="skill:write"

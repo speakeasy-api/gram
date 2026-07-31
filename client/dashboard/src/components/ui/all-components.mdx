@@ -113,13 +113,12 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/Tabs";
-import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
 import { ToggleButton } from "@/components/ui/ToggleButton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/ToggleGroup";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { ViewToggle } from "@/components/ui/ViewToggle";
 import { XYFade } from "@/components/ui/XyFade";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
@@ -168,16 +167,10 @@ export const Row = ({ name, origin, children }) => {
   <Heading variant="h5">Heading five</Heading>
 </Row>
 
-<Row name="Text" origin="DS">
-  <Text variant="lg">Large body</Text>
-  <Text>Default body</Text>
-  <Text variant="sm" muted>{"Small muted"}</Text>
-</Row>
-
-<Row name="Type" origin="Gram">
-  <Type variant="body">Body copy</Type>
-  <Type variant="small" muted>{"Small muted"}</Type>
-  <Type mono>mono</Type>
+<Row name="Text" origin="Gram">
+  <Text variant="body">Body copy</Text>
+  <Text variant="small" muted>{"Small muted"}</Text>
+  <Text mono>mono</Text>
 </Row>
 
 <Row name="Link" origin="DS">

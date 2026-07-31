@@ -1,6 +1,6 @@
 import { Stack } from "@/components/ui/Stack";
 import { cn } from "@/lib/utils";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 export const Block = ({
   label,
@@ -37,22 +37,22 @@ export const Block = ({
             labelRHS && "w-full",
           )}
         >
-          <Type
+          <Text
             small
             className={cn("z-1", error && "text-destructive! text-nowrap")}
           >
             {label}
-          </Type>
+          </Text>
           {labelRHS && (
-            <Type muted variant="small" className="z-1">
+            <Text muted variant="small" className="z-1">
               {labelRHS}
-            </Type>
+            </Text>
           )}
         </Stack>
         {error && !labelRHS && (
-          <Type small italic className="text-destructive! z-1 w-full pt-1">
+          <Text small italic className="text-destructive! z-1 w-full pt-1">
             {error}
-          </Type>
+          </Text>
         )}
       </Stack>
 

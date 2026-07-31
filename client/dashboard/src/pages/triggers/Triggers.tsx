@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   Collapsible,
   CollapsibleContent,
@@ -139,13 +139,13 @@ function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="zap" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No triggers yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Triggers let you connect external events to your assistants. Set up a
         cron schedule or a webhook to get started.
-      </Type>
+      </Text>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
           <Icon name="plus" className="h-4 w-4" />
@@ -285,14 +285,14 @@ function ConfigField({
     };
     return (
       <div>
-        <Type variant="body" className="mb-1 font-medium">
+        <Text variant="body" className="mb-1 font-medium">
           {label}
           {isRequired && " *"}
-        </Type>
+        </Text>
         {description && (
-          <Type small muted className="mb-2">
+          <Text small muted className="mb-2">
             {description}
-          </Type>
+          </Text>
         )}
         <div className="flex flex-wrap gap-2">
           {options.map((opt) => (
@@ -316,14 +316,14 @@ function ConfigField({
 
   return (
     <div>
-      <Type variant="body" className="mb-1 font-medium">
+      <Text variant="body" className="mb-1 font-medium">
         {label}
         {isRequired && " *"}
-      </Type>
+      </Text>
       {description && (
-        <Type small muted className="mb-1">
+        <Text small muted className="mb-1">
           {description}
-        </Type>
+        </Text>
       )}
       <Input
         value={typeof config[fieldKey] === "string" ? config[fieldKey] : ""}
@@ -348,9 +348,9 @@ function TriggerConfigFields({
     schema = JSON.parse(definition.configSchema) as TriggerConfigSchema;
   } catch {
     return (
-      <Type small muted>
+      <Text small muted>
         Unable to parse config schema.
-      </Type>
+      </Text>
     );
   }
 
@@ -581,17 +581,17 @@ function TriggerDialog({
         <div className="min-h-0 overflow-y-auto">
           <Stack gap={4}>
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Name
-              </Type>
+              </Text>
               <Input value={name} onChange={setName} placeholder="My Trigger" />
             </div>
 
             {!isEditing && (
               <div>
-                <Type variant="body" className="mb-1 font-medium">
+                <Text variant="body" className="mb-1 font-medium">
                   Trigger Type
-                </Type>
+                </Text>
                 <Select
                   value={definitionSlug}
                   onValueChange={(val) => {
@@ -619,13 +619,13 @@ function TriggerDialog({
 
             {needsEnvironment && (
               <div>
-                <Type variant="body" className="mb-1 font-medium">
+                <Text variant="body" className="mb-1 font-medium">
                   Environment
-                </Type>
-                <Type small muted className="mb-1">
+                </Text>
+                <Text small muted className="mb-1">
                   This trigger type requires environment variables. Select an
                   environment that has them configured.
-                </Type>
+                </Text>
                 <Select value={environmentId} onValueChange={setEnvironmentId}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select an environment..." />
@@ -643,10 +643,10 @@ function TriggerDialog({
 
             {missingEnvVars.length > 0 && selectedEnvironment && (
               <div className="border-warning-default bg-warning-softest rounded-md border p-3">
-                <Type variant="body" className="mb-1 font-medium">
+                <Text variant="body" className="mb-1 font-medium">
                   Missing environment variables
-                </Type>
-                <Type small className="text-warning-foreground">
+                </Text>
+                <Text small className="text-warning-foreground">
                   The selected environment is missing required variables. The
                   trigger will be created but will fail at runtime until these
                   are configured in{" "}
@@ -657,7 +657,7 @@ function TriggerDialog({
                     {selectedEnvironment.name}
                   </routes.environments.environment.Link>
                   :
-                </Type>
+                </Text>
                 <ul className="mt-2 space-y-1">
                   {missingEnvVars.map((req) => (
                     <li
@@ -687,9 +687,9 @@ function TriggerDialog({
             )}
 
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Target Kind
-              </Type>
+              </Text>
               <Select
                 value={targetKind}
                 onValueChange={(value) =>
@@ -714,9 +714,9 @@ function TriggerDialog({
             </div>
 
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Target Display Name
-              </Type>
+              </Text>
               <Input
                 value={targetDisplay}
                 onChange={setTargetDisplay}
@@ -725,9 +725,9 @@ function TriggerDialog({
             </div>
 
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Target Reference
-              </Type>
+              </Text>
               <Input
                 value={targetRef}
                 onChange={setTargetRef}

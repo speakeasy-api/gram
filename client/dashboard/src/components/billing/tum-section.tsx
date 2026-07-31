@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -318,9 +318,9 @@ export const TumUsageSection = (): JSX.Element => {
         {tum && period ? (
           <Stack gap={3} className="mb-6">
             <Stack direction="horizontal" align="center" gap={1}>
-              <Type variant="body" className="font-medium">
+              <Text variant="body" className="font-medium">
                 Tokens Under Management
-              </Type>
+              </Text>
               <TumDefinitionTooltip />
               <div className="ml-auto flex items-center gap-2">
                 <BillingCyclePicker
@@ -503,14 +503,14 @@ export const TumAdminSection = (): JSX.Element => {
               {mutation.isPending ? "SAVING..." : "SAVE CONTRACT TERMS"}
             </Button>
             {mutation.isSuccess && !mutation.isPending && (
-              <Type muted small>
+              <Text muted small>
                 Saved.
-              </Type>
+              </Text>
             )}
             {mutation.isError && (
-              <Type small className="text-destructive">
+              <Text small className="text-destructive">
                 Failed to save contract terms.
-              </Type>
+              </Text>
             )}
           </Stack>
         </Stack>

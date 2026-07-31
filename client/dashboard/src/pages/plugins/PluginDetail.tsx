@@ -9,7 +9,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { DotCard } from "@/components/ui/DotCard";
 import { DotTable } from "@/components/ui/DotTable";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
@@ -536,12 +536,12 @@ export default function PluginDetail(): JSX.Element | null {
                     </Badge>
                   )}
                 </div>
-                <Type muted small className="mt-1 font-mono">
+                <Text muted small className="mt-1 font-mono">
                   {plugin.slug}
-                </Type>
-                <Type small className="mt-4 max-w-xl">
+                </Text>
+                <Text small className="mt-4 max-w-xl">
                   {description}
-                </Type>
+                </Text>
                 <PublishFreshnessIndicator publishStatus={publishStatus} />
               </div>
             </div>
@@ -677,13 +677,13 @@ export default function PluginDetail(): JSX.Element | null {
           {/* Servers section */}
           <div className="mb-3 flex items-center gap-3">
             <div className="border-border flex-1 border-t" />
-            <Type
+            <Text
               small
               muted
               className="shrink-0 font-mono text-xs tracking-wide uppercase"
             >
               MCP Servers
-            </Type>
+            </Text>
             <div className="border-border flex-1 border-t" />
           </div>
           <div className="mb-3 flex justify-end">
@@ -707,13 +707,13 @@ export default function PluginDetail(): JSX.Element | null {
               <div className="mb-3 flex items-center gap-3">
                 <div className="border-border flex-1 border-t" />
                 <div className="flex shrink-0 items-center gap-2">
-                  <Type
+                  <Text
                     small
                     muted
                     className="font-mono text-xs tracking-wide uppercase"
                   >
                     Assignments
-                  </Type>
+                  </Text>
                   {assignments.length > 0 && (
                     <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
                       {assignments.length}
@@ -723,11 +723,11 @@ export default function PluginDetail(): JSX.Element | null {
                 <div className="border-border flex-1 border-t" />
               </div>
               <div className="mb-3 flex items-center justify-between gap-4">
-                <Type small muted className="max-w-md">
+                <Text small muted className="max-w-md">
                   Controls delivery to devices running the Speakeasy agent.
                   Marketplace installs (Claude, Cursor, Codex) receive every
                   published plugin regardless.
-                </Type>
+                </Text>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -762,13 +762,13 @@ export default function PluginDetail(): JSX.Element | null {
             <>
               <div className="mb-3 flex items-center gap-3">
                 <div className="border-border flex-1 border-t" />
-                <Type
+                <Text
                   small
                   muted
                   className="shrink-0 font-mono text-xs tracking-wide uppercase"
                 >
                   Skills
-                </Type>
+                </Text>
                 <div className="border-border flex-1 border-t" />
               </div>
               <div className="mb-8">
@@ -778,17 +778,17 @@ export default function PluginDetail(): JSX.Element | null {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <Type variant="subheading" as="div">
+                      <Text variant="subheading" as="div">
                         Skills
-                      </Type>
+                      </Text>
                       <Badge variant="neutral">
                         <Badge.Text>Coming soon</Badge.Text>
                       </Badge>
                     </div>
-                    <Type small muted>
+                    <Text small muted>
                       Bundle reusable skills alongside your MCP servers in this
                       plugin.
-                    </Type>
+                    </Text>
                   </div>
                 </div>
               </div>
@@ -896,15 +896,15 @@ export default function PluginDetail(): JSX.Element | null {
                     ))}
                   </select>
                 ) : serverOptions.length > 0 ? (
-                  <Type muted small>
+                  <Text muted small>
                     All available MCP servers have already been added to this
                     plugin.
-                  </Type>
+                  </Text>
                 ) : (
-                  <Type muted small>
+                  <Text muted small>
                     No MCP servers available. Create an MCP server in this
                     project first.
-                  </Type>
+                  </Text>
                 )}
               </div>
               <Dialog.Footer>
@@ -1037,11 +1037,11 @@ function PublishFreshnessIndicator({
     rows.push({
       label: "Last published",
       value: (
-        <Type small>
+        <Text small>
           {formatDistanceToNow(publishStatus.lastPublishedAt, {
             addSuffix: true,
           })}
-        </Type>
+        </Text>
       ),
     });
   }
@@ -1084,9 +1084,9 @@ function PublishFreshnessIndicator({
     <div className="mt-4 grid w-fit grid-cols-[max-content_1fr] items-center gap-x-8 gap-y-2">
       {rows.map((row) => (
         <Fragment key={row.label}>
-          <Type muted small>
+          <Text muted small>
             {row.label}
-          </Type>
+          </Text>
           <div>{row.value}</div>
         </Fragment>
       ))}
@@ -1141,14 +1141,14 @@ function PluginServerCard({
       icon={<Network className="text-muted-foreground h-8 w-8" />}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={server.displayName}
         >
           {server.displayName}
-        </Type>
+        </Text>
         <div className="flex items-center gap-2">
           {notYetPublished ? (
             <Badge

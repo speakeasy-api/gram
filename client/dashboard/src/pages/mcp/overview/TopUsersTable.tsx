@@ -1,7 +1,7 @@
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
 import type { GetToolUsageUsersResult } from "@gram/client/models/components/gettoolusageusersresult.js";
@@ -17,25 +17,25 @@ const columns: Column<UserRow>[] = [
   {
     key: "userLabel",
     header: "User",
-    render: (row) => <Type className="truncate">{row.userLabel}</Type>,
+    render: (row) => <Text className="truncate">{row.userLabel}</Text>,
   },
   {
     key: "eventCount",
     header: "Calls",
     width: "100px",
-    render: (row) => <Type>{row.eventCount}</Type>,
+    render: (row) => <Text>{row.eventCount}</Text>,
   },
   {
     key: "failureCount",
     header: "Failures",
     width: "100px",
-    render: (row) => <Type>{row.failureCount}</Type>,
+    render: (row) => <Text>{row.failureCount}</Text>,
   },
   {
     key: "uniqueTools",
     header: "Unique tools",
     width: "120px",
-    render: (row) => <Type>{row.uniqueTools}</Type>,
+    render: (row) => <Text>{row.uniqueTools}</Text>,
   },
 ];
 
@@ -83,9 +83,9 @@ export function TopUsersTable({
   let content: React.JSX.Element;
   if (isLogsDisabled) {
     content = (
-      <Type muted small>
+      <Text muted small>
         Observability is not enabled for this organization.
-      </Type>
+      </Text>
     );
   } else if (isLoading) {
     content = <SkeletonTable />;
@@ -94,9 +94,9 @@ export function TopUsersTable({
     // instead of rendering the empty-results state, which would otherwise
     // read as "no usage" rather than "couldn't load usage".
     content = (
-      <Type muted small className="text-destructive">
+      <Text muted small className="text-destructive">
         Failed to load top users.
-      </Type>
+      </Text>
     );
   } else {
     content = (

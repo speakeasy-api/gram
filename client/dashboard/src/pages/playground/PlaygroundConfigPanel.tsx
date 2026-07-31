@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { AVAILABLE_MODELS } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
@@ -506,9 +506,9 @@ function ToolsBody({
   if (toolGroups.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <Type variant="small" className="text-muted-foreground">
+        <Text variant="small" className="text-muted-foreground">
           No tools added
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -602,9 +602,9 @@ function ReadOnlyToolList({ tools }: { tools: ReadOnlyTool[] }): JSX.Element {
   if (tools.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <Type variant="small" className="text-muted-foreground">
+        <Text variant="small" className="text-muted-foreground">
           No tools advertised
-        </Type>
+        </Text>
       </div>
     );
   }

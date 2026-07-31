@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 import { Resource, Toolset } from "@/lib/toolTypes";
@@ -256,19 +256,19 @@ function ResourceSelectPopover({
                         strokeWidth={1.5}
                       />
                       <Stack gap={0.5} className="min-w-0 flex-1">
-                        <Type small className="font-medium">
+                        <Text small className="font-medium">
                           {resource.name}
-                        </Type>
-                        <Type small muted className="truncate">
+                        </Text>
+                        <Text small muted className="truncate">
                           {resource.description || "No description"}
-                        </Type>
-                        <Type
+                        </Text>
+                        <Text
                           small
                           muted
                           className="truncate font-mono text-xs"
                         >
                           {resource.uri}
-                        </Type>
+                        </Text>
                       </Stack>
                     </div>
                   </CommandItem>

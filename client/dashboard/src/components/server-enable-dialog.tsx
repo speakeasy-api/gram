@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/ui/Dialog";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useOrgRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
@@ -62,18 +62,18 @@ export function ServerEnableDialog({
 
         <div className="space-y-4">
           {!canEnable ? (
-            <Type className="text-muted-foreground">
+            <Text className="text-muted-foreground">
               Free accounts are limited to one enabled MCP server. To enable
               additional servers, upgrade to a paid plan.
-            </Type>
+            </Text>
           ) : (
-            <Type className="text-muted-foreground">
+            <Text className="text-muted-foreground">
               {currentlyEnabled
                 ? "Disabling this server will stop all requests and may affect any applications using this MCP server."
                 : targetIsPublic
                   ? "This will enable the server and make it publicly accessible. Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools."
                   : "Enabling this server will allow it to receive requests. Standard usage charges may apply based on your plan."}
-            </Type>
+            </Text>
           )}
         </div>
 

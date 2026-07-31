@@ -4,7 +4,8 @@ import { cva } from "class-variance-authority";
 import { Slot, Slottable } from "@radix-ui/react-slot";
 import { IconName } from "../Icon/names";
 import { Icon as IconComponent } from "../Icon";
-import { TextVariant } from "../Text";
+/** Link text sizes, matching the design system body scale. */
+type LinkSize = "xs" | "sm" | "md" | "lg";
 
 type LinkVariant = "primary" | "secondary";
 
@@ -56,7 +57,7 @@ const iconWrapperVariants = cva("inline-block", {
 export interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children: ReactNode;
   variant?: LinkVariant;
-  size?: TextVariant;
+  size?: LinkSize;
   underline?: boolean;
   iconPrefixName?: IconName;
   iconSuffixName?: IconName;
@@ -139,7 +140,7 @@ const Text = ({
 };
 
 interface IconWrapperProps {
-  size?: TextVariant;
+  size?: LinkSize;
 }
 
 const IconWrapper = ({

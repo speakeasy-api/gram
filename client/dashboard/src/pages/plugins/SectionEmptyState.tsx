@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 
 /**
@@ -20,13 +20,13 @@ export function SectionEmptyState({
       align="center"
       justify="center"
     >
-      <Type variant="body" muted>
+      <Text variant="body" muted>
         {title}
-      </Type>
+      </Text>
       {subtitle && (
-        <Type small muted>
+        <Text small muted>
           {subtitle}
-        </Type>
+        </Text>
       )}
     </Stack>
   );

@@ -11,7 +11,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/InputGroup";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
@@ -129,9 +129,9 @@ export function ServerUrlSection({
       <SettingsSection.Panel>
         <SettingsSection.Body>
           {isLoadingEndpoints ? (
-            <Type muted small>
+            <Text muted small>
               Loading…
-            </Type>
+            </Text>
           ) : (
             <FieldGroup className="gap-6">
               {/* Hosted (platform) address: at most one. */}

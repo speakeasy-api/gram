@@ -1,6 +1,6 @@
 import { type SourceTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
 
 // Brand-inspired muted palette (from moonshine gradient colors). Defined here
@@ -36,9 +36,9 @@ export function SourceActivityPanel({
     <div className="flex flex-col">
       <div className="mb-3 flex items-center justify-between">
         <Heading variant="h4">Source Activity</Heading>
-        <Type muted small>
+        <Text muted small>
           {windowLabel}
-        </Type>
+        </Text>
       </div>
 
       {isLoading ? (
@@ -47,21 +47,21 @@ export function SourceActivityPanel({
         <div className="space-y-4">
           {summary && <TelemetrySummaryRow summary={summary} />}
           <div className="rounded-lg border p-4">
-            <Type muted small className="mb-3 block">
+            <Text muted small className="mb-3 block">
               Tool usage
-            </Type>
+            </Text>
             <ToolBarList tools={tools} />
           </div>
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-          <Type muted className="mb-1 block">
+          <Text muted className="mb-1 block">
             No invocation data yet
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Telemetry will appear here once tools from this source are called
             via an MCP server.
-          </Type>
+          </Text>
         </div>
       )}
     </div>
@@ -71,28 +71,28 @@ export function SourceActivityPanel({
 function TelemetrySummaryRow({ summary }: { summary: SourceTelemetrySummary }) {
   return (
     <div className="flex items-center gap-4 text-sm">
-      <Type muted small>
+      <Text muted small>
         {summary.totalCalls.toLocaleString()} calls
-      </Type>
+      </Text>
       {summary.totalFailures > 0 && (
-        <Type small className="text-destructive">
+        <Text small className="text-destructive">
           {summary.totalFailures} failed
-        </Type>
+        </Text>
       )}
-      <Type muted small>
+      <Text muted small>
         {summary.avgLatency < 1000
           ? `${summary.avgLatency.toFixed(0)}ms avg`
           : `${(summary.avgLatency / 1000).toFixed(1)}s avg`}
-      </Type>
+      </Text>
       {summary.errorRate > 0 && (
-        <Type
+        <Text
           small
           className={
             summary.errorRate > 5 ? "text-destructive" : "text-warning"
           }
         >
           {summary.errorRate.toFixed(1)}% error rate
-        </Type>
+        </Text>
       )}
     </div>
   );

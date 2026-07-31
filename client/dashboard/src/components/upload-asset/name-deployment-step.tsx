@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
 import React from "react";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
@@ -88,15 +88,15 @@ export default function NameDeploymentStep(): React.JSX.Element | null {
       </form>
     );
   } else if (step.state === "completed") {
-    return <Type>✓ Source named "{stepper.meta.current.assetName}"</Type>;
+    return <Text>✓ Source named "{stepper.meta.current.assetName}"</Text>;
   } else if (!step.isCurrentStep) {
     return null;
   } else {
     return (
-      <Type>
+      <Text>
         An unexpected error occurred. Please refresh your browser, and try
         again.
-      </Type>
+      </Text>
     );
   }
 }

@@ -2,7 +2,7 @@ import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import { SidebarFooterAction } from "@/components/sidebar-footer-action";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/Sidebar";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import * as React from "react";
@@ -13,13 +13,13 @@ export function McpSidebarInfoLabel({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Type
+    <Text
       variant="small"
       muted
       className="font-mono text-xs tracking-wide uppercase"
     >
       {children}
-    </Type>
+    </Text>
   );
 }
 

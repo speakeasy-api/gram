@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -33,11 +33,11 @@ export function SkillContentUploadSetting(): JSX.Element | null {
       <Stack gap={1}>
         <Stack direction="horizontal" align="center" gap={2}>
           <FileText className="text-muted-foreground h-4 w-4" />
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             Upload Skill Content
-          </Type>
+          </Text>
         </Stack>
-        <Type
+        <Text
           variant="body"
           className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
         >
@@ -45,7 +45,7 @@ export function SkillContentUploadSetting(): JSX.Element | null {
           captured skills can be inspected. When disabled, Speakeasy only
           receives skill names, source details, hashes, users, and hostnames at
           activation.
-        </Type>
+        </Text>
       </Stack>
       <RequireScope scope="org:admin" level="component">
         <Switch

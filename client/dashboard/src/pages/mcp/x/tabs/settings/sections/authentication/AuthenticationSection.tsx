@@ -5,7 +5,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/Field";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
@@ -281,9 +281,9 @@ function AuthenticationLoadingField() {
   return (
     <Field>
       <FieldLabel>Authentication</FieldLabel>
-      <Type muted small>
+      <Text muted small>
         Loading authentication configuration...
-      </Type>
+      </Text>
     </Field>
   );
 }

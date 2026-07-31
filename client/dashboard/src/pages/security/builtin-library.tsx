@@ -7,7 +7,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useBuiltinExclusions } from "@gram/client/react-query/builtinExclusions.js";
 import type { BuiltinExclusionEntry } from "@gram/client/models/components/builtinexclusionentry.js";
 import { Info } from "lucide-react";
@@ -36,7 +36,7 @@ export function BuiltinLibrary(): JSX.Element {
       <div className="flex items-center justify-between gap-4">
         <SimpleTooltip tooltip={LIBRARY_TOOLTIP}>
           <span className="flex cursor-default items-center gap-1.5">
-            <Type className="font-medium">Built-in library</Type>
+            <Text className="font-medium">Built-in library</Text>
             <Info className="text-muted-foreground size-3.5" aria-hidden />
           </span>
         </SimpleTooltip>
@@ -67,7 +67,7 @@ export function BuiltinLibrary(): JSX.Element {
           <div className="space-y-6 px-6 pb-8">
             {categories.map((category) => (
               <div key={category.label} className="space-y-3">
-                <Type className="font-medium">{category.label}</Type>
+                <Text className="font-medium">{category.label}</Text>
                 <ul className="space-y-3">
                   {category.entries.map((entry) => (
                     <PresetEntryRow key={entry.id} entry={entry} />
@@ -89,12 +89,12 @@ function PresetEntryRow({
 }): JSX.Element {
   return (
     <li className="bg-muted/30 space-y-1 rounded-lg border p-3">
-      <Type small className="font-medium">
+      <Text small className="font-medium">
         {entry.reason}
-      </Type>
-      <Type className="text-muted-foreground" small>
+      </Text>
+      <Text className="text-muted-foreground" small>
         {entry.description}
-      </Type>
+      </Text>
       {entry.samples && entry.samples.length > 0 && (
         <div className="flex flex-wrap gap-1 pt-1">
           {entry.samples.map((sample) => (

@@ -5,7 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
@@ -612,9 +612,9 @@ export function CostTable({
           className="px-5 py-10 text-center"
           style={{ gridColumn: "1 / -1" }}
         >
-          <Type className="text-muted-foreground">
+          <Text className="text-muted-foreground">
             {emptyMessage ?? "No cost data for this slice."}
-          </Type>
+          </Text>
         </div>
       ) : (
         pageRows.map((row, i) => {

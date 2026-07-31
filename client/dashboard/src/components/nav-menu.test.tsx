@@ -40,10 +40,10 @@ vi.mock("react-router", () => ({
   ),
 }));
 
-// Type renders as a plain span; className is forwarded so tests can observe
+// Text renders as a plain span; className is forwarded so tests can observe
 // loading state via the nav-shimmer class that NavButton applies.
-vi.mock("@/components/ui/Type", () => ({
-  Type: ({
+vi.mock("@/components/ui/Text", () => ({
+  Text: ({
     children,
     className,
   }: {

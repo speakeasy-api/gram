@@ -4,7 +4,7 @@ import {
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import {
@@ -49,20 +49,20 @@ export function BuiltInMcpSidebarNav(): React.JSX.Element | null {
   const cardContent = (
     <>
       <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">MCP Logs</Type>
+        <Text className="truncate font-semibold">MCP Logs</Text>
         <McpSidebarInfoLabel>Built-in</McpSidebarInfoLabel>
       </div>
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
         <div className="flex items-start gap-1">
-          <Type
+          <Text
             variant="small"
             muted
             className="line-clamp-2 font-mono text-xs break-all"
           >
             {mcpUrl.replace(/^https?:\/\//, "")}
-          </Type>
+          </Text>
           <CopyButton
             text={mcpUrl}
             size="xs"
@@ -74,7 +74,7 @@ export function BuiltInMcpSidebarNav(): React.JSX.Element | null {
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>Tools</McpSidebarInfoLabel>
-        <Type variant="small">{BUILT_IN_TOOLS.length}</Type>
+        <Text variant="small">{BUILT_IN_TOOLS.length}</Text>
       </div>
     </>
   );

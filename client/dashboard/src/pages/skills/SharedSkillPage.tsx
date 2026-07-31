@@ -1,6 +1,6 @@
 import { GramLogo } from "@/components/gram-logo";
 import { Button } from "@/components/ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Markdown } from "@/elements/components/Markdown";
 import { dateTimeFormatters } from "@/lib/dates";
 import type { SharedSkill2 } from "@gram/client/models/components/sharedskill2.js";
@@ -27,9 +27,9 @@ export function SharedSkillPage(): JSX.Element {
         <SharedSkillBody token={token} />
       </main>
       <footer className="flex items-center justify-center gap-2 pb-8">
-        <Type muted small>
+        <Text muted small>
           Powered by
-        </Type>
+        </Text>
         <GramLogo className="w-16" />
       </footer>
     </div>
@@ -63,9 +63,9 @@ function SharedSkillBody({ token }: { token: string | undefined }) {
         className="justify-center py-24"
       >
         <Icon name="loader-circle" className="size-4 animate-spin" />
-        <Type muted small>
+        <Text muted small>
           Loading skill…
-        </Type>
+        </Text>
       </Stack>
     );
   }
@@ -93,13 +93,13 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
       <header className="space-y-3">
         <h1 className="text-3xl font-semibold">{skill.displayName}</h1>
         {skill.summary && (
-          <Type muted className="max-w-2xl">
+          <Text muted className="max-w-2xl">
             {skill.summary}
-          </Type>
+          </Text>
         )}
-        <Type small muted className="block">
+        <Text small muted className="block">
           Updated {dateTimeFormatters.full.format(skill.updatedAt)}
-        </Type>
+        </Text>
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             size="sm"
@@ -119,9 +119,9 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
       </header>
       <div className="border-t pt-8">
         {body.trim().length === 0 ? (
-          <Type small muted>
+          <Text small muted>
             This manifest has no Markdown body.
-          </Type>
+          </Text>
         ) : (
           <Markdown>{body}</Markdown>
         )}
@@ -134,13 +134,13 @@ function SharedSkillUnavailable(): JSX.Element {
   return (
     <Stack gap={3} align="center" className="py-24">
       <Icon name="link-2-off" className="text-muted-foreground size-8" />
-      <Type variant="subheading" className="text-center">
+      <Text variant="subheading" className="text-center">
         This skill isn't available
-      </Type>
-      <Type muted small className="max-w-md text-center">
+      </Text>
+      <Text muted small className="max-w-md text-center">
         The link may have been turned off by its owner, or the address might not
         be quite right. Ask whoever shared it with you for a fresh link.
-      </Type>
+      </Text>
     </Stack>
   );
 }

@@ -2,7 +2,7 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Textarea } from "@/components/moon/textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useQueryState } from "nuqs";
 import type { ApproveSkillSuggestionResultOutcome } from "@gram/client/models/components/approveskillsuggestionresult.js";
 import type { RecordSkillResult } from "@gram/client/models/components/recordskillresult.js";
@@ -268,10 +268,10 @@ export function SkillManifestDialog({
           />
 
           {continuing && (
-            <Type small muted role="status">
+            <Text small muted role="status">
               Future saves add versions to this saved skill. Change the manifest
               before saving again.
-            </Type>
+            </Text>
           )}
 
           <div className="space-y-2">
@@ -309,18 +309,18 @@ export function SkillManifestDialog({
               }}
             />
             <div className="flex flex-wrap justify-between gap-2">
-              <Type id={helpId} small muted>
+              <Text id={helpId} small muted>
                 UTF-8, up to 65,536 bytes.
-              </Type>
-              <Type small muted className="font-mono">
+              </Text>
+              <Text small muted className="font-mono">
                 {manifestByteLength(content).toLocaleString()} bytes
-              </Type>
+              </Text>
             </div>
             <div id={errorId} aria-live="polite">
               {fieldError && (
-                <Type small className="text-destructive">
+                <Text small className="text-destructive">
                   {fieldError}
-                </Type>
+                </Text>
               )}
             </div>
           </div>
@@ -383,14 +383,14 @@ function SavedManifestResult({
       className="border-border bg-muted/30 space-y-3 rounded-lg border p-4"
       role="status"
     >
-      <Type variant="subheading">{title}</Type>
+      <Text variant="subheading">{title}</Text>
       {!noChanges && (
         <SkillValidationErrors errors={result.version.validationErrors} />
       )}
-      <Type small muted>
+      <Text small muted>
         Continue editing keeps this saved skill selected. Future saves create
         immutable versions of it.
-      </Type>
+      </Text>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={onView}>
           View skill

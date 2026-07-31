@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
@@ -324,9 +324,9 @@ function IssuerTable({
 
   if (!isLoading && items.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         {emptyMessage}
-      </Type>
+      </Text>
     );
   }
 
@@ -347,28 +347,28 @@ function IssuerTable({
           ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
         >
           <td className="px-3 py-3">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
             >
               {issuerDisplayName(item.issuer)}
-            </Type>
-            <Type small muted as="div" className="truncate">
+            </Text>
+            <Text small muted as="div" className="truncate">
               {item.issuer.issuer}
-            </Type>
+            </Text>
           </td>
           {showProject && (
             <td className="px-3 py-3">
-              <Type small muted>
+              <Text small muted>
                 {item.projectName || "—"}
-              </Type>
+              </Text>
             </td>
           )}
           <td className="px-3 py-3">
-            <Type small muted>
+            <Text small muted>
               {item.clientCount} {item.clientCount === 1 ? "client" : "clients"}
-            </Type>
+            </Text>
           </td>
           {!readOnly && (
             <td className="px-3 py-3 text-right">

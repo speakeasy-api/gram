@@ -11,7 +11,7 @@ import {
   TabsList,
 } from "@/components/ui/Tabs";
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
@@ -272,9 +272,9 @@ export default function SourceDetails(): JSX.Element {
               </Badge>
             </div>
             <div className="ml-1 flex items-center gap-2">
-              <Type className="text-muted-foreground max-w-2xl truncate">
+              <Text className="text-muted-foreground max-w-2xl truncate">
                 {source?.slug}
-              </Type>
+              </Text>
             </div>
           </div>
         </DetailHero>
@@ -347,11 +347,11 @@ export default function SourceDetails(): JSX.Element {
                 </div>
               ) : specError ? (
                 <div className="py-8 text-center">
-                  <Type className="text-destructive">
+                  <Text className="text-destructive">
                     {specError instanceof Error
                       ? specError.message
                       : "Failed to fetch spec"}
-                  </Type>
+                  </Text>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -371,9 +371,9 @@ export default function SourceDetails(): JSX.Element {
                   wordWrap="on"
                 />
               ) : (
-                <Type className="text-muted-foreground py-8 text-center">
+                <Text className="text-muted-foreground py-8 text-center">
                   No spec content available
-                </Type>
+                </Text>
               )}
             </TabsContent>
           )}

@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import { useCreateGcpIamPlatformCredentialMutation } from "@gram/client/react-query/createGcpIamPlatformCredential";
 import { invalidateAllListPlatformExternalCredentials } from "@gram/client/react-query/listPlatformExternalCredentials";
@@ -185,10 +185,10 @@ function GcpCredentialFields({
 }): JSX.Element {
   return (
     <Stack gap={4}>
-      <Type muted small>
+      <Text muted small>
         Leave blank to use the platform's ambient attached identity, or set a
         service account for the platform to impersonate.
-      </Type>
+      </Text>
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">
           Impersonate service account (optional)

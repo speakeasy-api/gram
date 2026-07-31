@@ -8,7 +8,7 @@ import {
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   getMcpServerArgs,
   remoteMcpRouteParam,
@@ -209,9 +209,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const cardContent = mcpServer && (
     <>
       <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">
+        <Text className="truncate font-semibold">
           {mcpServer.name || "MCP Server"}
-        </Type>
+        </Text>
         {isRemoteBacked && (
           <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
         )}
@@ -229,13 +229,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {mcpUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={mcpUrl}
               size="xs"
@@ -250,13 +250,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>Upstream URL</McpSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {upstreamUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={upstreamUrl}
               size="xs"

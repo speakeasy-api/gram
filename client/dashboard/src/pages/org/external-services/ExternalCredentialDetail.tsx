@@ -7,7 +7,7 @@ import {
   TabsContent,
   TabsList,
 } from "@/components/ui/Tabs";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import { useGetGcpIamPlatformCredential } from "@gram/client/react-query/getGcpIamPlatformCredential";
 import { Link, Navigate, useLocation, useParams } from "react-router";
@@ -57,11 +57,11 @@ export default function ExternalCredentialDetail(): JSX.Element {
       </Page.Header>
       <Page.Body fullWidth noPadding className="gap-0">
         <DetailHero>
-          <Type small muted>
+          <Text small muted>
             {credential
               ? providerLabel(credential.provider)
               : "External Credential"}
-          </Type>
+          </Text>
           <Heading variant="h1" className="break-all normal-case">
             {label}
           </Heading>
@@ -84,13 +84,13 @@ export default function ExternalCredentialDetail(): JSX.Element {
           <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
             <TabsContent value="overview" className="mt-0">
               {credential && <OverviewTab credential={credential} />}
-              {isLoading && <Type muted>Loading…</Type>}
+              {isLoading && <Text muted>Loading…</Text>}
             </TabsContent>
             <TabsContent value="settings" className="mt-0">
               {credential && (
                 <SettingsTab key={credential.id} credential={credential} />
               )}
-              {isLoading && <Type muted>Loading…</Type>}
+              {isLoading && <Text muted>Loading…</Text>}
             </TabsContent>
           </div>
         </Tabs>

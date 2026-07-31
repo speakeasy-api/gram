@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
@@ -615,9 +615,9 @@ export const LogsTabContent = ({
       {!embeddedMode && sourceOptions.length > 0 && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
-            <Type small muted>
+            <Text small muted>
               Source
-            </Type>
+            </Text>
             <Select value={selectedSource} onValueChange={setSelectedSource}>
               <SelectTrigger size="sm" className="bg-background min-w-[180px]">
                 <SelectValue placeholder="All sources" />

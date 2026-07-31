@@ -4,7 +4,7 @@ import { Stack } from "@/components/ui/Stack";
 import { HttpRoute } from "./http-route";
 import { Badge, type BadgeProps } from "./ui/Badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 export function ToolBadge({
   tool,
@@ -38,14 +38,14 @@ export function ToolBadge({
                 size="small"
                 className="text-muted-foreground"
               />
-              <Type small mono muted>
+              <Text small mono muted>
                 {tool.name}
-              </Type>
+              </Text>
             </Stack>
           )}
-          <Type small className="line-clamp-3">
+          <Text small className="line-clamp-3">
             {tool.description}
-          </Type>
+          </Text>
         </Stack>
       </TooltipContent>
     </Tooltip>

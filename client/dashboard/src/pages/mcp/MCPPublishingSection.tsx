@@ -1,7 +1,7 @@
 import { Block, BlockInner } from "@/components/block";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   usePublishing,
   type PublishingTarget,
@@ -49,17 +49,17 @@ export function MCPPublishingSection({
         <Block label="Collections" className="p-0">
           <BlockInner>
             {!canPublish ? (
-              <Type muted small>
+              <Text muted small>
                 {disabledMessage}
-              </Type>
+              </Text>
             ) : isLoading ? (
-              <Type muted small>
+              <Text muted small>
                 Loading collections...
-              </Type>
+              </Text>
             ) : collections.length === 0 ? (
-              <Type muted small>
+              <Text muted small>
                 No collections available.
-              </Type>
+              </Text>
             ) : (
               <Stack direction="vertical" gap={2}>
                 {collections.map((collection) => (
@@ -73,13 +73,13 @@ export function MCPPublishingSection({
                       onCheckedChange={() => toggleCollection(collection.id)}
                     />
                     <Stack direction="vertical" gap={0}>
-                      <Type small className="font-medium">
+                      <Text small className="font-medium">
                         {collection.name}
-                      </Type>
+                      </Text>
                       {collection.description && (
-                        <Type muted small>
+                        <Text muted small>
                           {collection.description}
-                        </Type>
+                        </Text>
                       )}
                     </Stack>
                   </label>

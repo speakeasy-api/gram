@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Combobox } from "@/components/ui/Combobox";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import {
   AlertTriangle,
@@ -464,12 +464,12 @@ function CollectionDetailInner() {
               <div className="border-warning-default bg-warning-softest mb-4 flex items-start gap-3 rounded-md border p-3">
                 <AlertTriangle className="text-warning-foreground mt-0.5 h-4 w-4 shrink-0" />
                 <div>
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Some servers were excluded
-                  </Type>
-                  <Type small className="text-warning-foreground">
+                  </Text>
+                  <Text small className="text-warning-foreground">
                     {excludedServersNotice}
-                  </Type>
+                  </Text>
                 </div>
               </div>
             )}
@@ -650,11 +650,11 @@ function CollectionDetailInner() {
                         ) : filteredServers.length === 0 ? (
                           <div className="flex flex-col items-center justify-center p-4 text-center">
                             <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                            <Type small muted>
+                            <Text small muted>
                               {serverSearch
                                 ? "No servers match your search."
                                 : "No MCP servers available."}
-                            </Type>
+                            </Text>
                           </div>
                         ) : (
                           filteredServers.map((server) => {

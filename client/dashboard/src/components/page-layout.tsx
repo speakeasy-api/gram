@@ -13,7 +13,7 @@ import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Toolbar } from "@/components/ui/Toolbar";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { XYFade } from "@/components/ui/XyFade";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
@@ -172,9 +172,9 @@ function PageSectionDescription({
   className?: string;
 }) {
   return (
-    <Type muted small className={cn("font-normal", className)}>
+    <Text muted small className={cn("font-normal", className)}>
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -272,9 +272,9 @@ export function EmptyState({
         <Heading variant="h5" className="font-medium">
           {heading}
         </Heading>
-        <Type small muted className="mb-4 text-center">
+        <Text small muted className="mb-4 text-center">
           {description}
-        </Type>
+        </Text>
         {CTA}
       </Stack>
     </div>

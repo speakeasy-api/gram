@@ -8,7 +8,7 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { Markdown } from "@/elements/components/Markdown";
@@ -302,10 +302,10 @@ function SkillDetailSections({
               {latestVersion ? (
                 <ManifestBody body={body} />
               ) : (
-                <Type small muted>
+                <Text small muted>
                   Manifest content has not been captured for this observed
                   skill.
-                </Type>
+                </Text>
               )}
             </div>
           </SettingsSection.Body>
@@ -400,11 +400,11 @@ function SkillDetailSections({
         <DangerSettingsSection.Panel>
           <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-1">
-              <Type className="text-sm font-semibold">Archive this skill</Type>
-              <Type small muted className="max-w-xl">
+              <Text className="text-sm font-semibold">Archive this skill</Text>
+              <Text small muted className="max-w-xl">
                 Archiving removes the skill from this project's catalog and
                 revokes its plugin distributions.
-              </Type>
+              </Text>
             </div>
             <RequireScope
               scope="skill:write"
@@ -539,10 +539,10 @@ function VersionHistory({
     <SettingsSection.Panel>
       <SettingsSection.Body>
         {comparable && (
-          <Type small muted>
+          <Text small muted>
             Select one version to compare it with current, or select any two
             loaded versions.
-          </Type>
+          </Text>
         )}
         {versionsQuery.isPending && !versionsQuery.data && <SkeletonTable />}
         {versionsQuery.error && !versionsQuery.data && (
@@ -589,9 +589,9 @@ function VersionHistory({
 function ManifestBody({ body }: { body: string }): JSX.Element {
   if (body.trim().length === 0) {
     return (
-      <Type small muted>
+      <Text small muted>
         This manifest has no Markdown body.
-      </Type>
+      </Text>
     );
   }
   return <Markdown className="text-sm">{body}</Markdown>;
@@ -624,9 +624,9 @@ function ValidationErrors({
 }): JSX.Element {
   return (
     <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4">
-      <Type variant="subheading" className="text-destructive mb-2">
+      <Text variant="subheading" className="text-destructive mb-2">
         Current version has validation issues
-      </Type>
+      </Text>
       <SkillValidationErrors errors={errors} />
     </div>
   );
@@ -701,7 +701,7 @@ function versionColumns({
       key: "activations",
       header: "Activations",
       width: "110px",
-      render: (version) => <Type small>{version.seenCount}</Type>,
+      render: (version) => <Text small>{version.seenCount}</Text>,
     },
     {
       key: "firstSeen",
@@ -709,17 +709,17 @@ function versionColumns({
       width: "150px",
       render: (version) =>
         version.firstSeenAt ? (
-          <Type
+          <Text
             small
             muted
             title={dateTimeFormatters.full.format(version.firstSeenAt)}
           >
             <HumanizeDateTime date={version.firstSeenAt} />
-          </Type>
+          </Text>
         ) : (
-          <Type small muted>
+          <Text small muted>
             Never
-          </Type>
+          </Text>
         ),
     },
     {
@@ -728,17 +728,17 @@ function versionColumns({
       width: "150px",
       render: (version) =>
         version.lastSeenAt ? (
-          <Type
+          <Text
             small
             muted
             title={dateTimeFormatters.full.format(version.lastSeenAt)}
           >
             <HumanizeDateTime date={version.lastSeenAt} />
-          </Type>
+          </Text>
         ) : (
-          <Type small muted>
+          <Text small muted>
             Never
-          </Type>
+          </Text>
         ),
     },
     {
@@ -746,9 +746,9 @@ function versionColumns({
       header: "Created",
       width: "150px",
       render: (version) => (
-        <Type small title={dateTimeFormatters.full.format(version.createdAt)}>
+        <Text small title={dateTimeFormatters.full.format(version.createdAt)}>
           <HumanizeDateTime date={version.createdAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -763,9 +763,9 @@ function versionColumns({
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
     <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-      <Type small className="text-destructive">
+      <Text small className="text-destructive">
         Unable to load more versions.
-      </Type>
+      </Text>
       <Button size="sm" variant="secondary" onClick={onRetry}>
         Retry
       </Button>
@@ -782,10 +782,10 @@ function VersionDiff({
   const [older, newer] = versions;
   return (
     <div className="space-y-3">
-      <Type small muted mono className="text-xs tracking-wider">
+      <Text small muted mono className="text-xs tracking-wider">
         Diff · {older.canonicalSha256.slice(0, 8)} →{" "}
         {newer.canonicalSha256.slice(0, 8)}
-      </Type>
+      </Text>
       <Suspense fallback={<Skeleton className="h-80 w-full" />}>
         <SkillTextDiff
           oldContent={older.content}

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 export function Editable({
   onClick,
@@ -33,20 +33,20 @@ export function Editable({
       {isHovered && (
         <div className="absolute inset-0 flex items-center justify-center">
           {disabled ? (
-            <Type muted italic>
+            <Text muted italic>
               Can't edit
-            </Type>
+            </Text>
           ) : (
             <>
               <Pencil className="text-muted-foreground mr-1 h-4 w-4" />
-              <Type
+              <Text
                 className={cn(
                   "font-medium text-inherit",
                   disabled && "text-muted-foreground",
                 )}
               >
                 Edit
-              </Type>
+              </Text>
             </>
           )}
         </div>

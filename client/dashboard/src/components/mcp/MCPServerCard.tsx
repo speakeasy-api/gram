@@ -1,5 +1,5 @@
 import { DotCard } from "@/components/ui/DotCard";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -43,14 +43,14 @@ export function MCPServerCard({
       <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>
         {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="text-md group-hover:text-primary flex-1 truncate transition-colors"
             title={server.name ?? undefined}
           >
             {server.name || "MCP Server"}
-          </Type>
+          </Text>
           <Badge variant="neutral" className="bg-card">
             <Badge.Text>
               {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}

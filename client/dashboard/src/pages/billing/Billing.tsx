@@ -5,7 +5,7 @@ import { Card, Cards, CardSkeleton } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -97,9 +97,9 @@ const UsageSection = () => {
     return (
       <Stack gap={3} className="mb-6">
         <Stack direction="horizontal" align="center" gap={1}>
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             {label}
-          </Type>
+          </Text>
           <SimpleTooltip tooltip={tooltip}>
             <Info className="text-muted-foreground h-4 w-4" />
           </SimpleTooltip>
@@ -341,7 +341,7 @@ const UsageTiers = () => {
         <Card.Content>
           <Stack gap={8}>
             <Stack gap={1}>
-              <Type
+              <Text
                 mono
                 muted
                 small
@@ -351,7 +351,7 @@ const UsageTiers = () => {
                 {previousTier
                   ? `Everything from ${previousTier}, plus`
                   : "Features"}
-              </Type>
+              </Text>
               <ul className="list-inside space-y-1">
                 {tierLimits.featureBullets.map((bullet) => (
                   <li key={bullet}>
@@ -363,7 +363,7 @@ const UsageTiers = () => {
             {tierLimits.includedBullets &&
               tierLimits.includedBullets.length > 0 && (
                 <Stack gap={1}>
-                  <Type
+                  <Text
                     mono
                     muted
                     small
@@ -371,7 +371,7 @@ const UsageTiers = () => {
                     className="font-medium uppercase"
                   >
                     Included
-                  </Type>
+                  </Text>
                   <ul className="list-inside space-y-1">
                     {tierLimits.includedBullets.map((bullet) => (
                       <li key={bullet}>
@@ -384,7 +384,7 @@ const UsageTiers = () => {
               )}
             {tierLimits.addOnBullets && tierLimits.addOnBullets.length > 0 && (
               <Stack gap={1}>
-                <Type
+                <Text
                   mono
                   muted
                   small
@@ -392,7 +392,7 @@ const UsageTiers = () => {
                   className="font-medium uppercase"
                 >
                   Extras
-                </Type>
+                </Text>
                 <ul className="list-inside space-y-1">
                   {tierLimits.addOnBullets.map((bullet) => (
                     <li key={bullet}>

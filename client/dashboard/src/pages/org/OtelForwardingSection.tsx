@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   invalidateAllOtelForwardingConfig,
   useOtelForwardingConfig,
@@ -139,11 +139,11 @@ export function OtelForwardingSection(): JSX.Element {
         <Heading variant="h4" className="mb-2">
           OTEL forwarding
         </Heading>
-        <Type muted small>
+        <Text muted small>
           Forward a copy of every OTEL payload received on the hooks endpoint to
           your own collector. Headers are encrypted at rest; values are never
           returned by the API.
-        </Type>
+        </Text>
       </div>
 
       <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
@@ -151,13 +151,13 @@ export function OtelForwardingSection(): JSX.Element {
           <Stack gap={1}>
             <Stack direction="horizontal" align="center" gap={2}>
               <Send className="text-muted-foreground h-4 w-4" />
-              <Type variant="body" className="font-medium">
+              <Text variant="body" className="font-medium">
                 Enable forwarding
-              </Type>
+              </Text>
             </Stack>
-            <Type variant="body" className="text-muted-foreground ml-6 text-sm">
+            <Text variant="body" className="text-muted-foreground ml-6 text-sm">
               Send each inbound OTEL payload to the endpoint below.
-            </Type>
+            </Text>
           </Stack>
           <RequireScope scope="org:admin" level="component">
             <Switch
@@ -201,11 +201,11 @@ export function OtelForwardingSection(): JSX.Element {
           </Stack>
 
           {headers.length === 0 ? (
-            <Type variant="body" className="text-muted-foreground text-sm">
+            <Text variant="body" className="text-muted-foreground text-sm">
               No headers. Add any required authorization headers (e.g.
               <code className="bg-muted ml-1 rounded px-1">Authorization</code>
               ).
-            </Type>
+            </Text>
           ) : (
             <Stack gap={2}>
               {headers.map((header, idx) => (

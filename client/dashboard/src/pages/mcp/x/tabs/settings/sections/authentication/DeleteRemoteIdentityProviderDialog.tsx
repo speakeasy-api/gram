@@ -1,5 +1,5 @@
 import { Input } from "@/components/ui/Input";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
@@ -127,9 +127,9 @@ function DeleteRemoteIdentityProviderDialogBody({
       </Dialog.Header>
 
       <div className="grid gap-2">
-        <Type small>
+        <Text small>
           To confirm, type the issuer URL: <strong>{issuer.issuer}</strong>
-        </Type>
+        </Text>
         <Input
           value={confirmation}
           onChange={setConfirmation}

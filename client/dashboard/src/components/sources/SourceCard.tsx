@@ -6,7 +6,7 @@ import {
 import { CardContextMenu } from "@/components/card-context-menu";
 import { DotCard } from "@/components/ui/DotCard";
 import { MoreActions } from "@/components/ui/MoreActions";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpUrlForDisplay,
@@ -187,16 +187,16 @@ export function SourceCard({
           {/* Header row with name and actions */}
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <Type
+              <Text
                 variant="subheading"
                 as="div"
                 className="text-md group-hover:text-primary truncate transition-colors"
                 title={displayName}
               >
                 {displayName}
-              </Type>
+              </Text>
               {displaySubtitle && (
-                <Type
+                <Text
                   as="div"
                   muted
                   small
@@ -204,7 +204,7 @@ export function SourceCard({
                   title={displaySubtitle}
                 >
                   {displaySubtitle}
-                </Type>
+                </Text>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">

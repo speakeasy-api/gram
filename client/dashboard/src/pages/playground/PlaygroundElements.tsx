@@ -6,7 +6,7 @@ import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { AlertCircle, ShieldAlert } from "lucide-react";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundChat } from "./PlaygroundChat";
 
@@ -87,7 +87,7 @@ export function PlaygroundElements({
   if (!mcpUrl || !toolsetSlug) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Type muted>Select an MCP server to start chatting</Type>
+        <Text muted>Select an MCP server to start chatting</Text>
       </div>
     );
   }
@@ -155,14 +155,14 @@ function LoginRequiredNotice({ providerName }: { providerName: string }) {
         <div className="bg-warning/15 rounded-full p-3">
           <ShieldAlert className="text-warning size-6" />
         </div>
-        <Type className="font-medium">Login Required</Type>
-        <Type muted className="text-sm">
+        <Text className="font-medium">Login Required</Text>
+        <Text muted className="text-sm">
           This MCP server requires you to connect your{" "}
           <span className="text-foreground font-medium">{providerName}</span>{" "}
           account. Use the{" "}
           <span className="text-foreground font-medium">Connect</span> button in
           the Authentication section of the sidebar to sign in.
-        </Type>
+        </Text>
       </div>
     </div>
   );

@@ -41,7 +41,7 @@ import {
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { Line } from "react-chartjs-2";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { buildRiskTrendChartData, type TrendPoint } from "./riskTrendChartData";
 
 ChartJS.register(
@@ -135,13 +135,13 @@ function NoPoliciesEmptyState() {
         <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
           <Shield className="text-muted-foreground size-6" />
         </div>
-        <Type variant="subheading" className="mb-1">
+        <Text variant="subheading" className="mb-1">
           Risk Analysis
-        </Type>
-        <Type small muted className="mb-4 max-w-md text-center">
+        </Text>
+        <Text small muted className="mb-4 max-w-md text-center">
           Create a risk policy to begin scanning chat messages for leaked
           secrets, sensitive data, and policy flags.
-        </Type>
+        </Text>
         <Button variant="primary" asChild>
           <Link to={routes.policyCenter.href()}>
             <Button.Text>Manage Policies</Button.Text>
@@ -360,13 +360,13 @@ function SecurityOverviewContent() {
               className="text-muted-foreground mt-0.5 size-4 shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <Type small className="font-medium">
+              <Text small className="font-medium">
                 All risk policies are disabled
-              </Type>
-              <Type small muted>
+              </Text>
+              <Text small muted>
                 Showing historic findings only — new chat messages will not be
                 scanned until a policy is re-enabled.
-              </Type>
+              </Text>
             </div>
             <Button variant="secondary" size="sm" asChild>
               <Link to={routes.policyCenter.href()}>

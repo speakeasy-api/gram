@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
 import { SkillEfficacySettingsSection } from "./SkillEfficacySettingsSection";
@@ -24,9 +24,9 @@ export default function OrgSkills(): JSX.Element {
               <Heading variant="h4" className="mb-2">
                 Skills
               </Heading>
-              <Type muted small className="mb-6 max-w-2xl">
+              <Text muted small className="mb-6 max-w-2xl">
                 Configure organization-wide skill capture and efficacy sampling.
-              </Type>
+              </Text>
 
               <div className="border-border bg-card max-w-2xl rounded-lg border p-6">
                 <SkillContentUploadSetting />

@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
@@ -20,8 +20,8 @@ export function RouteNotFoundState({
       <Stack gap={4} align="center" className="max-w-md text-center">
         <Icon name="circle-alert" className="size-10" />
         <Stack gap={2} align="center">
-          <Type variant="subheading">{title}</Type>
-          <Type muted>{description}</Type>
+          <Text variant="subheading">{title}</Text>
+          <Text muted>{description}</Text>
         </Stack>
         {action}
       </Stack>

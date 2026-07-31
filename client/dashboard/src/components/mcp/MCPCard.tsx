@@ -1,7 +1,7 @@
 import { CopyButton } from "@/components/ui/CopyButton";
 import { DotCard } from "@/components/ui/DotCard";
 import { Button } from "@/components/ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
@@ -106,14 +106,14 @@ export function MCPCard({
     >
       {/* Header row with name */}
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={toolset.name}
         >
           {toolset.name}
-        </Type>
+        </Text>
         <div className="flex items-center gap-1">
           {installPageUrl && (
             <CopyButton

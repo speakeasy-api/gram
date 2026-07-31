@@ -1,5 +1,5 @@
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Toolset } from "@/lib/toolTypes";
@@ -55,12 +55,12 @@ function ModeCard({
         <Heading variant="h4">{title}</Heading>
       </div>
 
-      <Type muted className="text-sm leading-relaxed">
+      <Text muted className="text-sm leading-relaxed">
         {description}
-      </Type>
+      </Text>
 
       <div className="flex flex-col gap-1.5">
-        <Type className="text-sm font-medium">Best for</Type>
+        <Text className="text-sm font-medium">Best for</Text>
         <ul className="flex flex-col gap-1 pl-4">
           {bestFor.map((item) => (
             <li key={item} className="text-muted-foreground list-disc text-sm">
@@ -71,10 +71,10 @@ function ModeCard({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Type className="text-sm font-medium">Trade-off</Type>
-        <Type muted className="text-sm">
+        <Text className="text-sm font-medium">Trade-off</Text>
+        <Text muted className="text-sm">
           {tradeoff}
-        </Type>
+        </Text>
       </div>
     </button>
   );
@@ -120,10 +120,10 @@ export function MCPPerformanceTab({
     <Stack gap={4}>
       <Stack gap={2}>
         <Heading variant="h3">Tool Selection Mode</Heading>
-        <Type muted className="max-w-2xl text-sm">
+        <Text muted className="max-w-2xl text-sm">
           Choose how tools are exposed to the LLM. This affects token usage and
           how the model discovers available tools.
-        </Type>
+        </Text>
       </Stack>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

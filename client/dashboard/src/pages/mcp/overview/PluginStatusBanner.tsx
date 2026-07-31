@@ -4,7 +4,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components/plugin.js";
 import { PluginServer } from "@gram/client/models/components/pluginserver.js";
@@ -258,7 +258,7 @@ export function PluginStatusBanner({
               ) : (
                 <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
               )}
-              <Type
+              <Text
                 className={cn(
                   "text-warning-foreground text-base font-semibold",
                   isTrulyPublished && "text-emerald-500",
@@ -271,16 +271,16 @@ export function PluginStatusBanner({
                   : isPublished
                     ? "Marketplace needs setup"
                     : "Not published to any plugin"}
-              </Type>
+              </Text>
               {isRefetching && (
                 <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
               )}
             </div>
-            <Type variant="small" className="text-muted-foreground/90">
+            <Text variant="small" className="text-muted-foreground/90">
               Plugins are the preferred way to distribute MCP servers to your
               organization's users. Plugins are installed via marketplaces which
               are GitHub repositories that Speakeasy hosts on your behalf.
-            </Type>
+            </Text>
             {plugins.length > 0 && (
               <div className="flex items-center gap-2">
                 <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
@@ -349,14 +349,14 @@ export function PluginStatusBanner({
             <div className="border-border border-t" />
             <div className="flex items-center justify-between gap-4 p-6">
               <div className="flex flex-col gap-1">
-                <Type className="text-sm font-semibold">
+                <Text className="text-sm font-semibold">
                   Install the plugin
-                </Type>
-                <Type variant="small" className="text-muted-foreground/90">
+                </Text>
+                <Text variant="small" className="text-muted-foreground/90">
                   {marketplaceReady
                     ? "Your team installs the plugin in their AI client to start using this server."
                     : "Your project marketplace isn't fully set up yet, which means you won't be able to install this MCP via the plugin."}
-                </Type>
+                </Text>
               </div>
               {marketplaceReady &&
               publishStatus?.repoOwner &&

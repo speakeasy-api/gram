@@ -5,7 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -53,7 +53,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
         <div>
           <Stack gap={2} className="mb-6">
             <Heading variant="h2">Invalid Assets</Heading>
-            <Type variant="small">
+            <Text variant="small">
               The following assets caused this deployment to fail. Correct these
               errors by managing assets in the{" "}
               <routes.mcp.Link className="text-link hover:cursor-pointer">
@@ -69,7 +69,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
                 deployment logs
               </a>
               .
-            </Type>
+            </Text>
           </Stack>
 
           <ul className="flex flex-col flex-wrap gap-4">

@@ -2,7 +2,7 @@ import { useFilterState, type FilterValue } from "@/components/filters";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -498,11 +498,11 @@ export default function Sources(): JSX.Element {
               <SourceCardSkeleton />
             </div>
           ) : showNoMatches ? (
-            <Type muted className="py-8 text-center">
+            <Text muted className="py-8 text-center">
               {search.trim() !== ""
                 ? `No sources matching “${search}”`
                 : "No sources match your filters"}
-            </Type>
+            </Text>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {filteredSources.map((asset: NamedAsset) => (

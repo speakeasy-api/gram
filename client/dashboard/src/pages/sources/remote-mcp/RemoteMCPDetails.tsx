@@ -17,7 +17,7 @@ import {
   TabsContent,
   TabsList,
 } from "@/components/ui/Tabs";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
@@ -347,37 +347,37 @@ function OverviewTab({
           </Heading>
           <SourceInfoTable>
             <SourceInfoRow label="Name">
-              <Type className="font-medium">
+              <Text className="font-medium">
                 {remoteMcpServer?.name || "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="URL">
-              <Type className="font-mono text-sm break-all">
+              <Text className="font-mono text-sm break-all">
                 {remoteMcpServer?.url ?? "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Transport Type">
-              <Type className="font-mono text-sm">
+              <Text className="font-mono text-sm">
                 {remoteMcpServer?.transportType ?? "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Source ID">
               <span className="flex items-center gap-1">
-                <Type className="font-mono text-sm">
+                <Text className="font-mono text-sm">
                   {remoteMcpServer?.id
                     ? `${remoteMcpServer.id.slice(0, 8)}…`
                     : "—"}
-                </Type>
+                </Text>
                 {remoteMcpServer?.id && (
                   <CopyButton text={remoteMcpServer.id} size="xs" />
                 )}
               </span>
             </SourceInfoRow>
             <SourceInfoRow label="Created">
-              <Type className="text-sm">{createdAt}</Type>
+              <Text className="text-sm">{createdAt}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Updated">
-              <Type className="text-sm">{updatedAt}</Type>
+              <Text className="text-sm">{updatedAt}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Linked MCP servers">
               {showLinkedCount ? (
@@ -389,7 +389,7 @@ function OverviewTab({
                   {linkedMcpServersCount}
                 </button>
               ) : (
-                <Type className="text-muted-foreground text-sm">—</Type>
+                <Text className="text-muted-foreground text-sm">—</Text>
               )}
             </SourceInfoRow>
           </SourceInfoTable>
@@ -460,9 +460,9 @@ function McpServersEmptyState({
   return (
     <div className="flex flex-col items-center py-12 text-center">
       <Server className="text-muted-foreground/50 mb-3 h-12 w-12" />
-      <Type muted className="mb-4">
+      <Text muted className="mb-4">
         No MCP servers are linked to this source yet.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         <Button
           variant="primary"
@@ -581,13 +581,13 @@ function NameSection({
 
   return (
     <div className="rounded-lg border p-6">
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         Display Name
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         Optional name for display purposes such as source listings and
         breadcrumbs. Defaults to URL when empty.
-      </Type>
+      </Text>
       <Stack gap={2}>
         <Input
           value={draft}
@@ -692,13 +692,13 @@ function UrlSection({
 
   return (
     <div className="rounded-lg border p-6">
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         Remote URL
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         The endpoint this source proxies to. Must be an absolute http or https
         URL.
-      </Type>
+      </Text>
       <Stack gap={2}>
         <Input
           value={draft}
@@ -772,13 +772,13 @@ function DangerZoneSection({
 
   return (
     <div className="border-destructive/30 rounded-lg border p-6">
-      <Type variant="subheading" className="text-destructive mb-1">
+      <Text variant="subheading" className="text-destructive mb-1">
         Danger Zone
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         Deleting this source will also remove the linked MCP servers and their
         endpoints. This action cannot be undone.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         <Button
           variant="destructive-primary"

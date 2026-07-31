@@ -8,7 +8,7 @@ import { Card, Cards } from "@/components/ui/Card";
 import { Dialog } from "@/components/ui/Dialog";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -322,10 +322,10 @@ function IntegrationCard({
       </Card.Content>
       <Card.Footer>
         <ToolCollectionBadge toolNames={integration.toolNames} />
-        <Type variant="body" muted className="text-sm italic">
+        <Text variant="body" muted className="text-sm italic">
           {"Updated "}
           <HumanizeDateTime date={new Date(integration.versionCreatedAt)} />
-        </Type>
+        </Text>
       </Card.Footer>
     </Card>
   );

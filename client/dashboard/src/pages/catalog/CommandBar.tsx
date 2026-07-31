@@ -1,5 +1,5 @@
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Plus, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -141,10 +141,10 @@ export function CommandBar({
               <div className="h-5 w-px bg-black/20 dark:bg-white/20" />
 
               {/* Count */}
-              <Type small className="font-medium text-black dark:text-white">
+              <Text small className="font-medium text-black dark:text-white">
                 {selectedCount} {selectedCount === 1 ? "server" : "servers"}{" "}
                 selected
-              </Type>
+              </Text>
 
               {/* Divider */}
               <div className="h-5 w-px bg-black/20 dark:bg-white/20" />

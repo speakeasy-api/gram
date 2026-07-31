@@ -3,7 +3,7 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button } from "@/components/ui/Button";
 import { DotRow } from "@/components/ui/DotRow";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -55,9 +55,9 @@ export function PluginServerTableRow({
   let visibilityContent: JSX.Element;
   if (isRemote) {
     visibilityContent = (
-      <Type small muted>
+      <Text small muted>
         —
-      </Type>
+      </Text>
     );
   } else if (toolset) {
     visibilityContent = (
@@ -71,9 +71,9 @@ export function PluginServerTableRow({
     visibilityContent = <Skeleton className="h-3.5 w-20" />;
   } else {
     visibilityContent = (
-      <Type small muted>
+      <Text small muted>
         —
-      </Type>
+      </Text>
     );
   }
 
@@ -84,14 +84,14 @@ export function PluginServerTableRow({
       ariaLabel={`View server ${server.displayName}`}
     >
       <td className="px-3 py-3">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="group-hover:text-primary truncate text-sm transition-colors"
           title={server.displayName}
         >
           {server.displayName}
-        </Type>
+        </Text>
       </td>
       <td className="px-3 py-3">
         {notYetPublished ? (

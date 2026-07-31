@@ -8,7 +8,7 @@ import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/DotTable";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
@@ -393,11 +393,11 @@ function MCPOverview() {
             </Page.Toolbar>
           )}
           {showNoMatches ? (
-            <Type muted className="py-8 text-center">
+            <Text muted className="py-8 text-center">
               {search !== ""
                 ? `No MCP servers matching “${search}”`
                 : "No MCP servers match your filters"}
-            </Type>
+            </Text>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (

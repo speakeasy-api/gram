@@ -10,7 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { motion } from "motion/react";
 import * as React from "react";
 
@@ -180,21 +180,21 @@ export function MemberFacepile({
         className="w-64 overflow-hidden p-0"
       >
         <div className="border-border border-b px-3 py-2">
-          <Type small className="font-medium">
+          <Text small className="font-medium">
             {label}
-          </Type>
+          </Text>
         </div>
         <div className="max-h-64 overflow-y-auto py-1">
           {sorted.map((m) => (
             <div key={m.id} className="flex items-center gap-2.5 px-3 py-1.5">
               <MemberAvatar member={m} className="size-6" />
               <div className="min-w-0">
-                <Type small className="truncate font-medium">
+                <Text small className="truncate font-medium">
                   {m.name}
-                </Type>
-                <Type muted small className="truncate text-xs">
+                </Text>
+                <Text muted small className="truncate text-xs">
                   {m.email}
-                </Type>
+                </Text>
               </div>
             </div>
           ))}

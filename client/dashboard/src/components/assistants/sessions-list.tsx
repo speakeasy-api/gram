@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
@@ -59,17 +59,17 @@ export function AssistantSessionsList({
 
   if (error) {
     return (
-      <Type small muted>
+      <Text small muted>
         Couldn't load sessions. {error.message}
-      </Type>
+      </Text>
     );
   }
 
   if (chats.length === 0) {
     return (
-      <Type small muted>
+      <Text small muted>
         No sessions yet. Conversations with this assistant will appear here.
-      </Type>
+      </Text>
     );
   }
 
@@ -90,9 +90,9 @@ export function AssistantSessionsList({
                   isSelected && "bg-primary/5",
                 )}
               >
-                <Type small className="line-clamp-2 font-medium">
+                <Text small className="line-clamp-2 font-medium">
                   {chat.title || "Untitled session"}
-                </Type>
+                </Text>
                 <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
                   <span>
                     {chat.numMessages}{" "}

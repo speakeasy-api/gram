@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Combobox } from "@/components/ui/Combobox";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { cn } from "@/lib/utils";
@@ -56,9 +56,9 @@ export function EnvironmentDropdown({
       tooltip={tooltip}
       className={cn("max-w-fit", className)}
     >
-      <Type variant="small">
+      <Text variant="small">
         {selectedEnvironmentData?.name || selectedEnvironment}
-      </Type>
+      </Text>
     </Combobox>
   );
 }

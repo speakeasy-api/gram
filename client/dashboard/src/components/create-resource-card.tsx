@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Plus } from "lucide-react";
 import { DotCard } from "@/components/ui/DotCard";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 type CreateResourceCardProps = {
   title: React.ReactNode;
@@ -30,16 +30,16 @@ export function CreateResourceCard({
         }
         className="!border-foreground/10 hover:!border-foreground/20 border-dashed"
       >
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md text-muted-foreground group-hover:text-primary transition-colors"
         >
           {title}
-        </Type>
-        <Type small muted className="mb-3">
+        </Text>
+        <Text small muted className="mb-3">
           {description}
-        </Type>
+        </Text>
 
         <div className="mt-auto flex items-center justify-end pt-2">
           <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">

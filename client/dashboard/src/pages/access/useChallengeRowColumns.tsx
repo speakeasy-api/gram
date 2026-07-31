@@ -4,7 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/contexts/Auth";
@@ -124,7 +124,7 @@ export function useChallengeRowColumns(
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Type
+                <Text
                   variant="body"
                   className={cn(
                     "min-w-0 truncate text-sm font-medium",
@@ -132,7 +132,7 @@ export function useChallengeRowColumns(
                   )}
                 >
                   {display}
-                </Type>
+                </Text>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (
                 <TooltipContent side="bottom">
@@ -207,9 +207,9 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (!row.resolvedBy) {
             return (
-              <Type variant="body" className="text-muted-foreground/40 text-sm">
+              <Text variant="body" className="text-muted-foreground/40 text-sm">
                 —
-              </Type>
+              </Text>
             );
           }
           const userId = row.resolvedBy.replace(/^user:/, "");
@@ -242,12 +242,12 @@ export function useChallengeRowColumns(
             <div className={cn("flex items-center gap-1.5", rowFade(row))}>
               <Tooltip delayDuration={500}>
                 <TooltipTrigger asChild>
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground cursor-default text-sm whitespace-nowrap underline decoration-dotted underline-offset-4"
                   >
                     <HumanizeDateTime date={row.lastSeen} />
-                  </Type>
+                  </Text>
                 </TooltipTrigger>
                 <TooltipContent>{row.lastSeen.toLocaleString()}</TooltipContent>
               </Tooltip>

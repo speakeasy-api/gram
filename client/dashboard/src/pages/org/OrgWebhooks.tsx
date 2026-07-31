@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { Switch } from "@/components/ui/Switch";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useCreatePortalSessionMutation } from "@gram/client/react-query/createPortalSession.js";
 import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebhooks.js";
 import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
@@ -64,27 +64,27 @@ function OrgWebhooksInner() {
       <Heading variant="h3" className="mb-4">
         Webhooks
       </Heading>
-      <Type muted small className="mb-6">
+      <Text muted small className="mb-6">
         Configure webhook delivery for various platform events.
-      </Type>
+      </Text>
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Webhook className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Enable Webhooks
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Enable or disable webhook delivery of organization events.
                 Disabling this option does not destroy existing webhook
                 configuration below.
-              </Type>
+              </Text>
             </Stack>
             <RequireScope scope="org:admin" level="component">
               <Switch

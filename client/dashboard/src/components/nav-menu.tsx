@@ -8,7 +8,7 @@ import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 export const NAV_LOADING_DURATION_MS = 600;
 
@@ -401,7 +401,7 @@ export function NavButton({
           )}
         />
       )}
-      <Type
+      <Text
         variant="small"
         className={cn(
           "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
@@ -410,7 +410,7 @@ export function NavButton({
         )}
       >
         {titleNode ?? title}
-      </Type>
+      </Text>
       {title === "Billing" && <ProductTierBadge />}
       {stage && (
         <ReleaseStageBadge

@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { Stack } from "@/components/ui/Stack";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ReactNode, useState } from "react";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 export type DropdownItem = {
   value: string;
@@ -80,9 +80,9 @@ export function Combobox<T extends DropdownItem>({
         align="center"
         className="w-fit rounded-md bg-stone-200 dark:bg-stone-800"
       >
-        <Type variant="small" className="px-2">
+        <Text variant="small" className="px-2">
           {label}
-        </Type>
+        </Text>
         {trigger}
       </Stack>
     );

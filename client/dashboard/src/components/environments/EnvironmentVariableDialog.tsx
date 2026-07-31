@@ -3,7 +3,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
 import { Button } from "@/components/ui/Button";
@@ -166,11 +166,11 @@ export function EnvironmentVariableDialog({
 
         <div className="grid gap-4 py-2">
           <div className="grid gap-2">
-            <Type className="text-sm font-medium">Key</Type>
+            <Text className="text-sm font-medium">Key</Text>
             {isEdit ? (
-              <Type className="text-muted-foreground font-mono text-sm break-all">
+              <Text className="text-muted-foreground font-mono text-sm break-all">
                 {entry.name}
-              </Type>
+              </Text>
             ) : (
               <Input
                 value={name}
@@ -185,7 +185,7 @@ export function EnvironmentVariableDialog({
 
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
-              <Type className="text-sm font-medium">Value</Type>
+              <Text className="text-sm font-medium">Value</Text>
               {showCopy && (
                 <CopyButton text={value} tooltip={`Copy ${entry.name}`} />
               )}
@@ -202,26 +202,26 @@ export function EnvironmentVariableDialog({
               disabled={isSaving}
             />
             {isStored && entry.isSecret && !needsNewValue && (
-              <Type className="text-muted-foreground text-xs">
+              <Text className="text-muted-foreground text-xs">
                 Leave blank to keep the current value. Secret values are never
                 revealed.
-              </Type>
+              </Text>
             )}
             {needsNewValue && (
-              <Type className="text-muted-foreground text-xs">
+              <Text className="text-muted-foreground text-xs">
                 Secret values are never revealed, so making {entry.name}{" "}
                 readable requires a new value.
-              </Type>
+              </Text>
             )}
           </div>
 
           <label className="flex cursor-pointer items-start justify-between gap-4">
             <span className="min-w-0">
-              <Type className="text-sm font-medium">Secret</Type>
-              <Type className="text-muted-foreground text-xs">
+              <Text className="text-sm font-medium">Secret</Text>
+              <Text className="text-muted-foreground text-xs">
                 Secret values are encrypted and shown only as a redacted
                 preview. Turn this off to keep the value readable.
-              </Type>
+              </Text>
             </span>
             <Switch
               checked={isSecret}

@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
@@ -141,13 +141,13 @@ function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <MessageCircle className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No MCP servers yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         The playground lets you chat with tools from an MCP server. Create one
         to start testing.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         {({ disabled }) => (
           <Button onClick={onCreate} disabled={disabled}>
@@ -326,7 +326,7 @@ function PlaygroundInner() {
             <div className="flex h-full flex-col">
               {!selectedServer && (
                 <div className="flex h-full items-center justify-center">
-                  <Type muted>Select an MCP server to start chatting</Type>
+                  <Text muted>Select an MCP server to start chatting</Text>
                 </div>
               )}
               {selectedServer?.kind === "toolset" && (

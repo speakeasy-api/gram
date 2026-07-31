@@ -1,6 +1,6 @@
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -97,9 +97,9 @@ export function SourceSettingsTab({
     <>
       <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
         <div>
-          <Type variant="subheading" className="mb-4">
+          <Text variant="subheading" className="mb-4">
             Source Actions
-          </Type>
+          </Text>
           <Stack direction="horizontal" gap={3}>
             {!isOpenAPI && (
               <Button
@@ -123,13 +123,13 @@ export function SourceSettingsTab({
         </div>
 
         <div className="border-destructive/30 rounded-lg border p-6">
-          <Type variant="subheading" className="text-destructive mb-1">
+          <Text variant="subheading" className="text-destructive mb-1">
             Danger Zone
-          </Type>
-          <Type muted small className="mb-4">
+          </Text>
+          <Text muted small className="mb-4">
             Removing this source will remove it from the current deployment.
             This action cannot be undone.
-          </Type>
+          </Text>
           <RequireScope scope="project:write" level="component">
             <Button
               variant="destructive-primary"

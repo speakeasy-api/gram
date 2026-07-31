@@ -4,7 +4,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Combobox } from "@/components/ui/Combobox";
 import { SkeletonCode } from "@/components/ui/Skeleton";
 import { TextArea } from "@/components/ui/Textarea";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
@@ -100,7 +100,7 @@ const SdkContent = ({
       onSelectionChange={(value) => setFramework(value.value as SdkFramework)}
       className="max-w-fit"
     >
-      <Type variant="small">{framework}</Type>
+      <Text variant="small">{framework}</Text>
     </Combobox>
   );
 
@@ -113,10 +113,10 @@ const SdkContent = ({
 
   let heading = (
     <div className="flex items-end justify-between gap-4">
-      <Type variant="subheading">
+      <Text variant="subheading">
         Use platform MCP servers to build agentic workflows in many popular
         frameworks
-      </Type>
+      </Text>
       {langFrameworkDropdowns}
     </div>
   );
@@ -124,12 +124,12 @@ const SdkContent = ({
   if (prompt) {
     heading = (
       <Stack gap={1}>
-        <Type variant="subheading">
+        <Text variant="subheading">
           What should the agent do?{" "}
           <span className="text-muted-foreground text-sm italic">
             Chat history will also be included in the prompt.
           </span>
-        </Type>
+        </Text>
         <Stack direction="horizontal" gap={4} align="end">
           <TextArea
             value={prompt}
@@ -197,9 +197,9 @@ const SdkLanguageDropdown = ({
       onSelectionChange={(value) => setLang(value.value as SdkLanguage)}
       className="max-w-fit"
     >
-      <Type variant="small" className="capitalize">
+      <Text variant="small" className="capitalize">
         {lang}
-      </Type>
+      </Text>
     </Combobox>
   );
 };

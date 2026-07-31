@@ -1,7 +1,7 @@
 import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   formatRemoteSessionIssuerDisplay,
   remoteSessionScopeTier,
@@ -29,9 +29,9 @@ export function RemoteIdentityProvidersField({
   let providerControls: ReactNode;
   if (isLoading) {
     providerControls = (
-      <Type muted small>
+      <Text muted small>
         Loading...
-      </Type>
+      </Text>
     );
   } else if (associatedIssuers.length === 0) {
     providerControls = (
@@ -104,17 +104,17 @@ function RemoteIdentityProviderRow({
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Type small className="truncate font-medium">
+            <Text small className="truncate font-medium">
               {formatRemoteSessionIssuerDisplay(issuer)}
-            </Type>
+            </Text>
             <ScopeBadge
               projectId={issuer.projectId}
               organizationId={issuer.organizationId}
             />
           </div>
-          <Type muted mono variant="small" className="break-all">
+          <Text muted mono variant="small" className="break-all">
             {issuer.issuer}
-          </Type>
+          </Text>
         </div>
         <RequireScope scope="mcp:write" level="component">
           <div className="flex shrink-0 items-center gap-2">

@@ -5,7 +5,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Loader2, UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 export function ImageUpload({
   onUpload,
@@ -148,9 +148,9 @@ export function FullWidthUpload({
               <p className="text-card-foreground my-2 text-sm font-semibold">
                 Uploading and validating...
               </p>
-              <Type small mono muted>
+              <Text small mono muted>
                 This may take a few seconds
-              </Type>
+              </Text>
             </Stack>
           ) : (
             <Stack align={"center"} justify={"center"} gap={3}>
@@ -163,10 +163,10 @@ export function FullWidthUpload({
                   </>
                 )}
               </p>
-              <Type small mono muted>
+              <Text small mono muted>
                 {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max
                 8MiB)
-              </Type>
+              </Text>
             </Stack>
           )}
           <input

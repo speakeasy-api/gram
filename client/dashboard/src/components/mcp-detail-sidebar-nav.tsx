@@ -5,7 +5,7 @@ import {
 } from "@/components/mcp-sidebar-nav-shell";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -140,7 +140,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const cardContent = toolset && (
     <>
       <div className="flex items-center justify-between gap-1">
-        <Type className="truncate font-semibold">{toolset.name}</Type>
+        <Text className="truncate font-semibold">{toolset.name}</Text>
         <RenameMCPServerButton toolset={toolset} />
       </div>
 
@@ -153,13 +153,13 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {mcpUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={mcpUrl}
               size="xs"
@@ -172,7 +172,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>Tools</McpSidebarInfoLabel>
-        <Type variant="small">{toolset.tools?.length ?? 0}</Type>
+        <Text variant="small">{toolset.tools?.length ?? 0}</Text>
       </div>
 
       <div className="border-border flex items-stretch border-t pt-3">

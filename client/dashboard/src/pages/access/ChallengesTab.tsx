@@ -6,7 +6,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
@@ -147,20 +147,20 @@ export function ChallengesEmptyState({
       <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Check className="text-primary h-6 w-6" />
       </div>
-      <Type variant="body" className="font-medium">
+      <Text variant="body" className="font-medium">
         {outcomeFilter === "deny"
           ? "No denied access attempts"
           : outcomeFilter === "resolved"
             ? "No resolved challenges yet"
             : "No challenges found"}
-      </Type>
-      <Type variant="body" className="text-muted-foreground mt-1 text-sm">
+      </Text>
+      <Text variant="body" className="text-muted-foreground mt-1 text-sm">
         {outcomeFilter === "deny"
           ? "All authorization checks are passing. Your team's permissions look good."
           : outcomeFilter === "resolved"
             ? "Denied challenges that are resolved by granting access will appear here."
             : "Authorization challenges will appear here as your team uses the platform."}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -505,10 +505,10 @@ export function ChallengesTab(): JSX.Element {
           </Table>
           {(accumulated.length > 0 || isLoadingMore) && (
             <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-              <Type muted small>
+              <Text muted small>
                 Showing {accumulated.length.toLocaleString()} of{" "}
                 {totalBuckets.toLocaleString()}
-              </Type>
+              </Text>
               {hasMore ? (
                 <Button
                   variant="secondary"
@@ -526,9 +526,9 @@ export function ChallengesTab(): JSX.Element {
                   )}
                 </Button>
               ) : (
-                <Type muted small>
+                <Text muted small>
                   All results loaded
-                </Type>
+                </Text>
               )}
             </div>
           )}
@@ -536,35 +536,35 @@ export function ChallengesTab(): JSX.Element {
       )}
 
       <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
-        <Type variant="subheading" className="mb-3">
+        <Text variant="subheading" className="mb-3">
           About Challenges
-        </Type>
+        </Text>
         <div className="space-y-2 text-sm">
           <div className="flex items-start gap-3">
             <MoonshineBadge variant="destructive" className="mt-0.5 shrink-0">
               <MoonshineBadge.Text>Denied</MoonshineBadge.Text>
             </MoonshineBadge>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            <Text variant="body" className="text-muted-foreground text-sm">
               The principal lacked the required scope or grants to perform the
               action. Check role assignments and grant selectors.
-            </Type>
+            </Text>
           </div>
           <div className="flex items-start gap-3">
             <MoonshineBadge variant="success" className="mt-0.5 shrink-0">
               <MoonshineBadge.Text>Allowed</MoonshineBadge.Text>
             </MoonshineBadge>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            <Text variant="body" className="text-muted-foreground text-sm">
               The principal had matching grants satisfying the requested scope.
-            </Type>
+            </Text>
           </div>
           <div className="flex items-start gap-3">
             <MoonshineBadge variant="neutral" className="mt-0.5 shrink-0">
               <MoonshineBadge.Text>Resolved</MoonshineBadge.Text>
             </MoonshineBadge>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            <Text variant="body" className="text-muted-foreground text-sm">
               A denied challenge that has since been addressed by granting the
               required access.
-            </Type>
+            </Text>
           </div>
         </div>
       </div>

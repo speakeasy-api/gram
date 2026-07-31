@@ -6,7 +6,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
@@ -175,16 +175,16 @@ export function GrantDrawer({
                     <Users className="h-5 w-5" />
                   </div>
                   <div className="flex-1">
-                    <Type variant="body" className="font-medium">
+                    <Text variant="body" className="font-medium">
                       Add to existing role
-                    </Type>
-                    <Type
+                    </Text>
+                    <Text
                       variant="body"
                       className="text-muted-foreground text-sm"
                     >
                       Assign to a role that already includes the required
                       permissions.
-                    </Type>
+                    </Text>
                   </div>
                   <ChevronRight className="text-muted-foreground h-5 w-5 shrink-0" />
                 </button>
@@ -197,15 +197,15 @@ export function GrantDrawer({
                       <Users className="h-5 w-5" />
                     </div>
                     <div className="flex-1">
-                      <Type variant="body" className="font-medium">
+                      <Text variant="body" className="font-medium">
                         Add to existing role
-                      </Type>
-                      <Type
+                      </Text>
+                      <Text
                         variant="body"
                         className="text-muted-foreground text-sm"
                       >
                         No roles include the required permissions.
-                      </Type>
+                      </Text>
                     </div>
                   </div>
                 </SimpleTooltip>
@@ -220,15 +220,15 @@ export function GrantDrawer({
                   <Plus className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Create new role
-                  </Type>
-                  <Type
+                  </Text>
+                  <Text
                     variant="body"
                     className="text-muted-foreground text-sm"
                   >
                     Define a new role with the exact permissions needed.
-                  </Type>
+                  </Text>
                 </div>
                 <ChevronRight className="text-muted-foreground h-5 w-5 shrink-0" />
               </button>
@@ -255,22 +255,22 @@ export function GrantDrawer({
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <Type variant="body" className="font-medium">
+                        <Text variant="body" className="font-medium">
                           {role.name}
-                        </Type>
+                        </Text>
                         {role.isSystem && (
                           <Badge variant="neutral">
                             <Badge.Text>System</Badge.Text>
                           </Badge>
                         )}
                       </div>
-                      <Type
+                      <Text
                         variant="body"
                         className="text-muted-foreground text-sm"
                       >
                         {visiblePermissionCount(role.grants)} permissions
                         &middot; {role.memberCount} members
-                      </Type>
+                      </Text>
                     </div>
                     <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                   </button>
@@ -294,27 +294,27 @@ export function GrantDrawer({
                   <div className="border-border rounded-md border p-4">
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <Type
+                        <Text
                           variant="body"
                           className="text-muted-foreground text-sm"
                         >
                           Identity
-                        </Type>
-                        <Type variant="body" className="text-sm font-medium">
+                        </Text>
+                        <Text variant="body" className="text-sm font-medium">
                           {principalDisplay}
-                        </Type>
+                        </Text>
                       </div>
                       <div className="flex items-center justify-between">
-                        <Type
+                        <Text
                           variant="body"
                           className="text-muted-foreground text-sm"
                         >
                           Role
-                        </Type>
+                        </Text>
                         <div className="flex items-center gap-2">
-                          <Type variant="body" className="text-sm font-medium">
+                          <Text variant="body" className="text-sm font-medium">
                             {selectedRole.name}
-                          </Type>
+                          </Text>
                           {selectedRole.isSystem && (
                             <Badge variant="neutral">
                               <Badge.Text>System</Badge.Text>
@@ -323,26 +323,26 @@ export function GrantDrawer({
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <Type
+                        <Text
                           variant="body"
                           className="text-muted-foreground text-sm"
                         >
                           Scope
-                        </Type>
+                        </Text>
                         <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
                           {challenge.scope}
                         </code>
                       </div>
                       <div className="flex items-center justify-between">
-                        <Type
+                        <Text
                           variant="body"
                           className="text-muted-foreground text-sm"
                         >
                           Permissions
-                        </Type>
-                        <Type variant="body" className="text-sm">
+                        </Text>
+                        <Text variant="body" className="text-sm">
                           {visiblePermissionCount(selectedRole.grants)}
-                        </Type>
+                        </Text>
                       </div>
                     </div>
                   </div>

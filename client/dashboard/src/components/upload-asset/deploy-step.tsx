@@ -16,7 +16,7 @@ import { Stack } from "@/components/ui/Stack";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
 import { Spinner } from "@/components/ui/Spinner";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
@@ -170,10 +170,10 @@ export default function DeployStep(): React.JSX.Element | null {
     return (
       <Stack direction="horizontal" gap={1} align="center">
         <Spinner />
-        <Type>
+        <Text>
           The platform is generating tools for your API. This may take a few
           seconds.
-        </Type>
+        </Text>
       </Stack>
     );
   }
@@ -207,7 +207,7 @@ function DeployCompletedMessage({
     return (
       <Stack direction="horizontal" gap={1} align="center">
         <Spinner />
-        <Type>Checking generated tools...</Type>
+        <Text>Checking generated tools...</Text>
       </Stack>
     );
   }

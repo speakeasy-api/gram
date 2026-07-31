@@ -28,7 +28,7 @@ import { AnnotationBadges } from "./AnnotationBadges";
 import { ToolVariationBadge } from "../tool-variation-badge";
 import { McpIcon } from "@/components/ui/McpIcon";
 import { SimpleTooltip } from "../ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
@@ -473,9 +473,9 @@ function ToolRow({
               <Stack direction="horizontal" gap={2} align="center">
                 <p className="text-foreground truncate text-sm leading-6">
                   {toolPrefix && (
-                    <Type small muted className="inline">
+                    <Text small muted className="inline">
                       {toolPrefix}
-                    </Type>
+                    </Text>
                   )}
                   {toolNameNoPrefix}
                 </p>
@@ -615,12 +615,12 @@ function ToolRow({
                         size="small"
                         className="text-muted-foreground/70"
                       />
-                      <Type small muted>
+                      <Text small muted>
                         Original name:
-                      </Type>
-                      <Type small muted>
+                      </Text>
+                      <Text small muted>
                         {tool.canonical?.name}
-                      </Type>
+                      </Text>
                     </Stack>
                   )}
               </Stack>
@@ -636,17 +636,17 @@ function ToolRow({
                   tool.variation?.description !==
                     tool.canonical?.description && (
                     <Stack className="border-border/70 rounded-md border p-2">
-                      <Type small muted className="inline font-medium">
+                      <Text small muted className="inline font-medium">
                         <Icon
                           name="layers-2"
                           size="small"
                           className="text-muted-foreground/70 inline align-text-bottom"
                         />{" "}
                         Original Description
-                      </Type>
-                      <Type small muted>
+                      </Text>
+                      <Text small muted>
                         {tool.canonical?.description}
-                      </Type>
+                      </Text>
                     </Stack>
                   )}
               </Stack>

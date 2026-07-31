@@ -2,7 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,7 @@ export function SkillSuggestionComment({
     // The card sits inside the diff's <pre>, so the prose font is reset here.
     <div className="border-border bg-card my-2 overflow-hidden rounded-lg border font-sans shadow-sm">
       <div className="space-y-3 px-4 py-3">
-        <Type small>
+        <Text small>
           {change.feedbackSessionCount > 0 && (
             <span className="font-medium">
               {`Requested in ${change.feedbackSessionCount.toLocaleString()} ${
@@ -66,7 +66,7 @@ export function SkillSuggestionComment({
             </span>
           )}
           {change.rationale}
-        </Type>
+        </Text>
 
         <SuggestionSources
           changeId={change.id}
@@ -77,10 +77,10 @@ export function SkillSuggestionComment({
       </div>
 
       <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
-        <Type small muted>
+        <Text small muted>
           Applying records a new version of this skill and makes it the latest
           one agents load.
-        </Type>
+        </Text>
         <RequireScope
           scope="skill:write"
           resourceId={project.id}
@@ -149,9 +149,9 @@ function SuggestionSources({
             />
           )}
           {query.data && query.data.feedback.length === 0 && (
-            <Type small muted>
+            <Text small muted>
               The linked reports are no longer available.
-            </Type>
+            </Text>
           )}
           {query.data && query.data.feedback.length > 0 && (
             <ul className="divide-y rounded-md border">
@@ -161,15 +161,15 @@ function SuggestionSources({
                     <Badge variant="neutral">
                       {feedback.outcome.replaceAll("_", " ")}
                     </Badge>
-                    <Type
+                    <Text
                       small
                       muted
                       title={dateTimeFormatters.full.format(feedback.createdAt)}
                     >
                       <HumanizeDateTime date={feedback.createdAt} />
-                    </Type>
+                    </Text>
                   </div>
-                  {feedback.note && <Type small>{feedback.note}</Type>}
+                  {feedback.note && <Text small>{feedback.note}</Text>}
                 </li>
               ))}
             </ul>

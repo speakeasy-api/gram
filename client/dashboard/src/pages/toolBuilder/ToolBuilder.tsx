@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
@@ -515,7 +515,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                 onSubmit={setDescription}
                 lines={4}
               >
-                <Type variant="subheading">{description}</Type>
+                <Text variant="subheading">{description}</Text>
               </EditableText>
             </BlockInner>
           </Block>
@@ -536,10 +536,10 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             <BlockInner>
               <div className="flex flex-wrap gap-2">
                 {inputs.length === 0 && (
-                  <Type
+                  <Text
                     muted
                     italic
-                  >{`Inputs will appear here. Use {{braces}} in step instructions to create or reference them.`}</Type>
+                  >{`Inputs will appear here. Use {{braces}} in step instructions to create or reference them.`}</Text>
                 )}
                 {inputs.map((input) => (
                   <EditableText
@@ -737,9 +737,9 @@ const StepCard = ({
           className="group/heading border-b border-stone-300 px-4 py-3 dark:border-stone-700"
         >
           {step.canonicalTool ? (
-            <Type variant="subheading">Use the {toolBadge} tool to...</Type>
+            <Text variant="subheading">Use the {toolBadge} tool to...</Text>
           ) : (
-            <Type variant="subheading">{noToolText}</Type>
+            <Text variant="subheading">{noToolText}</Text>
           )}
           <Stack
             direction="horizontal"
@@ -784,7 +784,7 @@ const StepCard = ({
               step.update?.({ ...step, instructions });
             }}
           >
-            <Type
+            <Text
               small
               className={cn(
                 step.instructions === instructionsPlaceholder &&
@@ -792,7 +792,7 @@ const StepCard = ({
               )}
             >
               <MustacheHighlight>{step.instructions}</MustacheHighlight>
-            </Type>
+            </Text>
           </EditableText>
         </div>
       </Stack>

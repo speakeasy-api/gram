@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { ProxyRegistrationError } from "@/lib/proxyRegisterUpstreamClient";
 import { Alert } from "@/components/ui/Alert";
 import { Stack } from "@/components/ui/Stack";
@@ -64,8 +64,8 @@ export function IdentityProviderAttachmentErrorAlert({
     <div ref={alertRef}>
       <Alert variant="error" dismissible={false}>
         <Stack gap={1}>
-          <Type className="font-medium">{content.title}</Type>
-          <Type small>{capitalizeFirstCharacter(content.message)}</Type>
+          <Text className="font-medium">{content.title}</Text>
+          <Text small>{capitalizeFirstCharacter(content.message)}</Text>
         </Stack>
       </Alert>
     </div>

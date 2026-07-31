@@ -6,7 +6,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
@@ -127,12 +127,12 @@ export function MCPOverviewTab({
 
       {isLogsDisabled ? (
         <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-          <Type muted className="mb-1 block">
+          <Text muted className="mb-1 block">
             Observability is not enabled
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Enable logs for this organization to see usage for this MCP server.
-          </Type>
+          </Text>
         </div>
       ) : (
         <>

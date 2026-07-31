@@ -9,7 +9,7 @@ import {
   CommandList,
 } from "@/components/ui/Command";
 import { Dialog } from "@/components/ui/Dialog";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { invalidateAllMembers } from "@gram/client/react-query/members.js";
 import {
@@ -115,12 +115,12 @@ export function ChangeRoleDialog({
                 </AvatarFallback>
               </Avatar>
               <div>
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   {member.name}
-                </Type>
-                <Type variant="body" className="text-muted-foreground text-sm">
+                </Text>
+                <Text variant="body" className="text-muted-foreground text-sm">
                   {member.email}
-                </Type>
+                </Text>
               </div>
             </div>
 

@@ -4,7 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -88,7 +88,7 @@ export function ToolMetadataDriftPanel({
   return (
     <div className="border-border mb-5 rounded-lg border">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-4 py-2">
-        <Type small as="p" className="text-muted-foreground">
+        <Text small as="p" className="text-muted-foreground">
           <span className="text-foreground font-medium">
             {drift.length} {drift.length === 1 ? "tool" : "tools"}
           </span>{" "}
@@ -102,7 +102,7 @@ export function ToolMetadataDriftPanel({
               </span>
             </>
           ) : null}
-        </Type>
+        </Text>
         <RequireScope
           scope="mcp:write"
           resourceId={mcpServerId}
@@ -158,7 +158,7 @@ function DriftRow({ entry }: { entry: ToolDrift }): JSX.Element {
   return (
     <li className="hover:bg-muted/50 grid grid-cols-[0.75rem_minmax(0,14rem)_minmax(0,1fr)] items-baseline gap-x-3 px-4 py-1.5 transition-colors">
       <DriftMarker kind={entry.kind} />
-      <Type
+      <Text
         mono
         small
         as="span"
@@ -171,7 +171,7 @@ function DriftRow({ entry }: { entry: ToolDrift }): JSX.Element {
         title={entry.toolName}
       >
         {entry.toolName}
-      </Type>
+      </Text>
 
       {entry.kind === "changed" ? (
         <span className="flex gap-x-3 overflow-x-auto whitespace-nowrap">
@@ -182,9 +182,9 @@ function DriftRow({ entry }: { entry: ToolDrift }): JSX.Element {
       ) : entry.kind === "new" ? (
         // Worth saying, because it already happened without the user asking.
         // A removal needs no gloss — the marker is the whole story.
-        <Type muted small as="span" className="truncate">
+        <Text muted small as="span" className="truncate">
           recorded automatically
-        </Type>
+        </Text>
       ) : null}
     </li>
   );

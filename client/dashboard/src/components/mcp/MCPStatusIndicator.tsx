@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 
 interface MCPStatusIndicatorProps {
@@ -61,9 +61,9 @@ export function MCPStatusIndicator({
           )}
         />
       </div>
-      <Type variant="small" muted>
+      <Text variant="small" muted>
         {status.label}
-      </Type>
+      </Text>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { catalogHeadersForRemoteUrl } from "@/pages/catalog/remotes";
@@ -419,22 +419,22 @@ export function HeadersSection({
 
   return (
     <div className="rounded-lg border p-6">
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         Upstream Headers
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         Headers sent to the remote MCP URL.
-      </Type>
+      </Text>
       <Stack gap={4}>
         {readOnly ? (
           <Alert variant="warning" dismissible={false}>
             <Stack gap={2}>
-              <Type small>
+              <Text small>
                 These headers are shared by {linkedMcpServers.length} MCP
                 servers backed by this remote source. Editing them here would
                 change the values every one of those servers sends, so editing
                 is disabled on this page.
-              </Type>
+              </Text>
               <Link
                 to={remoteSettingsHref}
                 className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
@@ -449,11 +449,11 @@ export function HeadersSection({
         {context.kind === "remote-mcp" && linkedMcpServers.length > 0 ? (
           <Alert variant="warning" dismissible={false}>
             <Stack gap={1}>
-              <Type small>
+              <Text small>
                 Changes here affect {linkedMcpServers.length}{" "}
                 {linkedMcpServers.length === 1 ? "MCP server" : "MCP servers"}{" "}
                 backed by this source:
-              </Type>
+              </Text>
               <div className="flex flex-wrap gap-2">
                 {linkedMcpServers.map((server) => (
                   <Link
@@ -472,21 +472,21 @@ export function HeadersSection({
         ) : null}
 
         {headersQuery.isLoading || siblingsLoading ? (
-          <Type muted small>
+          <Text muted small>
             Loading headers…
-          </Type>
+          </Text>
         ) : drafts.length === 0 ? (
-          <Type muted small>
+          <Text muted small>
             No upstream headers configured yet.
-          </Type>
+          </Text>
         ) : (
           <Stack gap={4}>
             {drafts.some((draft) => draft.fromCatalog) && (
-              <Type muted small>
+              <Text muted small>
                 These headers are suggested from this endpoint's MCP catalog
                 entry. Fill in the values and save, or remove the ones you don't
                 need.
-              </Type>
+              </Text>
             )}
             {drafts.map((draft, index) => (
               <HeaderDraftRow
@@ -513,9 +513,9 @@ export function HeadersSection({
         {readOnly || siblingsLoading ? null : (
           <>
             {validationError && dirty && !pristineSuggestions ? (
-              <Type small className="text-destructive">
+              <Text small className="text-destructive">
                 {validationError}
-              </Type>
+              </Text>
             ) : null}
 
             {mutationError ? (
@@ -540,11 +540,11 @@ export function HeadersSection({
               </Button>
             </RequireScope>
 
-            <Type muted small>
+            <Text muted small>
               Static secrets are redacted after save. Leave the redacted value
               unchanged to keep the current secret, or replace it to set a new
               one.
-            </Type>
+            </Text>
 
             <Stack direction="horizontal" gap={2}>
               <RequireScope scope="mcp:write" level="component">
@@ -595,9 +595,9 @@ function HeaderDraftRow({
       <Stack gap={3}>
         <Stack direction="horizontal" gap={3} align="start">
           <div className="min-w-0 flex-1">
-            <Type small muted className="mb-1">
+            <Text small muted className="mb-1">
               Header name
-            </Type>
+            </Text>
             <Input
               value={draft.name}
               disabled={readOnly}
@@ -606,9 +606,9 @@ function HeaderDraftRow({
             />
           </div>
           <div className="w-52 shrink-0">
-            <Type small muted className="mb-1">
+            <Text small muted className="mb-1">
               Value source
-            </Type>
+            </Text>
             <Select
               value={draft.source}
               disabled={readOnly}
@@ -649,9 +649,9 @@ function HeaderDraftRow({
 
         {draft.source === "static" ? (
           <div>
-            <Type small muted className="mb-1">
+            <Text small muted className="mb-1">
               Static value
-            </Type>
+            </Text>
             <Input
               value={draft.staticValue}
               disabled={readOnly}
@@ -687,9 +687,9 @@ function HeaderDraftRow({
 
         {draft.source === "request" ? (
           <div>
-            <Type small muted className="mb-1">
+            <Text small muted className="mb-1">
               Inbound request header
-            </Type>
+            </Text>
             <Input
               value={draft.valueFromRequestHeader}
               disabled={readOnly}
@@ -710,7 +710,7 @@ function HeaderDraftRow({
                 onChange({ ...draft, isRequired: checked === true })
               }
             />
-            <Type small>Required</Type>
+            <Text small>Required</Text>
           </label>
           {draft.source === "static" ? (
             <label className="flex items-center gap-2">
@@ -721,7 +721,7 @@ function HeaderDraftRow({
                   onChange({ ...draft, isSecret: checked === true })
                 }
               />
-              <Type small>Secret</Type>
+              <Text small>Secret</Text>
             </label>
           ) : null}
         </Stack>

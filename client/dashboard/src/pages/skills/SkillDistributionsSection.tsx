@@ -2,7 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
@@ -82,10 +82,10 @@ export function SkillDistributionsSection({
     <div className="space-y-3">
       {distributions.length === 0 ? (
         <div className="border-border rounded-xl border border-dashed p-6">
-          <Type small muted>
+          <Text small muted>
             Not distributed to any plugins yet. Use the banner above to
             distribute this skill.
-          </Type>
+          </Text>
         </div>
       ) : (
         <ul className="border-border bg-card divide-y overflow-hidden rounded-xl border">
@@ -101,14 +101,14 @@ export function SkillDistributionsSection({
                 >
                   {distribution.pluginName}
                 </Link>
-                <Type
+                <Text
                   small
                   muted
                   className="block text-xs"
                   title={dateTimeFormatters.full.format(distribution.createdAt)}
                 >
                   Distributed <HumanizeDateTime date={distribution.createdAt} />
-                </Type>
+                </Text>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <VersionTrackingBadge distribution={distribution} />

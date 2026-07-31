@@ -15,7 +15,7 @@ import {
   TabsContent,
   TabsList,
 } from "@/components/ui/Tabs";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { Assistant } from "@gram/client/models/components/assistant.js";
@@ -60,12 +60,12 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="bot" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No assistants yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Create an assistant to wire a model up to your MCP servers.
-      </Type>
+      </Text>
       <RequireScope
         scope={["project:write", "mcp:write"]}
         all
@@ -222,9 +222,9 @@ function AssistantsBody({
 
   if (showNoMatches) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         No assistants matching &ldquo;{search}&rdquo;
-      </Type>
+      </Text>
     );
   }
 
@@ -260,9 +260,9 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
     return (
       <div className="flex items-center gap-1.5">
         <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
-        <Type muted small>
+        <Text muted small>
           No MCP servers
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -322,14 +322,14 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
         <DotCard icon={<AssistantIcon assistant={assistant} />}>
           {/* Header row: name + actions */}
           <div className="mb-3 flex items-start justify-between gap-2">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
               title={assistant.name}
             >
               {assistant.name}
-            </Type>
+            </Text>
             <div onClick={stopLinkNavigation}>
               <MoreActions actions={actions} />
             </div>
@@ -339,9 +339,9 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
           <div className="mb-3 flex flex-col gap-2">
             <div className="flex items-center gap-1.5">
               <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
-              <Type muted small className="truncate" title={assistant.model}>
+              <Text muted small className="truncate" title={assistant.model}>
                 {assistant.model}
-              </Type>
+              </Text>
             </div>
             <AssistantToolsets assistant={assistant} />
             <AssistantOwner

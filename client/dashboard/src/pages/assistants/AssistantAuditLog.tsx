@@ -11,7 +11,7 @@ import {
   type TimestampMode,
 } from "@/lib/audit-log-feed";
 import { Heading } from "@/components/ui/Heading";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
@@ -109,9 +109,9 @@ function AssistantAuditLogRow({
             {params}
           </pre>
           {paramsTruncated && (
-            <Type muted small className="mt-1.5">
+            <Text muted small className="mt-1.5">
               Parameters were truncated for storage.
-            </Type>
+            </Text>
           )}
         </div>
       </div>
@@ -189,11 +189,11 @@ export function AssistantsAuditLog(): React.JSX.Element {
         <Heading variant="h3" className="mb-2">
           Assistant activity
         </Heading>
-        <Type muted small className="mt-1">
+        <Text muted small className="mt-1">
           Every autonomous tool call your assistants make. The assistant, tool,
           MCP and parameters. These events are kept out of the organization
           audit log; filter by assistant below.
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -220,21 +220,21 @@ export function AssistantsAuditLog(): React.JSX.Element {
           </div>
         ) : error ? (
           <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <Type className="font-medium">
+            <Text className="font-medium">
               Error loading assistant activity
-            </Type>
-            <Type muted small>
+            </Text>
+            <Text muted small>
               {error.message}
-            </Type>
+            </Text>
           </div>
         ) : logs.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <Type className="font-medium">No assistant activity yet</Type>
-            <Type muted small>
+            <Text className="font-medium">No assistant activity yet</Text>
+            <Text muted small>
               {selectedAssistant === "all"
                 ? "Tool calls made by your assistants will appear here."
                 : "This assistant has not made any tool calls yet."}
-            </Type>
+            </Text>
           </div>
         ) : (
           <div>

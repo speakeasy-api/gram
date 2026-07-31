@@ -5,7 +5,7 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   useRegisterEnvironmentTelemetry,
   useTelemetry,
@@ -85,7 +85,7 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
         </Dialog.Header>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Type>MCP Server</Type>
+            <Text>MCP Server</Text>
             <select
               value={selectedToolset}
               onChange={(e) => setSelectedToolset(e.target.value)}

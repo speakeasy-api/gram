@@ -1,7 +1,7 @@
 import { CopyButton } from "@/components/ui/CopyButton";
 import { DotRow } from "@/components/ui/DotRow";
 import { Button } from "@/components/ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
@@ -89,14 +89,14 @@ export function MCPTableRow({
       {/* Name */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="group-hover:text-primary min-w-0 flex-1 truncate text-sm transition-colors"
             title={toolset.name}
           >
             {toolset.name}
-          </Type>
+          </Text>
           {oauthStatus === "required-unconfigured" && (
             <Badge variant="warning">
               <Badge.LeftIcon>
@@ -129,9 +129,9 @@ export function MCPTableRow({
       <td className="max-w-xs px-3 py-3">
         {mcpUrl ? (
           <div className="flex items-center gap-1.5">
-            <Type small muted className="truncate">
+            <Text small muted className="truncate">
               {mcpUrl}
-            </Type>
+            </Text>
             <CopyButton
               text={mcpUrl}
               size="sm"
@@ -152,9 +152,9 @@ export function MCPTableRow({
             )}
           </div>
         ) : (
-          <Type small muted>
+          <Text small muted>
             —
-          </Type>
+          </Text>
         )}
       </td>
 

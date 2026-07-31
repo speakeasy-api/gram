@@ -1,7 +1,7 @@
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Link } from "@/components/ui/Link";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 
@@ -22,12 +22,12 @@ export function ProxyMetadataForm(): JSX.Element {
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
         <div>
-          <Type muted small className="mb-2 font-medium">
+          <Text muted small className="mb-2 font-medium">
             Ideal for internal MCP servers. The OAuth Proxy configuration can be
             used to set up auth for an MCP server even though the underlying API
             doesn't support MCP OAuth.
-          </Type>
-          <Type muted small className="mb-4 font-medium">
+          </Text>
+          <Text muted small className="mb-4 font-medium">
             Getting proxy settings correct can be tricky. Need help?
             <Link
               href="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
@@ -35,18 +35,18 @@ export function ProxyMetadataForm(): JSX.Element {
             >
               Book a meeting
             </Link>
-          </Type>
+          </Text>
 
           {discovered && !proxy.prefilled && (
             <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
               <div>
-                <Type small className="font-medium">
+                <Text small className="font-medium">
                   OAuth detected from {discovered.name}
-                </Type>
-                <Type muted small className="mt-1">
+                </Text>
+                <Text muted small className="mt-1">
                   We discovered OAuth {discovered.version} metadata from this
                   server. You can use it to pre-fill the endpoints below.
-                </Type>
+                </Text>
               </div>
               <Button
                 size="sm"
@@ -59,23 +59,23 @@ export function ProxyMetadataForm(): JSX.Element {
           )}
           {proxy.prefilled && (
             <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
-              <Type small className="font-medium">
+              <Text small className="font-medium">
                 Pre-filled from detected OAuth metadata
-              </Type>
-              <Type muted small className="mt-1">
+              </Text>
+              <Text muted small className="mt-1">
                 This form has been pre-filled with information Speakeasy
                 detected about this server's OAuth requirements. Please review
                 carefully and refer to the MCP server or API's documentation to
                 confirm these values are correct.
-              </Type>
+              </Text>
             </div>
           )}
 
-          {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
+          {error && <Text className="mb-4 text-sm text-red-500!">{error}</Text>}
 
           <Stack gap={4}>
             <div>
-              <Type className="mb-2 font-medium">OAuth Proxy Server Slug</Type>
+              <Text className="mb-2 font-medium">OAuth Proxy Server Slug</Text>
               <Input
                 placeholder="my-oauth-proxy"
                 value={proxy.slug}
@@ -85,7 +85,7 @@ export function ProxyMetadataForm(): JSX.Element {
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">Authorization Endpoint</Type>
+              <Text className="mb-2 font-medium">Authorization Endpoint</Text>
               <Input
                 placeholder="https://provider.com/oauth/authorize"
                 value={proxy.authorizationEndpoint}
@@ -94,7 +94,7 @@ export function ProxyMetadataForm(): JSX.Element {
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">Token Endpoint</Type>
+              <Text className="mb-2 font-medium">Token Endpoint</Text>
               <Input
                 placeholder="https://provider.com/oauth/token"
                 value={proxy.tokenEndpoint}
@@ -103,9 +103,9 @@ export function ProxyMetadataForm(): JSX.Element {
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">
+              <Text className="mb-2 font-medium">
                 Scopes (comma-separated, optional)
-              </Type>
+              </Text>
               <Input
                 placeholder="read, write, openid"
                 value={proxy.scopes}
@@ -114,23 +114,23 @@ export function ProxyMetadataForm(): JSX.Element {
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">Audience (optional)</Type>
+              <Text className="mb-2 font-medium">Audience (optional)</Text>
               <Input
                 placeholder="https://api.example.com"
                 value={proxy.audience}
                 onChange={(v: string) => setField("audience", v)}
               />
-              <Type muted small className="mt-1">
+              <Text muted small className="mt-1">
                 The audience parameter sent to the upstream OAuth provider.
                 Required by some providers (e.g. Auth0) to return JWT access
                 tokens.
-              </Type>
+              </Text>
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">
+              <Text className="mb-2 font-medium">
                 Token Endpoint Auth Method
-              </Type>
+              </Text>
               <select
                 className="bg-background w-full rounded border px-3 py-2"
                 value={proxy.tokenAuthMethod}

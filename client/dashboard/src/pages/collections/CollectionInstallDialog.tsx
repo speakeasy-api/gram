@@ -2,7 +2,7 @@ import { ProjectAvatar } from "@/components/project-menu";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
@@ -160,11 +160,11 @@ export function CollectionInstallDialog({
                 </Dialog.Description>
               </Dialog.Header>
               <div className="space-y-4 py-2">
-                <Type small muted>
+                <Text small muted>
                   Project{" "}
                   {Math.min(currentProjectIndex + 1, selectedProjects.length)}{" "}
                   of {selectedProjects.length}
-                </Type>
+                </Text>
                 <ProjectProgressList
                   projects={selectedProjects}
                   resultByProjectSlug={resultByProjectSlug}
@@ -246,12 +246,12 @@ export function CollectionInstallDialog({
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <label className="text-sm font-medium">Projects</label>
-                        <Type small muted>
+                        <Text small muted>
                           {selectedProjects.length} selected
-                        </Type>
+                        </Text>
                       </div>
                       {selectedProjects.length > 0 && (
-                        <Type small muted className="line-clamp-2">
+                        <Text small muted className="line-clamp-2">
                           {selectedProjects
                             .slice(0, 3)
                             .map((project) => project.name)
@@ -259,7 +259,7 @@ export function CollectionInstallDialog({
                           {selectedProjects.length > 3
                             ? `, +${selectedProjects.length - 3} more`
                             : ""}
-                        </Type>
+                        </Text>
                       )}
                     </div>
                     {projects.length > 5 && (
@@ -370,16 +370,16 @@ function ProjectProgressList({
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <Type className="truncate text-sm font-medium">
+                <Text className="truncate text-sm font-medium">
                   {project.name}
-                </Type>
+                </Text>
                 <ProjectStatusIndicator status={status} />
               </div>
               {result && (result.status !== "succeeded" || result.error) && (
-                <Type small muted className="mt-1 whitespace-pre-line">
+                <Text small muted className="mt-1 whitespace-pre-line">
                   {result.error ||
                     `${result.succeededCount} succeeded, ${result.failedCount} failed.`}
-                </Type>
+                </Text>
               )}
               {result?.firstCompletedMcpServerParam && (
                 <ProjectConfigureLink
@@ -415,9 +415,9 @@ function ResultStat({
         <StatusCircleIcon tone={tone} />
         <span className="text-lg font-semibold">{value}</span>
       </div>
-      <Type small muted className="block text-center">
+      <Text small muted className="block text-center">
         {label}
-      </Type>
+      </Text>
     </div>
   );
 }

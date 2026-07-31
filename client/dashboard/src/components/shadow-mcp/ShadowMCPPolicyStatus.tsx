@@ -1,5 +1,5 @@
 import { type ShadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 
@@ -57,12 +57,12 @@ export function ShadowMCPPolicyStatus({
         name={icon}
       />
       <div className="min-w-0 flex-1">
-        <Type variant="small" className="font-medium">
+        <Text variant="small" className="font-medium">
           {label}
-        </Type>
-        <Type muted className="text-xs">
+        </Text>
+        <Text muted className="text-xs">
           {description}
-        </Type>
+        </Text>
       </div>
     </div>
   );

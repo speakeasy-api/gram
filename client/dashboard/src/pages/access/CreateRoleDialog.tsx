@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -667,12 +667,12 @@ export function CreateRoleDialog({
                       showPermissions && "rotate-90",
                     )}
                   />
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Permissions
-                  </Type>
-                  <Type variant="body" className="text-muted-foreground ml-1">
+                  </Text>
+                  <Text variant="body" className="text-muted-foreground ml-1">
                     ({grantCount} selected)
-                  </Type>
+                  </Text>
                 </button>
 
                 {showPermissions && (
@@ -722,23 +722,23 @@ export function CreateRoleDialog({
                               />
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <Type
+                                  <Text
                                     variant="body"
                                     className="text-sm font-medium"
                                   >
                                     {group.label}
-                                  </Type>
-                                  <Type
+                                  </Text>
+                                  <Text
                                     variant="body"
                                     className="text-muted-foreground text-sm"
                                   >
                                     ({selectedInGroup}/{group.scopes.length})
-                                  </Type>
+                                  </Text>
                                 </div>
                                 {!isExpanded && (
-                                  <Type muted small className="mt-0.5 text-xs">
+                                  <Text muted small className="mt-0.5 text-xs">
                                     {group.description}
-                                  </Type>
+                                  </Text>
                                 )}
                               </div>
                             </div>
@@ -774,18 +774,18 @@ export function CreateRoleDialog({
                                           className="bg-background mt-0.5"
                                         />
                                         <div className="min-w-0 flex-1">
-                                          <Type
+                                          <Text
                                             variant="body"
                                             className="font-mono text-sm font-medium"
                                           >
                                             {scopeDef.slug}
-                                          </Type>
-                                          <Type
+                                          </Text>
+                                          <Text
                                             variant="body"
                                             className="text-muted-foreground text-xs"
                                           >
                                             {scopeDef.description}
-                                          </Type>
+                                          </Text>
                                         </div>
                                       </label>
 
@@ -886,12 +886,12 @@ export function CreateRoleDialog({
                         showMembers && "rotate-90",
                       )}
                     />
-                    <Type variant="body" className="font-medium">
+                    <Text variant="body" className="font-medium">
                       Assign Members
-                    </Type>
-                    <Type variant="body" className="text-muted-foreground ml-1">
+                    </Text>
+                    <Text variant="body" className="text-muted-foreground ml-1">
                       (optional, {selectedMembers.size} selected)
-                    </Type>
+                    </Text>
                   </button>
 
                   {showMembers && (
@@ -925,12 +925,12 @@ export function CreateRoleDialog({
                               }
                               onCheckedChange={() => toggleAllMembers()}
                             />
-                            <Type
+                            <Text
                               variant="body"
                               className="text-muted-foreground text-sm font-medium"
                             >
                               Select all
-                            </Type>
+                            </Text>
                           </label>
                         );
                       })()}
@@ -976,18 +976,18 @@ export function CreateRoleDialog({
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0 flex-1 space-y-0.5">
-                              <Type
+                              <Text
                                 variant="body"
                                 className="text-sm font-medium"
                               >
                                 {member.name}
-                              </Type>
-                              <Type
+                              </Text>
+                              <Text
                                 variant="body"
                                 className="text-muted-foreground text-xs"
                               >
                                 {member.email}
-                              </Type>
+                              </Text>
                             </div>
                           </label>
                         );

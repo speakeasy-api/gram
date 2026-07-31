@@ -1,7 +1,7 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ModelProviderKey } from "@gram/client/models/components/modelproviderkey.js";
@@ -160,12 +160,12 @@ function ModelProviderKeysTable({
       header: "Surface",
       render: (slot) => (
         <Stack gap={1}>
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             {slot.name}
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             {slot.description}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -233,15 +233,15 @@ function ModelProviderKeysTable({
         const key = keysBySlot.get(slot.slot);
         if (!key) {
           return (
-            <Type muted small>
+            <Text muted small>
               —
-            </Type>
+            </Text>
           );
         }
         return (
-          <Type muted small className="whitespace-nowrap">
+          <Text muted small className="whitespace-nowrap">
             <HumanizeDateTime date={key.updatedAt} />
-          </Type>
+          </Text>
         );
       },
     },
@@ -304,9 +304,9 @@ function ModelProviderKeysTable({
   } else if (isError) {
     keyList = (
       <Stack direction="horizontal" gap={2} align="center">
-        <Type muted small>
+        <Text muted small>
           Failed to load provider keys.
-        </Type>
+        </Text>
         <Button variant="secondary" size="sm" onClick={() => void refetch()}>
           Retry
         </Button>
@@ -329,11 +329,11 @@ function ModelProviderKeysTable({
           <Heading variant="h4">Model Provider Keys</Heading>
           <ReleaseStageBadge stage="preview" />
         </Stack>
-        <Type muted small>
+        <Text muted small>
           Bring your own OpenRouter API key for model completions. Set a project
           default for all surfaces, or override individual surfaces. Keys are
           write-only and never displayed after saving.
-        </Type>
+        </Text>
       </div>
 
       {keyList}

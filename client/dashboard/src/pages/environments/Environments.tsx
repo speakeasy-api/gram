@@ -15,7 +15,7 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
 import { useEnvironments } from "./useEnvironments";
@@ -106,13 +106,13 @@ function EnvironmentsInner() {
               <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
                 <Blocks className="text-muted-foreground h-6 w-6" />
               </div>
-              <Type variant="subheading" className="mb-1">
+              <Text variant="subheading" className="mb-1">
                 No environments yet
-              </Type>
-              <Type small muted className="mb-4 max-w-md text-center">
+              </Text>
+              <Text small muted className="mb-4 max-w-md text-center">
                 Environments let you store configuration and secrets that can be
                 shared across multiple MCP servers.
-              </Type>
+              </Text>
               <RequireScope scope="environment:write" level="component">
                 <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                   <Button.LeftIcon>
@@ -193,23 +193,23 @@ function EnvironmentCard({
       >
         <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
           <div className="mb-2 flex items-start justify-between gap-2">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="text-md group-hover:text-primary flex-1 truncate transition-colors"
               title={environment.name}
             >
               {environment.name}
-            </Type>
+            </Text>
             <RequireScope scope="environment:write" level="component">
               <div onClick={(e) => e.stopPropagation()}>
                 <MoreActions actions={actions} />
               </div>
             </RequireScope>
           </div>
-          <Type small muted className="truncate">
+          <Text small muted className="truncate">
             {environment.description || "No description provided"}
-          </Type>
+          </Text>
           <div className="mt-auto flex items-center justify-between gap-2 pt-2">
             <Badge variant="neutral">
               {environment.entries.length}{" "}

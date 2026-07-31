@@ -3,7 +3,7 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import { isAfter } from "date-fns";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 export function UpdatedAt({
   date,
@@ -24,7 +24,7 @@ export function UpdatedAt({
     : "";
 
   return (
-    <Type
+    <Text
       as="span"
       variant="body"
       muted
@@ -37,6 +37,6 @@ export function UpdatedAt({
     >
       {isRecent && <Icon name="badge-alert" size="small" />}
       Updated <HumanizeDateTime date={date} includeTime={false} />
-    </Type>
+    </Text>
   );
 }

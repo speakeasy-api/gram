@@ -1,7 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -56,9 +56,9 @@ export function AIIntegrationStreamsTable({
       render: (row) => (
         <Stack direction="horizontal" align="center" gap={1.5}>
           <Clock3 className="text-muted-foreground size-3.5 shrink-0" />
-          <Type muted small className="whitespace-nowrap">
+          <Text muted small className="whitespace-nowrap">
             {row.schedule.cadence}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -67,9 +67,9 @@ export function AIIntegrationStreamsTable({
       header: "Last synced",
       width: "110px",
       render: (row) => (
-        <Type muted small className="whitespace-nowrap">
+        <Text muted small className="whitespace-nowrap">
           {lastSyncedLabel(row)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -99,7 +99,7 @@ export function AIIntegrationStreamsTable({
       columns={columns}
       data={rows}
       rowKey={(row) => row.key}
-      noResultsMessage={<Type muted>No streams</Type>}
+      noResultsMessage={<Text muted>No streams</Text>}
     />
   );
 }
@@ -112,9 +112,9 @@ function NameCell({ row }: { row: AIIntegrationStreamRow }) {
     <SimpleTooltip
       tooltip={`${row.schedule.name} — ${row.schedule.description}`}
     >
-      <Type variant="small" className="w-fit font-mono text-xs font-medium">
+      <Text variant="small" className="w-fit font-mono text-xs font-medium">
         {stream}
-      </Type>
+      </Text>
     </SimpleTooltip>
   );
 }

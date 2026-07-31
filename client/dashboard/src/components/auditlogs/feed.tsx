@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 import {
   getActionCategory,
   getActionColorConfig,
@@ -84,9 +84,9 @@ export function FacetSelect({
 }): React.JSX.Element {
   return (
     <div className="flex flex-col gap-1.5">
-      <Type small muted>
+      <Text small muted>
         {label}
-      </Type>
+      </Text>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger size="sm" className="bg-background min-w-[220px]">
           <SelectValue placeholder={placeholder} />
@@ -137,10 +137,10 @@ export function AuditFeedFooter({
 
   return (
     <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-      <Type muted small>
+      <Text muted small>
         {count.toLocaleString()} {noun}
         {count === 1 ? "" : "s"}
-      </Type>
+      </Text>
 
       {hasNextPage ? (
         <Button
@@ -159,9 +159,9 @@ export function AuditFeedFooter({
           )}
         </Button>
       ) : (
-        <Type muted small>
+        <Text muted small>
           {isFetching ? "Refreshing..." : endLabel}
-        </Type>
+        </Text>
       )}
     </div>
   );

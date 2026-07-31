@@ -2,7 +2,7 @@
 import { cn } from "@/lib/utils";
 import React from "react";
 import { MoreActions } from "@/components/ui/MoreActions";
-import { Type } from "@/components/ui/Type";
+import { Text } from "@/components/ui/Text";
 
 const MiniCardComponent = ({
   className,
@@ -54,9 +54,9 @@ const MiniCardComponent = ({
 function MiniCardTitle({
   className,
   ...props
-}: React.ComponentProps<typeof Type>) {
+}: React.ComponentProps<typeof Text>) {
   return (
-    <Type
+    <Text
       data-slot="card-title"
       className={cn("text-foreground! leading-none font-normal", className)}
       {...props}
@@ -67,9 +67,9 @@ function MiniCardTitle({
 function MiniCardDescription({
   className,
   ...props
-}: React.ComponentProps<typeof Type>) {
+}: React.ComponentProps<typeof Text>) {
   return (
-    <Type
+    <Text
       muted
       data-slot="card-description"
       className={cn("w-full truncate text-xs", className)}
