@@ -32,9 +32,6 @@ type Endpoints struct {
 	UpsertShadowMCPInventoryPolicyBypass goa.Endpoint
 	DeleteShadowMCPInventoryPolicyBypass goa.Endpoint
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
-	GetRBACStatus                        goa.Endpoint
-	EnableRBAC                           goa.Endpoint
-	DisableRBAC                          goa.Endpoint
 	ListChallenges                       goa.Endpoint
 	ListChallengeBuckets                 goa.Endpoint
 	ResolveChallenge                     goa.Endpoint
@@ -61,9 +58,6 @@ func NewEndpoints(s Service) *Endpoints {
 		UpsertShadowMCPInventoryPolicyBypass: NewUpsertShadowMCPInventoryPolicyBypassEndpoint(s, a.APIKeyAuth),
 		DeleteShadowMCPInventoryPolicyBypass: NewDeleteShadowMCPInventoryPolicyBypassEndpoint(s, a.APIKeyAuth),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
-		GetRBACStatus:                        NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
-		EnableRBAC:                           NewEnableRBACEndpoint(s, a.APIKeyAuth),
-		DisableRBAC:                          NewDisableRBACEndpoint(s, a.APIKeyAuth),
 		ListChallenges:                       NewListChallengesEndpoint(s, a.APIKeyAuth),
 		ListChallengeBuckets:                 NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
 		ResolveChallenge:                     NewResolveChallengeEndpoint(s, a.APIKeyAuth),
@@ -88,9 +82,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpsertShadowMCPInventoryPolicyBypass = m(e.UpsertShadowMCPInventoryPolicyBypass)
 	e.DeleteShadowMCPInventoryPolicyBypass = m(e.DeleteShadowMCPInventoryPolicyBypass)
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
-	e.GetRBACStatus = m(e.GetRBACStatus)
-	e.EnableRBAC = m(e.EnableRBAC)
-	e.DisableRBAC = m(e.DisableRBAC)
 	e.ListChallenges = m(e.ListChallenges)
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
 	e.ResolveChallenge = m(e.ResolveChallenge)
@@ -572,75 +563,6 @@ func NewResolveShadowMCPInventoryRequestEndpoint(s Service, authAPIKeyFn securit
 			return nil, err
 		}
 		return s.ResolveShadowMCPInventoryRequest(ctx, p)
-	}
-}
-
-// NewGetRBACStatusEndpoint returns an endpoint function that calls the method
-// "getRBACStatus" of service "access".
-func NewGetRBACStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetRBACStatusPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.GetRBACStatus(ctx, p)
-	}
-}
-
-// NewEnableRBACEndpoint returns an endpoint function that calls the method
-// "enableRBAC" of service "access".
-func NewEnableRBACEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*EnableRBACPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.EnableRBAC(ctx, p)
-	}
-}
-
-// NewDisableRBACEndpoint returns an endpoint function that calls the method
-// "disableRBAC" of service "access".
-func NewDisableRBACEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DisableRBACPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.DisableRBAC(ctx, p)
 	}
 }
 

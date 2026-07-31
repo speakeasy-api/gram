@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	accessRepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -150,7 +152,8 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 		wf = fetcher
 	}
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, nil, cache.SuffixNone)
+	authzProvisioner := authz.NewProvisioner(conn)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cache.SuffixNone)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cache.Suffix("gram-e2e"),
 		idpClient, billingClient, resolver,
@@ -167,15 +170,15 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	require.NoError(t, err)
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, nil)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, authzProvisioner)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
 }
 
 // setUserWorkosID stamps the WorkOS user ID on an existing Gram user so the
-// fallback path can fire.
+// membership reconciliation path can run.
 func (e *e2eInstance) setUserWorkosID(ctx context.Context, t *testing.T, gramUserID, workosUserID string) {
 	t.Helper()
 	q := usersRepo.New(e.conn)
@@ -221,8 +224,8 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
-	// Callback fires code exchange → UpsertUserFromIDP → BuildUserInfoFromDB.
-	// No pre-seeding — the fallback must create the org and relationship.
+	// Callback fires code exchange → UpsertUserFromIDP → SyncMembershipsFromWorkOS → GetUserInfo.
+	// No pre-seeding — membership reconciliation must create the org and relationship.
 	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -245,11 +248,12 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	assert.Equal(t, orgName, orgMeta.Name)
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
 	assert.False(t, orgMeta.Whitelisted, "new org created via login must not be auto-whitelisted")
+
 }
 
 // TestE2E_Callback_NewUserJoiningExistingOrg verifies that when a new user
 // joins an org that already has metadata in the DB (from another user), the
-// fallback creates the relationship without corrupting the existing org row.
+// membership reconciliation creates the relationship without corrupting the existing org row.
 func TestE2E_Callback_NewUserJoiningExistingOrg(t *testing.T) {
 	t.Parallel()
 
@@ -300,7 +304,7 @@ func TestE2E_Callback_NewUserJoiningExistingOrg(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, workosOrgID, authCtx.ActiveOrganizationID)
 
-	// Verify the org's whitelisted flag was NOT overwritten by the fallback.
+	// Verify the org's whitelisted flag was not overwritten by membership reconciliation.
 	orgMeta, err := orgQueries.GetOrganizationMetadata(ctx, workosOrgID)
 	require.NoError(t, err)
 	assert.True(t, orgMeta.Whitelisted, "existing org's whitelisted flag must be preserved")
@@ -652,7 +656,7 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 }
 
 // TestE2E_Callback_RejoinedOrg verifies that when a user left an org (soft-deleted
-// relationship) and then rejoined in WorkOS, the fallback clears deleted_at.
+// relationship) and then rejoined in WorkOS, reconciliation clears deleted_at.
 func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	t.Parallel()
 
@@ -711,7 +715,7 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	require.NoError(t, inst.sessionManager.InvalidateUserInfoCache(ctx, gramUserID))
 
 	// Second login: relationship is soft-deleted, so ListOrganizationsForUser
-	// returns 0 rows. The fallback should fire and clear deleted_at.
+	// returns 0 rows. Membership reconciliation should clear deleted_at.
 	result2, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, result2.Location, "signin_error=")
@@ -890,7 +894,7 @@ func TestE2E_Callback_AcceptsPendingInviteAndAppliesRole(t *testing.T) {
 
 // TestE2E_Callback_ThenInfo exercises the full login→info flow.
 // After callback creates the session, calling Info should return the user's
-// orgs (populated via the WorkOS fallback) with a default project.
+// orgs populated through WorkOS membership reconciliation with a default project.
 func TestE2E_Callback_ThenInfo(t *testing.T) {
 	t.Parallel()
 
@@ -942,7 +946,7 @@ func TestE2E_Callback_ThenInfo(t *testing.T) {
 }
 
 // TestE2E_Callback_ThenSwitchScopes exercises: login → info → switch to
-// second org. The second org was also created via the WorkOS fallback.
+// second org. The second org was also created through membership reconciliation.
 func TestE2E_Callback_ThenSwitchScopes(t *testing.T) {
 	t.Parallel()
 
@@ -1001,7 +1005,7 @@ func TestE2E_Callback_ThenSwitchScopes(t *testing.T) {
 }
 
 // TestE2E_Callback_NoWorkOSClient verifies that when no WorkOS client is
-// configured (nil), the fallback is silently skipped and the zero-org flow
+// configured (nil), membership reconciliation is skipped and the zero-org flow
 // proceeds normally.
 func TestE2E_Callback_NoWorkOSClient(t *testing.T) {
 	t.Parallel()
@@ -1214,6 +1218,24 @@ func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, dbOrg.WorkosID.Valid, "workos_id should be stored on org")
 	assert.Equal(t, workosOrgID, dbOrg.WorkosID.String)
+
+	for _, roleSlug := range []string{authz.SystemRoleAdmin, authz.SystemRoleMember} {
+		role, err := accessRepo.New(inst.conn).GetGlobalRoleBySlug(ctx, roleSlug)
+		require.NoError(t, err)
+		roleURN := "role:global:" + role.ID.String()
+		grants, err := authz.GrantsForRole(ctx, testenv.NewLogger(t), inst.conn, expectedGramOrgID, roleSlug, roleURN)
+		require.NoError(t, err)
+		require.Len(t, grants, len(authz.SystemRoleGrants[roleSlug]))
+	}
+
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+	principals, err := authz.ResolveUserPrincipals(ctx, inst.conn, expectedGramOrgID, gramUserID)
+	require.NoError(t, err)
+	grants, err := authz.LoadGrants(ctx, inst.conn, expectedGramOrgID, principals)
+	require.NoError(t, err)
+	require.True(t, slices.ContainsFunc(grants, func(grant authz.Grant) bool {
+		return grant.Scope == authz.ScopeOrgAdmin
+	}))
 }
 
 // TestE2E_Register_RejectsWhenOrgAlreadyActive verifies that Register returns
@@ -1242,7 +1264,7 @@ func TestE2E_Register_RejectsWhenOrgAlreadyActive(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
-	// Callback — user gets an org via WorkOS fallback
+	// Callback — user gets an org through WorkOS membership reconciliation.
 	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")

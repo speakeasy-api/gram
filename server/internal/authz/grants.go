@@ -63,8 +63,8 @@ func GrantsSatisfy(grants []Grant, check Check) bool {
 }
 
 // SystemRoleGrants defines the canonical grant sets for the built-in system
-// roles. These are seeded when RBAC is enabled and replace any existing grants
-// for these roles (idempotent, won't clobber custom roles).
+// roles. These are seeded when an organization is provisioned. Existing grants
+// for a built-in role are preserved, and custom roles are never touched.
 var SystemRoleGrants = map[string][]*RoleGrant{
 	SystemRoleAdmin:  roleGrantsForScopes(adminScopes),
 	SystemRoleMember: roleGrantsForScopes(memberScopes),

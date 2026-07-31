@@ -86,7 +86,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	enc := testenv.NewEncryptionClient(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})

@@ -90,7 +90,7 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|resolve-shadow-mcp-inventory-request|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|resolve-shadow-mcp-inventory-request|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
 		"agent (get-plugins|list-synced-users)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -264,15 +264,6 @@ func ParseEndpoint(
 		accessResolveShadowMCPInventoryRequestFlags            = flag.NewFlagSet("resolve-shadow-mcp-inventory-request", flag.ExitOnError)
 		accessResolveShadowMCPInventoryRequestBodyFlag         = accessResolveShadowMCPInventoryRequestFlags.String("body", "REQUIRED", "")
 		accessResolveShadowMCPInventoryRequestSessionTokenFlag = accessResolveShadowMCPInventoryRequestFlags.String("session-token", "", "")
-
-		accessGetRBACStatusFlags            = flag.NewFlagSet("get-rbac-status", flag.ExitOnError)
-		accessGetRBACStatusSessionTokenFlag = accessGetRBACStatusFlags.String("session-token", "", "")
-
-		accessEnableRBACFlags            = flag.NewFlagSet("enable-rbac", flag.ExitOnError)
-		accessEnableRBACSessionTokenFlag = accessEnableRBACFlags.String("session-token", "", "")
-
-		accessDisableRBACFlags            = flag.NewFlagSet("disable-rbac", flag.ExitOnError)
-		accessDisableRBACSessionTokenFlag = accessDisableRBACFlags.String("session-token", "", "")
 
 		accessListChallengesFlags            = flag.NewFlagSet("list-challenges", flag.ExitOnError)
 		accessListChallengesOutcomeFlag      = accessListChallengesFlags.String("outcome", "", "")
@@ -3033,9 +3024,6 @@ func ParseEndpoint(
 	accessUpsertShadowMCPInventoryPolicyBypassFlags.Usage = accessUpsertShadowMCPInventoryPolicyBypassUsage
 	accessDeleteShadowMCPInventoryPolicyBypassFlags.Usage = accessDeleteShadowMCPInventoryPolicyBypassUsage
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
-	accessGetRBACStatusFlags.Usage = accessGetRBACStatusUsage
-	accessEnableRBACFlags.Usage = accessEnableRBACUsage
-	accessDisableRBACFlags.Usage = accessDisableRBACUsage
 	accessListChallengesFlags.Usage = accessListChallengesUsage
 	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
 	accessResolveChallengeFlags.Usage = accessResolveChallengeUsage
@@ -3861,15 +3849,6 @@ func ParseEndpoint(
 
 			case "resolve-shadow-mcp-inventory-request":
 				epf = accessResolveShadowMCPInventoryRequestFlags
-
-			case "get-rbac-status":
-				epf = accessGetRBACStatusFlags
-
-			case "enable-rbac":
-				epf = accessEnableRBACFlags
-
-			case "disable-rbac":
-				epf = accessDisableRBACFlags
 
 			case "list-challenges":
 				epf = accessListChallengesFlags
@@ -5631,15 +5610,6 @@ func ParseEndpoint(
 			case "resolve-shadow-mcp-inventory-request":
 				endpoint = c.ResolveShadowMCPInventoryRequest()
 				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
-			case "get-rbac-status":
-				endpoint = c.GetRBACStatus()
-				data, err = accessc.BuildGetRBACStatusPayload(*accessGetRBACStatusSessionTokenFlag)
-			case "enable-rbac":
-				endpoint = c.EnableRBAC()
-				data, err = accessc.BuildEnableRBACPayload(*accessEnableRBACSessionTokenFlag)
-			case "disable-rbac":
-				endpoint = c.DisableRBAC()
-				data, err = accessc.BuildDisableRBACPayload(*accessDisableRBACSessionTokenFlag)
 			case "list-challenges":
 				endpoint = c.ListChallenges()
 				data, err = accessc.BuildListChallengesPayload(*accessListChallengesOutcomeFlag, *accessListChallengesPrincipalUrnFlag, *accessListChallengesScopeFlag, *accessListChallengesProjectIDFlag, *accessListChallengesResolvedFlag, *accessListChallengesIdsFlag, *accessListChallengesLimitFlag, *accessListChallengesOffsetFlag, *accessListChallengesApikeyTokenFlag, *accessListChallengesSessionTokenFlag)
@@ -7409,9 +7379,6 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    upsert-shadow-mcp-inventory-policy-bypass: Create or modify a Shadow MCP URL allow decision for selected blocking policies.`)
 	fmt.Fprintln(os.Stderr, `    delete-shadow-mcp-inventory-policy-bypass: Remove a Shadow MCP URL allow decision.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
-	fmt.Fprintln(os.Stderr, `    get-rbac-status: Returns whether RBAC is currently enabled for the current organization.`)
-	fmt.Fprintln(os.Stderr, `    enable-rbac: Enable RBAC for the current organization. Seeds default grants for system roles.`)
-	fmt.Fprintln(os.Stderr, `    disable-rbac: Disable RBAC enforcement for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
 	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
@@ -7761,60 +7728,6 @@ func accessResolveShadowMCPInventoryRequestUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-shadow-mcp-inventory-request --body '{\n      \"decision\": \"deny\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessGetRBACStatusUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access get-rbac-status", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Returns whether RBAC is currently enabled for the current organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-rbac-status --session-token \"abc123\"")
-}
-
-func accessEnableRBACUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access enable-rbac", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Enable RBAC for the current organization. Seeds default grants for system roles.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access enable-rbac --session-token \"abc123\"")
-}
-
-func accessDisableRBACUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access disable-rbac", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Disable RBAC enforcement for the current organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access disable-rbac --session-token \"abc123\"")
 }
 
 func accessListChallengesUsage() {

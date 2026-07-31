@@ -4,9 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"runtime"
+	"slices"
+	"strings"
+	"sync"
+	"time"
 
+	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/client"
+	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -27,4 +37,80 @@ func NewTestcontainersLogger() log.Logger {
 			DataDogAttr: false,
 		})),
 	}
+}
+
+// UsePublishedPorts reports whether test containers must publish host ports
+// for tests to reach them. Local rootful Linux can dial container IPs directly;
+// Docker Desktop, rootless, and remote daemons require published ports.
+var UsePublishedPorts = sync.OnceValue(func() bool {
+	if runtime.GOOS != "linux" {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
+	if err != nil {
+		return true
+	}
+	defer func() { _ = cli.Close() }()
+
+	if !strings.HasPrefix(cli.DaemonHost(), "unix://") {
+		return true
+	}
+
+	res, err := cli.Info(ctx, client.InfoOptions{})
+	if err != nil {
+		return true
+	}
+
+	return res.Info.OperatingSystem == "Docker Desktop" || slices.Contains(res.Info.SecurityOptions, "name=rootless")
+})
+
+// WithoutPublishedPorts strips module-declared exposed ports when tests can
+// route directly to container IPs.
+func WithoutPublishedPorts() testcontainers.CustomizeRequestOption {
+	return func(req *testcontainers.GenericContainerRequest) error {
+		if !UsePublishedPorts() {
+			req.ExposedPorts = nil
+		}
+		return nil
+	}
+}
+
+// PortWait checks a container port internally when it is not published.
+func PortWait(port nat.Port) wait.Strategy {
+	w := wait.ForListeningPort(string(port))
+	if !UsePublishedPorts() {
+		return w.SkipExternalCheck()
+	}
+	return w
+}
+
+// ContainerAddr returns the address tests should dial for a container port.
+func ContainerAddr(ctx context.Context, container testcontainers.Container, port nat.Port) (string, error) {
+	if !UsePublishedPorts() {
+		ip, err := container.ContainerIP(ctx)
+		if err != nil {
+			return "", fmt.Errorf("get container ip: %w", err)
+		}
+		return net.JoinHostPort(ip, port.Port()), nil
+	}
+
+	host, err := container.Host(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get container host: %w", err)
+	}
+
+	mapped, err := container.MappedPort(ctx, string(port))
+	if err != nil {
+		return "", fmt.Errorf("get mapped port for %s: %w", port, err)
+	}
+
+	if host == "localhost" {
+		host = "127.0.0.1"
+	}
+
+	return net.JoinHostPort(host, mapped.Port()), nil
 }

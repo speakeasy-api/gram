@@ -6,17 +6,13 @@ import {
   invalidateAllChatAnalysisSettings,
   useChatAnalysisSettings,
 } from "@gram/client/react-query/chatAnalysisSettings.js";
-import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
-import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { useRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
 import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightLeft,
@@ -29,14 +25,13 @@ import {
   KeyRound,
   Loader2,
   Mail,
-  ShieldCheck,
   Webhook,
 } from "lucide-react";
 import { ComponentType, ReactElement, useState } from "react";
 import { toast } from "sonner";
 
 // These panels surface the Platform Admin tooling (org info & override, product
-// features, RBAC, enterprise onboarding) inside the Developer Toolkit, one panel
+// features and enterprise onboarding) inside the Developer Toolkit, one panel
 // per toolkit tab. They replace the standalone OrgAdminSettings page; the layout
 // is compact so it fits the narrow platform-admin-toolbar panel. Every control
 // here hits a platform-admin guarded endpoint, so a non-platform-admin caller
@@ -147,103 +142,6 @@ function FeatureToggle({
   );
 }
 
-function RBACManagementSection(): ReactElement {
-  const queryClient = useQueryClient();
-  const [confirmAction, setConfirmAction] = useState<
-    "enable" | "disable" | null
-  >(null);
-
-  const { data: status, isLoading, error } = useRbacStatus();
-
-  const enableMutation = useEnableRBACMutation({
-    onSuccess: () => {
-      void invalidateAllRbacStatus(queryClient);
-      void invalidateAllGrants(queryClient);
-      setConfirmAction(null);
-    },
-  });
-
-  const disableMutation = useDisableRBACMutation({
-    onSuccess: () => {
-      void invalidateAllRbacStatus(queryClient);
-      void invalidateAllGrants(queryClient);
-      setConfirmAction(null);
-    },
-  });
-
-  const toggleMutation =
-    confirmAction === "enable" ? enableMutation : disableMutation;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 py-1">
-        <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
-        <span className="text-muted-foreground text-[11px]">Loading…</span>
-      </div>
-    );
-  }
-
-  if (error || !status) {
-    return (
-      <p className="text-destructive text-[11px]">
-        Failed to load RBAC status: {error?.message ?? "unknown error"}
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <StatusPill enabled={status.rbacEnabled} />
-        {confirmAction === null && (
-          <ActionButton
-            onClick={() =>
-              setConfirmAction(status.rbacEnabled ? "disable" : "enable")
-            }
-            destructive={status.rbacEnabled}
-          >
-            {status.rbacEnabled ? "Disable RBAC" : "Enable RBAC"}
-          </ActionButton>
-        )}
-      </div>
-
-      {confirmAction !== null && (
-        // Inline confirmation instead of a modal: the platform-admin-toolbar collapses on
-        // outside clicks, which would tear down a portalled dialog mid-flow.
-        <div className="border-border bg-muted/40 rounded-md border p-2">
-          <p className="text-foreground mb-2 text-[11px] leading-snug">
-            {confirmAction === "enable"
-              ? "Seed default grants for system roles and enforce access control for this organization?"
-              : "Disable access control enforcement? All members will have unrestricted access."}
-          </p>
-          <div className="flex items-center gap-2">
-            <ActionButton
-              onClick={() => toggleMutation.mutate({})}
-              pending={toggleMutation.isPending}
-              destructive={confirmAction === "disable"}
-            >
-              {confirmAction === "enable" ? "Enable" : "Disable"}
-            </ActionButton>
-            <button
-              type="button"
-              onClick={() => setConfirmAction(null)}
-              className="text-muted-foreground hover:text-foreground text-[11px]"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {toggleMutation.error && (
-        <p className="text-destructive text-[11px]">
-          {toggleMutation.error.message}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function ProductFeaturesSection(): ReactElement {
   const queryClient = useQueryClient();
   const { data: features, isLoading, error } = useProductFeatures();
@@ -293,17 +191,9 @@ function ProductFeaturesSection(): ReactElement {
 
   return (
     <div className="space-y-2">
-      <Section
-        icon={ShieldCheck}
-        title="RBAC"
-        description="Role-based access control enforcement. Ensure all members have roles assigned before enabling."
-      >
-        <RBACManagementSection />
-      </Section>
-
       <FeatureToggle
         label="Skills"
-        description="Enables the Skills page and provisions default Skills grants when RBAC is active."
+        description="Enables the Skills page and provisions default Skills grants."
         icon={BookOpen}
         featureName={FeatureName.Skills}
         enabled={features.skillsEnabled}
@@ -693,7 +583,7 @@ function OrgInfoSection(): ReactElement {
 }
 
 // The panels below back the Platform Admin tabs in the Developer Toolkit, one
-// per tab: Info (org info + override), Features (RBAC + product features), and
+// per tab: Info (org info + override), Features (product features), and
 // Onboarding (enterprise admin email).
 
 export function PlatformAdminInfoPanel(): ReactElement {

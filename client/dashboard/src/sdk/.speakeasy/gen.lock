@@ -34,9 +34,6 @@ trackedFiles:
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessDeleteShadowMCPInventoryPolicyBypass.ts: {}
-  src/funcs/accessDisableRBAC.ts: {}
-  src/funcs/accessEnableRBAC.ts: {}
-  src/funcs/accessGetRBACStatus.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
@@ -962,7 +959,6 @@ trackedFiles:
   src/models/components/queryresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
-  src/models/components/rbacstatus.ts: {}
   src/models/components/recordskillresult.ts: {}
   src/models/components/redeemrequestbody.ts: {}
   src/models/components/redeemresponsebody.ts: {}
@@ -1370,7 +1366,6 @@ trackedFiles:
   src/models/operations/denyriskpolicybypassrequest.ts: {}
   src/models/operations/detachserverfromcollection.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
-  src/models/operations/disablerbac.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
   src/models/operations/dismissskillsuggestion.ts: {}
@@ -1378,7 +1373,6 @@ trackedFiles:
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
-  src/models/operations/enablerbac.ts: {}
   src/models/operations/enablewebhooks.ts: {}
   src/models/operations/ensuremanagedassistant.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
@@ -1436,7 +1430,6 @@ trackedFiles:
   src/models/operations/getprojectmetricssummary.ts: {}
   src/models/operations/getprojectoverview.ts: {}
   src/models/operations/getpublishstatus.ts: {}
-  src/models/operations/getrbacstatus.ts: {}
   src/models/operations/getremotemcpserver.ts: {}
   src/models/operations/getremotemcpserverheader.ts: {}
   src/models/operations/getremotesessionclient.ts: {}
@@ -1883,12 +1876,10 @@ trackedFiles:
   src/react-query/deviceIntegrationProviders.ts: {}
   src/react-query/deviceIntegrationSchedules.core.ts: {}
   src/react-query/deviceIntegrationSchedules.ts: {}
-  src/react-query/disableRBAC.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
   src/react-query/dismissSkillSuggestion.ts: {}
   src/react-query/distributeSkill.ts: {}
-  src/react-query/enableRBAC.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
   src/react-query/evolveDeployment.ts: {}
@@ -2149,8 +2140,6 @@ trackedFiles:
   src/react-query/publishPlugins.ts: {}
   src/react-query/publishStatus.core.ts: {}
   src/react-query/publishStatus.ts: {}
-  src/react-query/rbacStatus.core.ts: {}
-  src/react-query/rbacStatus.ts: {}
   src/react-query/redeployDeployment.ts: {}
   src/react-query/refreshGlobalRemoteSessionIssuerMetadata.ts: {}
   src/react-query/refreshOrganizationRemoteSession.ts: {}

@@ -74,7 +74,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	svc := externalkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)
 	credSvc := externalcredentials.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, gcpauth.NewResolver())

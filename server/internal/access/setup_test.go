@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -30,13 +29,6 @@ import (
 var (
 	infra *testenv.Environment
 )
-
-type noopProductFeatures struct{}
-
-func (noopProductFeatures) EnableRBAC(context.Context, string) error { return nil }
-
-func (noopProductFeatures) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
-}
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
@@ -93,9 +85,9 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger)
 
 	return ctx, &testInstance{
 		service: svc,

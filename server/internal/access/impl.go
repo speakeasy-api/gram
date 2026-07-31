@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -31,32 +29,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	pfRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var errConnectedUserNotFound = errors.New("connected user not found")
 
-// ProductFeatures is the subset of *productfeatures.Client the access service
-// needs: enabling RBAC for an org (seed grants + flag, atomically) and keeping
-// the feature cache consistent after a direct DB write.
-type ProductFeatures interface {
-	EnableRBAC(ctx context.Context, organizationID string) error
-	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
-}
-
 type Service struct {
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	db              *pgxpool.Pool
-	chConn          driver.Conn
-	auth            *auth.Auth
-	authz           *authz.Engine
-	roleMgr         *RoleManager
-	productFeatures ProductFeatures
-	audit           *audit.Logger
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	chConn  driver.Conn
+	auth    *auth.Auth
+	authz   *authz.Engine
+	roleMgr *RoleManager
+	audit   *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -70,21 +57,19 @@ func NewService(
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
-	productFeatures ProductFeatures,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:          logger,
-		db:              db,
-		chConn:          chConn,
-		auth:            auth.New(logger, db, sessions, authz),
-		authz:           authz,
-		roleMgr:         roleMgr,
-		productFeatures: productFeatures,
-		audit:           auditLogger,
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:  logger,
+		db:      db,
+		chConn:  chConn,
+		auth:    auth.New(logger, db, sessions, authz),
+		authz:   authz,
+		roleMgr: roleMgr,
+		audit:   auditLogger,
 	}
 }
 
@@ -571,85 +556,6 @@ func connectedUser(ctx context.Context, db database.DBTX, organizationID string,
 	}
 
 	return user, nil
-}
-
-func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload) (*gen.RBACStatus, error) {
-	ac, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	enabled, err := pfRepo.New(s.db).IsFeatureEnabled(ctx, pfRepo.IsFeatureEnabledParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureRBAC),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").LogError(ctx, s.logger)
-	}
-
-	return &gen.RBACStatus{RbacEnabled: enabled}, nil
-}
-
-func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) error {
-	ac, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return err
-	}
-	if err := s.productFeatures.EnableRBAC(ctx, ac.ActiveOrganizationID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "enable RBAC").LogError(ctx, s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID)))
-	}
-
-	return nil
-}
-
-func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) error {
-	ac, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return err
-	}
-	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
-
-	if _, err := pfRepo.New(s.db).DeleteFeature(ctx, pfRepo.DeleteFeatureParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureRBAC),
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Already disabled — no active feature row to soft-delete.
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").LogError(ctx, logger)
-	}
-
-	s.productFeatures.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
-	return nil
-}
-
-// requirePlatformAdmin returns the auth context and an error if the caller is not
-// a Speakeasy employee. Mirrors the exact condition used by the platform-admin
-// impersonation feature in auth/impl.go: email domain OR admin DB flag.
-// Email is read from the auth context (session cache). Admin is read from the
-// DB because AuthContext does not carry it; the DB value is synced from the
-// Speakeasy provider on every login so it matches the session cache.
-func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
-	}
-	email := ""
-	if ac.Email != nil {
-		email = *ac.Email
-	}
-	if strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev") {
-		return ac, nil
-	}
-	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").LogError(ctx, s.logger)
-	}
-	if !user.Admin {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-	return ac, nil
 }
 
 type challengeUserInfo struct {

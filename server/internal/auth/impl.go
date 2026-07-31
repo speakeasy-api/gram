@@ -111,7 +111,7 @@ type Service struct {
 	projectsRepo        *projectsRepo.Queries
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
-	rbac                identity.RBACEnabler
+	authzProvisioner    *authz.Provisioner
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -128,7 +128,7 @@ func NewService(
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
-	rbac identity.RBACEnabler,
+	authzProvisioner *authz.Provisioner,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -147,7 +147,7 @@ func NewService(
 		projectsRepo:        projectsRepo.New(db),
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
-		rbac:                rbac,
+		authzProvisioner:    authzProvisioner,
 	}
 }
 
@@ -733,16 +733,16 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	}
 
 	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
-	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
+	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").LogError(ctx, s.logger)
 	}
 
 	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          gramOrgID,
+		ID:          provisionedOrg.GramOrganizationID,
 		Name:        payload.OrgName,
 		Slug:        slug,
-		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
+		WorkosID:    pgtype.Text{String: provisionedOrg.WorkOSOrganizationID, Valid: provisionedOrg.WorkOSOrganizationID != ""},
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
 	})
 	if err != nil {
@@ -756,13 +756,14 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").LogError(ctx, s.logger)
 	}
 
-	// Enable RBAC for the new org so access control is on from the start. Fail
-	// closed: a newly created org must not come up without RBAC seeded. The
-	// nil guard is only for tests that do not wire an enabler. Idempotent.
-	if s.rbac != nil {
-		if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "enable RBAC for new organization").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
-		}
+	// New organizations must have their built-in access policy and initial
+	// administrator before the session can begin using them.
+	if err := s.authzProvisioner.ProvisionOrganizationAdmin(ctx, org.ID, authz.InitialOrganizationAdmin{
+		UserID:             authCtx.UserID,
+		WorkOSUserID:       provisionedOrg.WorkOSUserID,
+		WorkOSMembershipID: provisionedOrg.WorkOSMembershipID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "provision access for new organization").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
@@ -790,16 +791,16 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	}
 
 	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
-	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userInfo.UserID)
+	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userInfo.UserID)
 	if err != nil {
 		return "", fmt.Errorf("provision org in WorkOS: %w", err)
 	}
 
 	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          gramOrgID,
+		ID:          provisionedOrg.GramOrganizationID,
 		Name:        orgName,
 		Slug:        slug,
-		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
+		WorkosID:    pgtype.Text{String: provisionedOrg.WorkOSOrganizationID, Valid: provisionedOrg.WorkOSOrganizationID != ""},
 		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
 	})
 	if err != nil {
@@ -813,12 +814,12 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 		return "", fmt.Errorf("create org-user relationship: %w", err)
 	}
 
-	// Enable RBAC for the new org so access control is on from the start. Fail
-	// closed, mirroring Register. The nil guard is only for tests. Idempotent.
-	if s.rbac != nil {
-		if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
-			return "", fmt.Errorf("enable RBAC for new organization: %w", err)
-		}
+	if err := s.authzProvisioner.ProvisionOrganizationAdmin(ctx, org.ID, authz.InitialOrganizationAdmin{
+		UserID:             userInfo.UserID,
+		WorkOSUserID:       provisionedOrg.WorkOSUserID,
+		WorkOSMembershipID: provisionedOrg.WorkOSMembershipID,
+	}); err != nil {
+		return "", fmt.Errorf("provision access for new organization: %w", err)
 	}
 
 	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, userInfo.UserID); invalidationErr != nil {

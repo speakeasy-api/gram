@@ -524,7 +524,6 @@ func newWorkerCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
-			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 
 			// Create ClickHouse client and telemetry service for resolution events
@@ -539,7 +538,6 @@ func newWorkerCommand() *cli.Command {
 				logger,
 				db,
 				chDB,
-				rbacEnabled,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
@@ -665,7 +663,6 @@ func newWorkerCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
-				productFeatures,
 				cache.SuffixNone,
 			)
 
