@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -48,9 +49,10 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, challenges *ChallengePubli
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
 
-	if challenges == nil {
-		challenges = NewNoopChallengePublisher(authzLogger)
-	}
+	inv.Require(
+		"authz engine",
+		"challenge publisher set", challenges != nil,
+	)
 
 	return &Engine{
 		logger:                  authzLogger,

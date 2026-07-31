@@ -13,32 +13,20 @@ import (
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 )
 
-// ChallengeInserter writes challenge rows to ClickHouse. *authzrepo.Queries
-// satisfies it; tests supply a fake.
-type ChallengeInserter interface {
-	InsertChallenge(ctx context.Context, row authzrepo.ChallengeRow) error
-}
-
 // ChallengeCHWriter consumes ChallengeRow messages off Pub/Sub and inserts
 // them into the ClickHouse authz_challenges table.
 type ChallengeCHWriter struct {
-	logger   *slog.Logger
-	inserter ChallengeInserter
+	logger *slog.Logger
+	repo   *authzrepo.Queries
 }
 
-// NewChallengeCHWriter builds a ChallengeCHWriter. Pass authzrepo.New(chConn)
-// as the inserter in production.
-func NewChallengeCHWriter(logger *slog.Logger, inserter ChallengeInserter) *ChallengeCHWriter {
+// NewChallengeCHWriter builds a ChallengeCHWriter backed by the given
+// ClickHouse connection.
+func NewChallengeCHWriter(logger *slog.Logger, conn clickhouse.Conn) *ChallengeCHWriter {
 	return &ChallengeCHWriter{
-		logger:   logger.With(attr.SlogComponent("authz-challenge-ch-writer")),
-		inserter: inserter,
+		logger: logger.With(attr.SlogComponent("authz-challenge-ch-writer")),
+		repo:   authzrepo.New(conn),
 	}
-}
-
-// NewChallengeCHWriterFromConn is a convenience constructor for the streams
-// runner that wires a ClickHouse connection into authzrepo.Queries.
-func NewChallengeCHWriterFromConn(logger *slog.Logger, conn clickhouse.Conn) *ChallengeCHWriter {
-	return NewChallengeCHWriter(logger, authzrepo.New(conn))
 }
 
 func (w *ChallengeCHWriter) HandleBatch(ctx context.Context, messages []*authzv1.ChallengeRow, _ []gcp.MessageMetadata) error {
@@ -56,7 +44,7 @@ func (w *ChallengeCHWriter) HandleBatch(ctx context.Context, messages []*authzv1
 			)
 			continue
 		}
-		if err := w.inserter.InsertChallenge(ctx, row); err != nil {
+		if err := w.repo.InsertChallenge(ctx, row); err != nil {
 			// Return so the batch is nacked and retried (and eventually
 			// dead-lettered). Unlike risk findings, the Pub/Sub message is the
 			// sole path into ClickHouse — dropping on insert failure would lose

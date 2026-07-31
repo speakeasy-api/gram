@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
@@ -315,22 +314,16 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
-			// ClickHouse writers (authz challenges + risk_findings). A connect/
-			// ping failure must NOT abort streams: taking the process down would
-			// also kill every other receiver. Degrade instead — log the failure
-			// and disable only the ClickHouse receivers. The risk_findings kill
-			// switch can further disable that consumer without affecting authz
-			// challenge ingestion.
+			// ClickHouse is required for authz challenge ingestion. A connect/
+			// ping failure is a hard error: the streams process must not run
+			// without a path to persist challenges. The risk_findings kill
+			// switch can still disable that consumer independently.
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
-			var chConn clickhouse.Conn
-			chClient, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			chConn, chShutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
-				logger.ErrorContext(ctx, "failed to create clickhouse client, disabling clickhouse writers", attr.SlogError(err))
-				enableCHRiskWrites = false
-			} else {
-				shutdownFuncs = append(shutdownFuncs, chShutdown)
-				chConn = chClient
+				return fmt.Errorf("failed to create clickhouse client: %w", err)
 			}
+			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
@@ -414,15 +407,13 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
-				if chConn != nil {
-					mustReceiveBatch(
-						rg, &authzv1.ChallengeRow{}, &authzv1.ChallengeCHWriter{},
-						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
-						authz.NewChallengeCHWriterFromConn(logger, chConn),
-					)
-				}
+				mustReceiveBatch(
+					rg, &authzv1.ChallengeRow{}, &authzv1.ChallengeCHWriter{},
+					gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
+					authz.NewChallengeCHWriter(logger, chConn),
+				)
 
-				if enableCHRiskWrites && chConn != nil {
+				if enableCHRiskWrites {
 					mustReceiveBatch(
 						rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{},
 						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},

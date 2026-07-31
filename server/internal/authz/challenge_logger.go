@@ -45,12 +45,9 @@ type challengeLogger struct {
 // write is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Publish failures are logged asynchronously and never bubble back to
-// the caller, so authz decisions stay off the ClickHouse pool.
+// the caller, so authz decisions stay off the ClickHouse pool. publisher must
+// be non-nil (NewEngine requires one).
 func (l challengeLogger) Log(ctx context.Context, publisher *ChallengePublisher, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
-	if publisher == nil {
-		return
-	}
-
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return

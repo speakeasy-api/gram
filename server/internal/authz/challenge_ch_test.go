@@ -1,7 +1,6 @@
 package authz
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -14,24 +13,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-type fakeChallengeInserter struct {
-	rows []authzrepo.ChallengeRow
-	err  error
-}
-
-func (f *fakeChallengeInserter) InsertChallenge(_ context.Context, row authzrepo.ChallengeRow) error {
-	if f.err != nil {
-		return f.err
-	}
-	f.rows = append(f.rows, row)
-	return nil
-}
-
-func TestChallengeCHWriter_HandleBatch_InsertsMappedRows(t *testing.T) {
+func TestChallengeCHWriter_HandleBatch_InsertsIntoClickHouse(t *testing.T) {
 	t.Parallel()
 
-	ins := &fakeChallengeInserter{}
-	w := NewChallengeCHWriter(testenv.NewLogger(t), ins)
+	conn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	w := NewChallengeCHWriter(testenv.NewLogger(t), conn)
 
 	reqID := "req_" + uuid.NewString()
 	id := uuid.NewString()
@@ -65,42 +52,72 @@ func TestChallengeCHWriter_HandleBatch_InsertsMappedRows(t *testing.T) {
 		EvaluatedGrantCount: ptrUint32(2),
 	}.Build()
 
-	err := w.HandleBatch(t.Context(), []*authzv1.ChallengeRow{msg}, []gcp.MessageMetadata{{}})
-	require.NoError(t, err)
-	require.Len(t, ins.rows, 1)
-	got := ins.rows[0]
-	require.Equal(t, id, got.ID)
-	require.Equal(t, orgID, got.OrganizationID)
-	require.Equal(t, &reqID, got.RequestID)
-	require.Equal(t, authzrepo.OperationRequire, got.Operation)
-	require.Equal(t, uint32(2), got.EvaluatedGrantCount)
-	require.Len(t, got.RequestedChecks, 1)
-	require.Equal(t, string(ScopeProjectRead), got.RequestedChecks[0].Scope)
+	require.NoError(t, w.HandleBatch(t.Context(), []*authzv1.ChallengeRow{msg}, []gcp.MessageMetadata{{}}))
+
+	require.Eventually(t, func() bool {
+		rows, err := conn.Query(t.Context(), `
+			SELECT id, request_id, operation, evaluated_grant_count, requested_checks.scope
+			FROM authz_challenges WHERE organization_id = ?
+		`, orgID)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = rows.Close() }()
+		if !rows.Next() {
+			return false
+		}
+		var gotID, op string
+		var gotReqID *string
+		var evalCount uint32
+		var reqScopes []string
+		if err := rows.Scan(&gotID, &gotReqID, &op, &evalCount, &reqScopes); err != nil {
+			return false
+		}
+		return gotID == id &&
+			gotReqID != nil && *gotReqID == reqID &&
+			op == string(authzrepo.OperationRequire) &&
+			evalCount == 2 &&
+			len(reqScopes) == 1 && reqScopes[0] == string(ScopeProjectRead)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func TestChallengeCHWriter_HandleBatch_SkipsInvalidTimestamp(t *testing.T) {
 	t.Parallel()
 
-	ins := &fakeChallengeInserter{}
-	w := NewChallengeCHWriter(testenv.NewLogger(t), ins)
+	conn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	w := NewChallengeCHWriter(testenv.NewLogger(t), conn)
 
 	id := uuid.NewString()
+	orgID := "org_" + uuid.NewString()
 	badTS := "not-a-timestamp"
 	msg := authzv1.ChallengeRow_builder{
-		Id:        &id,
-		Timestamp: &badTS,
+		Id:             &id,
+		Timestamp:      &badTS,
+		OrganizationId: &orgID,
 	}.Build()
 
-	err := w.HandleBatch(t.Context(), []*authzv1.ChallengeRow{msg}, nil)
+	require.NoError(t, w.HandleBatch(t.Context(), []*authzv1.ChallengeRow{msg}, nil))
+
+	rows, err := conn.Query(t.Context(), `
+		SELECT count() FROM authz_challenges WHERE organization_id = ?
+	`, orgID)
 	require.NoError(t, err)
-	require.Empty(t, ins.rows)
+	defer func() { _ = rows.Close() }()
+	require.True(t, rows.Next())
+	var n uint64
+	require.NoError(t, rows.Scan(&n))
+	require.Equal(t, uint64(0), n)
 }
 
 func TestChallengeCHWriter_HandleBatch_InsertErrorNacks(t *testing.T) {
 	t.Parallel()
 
-	ins := &fakeChallengeInserter{err: context.DeadlineExceeded}
-	w := NewChallengeCHWriter(testenv.NewLogger(t), ins)
+	conn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+
+	w := NewChallengeCHWriter(testenv.NewLogger(t), conn)
 
 	id := uuid.NewString()
 	ts := time.Now().UTC().Format(time.RFC3339)
@@ -109,7 +126,7 @@ func TestChallengeCHWriter_HandleBatch_InsertErrorNacks(t *testing.T) {
 		Timestamp: &ts,
 	}.Build()
 
-	err := w.HandleBatch(t.Context(), []*authzv1.ChallengeRow{msg}, nil)
+	err = w.HandleBatch(t.Context(), []*authzv1.ChallengeRow{msg}, nil)
 	require.Error(t, err)
 }
 

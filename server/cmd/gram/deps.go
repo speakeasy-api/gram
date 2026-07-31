@@ -170,7 +170,9 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		// free pool slot, so a saturated pool previously stalled request-path
 		// writers (notably authz challenges) for 30s. Keep the pool modest but
 		// fail fast on exhaustion; authz challenges now publish via Pub/Sub.
-		DialTimeout:  2 * time.Second,
+		// 5s leaves room for brief recovery after a blip without reintroducing
+		// multi-tens-of-seconds request stalls.
+		DialTimeout:  5 * time.Second,
 		MaxOpenConns: 20,
 		MaxIdleConns: 10,
 		TLS: &tls.Config{
