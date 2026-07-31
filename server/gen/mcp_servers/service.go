@@ -23,9 +23,9 @@ type Service interface {
 	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
 	// List MCP servers for a project. Accepts optional remote_mcp_server_id,
-	// tunneled_mcp_server_id, or toolset_id filters to scope the result to a
-	// single backend; at most one filter may be supplied since the backends are
-	// mutually exclusive.
+	// tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to
+	// scope the result to a single backend; at most one filter may be supplied
+	// since the backends are mutually exclusive.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
 	// List all MCP servers across the organization
 	ListMcpServersForOrg(context.Context, *ListMcpServersForOrgPayload) (res *ListMcpServersResult, err error)
@@ -180,10 +180,12 @@ type ListMcpServersPayload struct {
 	// Filter to MCP servers backed by this tunneled MCP server
 	TunneledMcpServerID *string
 	// Filter to MCP servers backed by this toolset
-	ToolsetID        *string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	ToolsetID *string
+	// Filter to MCP servers backed by this pass-through MCP server
+	PassthroughMcpServerID *string
+	SessionToken           *string
+	ApikeyToken            *string
+	ProjectSlugInput       *string
 }
 
 // ListMcpServersResult is the result type of the mcpServers service

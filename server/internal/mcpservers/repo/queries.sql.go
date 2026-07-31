@@ -456,14 +456,16 @@ WHERE project_id = $1
   AND ($2::uuid IS NULL OR remote_mcp_server_id = $2::uuid)
   AND ($3::uuid IS NULL OR tunneled_mcp_server_id = $3::uuid)
   AND ($4::uuid IS NULL OR toolset_id = $4::uuid)
+  AND ($5::uuid IS NULL OR passthrough_mcp_server_id = $5::uuid)
 ORDER BY created_at DESC
 `
 
 type ListMCPServersByProjectIDParams struct {
-	ProjectID           uuid.UUID
-	RemoteMcpServerID   uuid.NullUUID
-	TunneledMcpServerID uuid.NullUUID
-	ToolsetID           uuid.NullUUID
+	ProjectID              uuid.UUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	PassthroughMcpServerID uuid.NullUUID
 }
 
 func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
@@ -472,6 +474,7 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 		arg.RemoteMcpServerID,
 		arg.TunneledMcpServerID,
 		arg.ToolsetID,
+		arg.PassthroughMcpServerID,
 	)
 	if err != nil {
 		return nil, err

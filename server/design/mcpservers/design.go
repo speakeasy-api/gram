@@ -71,7 +71,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("listMcpServers", func() {
-		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.")
+		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.")
 
 		Payload(func() {
 			Attribute("remote_mcp_server_id", String, "Filter to MCP servers backed by this remote MCP server", func() {
@@ -81,6 +81,9 @@ var _ = Service("mcpServers", func() {
 				Format(FormatUUID)
 			})
 			Attribute("toolset_id", String, "Filter to MCP servers backed by this toolset", func() {
+				Format(FormatUUID)
+			})
+			Attribute("passthrough_mcp_server_id", String, "Filter to MCP servers backed by this pass-through MCP server", func() {
 				Format(FormatUUID)
 			})
 			security.SessionPayload()
@@ -95,6 +98,7 @@ var _ = Service("mcpServers", func() {
 			Param("remote_mcp_server_id")
 			Param("tunneled_mcp_server_id")
 			Param("toolset_id")
+			Param("passthrough_mcp_server_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

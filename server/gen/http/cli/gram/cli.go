@@ -1206,13 +1206,14 @@ func ParseEndpoint(
 		mcpServersGetMcpServerApikeyTokenFlag      = mcpServersGetMcpServerFlags.String("apikey-token", "", "")
 		mcpServersGetMcpServerProjectSlugInputFlag = mcpServersGetMcpServerFlags.String("project-slug-input", "", "")
 
-		mcpServersListMcpServersFlags                   = flag.NewFlagSet("list-mcp-servers", flag.ExitOnError)
-		mcpServersListMcpServersRemoteMcpServerIDFlag   = mcpServersListMcpServersFlags.String("remote-mcp-server-id", "", "")
-		mcpServersListMcpServersTunneledMcpServerIDFlag = mcpServersListMcpServersFlags.String("tunneled-mcp-server-id", "", "")
-		mcpServersListMcpServersToolsetIDFlag           = mcpServersListMcpServersFlags.String("toolset-id", "", "")
-		mcpServersListMcpServersSessionTokenFlag        = mcpServersListMcpServersFlags.String("session-token", "", "")
-		mcpServersListMcpServersApikeyTokenFlag         = mcpServersListMcpServersFlags.String("apikey-token", "", "")
-		mcpServersListMcpServersProjectSlugInputFlag    = mcpServersListMcpServersFlags.String("project-slug-input", "", "")
+		mcpServersListMcpServersFlags                      = flag.NewFlagSet("list-mcp-servers", flag.ExitOnError)
+		mcpServersListMcpServersRemoteMcpServerIDFlag      = mcpServersListMcpServersFlags.String("remote-mcp-server-id", "", "")
+		mcpServersListMcpServersTunneledMcpServerIDFlag    = mcpServersListMcpServersFlags.String("tunneled-mcp-server-id", "", "")
+		mcpServersListMcpServersToolsetIDFlag              = mcpServersListMcpServersFlags.String("toolset-id", "", "")
+		mcpServersListMcpServersPassthroughMcpServerIDFlag = mcpServersListMcpServersFlags.String("passthrough-mcp-server-id", "", "")
+		mcpServersListMcpServersSessionTokenFlag           = mcpServersListMcpServersFlags.String("session-token", "", "")
+		mcpServersListMcpServersApikeyTokenFlag            = mcpServersListMcpServersFlags.String("apikey-token", "", "")
+		mcpServersListMcpServersProjectSlugInputFlag       = mcpServersListMcpServersFlags.String("project-slug-input", "", "")
 
 		mcpServersListMcpServersForOrgFlags            = flag.NewFlagSet("list-mcp-servers-for-org", flag.ExitOnError)
 		mcpServersListMcpServersForOrgSessionTokenFlag = mcpServersListMcpServersForOrgFlags.String("session-token", "", "")
@@ -6353,7 +6354,7 @@ func ParseEndpoint(
 				data, err = mcpserversc.BuildGetMcpServerPayload(*mcpServersGetMcpServerIDFlag, *mcpServersGetMcpServerSlugFlag, *mcpServersGetMcpServerSessionTokenFlag, *mcpServersGetMcpServerApikeyTokenFlag, *mcpServersGetMcpServerProjectSlugInputFlag)
 			case "list-mcp-servers":
 				endpoint = c.ListMcpServers()
-				data, err = mcpserversc.BuildListMcpServersPayload(*mcpServersListMcpServersRemoteMcpServerIDFlag, *mcpServersListMcpServersTunneledMcpServerIDFlag, *mcpServersListMcpServersToolsetIDFlag, *mcpServersListMcpServersSessionTokenFlag, *mcpServersListMcpServersApikeyTokenFlag, *mcpServersListMcpServersProjectSlugInputFlag)
+				data, err = mcpserversc.BuildListMcpServersPayload(*mcpServersListMcpServersRemoteMcpServerIDFlag, *mcpServersListMcpServersTunneledMcpServerIDFlag, *mcpServersListMcpServersToolsetIDFlag, *mcpServersListMcpServersPassthroughMcpServerIDFlag, *mcpServersListMcpServersSessionTokenFlag, *mcpServersListMcpServersApikeyTokenFlag, *mcpServersListMcpServersProjectSlugInputFlag)
 			case "list-mcp-servers-for-org":
 				endpoint = c.ListMcpServersForOrg()
 				data, err = mcpserversc.BuildListMcpServersForOrgPayload(*mcpServersListMcpServersForOrgSessionTokenFlag)
@@ -12044,7 +12045,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-mcp-server: Create a new MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.`)
-	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers-for-org: List all MCP servers across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.`)
 	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
@@ -12114,6 +12115,7 @@ func mcpServersListMcpServersUsage() {
 	fmt.Fprint(os.Stderr, " -remote-mcp-server-id STRING")
 	fmt.Fprint(os.Stderr, " -tunneled-mcp-server-id STRING")
 	fmt.Fprint(os.Stderr, " -toolset-id STRING")
+	fmt.Fprint(os.Stderr, " -passthrough-mcp-server-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -12121,19 +12123,20 @@ func mcpServersListMcpServersUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
+	fmt.Fprintln(os.Stderr, `List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -remote-mcp-server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -tunneled-mcp-server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -passthrough-mcp-server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-mcp-servers --remote-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --tunneled-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-mcp-servers --remote-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --tunneled-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --passthrough-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersListMcpServersForOrgUsage() {

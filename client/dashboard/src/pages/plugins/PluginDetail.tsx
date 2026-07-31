@@ -138,15 +138,22 @@ export default function PluginDetail(): JSX.Element | null {
     useMcpEndpoints({});
   const mcpServers = useMemo(
     () =>
-      (mcpServersData?.mcpServers ?? []).filter((s) => !!s.remoteMcpServerId),
+      (mcpServersData?.mcpServers ?? []).filter(
+        (s) => !!s.remoteMcpServerId || !!s.passthroughMcpServerId,
+      ),
     [mcpServersData],
   );
   const publishableMcpServers = useMemo(() => {
     const serverIdsWithEndpoint = new Set(
       (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
     );
+    // Pass-through-backed servers are never proxied, so they never gain an
+    // mcp_endpoints row — exempt them from the endpoint requirement, mirroring
+    // the backend's AddPluginServer check (server/internal/plugins/impl.go).
     return mcpServers.filter(
-      (s) => s.visibility !== "disabled" && serverIdsWithEndpoint.has(s.id),
+      (s) =>
+        s.visibility !== "disabled" &&
+        (serverIdsWithEndpoint.has(s.id) || !!s.passthroughMcpServerId),
     );
   }, [mcpServers, mcpEndpointsData]);
 

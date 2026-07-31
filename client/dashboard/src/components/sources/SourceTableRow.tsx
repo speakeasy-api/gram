@@ -19,7 +19,25 @@ const sourceTypeConfig = {
   externalmcp: { label: "Catalog" },
   remotemcp: { label: "Remote MCP" },
   tunneledmcp: { label: "Tunneled MCP" },
+  passthroughmcp: { label: "Pass-through MCP" },
 };
+
+// sourceRowDisplayName mirrors [sourceCardNameAndSubtitle] in SourceCard.tsx:
+// a flat switch instead of a nested ternary for source types whose display
+// name falls back to a URL when unnamed.
+function sourceRowDisplayName(asset: NamedAsset): string | undefined {
+  switch (asset.type) {
+    case "remotemcp":
+    case "passthroughmcp":
+      return formatRemoteMcpDisplay(asset);
+    case "tunneledmcp":
+      return formatTunneledMcpDisplay(asset);
+    case "openapi":
+    case "function":
+    case "externalmcp":
+      return asset.name;
+  }
+}
 
 function formatDate(date: Date | undefined) {
   if (!date) return "—";
@@ -61,7 +79,9 @@ export function SourceTableRow({
   const updatedAt = "updatedAt" in asset ? asset.updatedAt : undefined;
 
   const actions =
-    asset.type === "remotemcp" || asset.type === "tunneledmcp"
+    asset.type === "remotemcp" ||
+    asset.type === "tunneledmcp" ||
+    asset.type === "passthroughmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -111,19 +131,15 @@ export function SourceTableRow({
     if (
       asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
-      asset.type === "tunneledmcp"
+      asset.type === "tunneledmcp" ||
+      asset.type === "passthroughmcp"
     ) {
       return <Network className="text-muted-foreground h-5 w-5" />;
     }
     return <FileCode className="text-muted-foreground h-5 w-5" />;
   })();
 
-  const displayName =
-    asset.type === "remotemcp"
-      ? formatRemoteMcpDisplay(asset)
-      : asset.type === "tunneledmcp"
-        ? formatTunneledMcpDisplay(asset)
-        : asset.name;
+  const displayName = sourceRowDisplayName(asset);
 
   return (
     <TableRowContextMenu actions={actions}>

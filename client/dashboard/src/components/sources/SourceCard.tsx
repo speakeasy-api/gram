@@ -54,7 +54,52 @@ export type NamedAsset =
       type: "tunneledmcp";
       createdAt?: Date;
       updatedAt?: Date;
+    }
+  | {
+      id: string;
+      deploymentAssetId: string;
+      slug: string;
+      name?: string | null;
+      url: string;
+      type: "passthroughmcp";
     };
+
+// sourceCardNameAndSubtitle centralizes the "what to render" logic for
+// source types whose display name falls back to a URL when unnamed
+// (remotemcp, passthroughmcp), keeping the branching out of the component
+// body as a flat switch instead of a nested ternary.
+function sourceCardNameAndSubtitle(asset: NamedAsset): {
+  displayName: string | undefined;
+  displaySubtitle: string | undefined;
+} {
+  switch (asset.type) {
+    case "remotemcp": {
+      const urlDisplay = formatRemoteMcpUrlForDisplay(asset.url);
+      const trimmedName = asset.name?.trim();
+      return {
+        displayName: trimmedName || urlDisplay || "",
+        displaySubtitle: trimmedName ? urlDisplay : undefined,
+      };
+    }
+    case "passthroughmcp": {
+      const urlDisplay = formatRemoteMcpUrlForDisplay(asset.url);
+      const trimmedName = asset.name?.trim();
+      return {
+        displayName: trimmedName || urlDisplay || "",
+        displaySubtitle: trimmedName ? urlDisplay : undefined,
+      };
+    }
+    case "tunneledmcp":
+      return {
+        displayName: formatTunneledMcpDisplay(asset),
+        displaySubtitle: undefined,
+      };
+    case "openapi":
+    case "function":
+    case "externalmcp":
+      return { displayName: asset.name, displaySubtitle: undefined };
+  }
+}
 
 const sourceTypeConfig = {
   openapi: {
@@ -71,6 +116,9 @@ const sourceTypeConfig = {
   },
   tunneledmcp: {
     label: "Tunneled MCP",
+  },
+  passthroughmcp: {
+    label: "Pass-through MCP",
   },
 };
 
@@ -100,9 +148,12 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  // Remote/tunneled MCP deletion lives in Settings because it touches linked server/endpoint state.
+  // Remote/tunneled/pass-through MCP deletion lives in Settings because it
+  // touches linked server/endpoint state.
   const actions =
-    asset.type === "remotemcp" || asset.type === "tunneledmcp"
+    asset.type === "remotemcp" ||
+    asset.type === "tunneledmcp" ||
+    asset.type === "passthroughmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -139,22 +190,7 @@ export function SourceCard({
           },
         ];
 
-  const remoteMcpUrlDisplay =
-    asset.type === "remotemcp"
-      ? formatRemoteMcpUrlForDisplay(asset.url)
-      : undefined;
-  const remoteMcpTrimmedName =
-    asset.type === "remotemcp" ? asset.name?.trim() : undefined;
-  const displayName =
-    asset.type === "remotemcp"
-      ? remoteMcpTrimmedName || remoteMcpUrlDisplay || ""
-      : asset.type === "tunneledmcp"
-        ? formatTunneledMcpDisplay(asset)
-        : asset.name;
-  const displaySubtitle =
-    asset.type === "remotemcp" && remoteMcpTrimmedName
-      ? remoteMcpUrlDisplay
-      : undefined;
+  const { displayName, displaySubtitle } = sourceCardNameAndSubtitle(asset);
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {
@@ -169,7 +205,8 @@ export function SourceCard({
     if (
       asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
-      asset.type === "tunneledmcp"
+      asset.type === "tunneledmcp" ||
+      asset.type === "passthroughmcp"
     ) {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }

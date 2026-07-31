@@ -511,13 +511,14 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*mcpservers.ListMcpServersPayload, error) {
 		var payload *mcpservers.ListMcpServersPayload
 		var (
-			remoteMcpServerID   *string
-			tunneledMcpServerID *string
-			toolsetID           *string
-			sessionToken        *string
-			apikeyToken         *string
-			projectSlugInput    *string
-			err                 error
+			remoteMcpServerID      *string
+			tunneledMcpServerID    *string
+			toolsetID              *string
+			passthroughMcpServerID *string
+			sessionToken           *string
+			apikeyToken            *string
+			projectSlugInput       *string
+			err                    error
 		)
 		qp := r.URL.Query()
 		remoteMcpServerIDRaw := qp.Get("remote_mcp_server_id")
@@ -541,6 +542,13 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if toolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
 		}
+		passthroughMcpServerIDRaw := qp.Get("passthrough_mcp_server_id")
+		if passthroughMcpServerIDRaw != "" {
+			passthroughMcpServerID = &passthroughMcpServerIDRaw
+		}
+		if passthroughMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("passthrough_mcp_server_id", *passthroughMcpServerID, goa.FormatUUID))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -556,7 +564,7 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListMcpServersPayload(remoteMcpServerID, tunneledMcpServerID, toolsetID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListMcpServersPayload(remoteMcpServerID, tunneledMcpServerID, toolsetID, passthroughMcpServerID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

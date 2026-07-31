@@ -382,15 +382,20 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, logger)
 	}
-	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) > 1 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id may be provided").LogWarn(ctx, logger)
+	passthroughMcpServerID, err := conv.PtrToNullUUID(payload.PassthroughMcpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid passthrough_mcp_server_id").LogError(ctx, logger)
+	}
+	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID, passthroughMcpServerID) > 1 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id may be provided").LogWarn(ctx, logger)
 	}
 
 	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
-		ProjectID:           *authCtx.ProjectID,
-		RemoteMcpServerID:   remoteMcpServerID,
-		TunneledMcpServerID: tunneledMcpServerID,
-		ToolsetID:           toolsetID,
+		ProjectID:              *authCtx.ProjectID,
+		RemoteMcpServerID:      remoteMcpServerID,
+		TunneledMcpServerID:    tunneledMcpServerID,
+		ToolsetID:              toolsetID,
+		PassthroughMcpServerID: passthroughMcpServerID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)

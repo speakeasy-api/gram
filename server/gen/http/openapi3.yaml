@@ -20057,7 +20057,7 @@ paths:
                 name: GetMcpServer
     /rpc/mcpServers.list:
         get:
-            description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+            description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
             operationId: listMcpServers
             parameters:
                 - allowEmptyValue: true
@@ -20082,6 +20082,14 @@ paths:
                   name: toolset_id
                   schema:
                     description: Filter to MCP servers backed by this toolset
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to MCP servers backed by this pass-through MCP server
+                  in: query
+                  name: passthrough_mcp_server_id
+                  schema:
+                    description: Filter to MCP servers backed by this pass-through MCP server
                     format: uuid
                     type: string
                 - allowEmptyValue: true

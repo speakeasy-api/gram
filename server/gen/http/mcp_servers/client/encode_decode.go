@@ -553,6 +553,9 @@ func EncodeListMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.ToolsetID != nil {
 			values.Add("toolset_id", *p.ToolsetID)
 		}
+		if p.PassthroughMcpServerID != nil {
+			values.Add("passthrough_mcp_server_id", *p.PassthroughMcpServerID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

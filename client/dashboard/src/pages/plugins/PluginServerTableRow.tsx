@@ -39,8 +39,14 @@ export function PluginServerTableRow({
     href = routes.mcp.details.href(toolset.slug);
   }
 
+  const isPassthrough = !!mcpServer?.passthroughMcpServerId;
+
   let typeContent: JSX.Element;
-  if (isRemote) {
+  if (isPassthrough) {
+    typeContent = (
+      <Badge variant="neutral">Pass-through MCP · Not proxied</Badge>
+    );
+  } else if (isRemote) {
     typeContent = <Badge variant="neutral">Remote MCP</Badge>;
   } else if (toolset) {
     typeContent = (

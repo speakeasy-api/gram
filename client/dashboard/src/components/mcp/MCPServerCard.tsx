@@ -34,6 +34,9 @@ export function MCPServerCard({
 
   const mcpEnabled = server.visibility !== "disabled";
   const mcpIsPublic = server.visibility === "public";
+  // Pass-through servers are never proxied, so an endpoint count would always
+  // read 0 and imply something's broken. Surface the backend kind instead.
+  const isPassthrough = !!server.passthroughMcpServerId;
 
   return (
     <Link
@@ -53,7 +56,9 @@ export function MCPServerCard({
           </Text>
           <Badge variant="neutral" className="bg-card">
             <Badge.Text>
-              {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
+              {isPassthrough
+                ? "Not proxied"
+                : `${endpointCount} ${endpointCount === 1 ? "endpoint" : "endpoints"}`}
             </Badge.Text>
           </Badge>
         </div>

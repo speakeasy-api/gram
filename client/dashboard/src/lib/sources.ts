@@ -10,13 +10,15 @@ export type SourceType =
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunneledmcp";
+  | "tunneledmcp"
+  | "passthroughmcp";
 export type UrnKind =
   | "http"
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunneledmcp";
+  | "tunneledmcp"
+  | "passthroughmcp";
 
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
@@ -24,6 +26,7 @@ const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
+  passthroughmcp: "passthroughmcp",
 };
 
 const urnToSourceType: Record<UrnKind, SourceType> = {
@@ -32,6 +35,7 @@ const urnToSourceType: Record<UrnKind, SourceType> = {
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
+  passthroughmcp: "passthroughmcp",
 };
 
 export function sourceTypeToUrnKind(type: SourceType): UrnKind {
@@ -164,6 +168,15 @@ export function tunneledMcpRouteParam(server: { id: string }): string {
   return server.id;
 }
 
+// passthroughMcpRouteParam mirrors [remoteMcpRouteParam] for pass-through MCP
+// servers.
+export function passthroughMcpRouteParam(server: {
+  id: string;
+  slug?: string | null | undefined;
+}): string {
+  return server.slug?.trim() || server.id;
+}
+
 // mcpServerRouteParam returns the value to embed in dashboard URLs for an
 // mcp_server row. Mirrors remoteMcpRouteParam: prefers the slug for
 // human-friendly URLs and falls back to the ID. The server's getMcpServer
@@ -199,6 +212,18 @@ export function getRemoteMcpServerArgs(idOrSlug: string): {
 
 export function getTunneledMcpServerArgs(id: string): { id: string } {
   return { id };
+}
+
+// getPassthroughMcpServerArgs mirrors [getRemoteMcpServerArgs] for
+// pass-through MCP servers.
+export function getPassthroughMcpServerArgs(idOrSlug: string): {
+  id?: string;
+  slug?: string;
+} {
+  if (uuidRegex.test(idOrSlug)) {
+    return { id: idOrSlug };
+  }
+  return { slug: idOrSlug };
 }
 
 // getMcpServerArgs maps a route-param string into the request shape that

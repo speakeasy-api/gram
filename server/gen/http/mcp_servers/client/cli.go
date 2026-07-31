@@ -137,7 +137,7 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 
 // BuildListMcpServersPayload builds the payload for the mcpServers
 // listMcpServers endpoint from CLI flags.
-func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
+func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersPassthroughMcpServerID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
 	var err error
 	var remoteMcpServerID *string
 	{
@@ -169,6 +169,16 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 			}
 		}
 	}
+	var passthroughMcpServerID *string
+	{
+		if mcpServersListMcpServersPassthroughMcpServerID != "" {
+			passthroughMcpServerID = &mcpServersListMcpServersPassthroughMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("passthrough_mcp_server_id", *passthroughMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if mcpServersListMcpServersSessionToken != "" {
@@ -191,6 +201,7 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 	v.RemoteMcpServerID = remoteMcpServerID
 	v.TunneledMcpServerID = tunneledMcpServerID
 	v.ToolsetID = toolsetID
+	v.PassthroughMcpServerID = passthroughMcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

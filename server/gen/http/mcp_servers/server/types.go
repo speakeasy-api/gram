@@ -4625,11 +4625,12 @@ func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apik
 
 // NewListMcpServersPayload builds a mcpServers service listMcpServers endpoint
 // payload.
-func NewListMcpServersPayload(remoteMcpServerID *string, tunneledMcpServerID *string, toolsetID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListMcpServersPayload {
+func NewListMcpServersPayload(remoteMcpServerID *string, tunneledMcpServerID *string, toolsetID *string, passthroughMcpServerID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListMcpServersPayload {
 	v := &mcpservers.ListMcpServersPayload{}
 	v.RemoteMcpServerID = remoteMcpServerID
 	v.TunneledMcpServerID = tunneledMcpServerID
 	v.ToolsetID = toolsetID
+	v.PassthroughMcpServerID = passthroughMcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

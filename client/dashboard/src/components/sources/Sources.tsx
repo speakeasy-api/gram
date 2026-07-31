@@ -4,11 +4,13 @@ import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
 import {
   attachmentToURNPrefix,
+  passthroughMcpRouteParam,
   remoteMcpRouteParam,
   tunneledMcpRouteParam,
 } from "@/lib/sources";
@@ -19,6 +21,7 @@ import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { usePassthroughMcpServers } from "@gram/client/react-query/passthroughMcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import {
@@ -109,6 +112,7 @@ export default function Sources(): JSX.Element {
     telemetry.isFeatureEnabled("gram-functions") ?? false;
   const isTunneledMcpEnabled =
     telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) ?? false;
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
 
   const {
     data: deploymentResult,
@@ -122,12 +126,18 @@ export default function Sources(): JSX.Element {
     useTunneledMcpServers(undefined, undefined, {
       enabled: isTunneledMcpEnabled,
     });
+  const {
+    data: passthroughMcpServersResult,
+    isLoading: isLoadingPassthroughMcp,
+  } = usePassthroughMcpServers();
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
-  // Remote/tunneled sources bypass deployments, so page loading waits on their own queries.
+  // Remote/tunneled/pass-through sources bypass deployments, so page loading
+  // waits on their own queries.
   const isLoading =
     isLoadingDeployment ||
     isLoadingRemoteMcp ||
+    isLoadingPassthroughMcp ||
     (isTunneledMcpEnabled && isLoadingTunneledMcp);
 
   const [viewMode, setViewMode] = useViewMode();
@@ -232,12 +242,24 @@ export default function Sources(): JSX.Element {
         }))
       : [];
 
+    const passthroughMcpSources: NamedAsset[] = (
+      passthroughMcpServersResult?.passthroughMcpServers ?? []
+    ).map((server) => ({
+      id: server.id,
+      deploymentAssetId: server.id,
+      slug: passthroughMcpRouteParam(server),
+      name: server.name,
+      url: server.url,
+      type: "passthroughmcp" as const,
+    }));
+
     return [
       ...openApiSources,
       ...functionSources,
       ...externalMcpSources,
       ...remoteMcpSources,
       ...tunneledMcpSources,
+      ...passthroughMcpSources,
     ];
   }, [
     deployment,
@@ -245,6 +267,7 @@ export default function Sources(): JSX.Element {
     catalogIconMap,
     remoteMcpServersResult,
     tunneledMcpServersResult,
+    passthroughMcpServersResult,
     isTunneledMcpEnabled,
   ]);
 
@@ -340,7 +363,8 @@ export default function Sources(): JSX.Element {
           <Dialog.Content className="max-w-2xl!">
             {dialogState.type === "remove-source" &&
               dialogState.asset.type !== "remotemcp" &&
-              dialogState.asset.type !== "tunneledmcp" && (
+              dialogState.asset.type !== "tunneledmcp" &&
+              dialogState.asset.type !== "passthroughmcp" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}
                   onConfirmRemoval={removeSource}
@@ -464,6 +488,25 @@ export default function Sources(): JSX.Element {
                         </div>
                       </DropdownMenuItem>
                     )}
+                    {isSpeakeasyStaff && (
+                      <DropdownMenuItem
+                        onSelect={() => routes.sources.addPassthroughMcp.goTo()}
+                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 dark:bg-amber-500/20">
+                          <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">
+                            Pass-through MCP Server
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            List a vendor server without proxying it (Speakeasy
+                            staff only)
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>
@@ -564,7 +607,8 @@ export default function Sources(): JSX.Element {
             >
               {dialogState.type === "remove-source" &&
                 dialogState.asset.type !== "remotemcp" &&
-                dialogState.asset.type !== "tunneledmcp" && (
+                dialogState.asset.type !== "tunneledmcp" &&
+                dialogState.asset.type !== "passthroughmcp" && (
                   <RemoveSourceDialogContent
                     asset={dialogState.asset}
                     onConfirmRemoval={removeSource}
@@ -580,7 +624,8 @@ export default function Sources(): JSX.Element {
               )}
               {dialogState.type === "view-asset" &&
                 dialogState.asset.type !== "remotemcp" &&
-                dialogState.asset.type !== "tunneledmcp" && (
+                dialogState.asset.type !== "tunneledmcp" &&
+                dialogState.asset.type !== "passthroughmcp" && (
                   <ViewAssetDialogContent asset={dialogState.asset} />
                 )}
             </Dialog.Content>
@@ -594,18 +639,19 @@ export default function Sources(): JSX.Element {
 interface McpUsage {
   /** Every tool URN exposed by any toolset (Hosted MCP server). */
   toolsetToolUrns: string[];
-  /** IDs of remote/tunneled MCP servers that have an mcp_server row. */
+  /** IDs of remote/tunneled/pass-through MCP servers that have an mcp_server row. */
   remoteMcpServerIds: Set<string>;
   tunneledMcpServerIds: Set<string>;
+  passthroughMcpServerIds: Set<string>;
 }
 
 /**
  * A source counts as "used in an MCP server" through one of two paths, because
  * the two kinds of MCP server are backed differently. Deployment-bound sources
  * (OpenAPI / functions / catalog) contribute tools, so they're used when some
- * toolset references a tool URN under their prefix. Remote and tunneled
- * sources contribute no tools; they're used when an mcp_server row points back
- * at them.
+ * toolset references a tool URN under their prefix. Remote, tunneled, and
+ * pass-through sources contribute no tools; they're used when an mcp_server
+ * row points back at them.
  */
 function useMcpUsage(): McpUsage {
   const gramProject = useProjectSlugForRequests();
@@ -620,6 +666,7 @@ function useMcpUsage(): McpUsage {
     );
     const remoteMcpServerIds = new Set<string>();
     const tunneledMcpServerIds = new Set<string>();
+    const passthroughMcpServerIds = new Set<string>();
     for (const server of mcpServersResult?.mcpServers ?? []) {
       if (server.remoteMcpServerId) {
         remoteMcpServerIds.add(server.remoteMcpServerId);
@@ -627,8 +674,16 @@ function useMcpUsage(): McpUsage {
       if (server.tunneledMcpServerId) {
         tunneledMcpServerIds.add(server.tunneledMcpServerId);
       }
+      if (server.passthroughMcpServerId) {
+        passthroughMcpServerIds.add(server.passthroughMcpServerId);
+      }
     }
-    return { toolsetToolUrns, remoteMcpServerIds, tunneledMcpServerIds };
+    return {
+      toolsetToolUrns,
+      remoteMcpServerIds,
+      tunneledMcpServerIds,
+      passthroughMcpServerIds,
+    };
   }, [toolsetsData, mcpServersResult]);
 }
 
@@ -638,6 +693,9 @@ function sourceUsedInMcp(asset: NamedAsset, usage: McpUsage): boolean {
   }
   if (asset.type === "tunneledmcp") {
     return usage.tunneledMcpServerIds.has(asset.id);
+  }
+  if (asset.type === "passthroughmcp") {
+    return usage.passthroughMcpServerIds.has(asset.id);
   }
   const prefix = attachmentToURNPrefix(asset.type, asset.slug);
   return usage.toolsetToolUrns.some((urn) => urn.startsWith(prefix));
