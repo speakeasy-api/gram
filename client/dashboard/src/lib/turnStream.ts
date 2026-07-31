@@ -180,7 +180,16 @@ export async function streamTurn(args: {
             case "text": {
               if (!frame.text) break;
               openStep();
-              sawTextThisMessage = true;
+              // assistant-ui addresses text parts by id and rejects a delta
+              // for a part it has not been told about, so each part is opened
+              // before its first delta and closed when the row lands.
+              if (!sawTextThisMessage) {
+                writer.write({
+                  type: "text-start",
+                  id: `turn-${chatId}-${messageIndex}`,
+                });
+                sawTextThisMessage = true;
+              }
               writer.write({
                 type: "text-delta",
                 id: `turn-${chatId}-${messageIndex}`,
@@ -209,7 +218,13 @@ export async function streamTurn(args: {
                   input: call.input,
                 });
               }
-              if (sawTextThisMessage) messageIndex++;
+              if (sawTextThisMessage) {
+                writer.write({
+                  type: "text-end",
+                  id: `turn-${chatId}-${messageIndex}`,
+                });
+                messageIndex++;
+              }
               sawTextThisMessage = false;
               break;
             }
@@ -240,6 +255,10 @@ export async function streamTurn(args: {
       await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
     }
   } finally {
+    if (sawTextThisMessage) {
+      writer.write({ type: "text-end", id: `turn-${chatId}-${messageIndex}` });
+      sawTextThisMessage = false;
+    }
     closeStep();
   }
 }
