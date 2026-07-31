@@ -24660,7 +24660,7 @@ paths:
                 name: UpdateInviteRole
     /rpc/organizations.verifyOnboardingHooksSetup:
         get:
-            description: Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+            description: Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
             operationId: verifyOnboardingHooksSetup
             parameters:
                 - allowEmptyValue: true

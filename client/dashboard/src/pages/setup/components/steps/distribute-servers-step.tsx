@@ -616,8 +616,8 @@ export function DistributeServersStep({
                     <p className="text-muted-foreground text-xs leading-relaxed">
                       Push the marketplace to every developer through Claude
                       Code Managed Settings — no per-user install command
-                      required. The full guide also covers Claude Cowork,
-                      Cursor, and Codex.
+                      required. The full guide also covers the other supported
+                      platforms.
                     </p>
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}
