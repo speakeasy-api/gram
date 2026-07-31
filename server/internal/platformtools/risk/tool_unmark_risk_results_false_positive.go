@@ -15,7 +15,7 @@ type UnmarkRiskResultsFalsePositive struct {
 }
 
 type unmarkRiskResultsFalsePositiveInput struct {
-	ResultIDs []string `json:"result_ids" jsonschema:"IDs of the dismissed risk results to restore. Max 500."`
+	ResultIDs []string `json:"result_ids" jsonschema:"IDs of the dismissed risk results to restore. Max 500 per call. IDs that don't exist or belong to another project are skipped without error."`
 }
 
 func NewUnmarkRiskResultsFalsePositiveTool(riskSvc RiskService) *UnmarkRiskResultsFalsePositive {
@@ -31,7 +31,9 @@ func (s *UnmarkRiskResultsFalsePositive) Descriptor() core.ToolDescriptor {
 		HandlerName: "unmark_risk_results_false_positive",
 		Name:        "platform_unmark_risk_false_positive",
 		Description: "Undo a false-positive dismissal, returning the findings to the active results list.",
-		InputSchema: core.BuildInputSchema[unmarkRiskResultsFalsePositiveInput](),
+		InputSchema: core.BuildInputSchema[unmarkRiskResultsFalsePositiveInput](
+			core.WithPropertyItemsRange("result_ids", 1, maxFalsePositiveBatch),
+		),
 		Variables:   nil,
 		Annotations: writeAnnotations(destructive, idempotent),
 		Managed:     true,
@@ -62,5 +64,5 @@ func (s *UnmarkRiskResultsFalsePositive) Call(ctx context.Context, _ toolconfig.
 		return fmt.Errorf("unmark risk results false positive: %w", err)
 	}
 
-	return core.EncodeResult(wr, falsePositiveResult(input))
+	return core.EncodeResult(wr, falsePositiveResult{RequestedResultIDs: input.ResultIDs})
 }

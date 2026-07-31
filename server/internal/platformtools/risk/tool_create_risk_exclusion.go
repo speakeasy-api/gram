@@ -101,5 +101,7 @@ func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		return fmt.Errorf("create risk exclusion: %w", err)
 	}
 
-	return core.EncodeResult(wr, result)
+	// Same view as the listing so the two tools agree on shape. The model
+	// supplied this match_value itself, so nothing new is hidden from it.
+	return core.EncodeResult(wr, toExclusionView(result))
 }
