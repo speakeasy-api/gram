@@ -95,8 +95,10 @@ function TabbedCostsPage({
             onValueChange={(value) => setActiveTab(value as CostsTab)}
             className="min-h-0 flex-1 gap-0"
           >
-            <div className="mx-auto w-full max-w-7xl px-8 pt-6">
-              <div className="border-b">
+            {/* Full-bleed border so the hairline matches the full-width
+                explorer header below; tabs stay aligned to the content column. */}
+            <div className="border-border w-full border-b pt-6">
+              <div className="mx-auto w-full max-w-7xl px-8">
                 <PageTabsList>
                   <PageTabsTrigger value="costs">Costs</PageTabsTrigger>
                   <PageTabsTrigger
