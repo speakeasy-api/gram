@@ -996,6 +996,7 @@ func unmarshalUserSessionResponseBodyToTypesUserSession(v *UserSessionResponseBo
 		UpdatedAt:           *v.UpdatedAt,
 		IssuerSlug:          *v.IssuerSlug,
 		ClientName:          v.ClientName,
+		ClientIDMetadataURI: v.ClientIDMetadataURI,
 		SubjectType:         *v.SubjectType,
 		SubjectDisplayName:  v.SubjectDisplayName,
 		RevokedAt:           v.RevokedAt,

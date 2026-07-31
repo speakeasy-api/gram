@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -85,6 +86,59 @@ func TestListUserSessionClients_FilterByIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got.Items, 1)
 	require.Equal(t, issuerA.ID, got.Items[0].UserSessionIssuerID)
+}
+
+// client_id_metadata_uri is the CIMD/DCR discriminator the dashboard renders
+// its source badge from, so the view has to carry it faithfully in both
+// directions: set (and equal to client_id) for a CIMD row, nil for a DCR row.
+func TestListUserSessionClients_ClientIDMetadataURI(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "cimd-source-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+
+	dcrClient, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, "dcr-client")
+	require.NoError(t, err)
+
+	const documentURL = "https://client.example.com/oauth-client.json"
+	cimdClient, err := seedCimdUserSessionClient(t, ctx, ti.conn, issuerID, documentURL)
+	require.NoError(t, err)
+
+	got, err := ti.service.ListUserSessionClients(ctx, &gen.ListUserSessionClientsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		UserSessionIssuerID: &issuer.ID,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 2)
+
+	byID := make(map[string]*types.UserSessionClient, len(got.Items))
+	for _, item := range got.Items {
+		byID[item.ID] = item
+	}
+
+	gotDCR := byID[dcrClient.ID.String()]
+	require.NotNil(t, gotDCR)
+	require.Nil(t, gotDCR.ClientIDMetadataURI, "a DCR row must not advertise a metadata document")
+
+	gotCIMD := byID[cimdClient.ID.String()]
+	require.NotNil(t, gotCIMD)
+	require.NotNil(t, gotCIMD.ClientIDMetadataURI)
+	require.Equal(t, documentURL, *gotCIMD.ClientIDMetadataURI)
+	require.Equal(t, gotCIMD.ClientID, *gotCIMD.ClientIDMetadataURI, "for a CIMD row the document URL is the client_id")
 }
 
 func TestListUserSessionClients_RBACForbidden(t *testing.T) {

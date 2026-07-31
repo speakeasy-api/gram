@@ -30,6 +30,7 @@ import {
   KeyRound,
   LayoutDashboard,
   MessageSquareText,
+  Plug,
   Settings as SettingsIcon,
   Users,
   Wrench,
@@ -127,6 +128,13 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       Icon: MessageSquareText,
       href: mcpDetailTabHref(routes, toolsetSlug, "prompts"),
       active: activeTab === "prompts",
+    },
+    {
+      key: "sessions",
+      title: "Clients and Sessions",
+      Icon: Plug,
+      href: mcpDetailTabHref(routes, toolsetSlug, "sessions"),
+      active: activeTab === "sessions",
     },
     {
       key: "settings",
