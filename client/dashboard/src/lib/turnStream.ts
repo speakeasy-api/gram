@@ -99,6 +99,10 @@ export async function streamTurn(args: {
   // Whether the open step already carries a row, so the next row knows to
   // close it rather than sharing.
   let stepHasMessage = false;
+  // Tool calls announced but not yet answered. assistant-ui re-sends a turn
+  // whose last step holds an unresolved call, so any still outstanding when
+  // the turn ends are closed out rather than left to trigger that.
+  const pendingToolCalls = new Set<string>();
 
   const closeStep = () => {
     if (stepOpen) {
@@ -241,6 +245,7 @@ export async function streamTurn(args: {
                   toolName: call.name,
                   input: call.input,
                 });
+                pendingToolCalls.add(call.id);
               }
               break;
             }
@@ -251,6 +256,7 @@ export async function streamTurn(args: {
                 toolCallId: frame.tool_call_id,
                 output: frame.output ?? "",
               });
+              pendingToolCalls.delete(frame.tool_call_id);
               break;
             }
             case "done": {
@@ -275,6 +281,16 @@ export async function streamTurn(args: {
       await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
     }
   } finally {
+    // A turn that ended without an output for some call would otherwise be
+    // re-sent by assistant-ui's resume check.
+    for (const id of pendingToolCalls) {
+      writer.write({
+        type: "tool-output-available",
+        toolCallId: id,
+        output: "",
+      });
+    }
+    pendingToolCalls.clear();
     if (sawTextThisMessage) {
       writer.write({ type: "text-end", id: `turn-${chatId}-${messageIndex}` });
       sawTextThisMessage = false;

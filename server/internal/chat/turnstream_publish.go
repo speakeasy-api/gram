@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -53,6 +54,21 @@ func (w *ChatMessageWriter) publishTurnFrames(
 	}
 
 	for _, msg := range assistants {
+		// Tool rows reach this slice too, and skipping them left their calls
+		// unresolved on the client: assistant-ui's resume check sees a step
+		// holding a tool call with no output and re-sends a turn the server
+		// already finished, which is what produced a second sendMessage and a
+		// spinner that outlived the reply.
+		if msg.Role == "tool" {
+			if msg.ToolCallID.Valid && msg.ToolCallID.String != "" {
+				w.publishTurnFrame(ctx, msg.ChatID, TurnFrame{
+					Kind: TurnFrameToolOutput, Cursor: "", Text: "", MessageID: "",
+					ToolCalls: nil, FinishReason: "", ToolCallID: msg.ToolCallID.String,
+					Output: json.RawMessage(strconv.Quote(msg.Content)),
+				})
+			}
+			continue
+		}
 		if msg.Role != "assistant" {
 			continue
 		}
