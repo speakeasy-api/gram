@@ -34,6 +34,7 @@ export function InspectTab({
       {mcpServer.unproxiedMcpServerId ? (
         <UnproxiedMcpToolsSection
           unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
+          isDisabled={mcpServer.visibility === "disabled"}
         />
       ) : (
         <RemoteMcpToolsSection

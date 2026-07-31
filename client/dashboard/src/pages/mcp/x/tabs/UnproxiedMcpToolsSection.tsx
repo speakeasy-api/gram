@@ -4,14 +4,19 @@ import { useUnproxiedMcpServerTools } from "@gram/client/react-query/unproxiedMc
 
 type UnproxiedMcpToolsSectionProps = {
   unproxiedMcpServerId: string;
+  /** Disabled servers cannot serve MCP requests, so skip the live probe. */
+  isDisabled: boolean;
 };
 
 export function UnproxiedMcpToolsSection({
   unproxiedMcpServerId,
+  isDisabled,
 }: UnproxiedMcpToolsSectionProps): JSX.Element {
-  const { data, isLoading } = useUnproxiedMcpServerTools({
-    id: unproxiedMcpServerId,
-  });
+  const { data, isLoading } = useUnproxiedMcpServerTools(
+    { id: unproxiedMcpServerId },
+    undefined,
+    { enabled: !isDisabled, throwOnError: false },
+  );
 
   return (
     <div className="border-neutral-softest rounded-lg border">
@@ -21,7 +26,15 @@ export function UnproxiedMcpToolsSection({
           proxied through Gram.
         </Text>
       </div>
-      <UnproxiedMcpToolsBody data={data} isLoading={isLoading} />
+      {isDisabled ? (
+        <div className="px-4 py-6">
+          <Text small muted>
+            Enable this server to load its tools.
+          </Text>
+        </div>
+      ) : (
+        <UnproxiedMcpToolsBody data={data} isLoading={isLoading} />
+      )}
     </div>
   );
 }

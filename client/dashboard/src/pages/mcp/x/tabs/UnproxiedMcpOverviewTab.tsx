@@ -42,10 +42,23 @@ export function UnproxiedMcpOverviewTab({
       },
     },
     undefined,
-    { enabled: !!server?.url },
+    { enabled: !!server?.url, throwOnError: false },
   );
 
-  const buckets = data?.buckets ?? [];
+  // Zero-fill days the backend omitted so a sparse activity pattern renders
+  // with real gaps instead of bars that look visually adjacent in time.
+  const buckets = useMemo(() => {
+    const byDate = new Map(
+      (data?.buckets ?? []).map((bucket) => [bucket.date, bucket.callCount]),
+    );
+    const days: { date: string; callCount: number }[] = [];
+    for (let day = new Date(from); day <= to; day.setDate(day.getDate() + 1)) {
+      const date = day.toISOString().slice(0, 10);
+      days.push({ date, callCount: byDate.get(date) ?? 0 });
+    }
+    return days;
+  }, [data, from, to]);
+  const hasActivity = buckets.some((bucket) => bucket.callCount > 0);
   const maxCount = Math.max(1, ...buckets.map((bucket) => bucket.callCount));
   const isLoadingUsage = isLoading || !server;
 
@@ -54,8 +67,8 @@ export function UnproxiedMcpOverviewTab({
       <div className="border-neutral-softest rounded-lg border p-6">
         <Heading variant="h4">Tool calls over time</Heading>
         <Text small muted className="mt-1">
-          Sourced from Shadow MCP activity in the last {USAGE_WINDOW_DAYS} days
-          — this requires the Gram hook integration to be installed, and only
+          Sourced from Shadow MCP activity in the last {USAGE_WINDOW_DAYS} days.
+          This requires the Gram hook integration to be installed, and only
           reflects calls made from hook-instrumented sessions. A freshly added
           or rarely used server may show no data even when it's working
           correctly.
@@ -64,12 +77,12 @@ export function UnproxiedMcpOverviewTab({
         <div className="mt-6">
           {isLoadingUsage ? (
             <Skeleton className="h-32 w-full" />
-          ) : buckets.length === 0 ? (
+          ) : !hasActivity ? (
             <Text small muted>
               No activity observed yet.
             </Text>
           ) : (
-            <div className="flex items-end justify-start gap-3">
+            <div className="flex items-end justify-start gap-3 overflow-x-auto pb-1">
               {buckets.map((bucket) => (
                 <div
                   key={bucket.date}

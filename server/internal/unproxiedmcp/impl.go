@@ -3,7 +3,9 @@ package unproxiedmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -106,6 +108,10 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 	if !access.IsSpeakeasyStaffEmail(email) {
 		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be added by Speakeasy staff").LogWarn(ctx, logger)
+	}
+
+	if err := validateServerURL(ctx, s.policy, payload.URL); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server url").LogWarn(ctx, logger)
 	}
 
 	// Generate the server ID up front so the slug can include its suffix and
@@ -391,6 +397,32 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return nil
+}
+
+// validateServerURL checks that rawURL is an absolute http(s) URL whose host
+// isn't blocked by the guardian SSRF policy. Mirrors remotemcp.validateURL:
+// this only validates the URL string and resolves its host, it doesn't
+// connect to it. ListTools does later connect to this same host for live
+// tool discovery, so the same SSRF guard applies here at creation time too.
+func validateServerURL(ctx context.Context, policy *guardian.Policy, rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse url: %w", err)
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("url scheme must be http or https")
+	}
+
+	if u.Host == "" {
+		return fmt.Errorf("url must include a host")
+	}
+
+	if err := policy.ValidateHost(ctx, u.Hostname()); err != nil {
+		return fmt.Errorf("validate host: %w", err)
 	}
 
 	return nil

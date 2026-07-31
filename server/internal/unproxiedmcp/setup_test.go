@@ -2,7 +2,9 @@ package unproxiedmcp_test
 
 import (
 	"context"
+	"errors"
 	"log"
+	"net"
 	"os"
 	"testing"
 
@@ -15,12 +17,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp"
 )
+
+// blockedTestHost resolves to a private IP via the test mock resolver, so it
+// is rejected by the test guardian.Policy at validation time.
+const blockedTestHost = "internal.test"
+
+// unresolvableTestHost returns a resolver error via the test mock resolver,
+// so it is rejected by the test guardian.Policy at validation time.
+const unresolvableTestHost = "broken.test"
 
 var infra *testenv.Environment
 
@@ -72,7 +83,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	servicePolicy := guardian.NewDefaultPolicy(tracerProvider)
+	// servicePolicy blocks loopback / private ranges so validateServerURL
+	// exercises the real production CIDR set, and uses a mock resolver so
+	// hostname-based test cases are deterministic.
+	servicePolicy := guardian.NewDefaultPolicy(
+		tracerProvider,
+		guardian.WithResolver(newUnproxiedMCPMockResolver()),
+	)
 
 	svc := unproxiedmcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
@@ -103,4 +120,23 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
+}
+
+// newUnproxiedMCPMockResolver returns a [dns.Resolver] used to make hostname
+// validation deterministic in tests. blockedTestHost resolves to a private IP
+// (which the test guardian.Policy blocks), unresolvableTestHost returns a
+// resolver error, and any other hostname resolves to a public IP.
+func newUnproxiedMCPMockResolver() dns.Resolver {
+	return dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(ctx context.Context, network, host string) ([]net.IP, error) {
+			switch host {
+			case blockedTestHost:
+				return []net.IP{net.ParseIP("10.0.0.1")}, nil
+			case unresolvableTestHost:
+				return nil, errors.New("mock resolver: nxdomain")
+			default:
+				return []net.IP{net.ParseIP("1.2.3.4")}, nil
+			}
+		},
+	})
 }

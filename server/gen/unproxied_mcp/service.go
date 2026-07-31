@@ -67,8 +67,9 @@ type CreateServerPayload struct {
 	// Optional human-readable name for the unproxied MCP server. Empty values are
 	// stored as null.
 	Name *string
-	// The URL of the vendor's MCP server. Displayed to admins and customers only;
-	// Gram never fetches it.
+	// The URL of the vendor's MCP server. Gram never proxies tool calls through
+	// it; the only outbound request Gram ever makes to it is a live tool listing
+	// from the Inspect tab.
 	URL string
 	// Optional description shown alongside the server.
 	Description *string

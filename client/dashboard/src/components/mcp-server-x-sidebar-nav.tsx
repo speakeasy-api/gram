@@ -234,6 +234,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         {isTunneledBacked && (
           <McpSidebarInfoLabel>Tunneled MCP</McpSidebarInfoLabel>
         )}
+        {isUnproxied && (
+          <McpSidebarInfoLabel>Unproxied MCP</McpSidebarInfoLabel>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -301,19 +304,26 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           </span>
         )}
         <div className="bg-border w-px self-stretch" />
-        <routes.playground.Link
-          queryParams={
-            isRemoteBacked || isTunneledBacked
-              ? { mcpServer: mcpServer.id }
-              : undefined
-          }
-          className="flex flex-1 items-center justify-center hover:no-underline"
-        >
-          <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
+        {isUnproxied ? (
+          <span className="text-muted-foreground/50 flex flex-1 cursor-not-allowed items-center justify-center gap-1 text-xs font-semibold">
             Test in Playground
             <ArrowRight className="h-3 w-3" />
           </span>
-        </routes.playground.Link>
+        ) : (
+          <routes.playground.Link
+            queryParams={
+              isRemoteBacked || isTunneledBacked
+                ? { mcpServer: mcpServer.id }
+                : undefined
+            }
+            className="flex flex-1 items-center justify-center hover:no-underline"
+          >
+            <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
+              Test in Playground
+              <ArrowRight className="h-3 w-3" />
+            </span>
+          </routes.playground.Link>
+        )}
       </div>
     </>
   );

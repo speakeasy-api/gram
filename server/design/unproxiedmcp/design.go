@@ -153,7 +153,7 @@ var CreateServerForm = Type("CreateUnproxiedMcpServerForm", func() {
 	Description("Form for creating a new unproxied MCP server")
 
 	Attribute("name", String, "Optional human-readable name for the unproxied MCP server. Empty values are stored as null.")
-	Attribute("url", String, "The URL of the vendor's MCP server. Displayed to admins and customers only; Gram never fetches it.", func() {
+	Attribute("url", String, "The URL of the vendor's MCP server. Gram never proxies tool calls through it; the only outbound request Gram ever makes to it is a live tool listing from the Inspect tab.", func() {
 		Format(FormatURI)
 	})
 	Attribute("description", String, "Optional description shown alongside the server.")
