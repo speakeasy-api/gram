@@ -28,6 +28,30 @@ if [ "$cover" = true ]; then
   args=("-coverprofile=cover.out" "-covermode=atomic" "${args[@]}")
 fi
 
+# Explicit package/test parallelism from CPU count (bash 3.2+ / macOS-safe).
+# Callers can still override by passing -p / -parallel themselves.
+cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
+case "$cpus" in
+  ''|*[!0-9]*) cpus=1 ;;
+  0) cpus=1 ;;
+esac
+
+has_p=false
+has_parallel=false
+for arg in "${args[@]}"; do
+  case "$arg" in
+    -p|-p=*) has_p=true ;;
+    -parallel|-parallel=*) has_parallel=true ;;
+  esac
+done
+
+if [ "$has_p" = false ]; then
+  args=("-p" "$cpus" "${args[@]}")
+fi
+if [ "$has_parallel" = false ]; then
+  args=("-parallel" "$cpus" "${args[@]}")
+fi
+
 gotestsum --junitfile junit-report.xml --format-hide-empty-pkg -- "${args[@]}"
 test_exit_code=$?
 
