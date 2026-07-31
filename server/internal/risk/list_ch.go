@@ -256,6 +256,9 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		Tags:              tags,
 		Spans:             nil,
 		MatchRedacted:     conv.PtrEmpty(row.MatchRedacted),
-		CreatedAt:         row.CreatedAt.UTC().Format(time.RFC3339),
+		// Message event time, not scan time: the Postgres listing exposes
+		// message_created_at as CreatedAt, and the sort order and cursor both
+		// key on it.
+		CreatedAt: row.MessageCreatedAt.UTC().Format(time.RFC3339),
 	}
 }

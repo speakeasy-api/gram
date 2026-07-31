@@ -52,7 +52,6 @@ type ListRiskFindingsParams struct {
 // reaches this store.
 type RiskFindingListRow struct {
 	ID                uuid.UUID
-	CreatedAt         time.Time
 	MessageCreatedAt  time.Time
 	ChatMessageID     string
 	ContentPartID     string
@@ -101,9 +100,8 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 // (risk_policy_id, rule_id, tenant-fingerprint) keeping the newest occurrence,
 // which subsumes the id dedup (duplicates share the whole key).
 func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams) ([]RiskFindingListRow, error) {
-	sb, err := listRiskFindingsBase(p,
+	columns := []string{
 		"id",
-		"created_at",
 		"message_created_at",
 		"chat_message_id",
 		"content_part_id",
@@ -120,7 +118,8 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		"start_pos",
 		"end_pos",
 		"match_redacted",
-	)
+	}
+	sb, err := listRiskFindingsBase(p, columns...)
 	if err != nil {
 		return nil, err
 	}
@@ -150,19 +149,40 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	} else if p.NonAssistant {
 		sb = sb.Where("assistant_id = ''")
 	}
-	if p.CursorTime != nil && p.CursorID.Valid {
-		sb = sb.Where("(message_created_at, id) < (?, ?)", *p.CursorTime, p.CursorID.UUID)
-	}
-
 	sb = sb.OrderBy("message_created_at DESC", "id DESC", "inserted_at DESC")
 
-	// LIMIT BY must precede LIMIT in ClickHouse; squirrel has no native
-	// support, so both render through the suffix.
-	limitBy := "id"
+	// cursorCond resumes strictly after a prior page's last row; both branches
+	// below share it so the cursor shape cannot drift between them.
+	const cursorCond = "(message_created_at, id) < (?, ?)"
+	hasCursor := p.CursorTime != nil && p.CursorID.Valid
+
 	if p.UniqueMatch {
-		limitBy = "(risk_policy_id, rule_id, " + uniqueMatchKey + ")"
+		// Dedup before the cursor: the inner LIMIT 1 BY runs over the full
+		// filtered set so each group resolves to its single newest occurrence,
+		// and only then does the outer query apply the cursor and page over
+		// the deduped stream — the same subquery shape as the Postgres
+		// listing's ROW_NUMBER dedup. Applying the cursor first would remove a
+		// group's newest occurrence once it fell behind the cursor and let an
+		// older occurrence win LIMIT BY, repeating the group on a later page.
+		sb = sb.Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
+		outer := sq.Select(columns...).FromSelect(sb, "deduped")
+		if hasCursor {
+			outer = outer.Where(cursorCond, *p.CursorTime, p.CursorID.UUID)
+		}
+		sb = outer.
+			OrderBy("message_created_at DESC", "id DESC").
+			Limit(p.Limit)
+	} else {
+		// Plain id dedup can stay cursor-first: redelivered copies share both
+		// message_created_at and id, so the cursor keeps or drops a whole
+		// group at once and no group can straddle a page boundary.
+		if hasCursor {
+			sb = sb.Where(cursorCond, *p.CursorTime, p.CursorID.UUID)
+		}
+		// LIMIT BY must precede LIMIT in ClickHouse; squirrel has no native
+		// support, so both render through the suffix.
+		sb = sb.Suffix(fmt.Sprintf("LIMIT 1 BY id LIMIT %d", p.Limit))
 	}
-	sb = sb.Suffix(fmt.Sprintf("LIMIT 1 BY %s LIMIT %d", limitBy, p.Limit))
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -180,7 +200,6 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		var row RiskFindingListRow
 		if err := rows.Scan(
 			&row.ID,
-			&row.CreatedAt,
 			&row.MessageCreatedAt,
 			&row.ChatMessageID,
 			&row.ContentPartID,

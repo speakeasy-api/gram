@@ -113,6 +113,10 @@ func TestListRiskResults_ClickHousePageOrderingAndRedaction(t *testing.T) {
 	require.Equal(t, "<redacted len=9 sha=cccccccc>", *first.MatchRedacted)
 	require.Equal(t, "<redacted len=7 sha=bbbbbbbb>", *second.MatchRedacted)
 
+	// CreatedAt carries the message event time (the sort key), matching the
+	// Postgres listing, not the ClickHouse scan time.
+	require.Equal(t, newest.MessageCreatedAt.UTC().Format(time.RFC3339), first.CreatedAt)
+
 	// Postgres display enrichment.
 	require.NotNil(t, first.ChatTitle)
 	require.Equal(t, "test chat", *first.ChatTitle)
@@ -227,4 +231,55 @@ func TestListRiskResults_ClickHouseFilters(t *testing.T) {
 	require.Contains(t, uniqueIDs, noFp1.ID.String())
 	require.Contains(t, uniqueIDs, noFp2.ID.String())
 	require.Len(t, uniqueIDs, 5)
+}
+
+// TestListRiskResults_ClickHouseUniqueMatchPagination guards the
+// dedup-then-paginate order: the unique-match dedup must run over the full
+// filtered set before the cursor applies, so a fingerprint group whose newest
+// occurrence fell behind the cursor cannot reappear on a later page via an
+// older occurrence winning the dedup.
+func TestListRiskResults_ClickHouseUniqueMatchPagination(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("List CH Unique Pages")})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().AddDate(0, 0, -7).Truncate(time.Hour)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+
+	// Same fingerprint straddling the page boundary: the newest occurrence
+	// ends page one, so page two's cursor lands between the two occurrences
+	// and only the dedup-before-cursor order keeps the older one hidden.
+	dupNew := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base.Add(4*time.Hour), base.Add(3*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com", "<redacted len=7 sha=aaaaaaaa>", "fp-page", "")
+	other := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base.Add(4*time.Hour), base.Add(2*time.Hour), "gitleaks", "secret.slack_token", "alice@example.com", "<redacted len=6 sha=bbbbbbbb>", "fp-other", "")
+	dupOld := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base.Add(4*time.Hour), base.Add(1*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com", "<redacted len=7 sha=cccccccc>", "fp-page", "")
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dupNew, other, dupOld}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	pageSize := 1
+	var cursor *string
+	var seen []string
+	for range 5 {
+		page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{Limit: &pageSize, Cursor: cursor, UniqueMatch: new(true)})
+		require.NoError(t, err)
+		for _, r := range page.Results {
+			seen = append(seen, r.ID)
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	require.Equal(t, []string{dupNew.ID.String(), other.ID.String()}, seen)
 }
