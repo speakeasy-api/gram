@@ -599,6 +599,139 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const listToolsetSummariesForOrganization = `-- name: ListToolsetSummariesForOrganization :many
+SELECT
+  t.id,
+  t.slug,
+  t.name,
+  COALESCE(tv.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns,
+  toro.origin_registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+LEFT JOIN toolset_origins toro
+  ON toro.toolset_id = t.id
+  AND toro.organization_id = t.organization_id
+  AND toro.deleted IS FALSE
+WHERE t.id = ANY($1::uuid[])
+  AND t.organization_id = $2
+  AND t.deleted IS FALSE
+`
+
+type ListToolsetSummariesForOrganizationParams struct {
+	ToolsetIds     []uuid.UUID
+	OrganizationID string
+}
+
+type ListToolsetSummariesForOrganizationRow struct {
+	ID                      uuid.UUID
+	Slug                    string
+	Name                    string
+	ToolUrns                []string
+	OriginRegistrySpecifier pgtype.Text
+}
+
+// Organization-scoped variant of ListToolsetSummariesForProject for the
+// cross-project listForOrg view, anchored on toolsets.organization_id.
+func (q *Queries) ListToolsetSummariesForOrganization(ctx context.Context, arg ListToolsetSummariesForOrganizationParams) ([]ListToolsetSummariesForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetSummariesForOrganization, arg.ToolsetIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetSummariesForOrganizationRow
+	for rows.Next() {
+		var i ListToolsetSummariesForOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.ToolUrns,
+			&i.OriginRegistrySpecifier,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetSummariesForProject = `-- name: ListToolsetSummariesForProject :many
+SELECT
+  t.id,
+  t.slug,
+  t.name,
+  COALESCE(tv.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns,
+  toro.origin_registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+LEFT JOIN toolset_origins toro
+  ON toro.toolset_id = t.id
+  AND toro.organization_id = t.organization_id
+  AND toro.deleted IS FALSE
+WHERE t.id = ANY($1::uuid[])
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+`
+
+type ListToolsetSummariesForProjectParams struct {
+	ToolsetIds []uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+type ListToolsetSummariesForProjectRow struct {
+	ID                      uuid.UUID
+	Slug                    string
+	Name                    string
+	ToolUrns                []string
+	OriginRegistrySpecifier pgtype.Text
+}
+
+// Compact summaries of the toolsets backing toolset-backed mcp_servers rows,
+// used by the management get/list views so the dashboard can render a
+// toolset-backed server card without a parallel toolsets fetch. The lateral
+// picks the latest live toolset version for a cheap tool count; the origin
+// join surfaces the catalog registry specifier for source classification.
+func (q *Queries) ListToolsetSummariesForProject(ctx context.Context, arg ListToolsetSummariesForProjectParams) ([]ListToolsetSummariesForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetSummariesForProject, arg.ToolsetIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetSummariesForProjectRow
+	for rows.Next() {
+		var i ListToolsetSummariesForProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.ToolUrns,
+			&i.OriginRegistrySpecifier,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMCPServerByIDAndProjectID = `-- name: LockMCPServerByIDAndProjectID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers

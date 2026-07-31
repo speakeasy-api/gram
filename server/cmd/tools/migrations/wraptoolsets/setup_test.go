@@ -236,6 +236,53 @@ func (tn *tenant) detachToolsetFromCollection(t *testing.T, collectionID, toolse
 	}))
 }
 
+func (tn *tenant) newPlugin(t *testing.T) uuid.UUID {
+	t.Helper()
+
+	slug := "plg-" + uuid.NewString()[:8]
+	pluginID, err := tn.queries().InsertPluginFixture(t.Context(), repo.InsertPluginFixtureParams{
+		OrganizationID: tn.orgID,
+		ProjectID:      tn.projectID,
+		Name:           "plugin " + slug,
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+
+	return pluginID
+}
+
+// pluginServerSpec describes a plugin_servers fixture row. Exactly one of
+// toolsetID / mcpServerID must be valid; a non-zero deletedAt seeds
+// soft-deleted history.
+type pluginServerSpec struct {
+	pluginID    uuid.UUID
+	toolsetID   uuid.NullUUID
+	mcpServerID uuid.NullUUID
+	displayName string
+	deletedAt   time.Time
+}
+
+func (tn *tenant) newPluginServer(t *testing.T, spec pluginServerSpec) repo.PluginServer {
+	t.Helper()
+
+	deletedAt := pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
+	if !spec.deletedAt.IsZero() {
+		deletedAt = pgtype.Timestamptz{Time: spec.deletedAt, Valid: true, InfinityModifier: pgtype.Finite}
+	}
+	row, err := tn.queries().InsertPluginServerFixture(t.Context(), repo.InsertPluginServerFixtureParams{
+		PluginID:    spec.pluginID,
+		ToolsetID:   spec.toolsetID,
+		McpServerID: spec.mcpServerID,
+		DisplayName: spec.displayName,
+		Policy:      "required",
+		SortOrder:   0,
+		DeletedAt:   deletedAt,
+	})
+	require.NoError(t, err)
+
+	return row
+}
+
 func runWrap(t *testing.T, tn *tenant, opts Options) *Report {
 	t.Helper()
 
@@ -243,6 +290,23 @@ func runWrap(t *testing.T, tn *tenant, opts Options) *Report {
 	require.NoError(t, err)
 	require.NotNil(t, report)
 	return report
+}
+
+// wrapToolset applies the default wrap mode for the tenant and returns the
+// wrapper mcp_server id created for the toolset.
+func wrapToolset(t *testing.T, tn *tenant, toolsetID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	report := runWrap(t, tn, applyOptions())
+	for _, row := range report.Rows {
+		if row.ToolsetID == toolsetID {
+			require.Equal(t, OutcomeCreated, row.Outcome)
+			require.NotNil(t, row.McpServerID)
+			return *row.McpServerID
+		}
+	}
+	t.Fatalf("toolset %s was not wrapped", toolsetID)
+	return uuid.Nil
 }
 
 func applyOptions() Options {
@@ -253,11 +317,24 @@ func applyOptions() Options {
 		ProjectID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ClearDeadDomain: false,
 		MoveDependents:  true,
+		MovePlugins:     false,
 	}
 }
 
 func dryRunOptions() Options {
 	opts := applyOptions()
+	opts.DryRun = true
+	return opts
+}
+
+func movePluginsApplyOptions() Options {
+	opts := applyOptions()
+	opts.MovePlugins = true
+	return opts
+}
+
+func movePluginsDryRunOptions() Options {
+	opts := movePluginsApplyOptions()
 	opts.DryRun = true
 	return opts
 }

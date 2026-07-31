@@ -2659,41 +2659,15 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			// For public servers, load user-facing environment configs. A public
 			// toolset without an mcp_metadata row simply has no user-provided
 			// env vars — UpsertMetadata is explicit, not auto-created on publish.
+			// The wrapper mcp_server id covers the transition where metadata
+			// ownership has already moved server-side.
 			if r.ToolsetIsPublic {
-				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
-				switch {
-				case errors.Is(metaErr, pgx.ErrNoRows):
-					// No metadata configured → no env configs to surface.
-				case metaErr != nil:
-					return nil, oops.E(oops.CodeUnexpected, metaErr, "load mcp metadata for toolset").LogError(ctx, s.logger)
-				default:
-					envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
-					if envErr != nil {
-						return nil, oops.E(oops.CodeUnexpected, envErr, "load environment configs for toolset").LogError(ctx, s.logger)
-					}
-					for _, ec := range envConfigs {
-						if ec.ProvidedBy != "user" {
-							continue
-						}
-						// DisplayName ends up as both the HTTP header name and
-						// the userConfig description in generated configs. The
-						// env variable name is not a valid header substitute,
-						// so skip configs with no HeaderDisplayName rather than
-						// emit a broken header.
-						headerName := conv.FromPGText[string](ec.HeaderDisplayName)
-						if headerName == nil {
-							s.logger.WarnContext(ctx, "skipping user env config with no header name",
-								attr.SlogToolsetID(r.ToolsetID.UUID.String()),
-								attr.SlogEnvVarName(ec.VariableName),
-							)
-							continue
-						}
-						serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
-							VariableName: ec.VariableName,
-							DisplayName:  *headerName,
-						})
-					}
+				wrapperID := uuid.NullUUID{UUID: r.WrapperMcpServerID, Valid: r.WrapperMcpServerID != uuid.Nil}
+				envConfigs, err := s.loadUserEnvConfigs(ctx, mcpMeta, wrapperID, r.ToolsetID)
+				if err != nil {
+					return nil, err
 				}
+				serverInfo.EnvConfigs = envConfigs
 			}
 
 			pb.servers = append(pb.servers, serverBuild{info: serverInfo, sortOrder: r.ServerSortOrder})
@@ -2710,19 +2684,35 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
 			mcpBase = fmt.Sprintf("https://%s", *cd)
 		}
-		// Remote MCP-backed servers authenticate via their user session issuer
-		// (OAuth), so the generated config carries no static Authorization
-		// header (IsOAuth). Environments are not yet wired to mcp_servers, so
-		// there are no public env configs to surface.
+		// Remote- and tunneled-backed servers authenticate via their user
+		// session issuer (OAuth), so the generated config carries no static
+		// Authorization header (IsOAuth) and no public env configs.
+		serverInfo := PluginServerInfo{
+			DisplayName: m.ServerDisplayName,
+			Policy:      m.ServerPolicy,
+			MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug),
+			IsPublic:    false,
+			IsOAuth:     true,
+			EnvConfigs:  nil,
+		}
+		// A toolset-backed server publishes with toolset semantics, matching
+		// what the toolset-keyed branch above produces for the same toolset:
+		// wrapper visibility drives IsPublic, OAuth stays on the backing
+		// toolset's user session issuer, and public servers surface the same
+		// user-facing env configs.
+		if m.BackingToolsetID.Valid {
+			serverInfo.IsPublic = m.ServerVisibility == visibility.Public
+			serverInfo.IsOAuth = m.BackingToolsetIsOauth
+			if serverInfo.IsPublic {
+				envConfigs, err := s.loadUserEnvConfigs(ctx, mcpMeta, m.McpServerID, m.BackingToolsetID)
+				if err != nil {
+					return nil, err
+				}
+				serverInfo.EnvConfigs = envConfigs
+			}
+		}
 		pb.servers = append(pb.servers, serverBuild{
-			info: PluginServerInfo{
-				DisplayName: m.ServerDisplayName,
-				Policy:      m.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug),
-				IsPublic:    false,
-				IsOAuth:     true,
-				EnvConfigs:  nil,
-			},
+			info:      serverInfo,
 			sortOrder: m.ServerSortOrder,
 		})
 	}
@@ -2760,6 +2750,77 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		return pluginInfos[i].Slug < pluginInfos[j].Slug
 	})
 	return pluginInfos, nil
+}
+
+// loadUserEnvConfigs resolves the published mcp_metadata for a server —
+// server-keyed rows first when a wrapper mcp_server id is known, then the
+// toolset-keyed row — and returns the user-facing environment configs. Both
+// keys are consulted during the expand/contract swap because the backfill
+// moves metadata ownership server-side before plugin_servers rows move.
+func (s *Service) loadUserEnvConfigs(ctx context.Context, mcpMeta *mcpmetarepo.Queries, mcpServerID, toolsetID uuid.NullUUID) ([]ServerEnvConfig, error) {
+	var metadata mcpmetarepo.McpMetadatum
+	found := false
+	if mcpServerID.Valid {
+		record, err := mcpMeta.GetMetadataByMcpServerID(ctx, mcpServerID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Fall through to the toolset-keyed row.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp metadata for mcp server").LogError(ctx, s.logger)
+		default:
+			metadata = record
+			found = true
+		}
+	}
+	if !found && toolsetID.Valid {
+		record, err := mcpMeta.GetMetadataForToolset(ctx, toolsetID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// No metadata configured → no env configs to surface.
+			return nil, nil
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp metadata for toolset").LogError(ctx, s.logger)
+		default:
+			metadata = record
+			found = true
+		}
+	}
+	if !found {
+		return nil, nil
+	}
+
+	envConfigs, err := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load environment configs for mcp server").LogError(ctx, s.logger)
+	}
+
+	var result []ServerEnvConfig
+	for _, ec := range envConfigs {
+		if ec.ProvidedBy != "user" {
+			continue
+		}
+		// DisplayName ends up as both the HTTP header name and the userConfig
+		// description in generated configs. The env variable name is not a
+		// valid header substitute, so skip configs with no HeaderDisplayName
+		// rather than emit a broken header.
+		headerName := conv.FromPGText[string](ec.HeaderDisplayName)
+		if headerName == nil {
+			attrs := []any{attr.SlogEnvVarName(ec.VariableName)}
+			if toolsetID.Valid {
+				attrs = append(attrs, attr.SlogToolsetID(toolsetID.UUID.String()))
+			}
+			if mcpServerID.Valid {
+				attrs = append(attrs, attr.SlogMcpServerID(mcpServerID.UUID.String()))
+			}
+			s.logger.WarnContext(ctx, "skipping user env config with no header name", attrs...)
+			continue
+		}
+		result = append(result, ServerEnvConfig{
+			VariableName: ec.VariableName,
+			DisplayName:  *headerName,
+		})
+	}
+	return result, nil
 }
 
 func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID) GenerateConfig {

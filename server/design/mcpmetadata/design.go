@@ -185,7 +185,7 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
 			Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
-			Attribute("default_environment_id", String, "The default environment to load variables from. Not supported when mcp_server_id is provided.", func() {
+			Attribute("default_environment_id", String, "The default environment to load variables from. Accepted with either toolset_slug or mcp_server_id.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {

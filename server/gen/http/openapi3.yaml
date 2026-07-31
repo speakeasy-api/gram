@@ -60168,6 +60168,13 @@ components:
         McpServer:
             type: object
             properties:
+                backend_kind:
+                    type: string
+                    description: 'The kind of backend an MCP server is configured with, derived from which backend reference is set: toolset_id, remote_mcp_server_id, or tunneled_mcp_server_id.'
+                    enum:
+                        - toolset
+                        - remote
+                        - tunneled
                 created_at:
                     type: string
                     description: When the MCP server was created
@@ -60202,6 +60209,8 @@ components:
                     type: string
                     description: The ID of the toolset used as the backend
                     format: uuid
+                toolset_summary:
+                    $ref: '#/components/schemas/McpServerToolsetSummary'
                 tunneled_mcp_server_id:
                     type: string
                     description: The ID of the tunneled MCP server used as the backend
@@ -60262,6 +60271,38 @@ components:
                 - target_label
                 - total_tool_calls
                 - recent_tool_calls
+        McpServerToolsetSummary:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the backing toolset
+                    format: uuid
+                name:
+                    type: string
+                    description: The name of the backing toolset
+                origin_registry_specifier:
+                    type: string
+                    description: The registry specifier the toolset was installed from, when it originated from the catalog.
+                slug:
+                    type: string
+                    description: The slug of the backing toolset
+                tool_count:
+                    type: integer
+                    description: The number of tools in the toolset's latest version
+                    format: int64
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in the toolset's latest version
+            description: A compact summary of the toolset backing a toolset-backed MCP server, sufficient to render a listing card without a separate toolsets fetch.
+            required:
+                - id
+                - slug
+                - name
+                - tool_count
+                - tool_urns
         MigrateIssuerRequestBody:
             type: object
             properties:
@@ -65413,7 +65454,7 @@ components:
             properties:
                 default_environment_id:
                     type: string
-                    description: The default environment to load variables from. Not supported when mcp_server_id is provided.
+                    description: The default environment to load variables from. Accepted with either toolset_slug or mcp_server_id.
                     format: uuid
                 environment_configs:
                     type: array

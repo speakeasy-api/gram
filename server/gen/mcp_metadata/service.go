@@ -97,8 +97,8 @@ type SetMcpMetadataPayload struct {
 	ExternalDocumentationText *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
-	// The default environment to load variables from. Not supported when
-	// mcp_server_id is provided.
+	// The default environment to load variables from. Accepted with either
+	// toolset_slug or mcp_server_id.
 	DefaultEnvironmentID *string
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string

@@ -135,7 +135,21 @@ WHERE
   AND deleted IS FALSE;
 
 -- name: ListOrganizationMcpCollectionServerAttachments :many
-SELECT t.*, rt.published_at AS published_at FROM toolsets t
+-- The wrapper subquery resolves the toolset's single live wrapper mcp_server
+-- (COALESCEd to the zero uuid — sqlc cannot infer scalar-subquery
+-- nullability) so metadata reads can fall back to server-keyed rows once
+-- ownership moves onto the wrapper.
+SELECT t.*, rt.published_at AS published_at,
+  COALESCE((
+    SELECT ws.id
+    FROM mcp_servers ws
+    WHERE ws.toolset_id = t.id
+      AND ws.project_id = t.project_id
+      AND ws.deleted IS FALSE
+    ORDER BY ws.created_at
+    LIMIT 1
+  ), '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_mcp_server_id
+FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 WHERE
@@ -190,6 +204,22 @@ ON CONFLICT (collection_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: MoveCollectionAttachmentToMcpServer :execrows
+-- Rekeys a collection's live toolset-keyed attachment onto the toolset's
+-- wrapper mcp_server in place, preserving the row id, published_at,
+-- published_by, and created_at so publish history survives the
+-- expand/contract swap from toolset-column publishing to mcp_servers.
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = @collection_id AND omc.organization_id = @organization_id AND omc.deleted IS FALSE
+)
+UPDATE organization_mcp_collection_server_attachments
+SET toolset_id = NULL, mcp_server_id = @mcp_server_id, updated_at = clock_timestamp()
+WHERE
+  collection_id = (SELECT id FROM org_collection)
+  AND toolset_id = @toolset_id
+  AND deleted IS FALSE;
+
 -- name: DetachMcpServerFromOrganizationMcpCollection :exec
 WITH org_collection AS (
   SELECT omc.id FROM organization_mcp_collections omc
@@ -220,11 +250,16 @@ SELECT EXISTS (
 -- endpoint via a lateral pick: custom-domain endpoints win over platform
 -- endpoints, then oldest created_at, limit 1 (AGE-2651; per-plugin endpoint
 -- preference is a follow-up). Servers without a usable endpoint are dropped.
+-- Toolset-backed servers additionally carry their backing toolset's identity
+-- and description so the listing renders them with toolset publishing
+-- semantics rather than remote-server semantics.
 SELECT
   s.id AS mcp_server_id,
   s.name AS mcp_server_name,
   s.slug AS mcp_server_slug,
   s.visibility AS mcp_server_visibility,
+  s.toolset_id AS backing_toolset_id,
+  t.description AS backing_toolset_description,
   ep.slug AS endpoint_slug,
   ep.custom_domain_id AS endpoint_custom_domain_id,
   ep.custom_domain AS endpoint_custom_domain,
@@ -233,6 +268,7 @@ FROM organization_mcp_collection_server_attachments rt
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 JOIN mcp_servers s ON s.id = rt.mcp_server_id
 JOIN projects p ON p.id = s.project_id
+LEFT JOIN toolsets t ON t.id = s.toolset_id AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug, e.custom_domain_id, cd.domain AS custom_domain, e.created_at
   FROM mcp_endpoints e
@@ -261,3 +297,14 @@ WHERE
   AND s.visibility <> 'disabled'
   AND ep.slug IS NOT NULL
 ORDER BY rt.published_at DESC;
+
+-- name: ListOrganizationMcpCollectionAttachmentRows :many
+-- Test verification read: raw attachment rows (both backends, including
+-- soft-deleted history) for a collection.
+SELECT a.id, a.collection_id, a.toolset_id, a.mcp_server_id, a.published_at,
+       a.published_by, a.deleted_at
+FROM organization_mcp_collection_server_attachments a
+JOIN organization_mcp_collections c ON c.id = a.collection_id
+WHERE a.collection_id = @collection_id
+  AND c.organization_id = @organization_id
+ORDER BY a.id;

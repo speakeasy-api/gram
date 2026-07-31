@@ -180,7 +180,89 @@ UPDATE organization_mcp_collection_server_attachments
 SET toolset_id = NULL, mcp_server_id = @mcp_server_id
 WHERE toolset_id = @toolset_id;
 
+-- Queries for the -move-plugins mode: rekeying plugin_servers rows from
+-- toolset_id onto the toolset's live wrapper mcp_server.
+
+-- name: ListPluginMoveCandidateToolsets :many
+-- Candidates are live toolsets in live projects that still have any
+-- plugin_servers row (live or soft-deleted history) keyed by toolset_id.
+-- After a successful move a toolset drops out of this scan, which is what
+-- makes reruns naturally idempotent.
+SELECT DISTINCT t.id, t.project_id
+FROM toolsets t
+INNER JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+INNER JOIN plugin_servers ps ON ps.toolset_id = t.id
+WHERE t.deleted IS FALSE
+  AND t.id > @after_id::uuid
+  AND (sqlc.narg('project_id')::uuid IS NULL OR t.project_id = sqlc.narg('project_id')::uuid)
+ORDER BY t.id
+LIMIT NULLIF(@row_limit::bigint, 0);
+
+-- name: LockPluginMoveToolset :one
+-- Unlike LockCandidateToolset there is no mcp_slug requirement: the wrapper
+-- (not the toolset publishing columns) anchors the plugin move.
+SELECT id, organization_id, project_id, name, slug
+FROM toolsets
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: CountConflictingPluginAttachments :one
+-- Plugins where a live toolset-keyed row and a live wrapper-keyed row would
+-- collide after the move (the partial unique index on
+-- (plugin_id, mcp_server_id) covers live rows only).
+SELECT count(*)
+FROM plugin_servers wrapper_side
+WHERE wrapper_side.deleted IS FALSE
+  AND wrapper_side.mcp_server_id = @mcp_server_id
+  AND wrapper_side.plugin_id IN (
+    SELECT toolset_side.plugin_id
+    FROM plugin_servers toolset_side
+    WHERE toolset_side.toolset_id = @toolset_id AND toolset_side.deleted IS FALSE
+  );
+
+-- name: CountToolsetKeyedPluginServers :one
+-- Live and soft-deleted rows both count: history moves too.
+SELECT count(*)
+FROM plugin_servers
+WHERE toolset_id = @toolset_id;
+
+-- name: MovePluginServerOwnershipToServer :execrows
+-- Moves soft-deleted history rows too, preserving ids, display_name, policy,
+-- sort_order, timestamps, and deleted_at; only the owner columns change. The
+-- table has no project_id column, so tenancy is anchored on the locked
+-- toolset row and the project-scoped wrapper lookup.
+UPDATE plugin_servers
+SET toolset_id = NULL, mcp_server_id = @mcp_server_id
+WHERE toolset_id = @toolset_id;
+
 -- Test fixtures and verification reads.
+
+-- name: InsertPluginFixture :one
+INSERT INTO plugins (organization_id, project_id, name, slug)
+VALUES (@organization_id, @project_id, @name, @slug)
+RETURNING id;
+
+-- name: InsertPluginServerFixture :one
+INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, deleted_at)
+VALUES (
+    @plugin_id
+  , sqlc.narg('toolset_id')::uuid
+  , sqlc.narg('mcp_server_id')::uuid
+  , @display_name
+  , @policy
+  , @sort_order
+  , sqlc.narg('deleted_at')::timestamptz
+)
+RETURNING *;
+
+-- name: ListPluginServerRowsByPluginID :many
+SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy,
+       sort_order, created_at, updated_at, deleted_at
+FROM plugin_servers
+WHERE plugin_id = @plugin_id
+ORDER BY id;
 
 -- name: GetToolsetRow :one
 SELECT id, project_id, custom_domain_id, mcp_slug, updated_at

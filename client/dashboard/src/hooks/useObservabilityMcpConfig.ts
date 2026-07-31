@@ -1,4 +1,4 @@
-import { useProject, useSession } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
@@ -24,7 +24,6 @@ export function useObservabilityMcpConfig({
   "variant" | "welcome" | "theme"
 > {
   const { projectSlug } = useSlugs();
-  const project = useProject();
   const client = useGramContext();
   const { session } = useSession();
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
@@ -48,18 +47,25 @@ export function useObservabilityMcpConfig({
     return res.value?.clientToken ?? "";
   }, [client, projectSlug]);
 
-  // Build MCP server entries for all project toolsets
+  // Build MCP server entries for all project toolsets. A toolset without an
+  // MCP slug has no runtime URL and is skipped.
   const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
     if (isLoadingToolsets || !toolsetsData?.toolsets?.length) {
       return undefined;
     }
 
-    return toolsetsData.toolsets.map((toolset) => ({
-      url: internalMcpUrl({ slug: project.slug }, toolset),
-      name: toolset.slug,
-      environment: toolset.defaultEnvironmentSlug,
-    }));
-  }, [toolsetsData?.toolsets, project.slug, isLoadingToolsets]);
+    return toolsetsData.toolsets.flatMap((toolset) => {
+      const url = internalMcpUrl(toolset);
+      if (!url) return [];
+      return [
+        {
+          url,
+          name: toolset.slug,
+          environment: toolset.defaultEnvironmentSlug,
+        },
+      ];
+    });
+  }, [toolsetsData?.toolsets, isLoadingToolsets]);
 
   return useMemo(() => {
     if (!projectSlug) {

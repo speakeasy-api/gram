@@ -30,8 +30,8 @@ type SetMcpMetadataRequestBody struct {
 	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// The default environment to load variables from. Not supported when
-	// mcp_server_id is provided.
+	// The default environment to load variables from. Accepted with either
+	// toolset_slug or mcp_server_id.
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string `form:"installation_override_url,omitempty" json:"installation_override_url,omitempty" xml:"installation_override_url,omitempty"`

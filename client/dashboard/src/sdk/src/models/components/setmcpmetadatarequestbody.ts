@@ -12,7 +12,7 @@ import {
 
 export type SetMcpMetadataRequestBody = {
   /**
-   * The default environment to load variables from. Not supported when mcp_server_id is provided.
+   * The default environment to load variables from. Accepted with either toolset_slug or mcp_server_id.
    */
   defaultEnvironmentId?: string | undefined;
   /**

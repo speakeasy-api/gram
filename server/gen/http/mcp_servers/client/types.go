@@ -124,6 +124,12 @@ type CreateMcpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -157,6 +163,12 @@ type GetMcpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -202,6 +214,12 @@ type UpdateMcpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -2522,6 +2540,24 @@ type DeleteMcpServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// McpServerToolsetSummaryResponseBody is used to define fields on response
+// body types.
+type McpServerToolsetSummaryResponseBody struct {
+	// The ID of the backing toolset
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The slug of the backing toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The name of the backing toolset
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The number of tools in the toolset's latest version
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The tool URNs in the toolset's latest version
+	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The registry specifier the toolset was installed from, when it originated
+	// from the catalog.
+	OriginRegistrySpecifier *string `form:"origin_registry_specifier,omitempty" json:"origin_registry_specifier,omitempty" xml:"origin_registry_specifier,omitempty"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2548,6 +2584,12 @@ type McpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -2722,6 +2764,13 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
 	}
+	if body.BackendKind != nil {
+		backendKind := types.McpServerBackendKind(*body.BackendKind)
+		v.BackendKind = &backendKind
+	}
+	if body.ToolsetSummary != nil {
+		v.ToolsetSummary = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.ToolsetSummary)
+	}
 
 	return v
 }
@@ -2893,6 +2942,13 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.BackendKind != nil {
+		backendKind := types.McpServerBackendKind(*body.BackendKind)
+		v.BackendKind = &backendKind
+	}
+	if body.ToolsetSummary != nil {
+		v.ToolsetSummary = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.ToolsetSummary)
 	}
 
 	return v
@@ -3397,6 +3453,13 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.BackendKind != nil {
+		backendKind := types.McpServerBackendKind(*body.BackendKind)
+		v.BackendKind = &backendKind
+	}
+	if body.ToolsetSummary != nil {
+		v.ToolsetSummary = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.ToolsetSummary)
 	}
 
 	return v
@@ -4746,6 +4809,16 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
 		}
 	}
+	if body.BackendKind != nil {
+		if !(*body.BackendKind == "toolset" || *body.BackendKind == "remote" || *body.BackendKind == "tunneled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.backend_kind", *body.BackendKind, []any{"toolset", "remote", "tunneled"}))
+		}
+	}
+	if body.ToolsetSummary != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.ToolsetSummary); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -4800,6 +4873,16 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		}
+	}
+	if body.BackendKind != nil {
+		if !(*body.BackendKind == "toolset" || *body.BackendKind == "remote" || *body.BackendKind == "tunneled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.backend_kind", *body.BackendKind, []any{"toolset", "remote", "tunneled"}))
+		}
+	}
+	if body.ToolsetSummary != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.ToolsetSummary); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -4888,6 +4971,16 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		}
+	}
+	if body.BackendKind != nil {
+		if !(*body.BackendKind == "toolset" || *body.BackendKind == "remote" || *body.BackendKind == "tunneled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.backend_kind", *body.BackendKind, []any{"toolset", "remote", "tunneled"}))
+		}
+	}
+	if body.ToolsetSummary != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.ToolsetSummary); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -7892,6 +7985,30 @@ func ValidateDeleteMcpServerGatewayErrorResponseBody(body *DeleteMcpServerGatewa
 	return
 }
 
+// ValidateMcpServerToolsetSummaryResponseBody runs the validations defined on
+// McpServerToolsetSummaryResponseBody
+func ValidateMcpServerToolsetSummaryResponseBody(body *McpServerToolsetSummaryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	}
+	if body.ToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urns", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateMcpServerResponseBody runs the validations defined on
 // McpServerResponseBody
 func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
@@ -7937,6 +8054,16 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		}
+	}
+	if body.BackendKind != nil {
+		if !(*body.BackendKind == "toolset" || *body.BackendKind == "remote" || *body.BackendKind == "tunneled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.backend_kind", *body.BackendKind, []any{"toolset", "remote", "tunneled"}))
+		}
+	}
+	if body.ToolsetSummary != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.ToolsetSummary); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {

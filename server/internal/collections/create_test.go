@@ -94,7 +94,9 @@ func TestCollectionsService_Create_WithMcpServerIds(t *testing.T) {
 	require.Len(t, servers.Servers, 1)
 	require.NotNil(t, servers.Servers[0].McpServerID)
 	require.Equal(t, server.idStr, *servers.Servers[0].McpServerID)
-	require.Nil(t, servers.Servers[0].ToolsetID)
+	// The fixture server is toolset-backed, so the listing exposes its backing
+	// toolset alongside the server id.
+	require.NotNil(t, servers.Servers[0].ToolsetID)
 }
 
 func TestCollectionsService_Create_InvalidToolsetIdsRejected(t *testing.T) {

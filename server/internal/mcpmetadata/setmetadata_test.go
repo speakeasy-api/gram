@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -498,14 +500,12 @@ func TestService_SetMcpMetadata_McpServer_EmitsAuditLog(t *testing.T) {
 	require.Equal(t, "mcp_server", latest.SubjectType, "latest entry should carry the mcp_server subject")
 }
 
-func TestService_SetMcpMetadata_RejectsDefaultEnvironmentIDForMcpServer(t *testing.T) {
+func TestService_SetMcpMetadata_AcceptsDefaultEnvironmentIDForMcpServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPMetadataService(t)
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{})
 
-	// Make an environment in the same project so the rejection has to come
-	// from the explicit guard rather than from the existence check.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	env, err := environments_repo.New(ti.conn).CreateEnvironment(ctx, environments_repo.CreateEnvironmentParams{
@@ -519,11 +519,112 @@ func TestService_SetMcpMetadata_RejectsDefaultEnvironmentIDForMcpServer(t *testi
 
 	serverID := server.ID.String()
 	envID := env.ID.String()
-	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		McpServerID:          &serverID,
 		DefaultEnvironmentID: &envID,
 	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.DefaultEnvironmentID)
+	require.Equal(t, envID, *result.DefaultEnvironmentID)
+}
+
+// A toolset input whose toolset has a canonical wrapper mcp_server must write
+// a server-keyed metadata row (never re-create a toolset-keyed one), while
+// reads keep accepting the toolset identity.
+func TestService_SetMcpMetadata_ToolsetInputWritesServerKeyedWhenWrapped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "wrapped-write-toolset")
+	wrapper, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+
+	docURL := "https://docs.example.com/wrapped"
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
+		ExternalDocumentationURL: &docURL,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.McpServerID)
+	require.Equal(t, wrapper.ID.String(), *result.McpServerID)
+	require.Nil(t, result.ToolsetID)
+
+	mcpRepo := mcpmetadata_repo.New(ti.conn)
+	_, err = mcpRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "no toolset-keyed row may be created for a wrapped toolset")
+	stored, err := mcpRepo.GetMetadataByMcpServerID(ctx, uuid.NullUUID{UUID: wrapper.ID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, docURL, stored.ExternalDocumentationUrl.String)
+
+	// The read path accepts the toolset identity and resolves the
+	// server-keyed row.
+	got, err := ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{
+		ToolsetSlug: conv.PtrEmpty(types.Slug(toolset.Slug)),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, got.Metadata)
+	require.Equal(t, stored.ID.String(), got.Metadata.ID)
+}
+
+// A pre-existing toolset-keyed metadata row is rekeyed in place — same row
+// id, environment-config children intact — when a write arrives after the
+// toolset gained a wrapper.
+func TestService_SetMcpMetadata_MovesToolsetKeyedRowInPlace(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createTestToolset(t, ctx, ti, "moved-metadata-toolset")
+
+	mcpRepo := mcpmetadata_repo.New(ti.conn)
+	original, err := mcpRepo.UpsertMetadata(ctx, mcpmetadata_repo.UpsertMetadataParams{
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  conv.ToPGText("https://docs.example.com/original"),
+		ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
+		LogoID:                    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Instructions:              pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		InstallationOverrideUrl:   pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     original.ID,
+		VariableName:      "MOVED_API_KEY",
+		HeaderDisplayName: conv.ToPGText("Authorization"),
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+
+	wrapper, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+
+	docURL := "https://docs.example.com/updated"
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
+		ExternalDocumentationURL: &docURL,
+	})
+	require.NoError(t, err)
+	require.Equal(t, original.ID.String(), result.ID, "the metadata row must move in place, not be re-created")
+	require.NotNil(t, result.McpServerID)
+	require.Equal(t, wrapper.ID.String(), *result.McpServerID)
+
+	stored, err := mcpRepo.GetMetadataByMcpServerID(ctx, uuid.NullUUID{UUID: wrapper.ID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, original.ID, stored.ID)
+	require.False(t, stored.ToolsetID.Valid)
+	require.Equal(t, docURL, stored.ExternalDocumentationUrl.String)
+
+	configs, err := mcpRepo.ListEnvironmentConfigs(ctx, original.ID)
+	require.NoError(t, err)
+	require.Len(t, configs, 1)
+	require.Equal(t, "MOVED_API_KEY", configs[0].VariableName)
 }
 
 func TestService_SetMcpMetadata_RejectsBothBackends(t *testing.T) {

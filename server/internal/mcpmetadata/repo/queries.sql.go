@@ -226,6 +226,31 @@ func (q *Queries) ListEnvironmentConfigs(ctx context.Context, mcpMetadataID uuid
 	return items, nil
 }
 
+const moveMetadataToMcpServer = `-- name: MoveMetadataToMcpServer :execrows
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
+WHERE toolset_id = $2
+  AND project_id = $3
+`
+
+type MoveMetadataToMcpServerParams struct {
+	McpServerID uuid.NullUUID
+	ToolsetID   uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+// Rekeys a toolset-owned metadata row onto the toolset's wrapper mcp_server in
+// place, preserving the row id and its mcp_environment_configs children.
+// Callers must ensure no server-keyed row already exists for the wrapper (the
+// partial unique index on mcp_server_id would reject the move).
+func (q *Queries) MoveMetadataToMcpServer(ctx context.Context, arg MoveMetadataToMcpServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveMetadataToMcpServer, arg.McpServerID, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertEnvironmentConfig = `-- name: UpsertEnvironmentConfig :one
 INSERT INTO mcp_environment_configs (
     project_id,

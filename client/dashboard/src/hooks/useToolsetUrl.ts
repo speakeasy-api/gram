@@ -1,4 +1,3 @@
-import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -39,7 +38,10 @@ export function useCustomDomains(enabled = true): {
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
 // row. Platform-domain endpoints (`custom_domain_id` empty) resolve under the
 // Gram-hosted `/mcp/<slug>` runtime path; custom-domain endpoints resolve
-// under the matching `custom_domains.domain` value with the same suffix.
+// under the matching `custom_domains.domain` value with the same suffix. A
+// domain-root endpoint serves MCP at the bare custom domain, so that form is
+// preferred (`/mcp/<slug>` stays a valid alternate path); its install page
+// still lives under `/mcp/<slug>/install`.
 // Returns `undefined` when the endpoint has no slug or when its custom domain
 // hasn't resolved yet (loading or denied), so callers can gracefully render an
 // empty state.
@@ -64,6 +66,13 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
       // custom domain.
       return { mcpUrl: undefined, installPageUrl: undefined };
     }
+    if (endpoint.isDomainRoot) {
+      const rootUrl = `https://${match.domain}`;
+      return {
+        mcpUrl: rootUrl,
+        installPageUrl: `${rootUrl}/mcp/${endpoint.slug}/install`,
+      };
+    }
     serverURL = `https://${match.domain}`;
   }
 
@@ -72,9 +81,10 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
 }
 
 // useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
-// its endpoints, preferring a custom-domain endpoint. While the custom domain
-// is still resolving it falls back to the Gram-hosted `/mcp/<slug>` path so
-// callers always have a usable URL once a slug exists.
+// its endpoints, preferring a custom-domain endpoint. A custom-domain endpoint
+// whose domain hasn't resolved yet never degrades to a platform-host URL built
+// from its slug — that URL is not a registered endpoint. An actual
+// platform-domain endpoint, when one exists, is the fallback.
 export function useResolvedMcpServerUrl(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
@@ -83,66 +93,68 @@ export function useResolvedMcpServerUrl(
   installPageUrl: string | undefined;
   loading: boolean;
 } {
-  const endpoint = useMemo(
-    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
+  const customEndpoint = useMemo(
+    () => endpoints.find((e) => e.customDomainId),
     [endpoints],
   );
-  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const fallbackUrl = endpoint?.slug
-    ? `${getServerURL()}/mcp/${endpoint.slug}`
-    : undefined;
-  const mcpUrl = resolvedUrl ?? fallbackUrl;
+  const platformEndpoint = useMemo(
+    () => endpoints.find((e) => !e.customDomainId),
+    [endpoints],
+  );
+  const custom = useMcpEndpointUrl(customEndpoint);
+  const platform = useMcpEndpointUrl(platformEndpoint);
 
   return {
-    mcpUrl,
-    installPageUrl: mcpUrl ? `${mcpUrl}/install` : undefined,
+    mcpUrl: custom.mcpUrl ?? platform.mcpUrl,
+    installPageUrl: custom.installPageUrl ?? platform.installPageUrl,
     loading: isLoadingEndpoints,
   };
 }
 
 export function useMcpUrl(
   toolset:
-    | Pick<
-        ToolsetEntry,
-        | "slug"
-        | "customDomainId"
-        | "mcpSlug"
-        | "defaultEnvironmentSlug"
-        | "mcpIsPublic"
-      >
+    | Pick<ToolsetEntry, "customDomainId" | "mcpSlug" | "mcpIsPublic">
     | undefined,
 ): {
   url: string | undefined;
   customServerURL: string | undefined;
-  installPageUrl: string;
+  installPageUrl: string | undefined;
 } {
   // Only fetch domain data when the toolset actually has a custom domain
   // configured. This avoids a ~1s request on pages like Home where most
   // toolsets don't use custom domains.
   const { domain } = useCustomDomain(!!toolset?.customDomainId);
-  const project = useProject();
 
   if (!toolset)
-    return { url: undefined, customServerURL: undefined, installPageUrl: "" };
+    return {
+      url: undefined,
+      customServerURL: undefined,
+      installPageUrl: undefined,
+    };
 
-  // Determine which server URL to use
   let customServerURL: string | undefined;
   if (domain && toolset.customDomainId && domain.id == toolset.customDomainId) {
     customServerURL = `https://${domain.domain}`;
   }
 
-  const urlSuffix = toolset.mcpSlug
-    ? toolset.mcpSlug
-    : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  const mcpUrl = `${
-    toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
-  }/mcp/${urlSuffix}`;
+  // A toolset that was never published under an MCP slug has no runtime URL.
+  if (!toolset.mcpSlug) {
+    return { url: undefined, customServerURL, installPageUrl: undefined };
+  }
+
+  // A custom-domain toolset renders its custom-domain URL or nothing: until
+  // the domain resolves there is no guarantee a platform-host alias exists.
+  if (toolset.customDomainId && !customServerURL) {
+    return { url: undefined, customServerURL, installPageUrl: undefined };
+  }
+
+  const mcpUrl = `${customServerURL ?? getServerURL()}/mcp/${toolset.mcpSlug}`;
 
   // Always use our URL for install page when server is private, even for
   // custom domains to ensure cookie is present
   const installPageUrl = toolset.mcpIsPublic
     ? `${mcpUrl}/install`
-    : `${getServerURL()}/mcp/${urlSuffix}/install`;
+    : `${getServerURL()}/mcp/${toolset.mcpSlug}/install`;
 
   return {
     url: mcpUrl,
@@ -156,27 +168,22 @@ export function useMcpUrl(
  * Use this for internal tools like the playground where we want consistent routing.
  */
 export function useInternalMcpUrl(
-  toolset:
-    | Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">
-    | undefined,
+  toolset: Pick<ToolsetEntry, "mcpSlug"> | undefined,
 ): string | undefined {
-  const project = useProject();
   if (!toolset) return undefined;
-  return internalMcpUrl({ slug: project.slug }, toolset);
+  return internalMcpUrl(toolset);
 }
 
 /**
- * Non-hook variant of {@link useInternalMcpUrl}. Use this when the project and
- * toolset are already in scope (e.g. when mapping over an array of toolsets).
+ * Non-hook variant of {@link useInternalMcpUrl}. Use this when the toolset is
+ * already in scope (e.g. when mapping over an array of toolsets). Returns
+ * `undefined` for a toolset that was never published under an MCP slug.
  */
 export function internalMcpUrl(
-  project: { slug: string },
-  toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
-): string {
-  const urlSuffix = toolset.mcpSlug
-    ? toolset.mcpSlug
-    : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  return `${getServerURL()}/mcp/${urlSuffix}`;
+  toolset: Pick<ToolsetEntry, "mcpSlug">,
+): string | undefined {
+  if (!toolset.mcpSlug) return undefined;
+  return `${getServerURL()}/mcp/${toolset.mcpSlug}`;
 }
 
 /**

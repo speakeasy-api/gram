@@ -75,9 +75,12 @@ const (
 	OutcomeCreated                  Outcome = "created"
 	OutcomeWouldCreate              Outcome = "would_create"
 	OutcomeAlreadyComplete          Outcome = "already_complete"
+	OutcomeMovedPlugins             Outcome = "moved_plugins"
+	OutcomeWouldMovePlugins         Outcome = "would_move_plugins"
 	OutcomeBlockedCollision         Outcome = "blocked_collision"
 	OutcomeBlockedEnvironment       Outcome = "blocked_environment"
 	OutcomeBlockedDeadDomain        Outcome = "blocked_dead_domain"
+	OutcomeBlockedNoWrapper         Outcome = "blocked_no_wrapper"
 	OutcomeBlockedAmbiguousWrapper  Outcome = "blocked_ambiguous_wrapper"
 	OutcomeBlockedDependentConflict Outcome = "blocked_dependent_conflict"
 	OutcomeBlockedChanged           Outcome = "blocked_changed"
@@ -101,19 +104,25 @@ type Options struct {
 	// rows for those surfaces is deployed; moving earlier orphans
 	// toolset-keyed reads.
 	MoveDependents bool
+	// MovePlugins switches the command to its second mode: rekeying
+	// plugin_servers rows in place from toolset_id onto the toolset's live
+	// wrapper mcp_server. Run it only after the plugins service supports
+	// toolset-backed mcp_servers; see WRAPTOOLSETS.md.
+	MovePlugins bool
 }
 
 type RowResult struct {
-	ToolsetID         uuid.UUID  `json:"toolset_id"`
-	ProjectID         uuid.UUID  `json:"project_id"`
-	Slug              string     `json:"slug"`
-	Outcome           Outcome    `json:"outcome"`
-	Reason            string     `json:"reason,omitempty"`
-	McpServerID       *uuid.UUID `json:"mcp_server_id,omitempty"`
-	McpEndpointID     *uuid.UUID `json:"mcp_endpoint_id,omitempty"`
-	ClearedDeadDomain bool       `json:"cleared_dead_domain,omitempty"`
-	MetadataMoved     int64      `json:"metadata_moved,omitempty"`
-	AttachmentsMoved  int64      `json:"attachments_moved,omitempty"`
+	ToolsetID          uuid.UUID  `json:"toolset_id"`
+	ProjectID          uuid.UUID  `json:"project_id"`
+	Slug               string     `json:"slug"`
+	Outcome            Outcome    `json:"outcome"`
+	Reason             string     `json:"reason,omitempty"`
+	McpServerID        *uuid.UUID `json:"mcp_server_id,omitempty"`
+	McpEndpointID      *uuid.UUID `json:"mcp_endpoint_id,omitempty"`
+	ClearedDeadDomain  bool       `json:"cleared_dead_domain,omitempty"`
+	MetadataMoved      int64      `json:"metadata_moved,omitempty"`
+	AttachmentsMoved   int64      `json:"attachments_moved,omitempty"`
+	PluginServersMoved int64      `json:"plugin_servers_moved,omitempty"`
 }
 
 type Report struct {
@@ -131,6 +140,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Report, error)
 	if opts.DryRun {
 		mode = "dry-run"
 	}
+	if opts.MovePlugins {
+		mode += " (move-plugins)"
+	}
 	report := &Report{
 		Mode:       mode,
 		Counts:     map[Outcome]int{},
@@ -142,6 +154,31 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Report, error)
 	if opts.After.Valid {
 		after = opts.After.UUID
 	}
+
+	if opts.MovePlugins {
+		candidates, err := repo.New(pool).ListPluginMoveCandidateToolsets(ctx, repo.ListPluginMoveCandidateToolsetsParams{
+			AfterID:   after,
+			ProjectID: opts.ProjectID,
+			RowLimit:  opts.Limit,
+		})
+		if err != nil {
+			return report, fmt.Errorf("list plugin move candidate toolsets: %w", err)
+		}
+
+		for _, cand := range candidates {
+			row, err := processPluginMoveCandidate(ctx, pool, cand, opts)
+			if err != nil {
+				return report, fmt.Errorf("process toolset %s: %w", cand.ID, err)
+			}
+			report.Rows = append(report.Rows, row)
+			report.Counts[row.Outcome]++
+			cursor := cand.ID
+			report.LastCursor = &cursor
+		}
+
+		return report, nil
+	}
+
 	candidates, err := repo.New(pool).ListCandidateToolsets(ctx, repo.ListCandidateToolsetsParams{
 		AfterID:   after,
 		ProjectID: opts.ProjectID,
@@ -165,6 +202,112 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Report, error)
 	return report, nil
 }
 
+// processPluginMoveCandidate rekeys one toolset's plugin_servers rows —
+// including soft-deleted history — onto its single live wrapper mcp_server in
+// one transaction, preserving row ids, display names, policies, sort order,
+// timestamps, and deleted_at. Guard failures roll back with a structured
+// outcome; dry-run always rolls back.
+func processPluginMoveCandidate(ctx context.Context, pool *pgxpool.Pool, cand repo.ListPluginMoveCandidateToolsetsRow, opts Options) (RowResult, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return RowResult{}, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	q := repo.New(tx)
+	if err := q.AcquireWrapRunLock(ctx, runLockKey); err != nil {
+		return RowResult{}, fmt.Errorf("acquire run advisory lock: %w", err)
+	}
+
+	res := RowResult{
+		ToolsetID:          cand.ID,
+		ProjectID:          cand.ProjectID,
+		Slug:               "",
+		Outcome:            "",
+		Reason:             "",
+		McpServerID:        nil,
+		McpEndpointID:      nil,
+		ClearedDeadDomain:  false,
+		MetadataMoved:      0,
+		AttachmentsMoved:   0,
+		PluginServersMoved: 0,
+	}
+	block := func(outcome Outcome, reason string) (RowResult, error) {
+		res.Outcome = outcome
+		res.Reason = reason
+		return res, nil
+	}
+
+	toolset, err := q.LockPluginMoveToolset(ctx, repo.LockPluginMoveToolsetParams(cand))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return block(OutcomeBlockedChanged, "toolset no longer matches the candidate criteria under lock")
+	}
+	if err != nil {
+		return RowResult{}, fmt.Errorf("lock candidate toolset: %w", err)
+	}
+	res.Slug = toolset.Slug
+
+	if _, err := q.GetLiveProject(ctx, toolset.ProjectID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return block(OutcomeBlockedChanged, "project is no longer live")
+		}
+		return RowResult{}, fmt.Errorf("load project: %w", err)
+	}
+
+	wrappers, err := q.ListLiveToolsetWrappers(ctx, repo.ListLiveToolsetWrappersParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID: toolset.ProjectID,
+	})
+	if err != nil {
+		return RowResult{}, fmt.Errorf("list toolset wrappers: %w", err)
+	}
+	switch {
+	case len(wrappers) == 0:
+		return block(OutcomeBlockedNoWrapper, "toolset has no live toolset-backed mcp_servers row; run the wrap mode first")
+	case len(wrappers) > 1:
+		return block(OutcomeBlockedAmbiguousWrapper, fmt.Sprintf("toolset has %d live toolset-backed mcp_servers rows; expected exactly one", len(wrappers)))
+	}
+	serverID := wrappers[0].ID
+	res.McpServerID = &serverID
+
+	conflicts, err := q.CountConflictingPluginAttachments(ctx, repo.CountConflictingPluginAttachmentsParams{
+		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+		ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+	if err != nil {
+		return RowResult{}, fmt.Errorf("count conflicting plugin attachments: %w", err)
+	}
+	if conflicts > 0 {
+		return block(OutcomeBlockedDependentConflict, fmt.Sprintf("%d plugin(s) hold live attachments to both the toolset and its wrapper; refusing to dedupe", conflicts))
+	}
+
+	if opts.DryRun {
+		count, err := q.CountToolsetKeyedPluginServers(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+		if err != nil {
+			return RowResult{}, fmt.Errorf("count toolset plugin servers: %w", err)
+		}
+		res.PluginServersMoved = count
+		res.Outcome = OutcomeWouldMovePlugins
+		return res, nil
+	}
+
+	moved, err := q.MovePluginServerOwnershipToServer(ctx, repo.MovePluginServerOwnershipToServerParams{
+		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+		ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+	if err != nil {
+		return RowResult{}, fmt.Errorf("move plugin server ownership: %w", err)
+	}
+	res.PluginServersMoved = moved
+
+	if err := tx.Commit(ctx); err != nil {
+		return RowResult{}, fmt.Errorf("commit: %w", err)
+	}
+
+	res.Outcome = OutcomeMovedPlugins
+	return res, nil
+}
+
 // processCandidate runs the full guard-and-write sequence for one toolset in
 // one transaction. Guard failures roll back with a structured outcome; only a
 // successful apply commits. Dry-run always rolls back.
@@ -181,16 +324,17 @@ func processCandidate(ctx context.Context, pool *pgxpool.Pool, cand repo.ListCan
 	}
 
 	res := RowResult{
-		ToolsetID:         cand.ID,
-		ProjectID:         cand.ProjectID,
-		Slug:              "",
-		Outcome:           "",
-		Reason:            "",
-		McpServerID:       nil,
-		McpEndpointID:     nil,
-		ClearedDeadDomain: false,
-		MetadataMoved:     0,
-		AttachmentsMoved:  0,
+		ToolsetID:          cand.ID,
+		ProjectID:          cand.ProjectID,
+		Slug:               "",
+		Outcome:            "",
+		Reason:             "",
+		McpServerID:        nil,
+		McpEndpointID:      nil,
+		ClearedDeadDomain:  false,
+		MetadataMoved:      0,
+		AttachmentsMoved:   0,
+		PluginServersMoved: 0,
 	}
 	block := func(outcome Outcome, reason string) (RowResult, error) {
 		res.Outcome = outcome

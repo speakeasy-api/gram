@@ -285,13 +285,15 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 		return nil, err
 	}
 
-	var record repo.McpMetadatum
-	switch {
-	case backend.toolset != nil:
-		record, err = s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: backend.toolset.ID, Valid: true})
-	default:
-		record, err = s.repo.GetMetadataByMcpServerID(ctx, uuid.NullUUID{UUID: backend.mcpServer.ID, Valid: true})
+	// During the expand/contract publishing swap a toolset's metadata may
+	// live under either its own key or its wrapper mcp_server key, so reads
+	// accept both regardless of which identity the caller supplied.
+	keys, err := s.resolveMetadataKeys(ctx, s.mcpServersRepo, *authCtx.ProjectID, backend)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve metadata backend keys").LogError(ctx, logger)
 	}
+
+	record, err := lookupMetadataRecord(ctx, s.repo, keys)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this backend")
@@ -347,14 +349,33 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		)
 	}
 
-	var existing *types.McpMetadata
-	var existingRow repo.McpMetadatum
-	switch {
-	case backend.toolset != nil:
-		existingRow, err = mcpr.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: backend.toolset.ID, Valid: true})
-	default:
-		existingRow, err = mcpr.GetMetadataByMcpServerID(ctx, uuid.NullUUID{UUID: backend.mcpServer.ID, Valid: true})
+	keys, err := s.resolveMetadataKeys(ctx, msr, *authCtx.ProjectID, backend)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve metadata backend keys").LogError(ctx, logger)
 	}
+
+	// The wrapper mcp_server key is canonical once one exists: rekey a
+	// toolset-keyed row in place first — preserving the metadata id and its
+	// environment-config children — so this write lands server-keyed instead
+	// of re-creating (or duplicating) a toolset-keyed row.
+	if keys.mcpServerID.Valid && keys.toolsetID.Valid {
+		_, err := mcpr.GetMetadataByMcpServerID(ctx, keys.mcpServerID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			if _, err := mcpr.MoveMetadataToMcpServer(ctx, repo.MoveMetadataToMcpServerParams{
+				McpServerID: keys.mcpServerID,
+				ToolsetID:   keys.toolsetID,
+				ProjectID:   *authCtx.ProjectID,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "move metadata to mcp server").LogError(ctx, logger)
+			}
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "fetch existing MCP server metadata").LogError(ctx, logger)
+		}
+	}
+
+	var existing *types.McpMetadata
+	existingRow, err := lookupMetadataRecord(ctx, mcpr, keys)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		// No existing metadata, proceed with creation
@@ -393,10 +414,6 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	var defaultEnvironmentID uuid.NullUUID
 	if payload.DefaultEnvironmentID != nil {
-		if backend.mcpServer != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "default_environment_id is not yet supported for mcp_server-backed install pages").LogError(ctx, logger)
-		}
-
 		parsedDefaultEnvironmentID, err := uuid.Parse(*payload.DefaultEnvironmentID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid default environment ID (not a valid UUID)").LogError(ctx, logger)
@@ -422,11 +439,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		installationOverrideURL = conv.ToPGText(*payload.InstallationOverrideURL)
 	}
 
+	// Writes land on the canonical key: the wrapper mcp_server when one
+	// exists (including a toolset input resolved to its wrapper), the toolset
+	// otherwise.
 	var result repo.McpMetadatum
 	switch {
-	case backend.toolset != nil:
-		result, err = mcpr.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-			ToolsetID:                 uuid.NullUUID{UUID: backend.toolset.ID, Valid: true},
+	case keys.mcpServerID.Valid:
+		result, err = mcpr.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
+			McpServerID:               keys.mcpServerID,
 			ProjectID:                 *authCtx.ProjectID,
 			ExternalDocumentationUrl:  externalDocURL,
 			ExternalDocumentationText: externalDocText,
@@ -436,8 +456,8 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			InstallationOverrideUrl:   installationOverrideURL,
 		})
 	default:
-		result, err = mcpr.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
-			McpServerID:               uuid.NullUUID{UUID: backend.mcpServer.ID, Valid: true},
+		result, err = mcpr.UpsertMetadata(ctx, repo.UpsertMetadataParams{
+			ToolsetID:                 keys.toolsetID,
 			ProjectID:                 *authCtx.ProjectID,
 			ExternalDocumentationUrl:  externalDocURL,
 			ExternalDocumentationText: externalDocText,
@@ -572,7 +592,13 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	headerDisplayNames := make(map[string]string)
 	variableProvidedBy := make(map[string]string)
 
-	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+	// Metadata may be server-keyed on the toolset's wrapper after the
+	// expand/contract swap; accept either key.
+	var metadataRecord repo.McpMetadatum
+	metadataKeys, metadataErr := s.resolveMetadataKeys(ctx, s.mcpServersRepo, *authCtx.ProjectID, &resolvedMetadataBackend{toolset: &toolset, mcpServer: nil})
+	if metadataErr == nil {
+		metadataRecord, metadataErr = lookupMetadataRecord(ctx, s.repo, metadataKeys)
+	}
 	if metadataErr == nil {
 		if metadataRecord.LogoID.Valid {
 			logoURLValue := *s.serverURL
@@ -706,6 +732,74 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 type resolvedMetadataBackend struct {
 	toolset   *toolsets_repo.Toolset
 	mcpServer *mcpservers_repo.McpServer
+}
+
+// metadataKeys carries both metadata lookup keys for a backend during the
+// expand/contract publishing swap: the canonical wrapper mcp_server key (when
+// one exists) and the toolset key used by direct mcp_slug publishing.
+type metadataKeys struct {
+	mcpServerID uuid.NullUUID
+	toolsetID   uuid.NullUUID
+}
+
+// resolveMetadataKeys derives both lookup keys for a resolved backend. A
+// toolset input resolves its canonical wrapper — the single live
+// toolset-backed mcp_servers row — so writes land server-keyed; zero or
+// multiple wrappers keep the toolset key canonical rather than guessing. An
+// mcp_server input carries its backing toolset (if any) as the read fallback.
+func (s *Service) resolveMetadataKeys(ctx context.Context, mcpServerQueries *mcpservers_repo.Queries, projectID uuid.UUID, backend *resolvedMetadataBackend) (metadataKeys, error) {
+	if backend.mcpServer != nil {
+		return metadataKeys{
+			mcpServerID: uuid.NullUUID{UUID: backend.mcpServer.ID, Valid: true},
+			toolsetID:   backend.mcpServer.ToolsetID,
+		}, nil
+	}
+
+	keys := metadataKeys{
+		mcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		toolsetID:   uuid.NullUUID{UUID: backend.toolset.ID, Valid: true},
+	}
+	wrappers, err := mcpServerQueries.GetMCPServersByToolsetID(ctx, mcpservers_repo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: backend.toolset.ID, Valid: true},
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return keys, fmt.Errorf("list toolset wrapper mcp servers: %w", err)
+	}
+	switch {
+	case len(wrappers) == 1:
+		keys.mcpServerID = uuid.NullUUID{UUID: wrappers[0].ID, Valid: true}
+	case len(wrappers) > 1:
+		s.logger.WarnContext(ctx, "toolset has multiple live wrapper mcp servers; keeping toolset-keyed metadata",
+			attr.SlogToolsetID(backend.toolset.ID.String()),
+		)
+	}
+	return keys, nil
+}
+
+// lookupMetadataRecord reads the metadata row for a backend, preferring the
+// server-keyed row and falling back to the toolset-keyed row during the
+// transition. Returns pgx.ErrNoRows when neither key has a row.
+func lookupMetadataRecord(ctx context.Context, queries *repo.Queries, keys metadataKeys) (repo.McpMetadatum, error) {
+	if keys.mcpServerID.Valid {
+		record, err := queries.GetMetadataByMcpServerID(ctx, keys.mcpServerID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Fall through to the toolset-keyed row.
+		case err != nil:
+			return repo.McpMetadatum{}, fmt.Errorf("get mcp_server-keyed metadata: %w", err)
+		default:
+			return record, nil
+		}
+	}
+	if keys.toolsetID.Valid {
+		record, err := queries.GetMetadataForToolset(ctx, keys.toolsetID)
+		if err != nil {
+			return repo.McpMetadatum{}, fmt.Errorf("get toolset-keyed metadata: %w", err)
+		}
+		return record, nil
+	}
+	return repo.McpMetadatum{}, pgx.ErrNoRows
 }
 
 // resolveMetadataBackend validates the XOR shape on the payload, performs the

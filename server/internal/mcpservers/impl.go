@@ -259,7 +259,12 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildMcpServerView(server), nil
+	view := mv.BuildMcpServerView(server)
+	if err := s.attachProjectToolsetSummaries(ctx, *authCtx.ProjectID, []*types.McpServer{view}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load backing toolset summary").LogError(ctx, s.logger)
+	}
+
+	return view, nil
 }
 
 func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFiltersPayload) (*types.ListToolFiltersResult, error) {
@@ -393,7 +398,12 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	views := mv.BuildMcpServerListView(servers)
+	if err := s.attachProjectToolsetSummaries(ctx, *authCtx.ProjectID, views); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load backing toolset summaries").LogError(ctx, logger)
+	}
+
+	return &gen.ListMcpServersResult{McpServers: views}, nil
 }
 
 func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcpServersForOrgPayload) (*gen.ListMcpServersResult, error) {
@@ -413,7 +423,12 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for organization").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	views := mv.BuildMcpServerListView(servers)
+	if err := s.attachOrganizationToolsetSummaries(ctx, authCtx.ActiveOrganizationID, views); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load backing toolset summaries").LogError(ctx, logger)
+	}
+
+	return &gen.ListMcpServersResult{McpServers: views}, nil
 }
 
 func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpServerPayload) (*types.McpServer, error) {
@@ -1052,6 +1067,86 @@ func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uui
 	if !source.AllowPublic {
 		return fmt.Errorf("tunneled MCP servers cannot be public until the tunnel source enables public serving")
 	}
+	return nil
+}
+
+// backingToolsetIDs collects the distinct backing toolset ids from
+// toolset-backed server views.
+func backingToolsetIDs(views []*types.McpServer) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(views))
+	ids := make([]uuid.UUID, 0, len(views))
+	for _, view := range views {
+		if view.ToolsetID == nil {
+			continue
+		}
+		id, err := uuid.Parse(*view.ToolsetID)
+		if err != nil {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func attachToolsetSummaries(views []*types.McpServer, summaries map[string]*types.McpServerToolsetSummary) {
+	for _, view := range views {
+		if view.ToolsetID == nil {
+			continue
+		}
+		view.ToolsetSummary = summaries[*view.ToolsetID]
+	}
+}
+
+// attachProjectToolsetSummaries decorates toolset-backed server views with a
+// compact backing-toolset summary so the dashboard can render a card without
+// a parallel toolsets fetch.
+func (s *Service) attachProjectToolsetSummaries(ctx context.Context, projectID uuid.UUID, views []*types.McpServer) error {
+	ids := backingToolsetIDs(views)
+	if len(ids) == 0 {
+		return nil
+	}
+
+	rows, err := repo.New(s.db).ListToolsetSummariesForProject(ctx, repo.ListToolsetSummariesForProjectParams{
+		ToolsetIds: ids,
+		ProjectID:  projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("list backing toolset summaries: %w", err)
+	}
+
+	summaries := make(map[string]*types.McpServerToolsetSummary, len(rows))
+	for _, row := range rows {
+		summaries[row.ID.String()] = mv.BuildMcpServerToolsetSummary(row.ID.String(), row.Slug, row.Name, row.ToolUrns, conv.FromPGText[string](row.OriginRegistrySpecifier))
+	}
+	attachToolsetSummaries(views, summaries)
+	return nil
+}
+
+// attachOrganizationToolsetSummaries is the cross-project variant used by the
+// organization-wide listing, anchored on toolsets.organization_id.
+func (s *Service) attachOrganizationToolsetSummaries(ctx context.Context, organizationID string, views []*types.McpServer) error {
+	ids := backingToolsetIDs(views)
+	if len(ids) == 0 {
+		return nil
+	}
+
+	rows, err := repo.New(s.db).ListToolsetSummariesForOrganization(ctx, repo.ListToolsetSummariesForOrganizationParams{
+		ToolsetIds:     ids,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("list backing toolset summaries: %w", err)
+	}
+
+	summaries := make(map[string]*types.McpServerToolsetSummary, len(rows))
+	for _, row := range rows {
+		summaries[row.ID.String()] = mv.BuildMcpServerToolsetSummary(row.ID.String(), row.Slug, row.Name, row.ToolUrns, conv.FromPGText[string](row.OriginRegistrySpecifier))
+	}
+	attachToolsetSummaries(views, summaries)
 	return nil
 }
 

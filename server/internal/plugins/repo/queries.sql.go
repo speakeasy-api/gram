@@ -989,11 +989,15 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
+  s.toolset_id AS backing_toolset_id,
+  s.visibility AS server_visibility,
+  COALESCE(t.user_session_issuer_id IS NOT NULL, FALSE)::bool AS backing_toolset_is_oauth,
   ep.slug AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
+LEFT JOIN toolsets t ON t.id = s.toolset_id AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug, cd.domain AS custom_domain, e.created_at
   FROM mcp_endpoints e
@@ -1015,21 +1019,24 @@ ORDER BY p.slug, ps.sort_order ASC
 `
 
 type ListPluginsWithMcpServersForProjectRow struct {
-	PluginID             uuid.UUID
-	PluginName           string
-	PluginSlug           string
-	PluginDescription    pgtype.Text
-	ServerID             uuid.UUID
-	ServerDisplayName    string
-	ServerPolicy         string
-	ServerSortOrder      int32
-	McpServerID          uuid.NullUUID
-	EndpointSlug         string
-	EndpointCustomDomain pgtype.Text
+	PluginID              uuid.UUID
+	PluginName            string
+	PluginSlug            string
+	PluginDescription     pgtype.Text
+	ServerID              uuid.UUID
+	ServerDisplayName     string
+	ServerPolicy          string
+	ServerSortOrder       int32
+	McpServerID           uuid.NullUUID
+	BackingToolsetID      uuid.NullUUID
+	ServerVisibility      string
+	BackingToolsetIsOauth bool
+	EndpointSlug          string
+	EndpointCustomDomain  pgtype.Text
 }
 
 // Plugin-generation companion to ListPluginsWithServersForProject covering
-// mcp_server-backed (Remote MCP) plugin servers. Each server resolves to a
+// mcp_server-backed plugin servers. Each server resolves to a
 // single usable endpoint via a lateral pick: custom-domain endpoints win over
 // platform endpoints, then oldest created_at, limit 1 (mirrors the collections
 // rule; per-plugin endpoint preference is a follow-up). Resolving the host
@@ -1038,6 +1045,10 @@ type ListPluginsWithMcpServersForProjectRow struct {
 // a (wrong) platform URL. Servers without a usable endpoint are dropped.
 // Scoped to project_id; the mcp_server must live in the same project as the
 // plugin, and disabled servers are excluded.
+// Toolset-backed servers additionally carry the backing toolset id and its
+// user-session-issuer flag so generation can apply toolset publishing
+// semantics (wrapper visibility drives IsPublic; OAuth stays on the toolset)
+// instead of remote-server semantics.
 func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithMcpServersForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listPluginsWithMcpServersForProject, projectID)
 	if err != nil {
@@ -1057,6 +1068,9 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, proje
 			&i.ServerPolicy,
 			&i.ServerSortOrder,
 			&i.McpServerID,
+			&i.BackingToolsetID,
+			&i.ServerVisibility,
+			&i.BackingToolsetIsOauth,
 			&i.EndpointSlug,
 			&i.EndpointCustomDomain,
 		); err != nil {
@@ -1084,7 +1098,18 @@ SELECT
   t.mcp_slug AS toolset_mcp_slug,
   t.mcp_is_public AS toolset_is_public,
   (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth,
-  cd.domain AS toolset_custom_domain
+  cd.domain AS toolset_custom_domain,
+  -- COALESCE to the zero uuid (rather than NULL) because sqlc cannot infer
+  -- nullability for a scalar subquery; Go maps uuid.Nil back to "no wrapper".
+  COALESCE((
+    SELECT ws.id
+    FROM mcp_servers ws
+    WHERE ws.toolset_id = t.id
+      AND ws.project_id = p.project_id
+      AND ws.deleted IS FALSE
+    ORDER BY ws.created_at
+    LIMIT 1
+  ), '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_mcp_server_id
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
@@ -1108,10 +1133,15 @@ type ListPluginsWithServersForProjectRow struct {
 	ToolsetIsPublic     bool
 	ToolsetIsOauth      bool
 	ToolsetCustomDomain pgtype.Text
+	WrapperMcpServerID  uuid.UUID
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
-// their parent plugin and toolset mcp_slug for URL construction.
+// their parent plugin and toolset mcp_slug for URL construction. The lateral
+// resolves the toolset's single live wrapper mcp_server (when one exists) so
+// metadata reads can fall back to server-keyed rows after the expand-phase
+// backfill moves mcp_metadata ownership onto the wrapper while plugin_servers
+// rows are still toolset-keyed.
 func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithServersForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listPluginsWithServersForProject, projectID)
 	if err != nil {
@@ -1135,6 +1165,7 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 			&i.ToolsetIsPublic,
 			&i.ToolsetIsOauth,
 			&i.ToolsetCustomDomain,
+			&i.WrapperMcpServerID,
 		); err != nil {
 			return nil, err
 		}
