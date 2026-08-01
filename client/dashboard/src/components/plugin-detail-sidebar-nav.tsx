@@ -83,7 +83,14 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
   const cleanVersion = publishStatus?.connected
     ? publishStatus.liveVersion?.replace(/[^\w.\-+]/g, "").trim()
     : undefined;
+  // Only the explicit booleans are a known freshness — an undefined upToDate
+  // (connection predates fingerprinting) must not read as "Up to date".
   const hasUnpublishedChanges = publishStatus?.upToDate === false;
+  const isUpToDate = publishStatus?.upToDate === true;
+  const showMarketplaceInfo =
+    !!publishStatus?.connected &&
+    (hasUnpublishedChanges || isUpToDate || !!cleanVersion);
+  const serverCount = plugin?.serverCount ?? plugin?.servers?.length ?? 0;
 
   const cardContent = plugin && (
     <>
@@ -101,15 +108,16 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
         </Text>
       </div>
 
-      {publishStatus?.connected && (
+      {showMarketplaceInfo && (
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>Marketplace</McpSidebarInfoLabel>
           <div className="flex flex-wrap items-center gap-1.5">
-            {hasUnpublishedChanges ? (
+            {hasUnpublishedChanges && (
               <Badge variant="warning">
                 <Badge.Text>Needs syncing</Badge.Text>
               </Badge>
-            ) : (
+            )}
+            {isUpToDate && (
               <Badge variant="success">
                 <Badge.Text>Up to date</Badge.Text>
               </Badge>
@@ -126,7 +134,7 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
       <div className="flex gap-6">
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>Servers</McpSidebarInfoLabel>
-          <Text variant="small">{plugin.serverCount ?? 0}</Text>
+          <Text variant="small">{serverCount}</Text>
         </div>
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>Skills</McpSidebarInfoLabel>

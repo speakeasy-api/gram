@@ -217,11 +217,19 @@ export default function PluginDetail(): JSX.Element | null {
   // Device-agent reach powers the Installs stat. It's an admin-only, org-scoped
   // list, so it's fetched only for device-agent orgs and degrades quietly
   // (throwOnError:false) when the viewer can't read it.
-  const { data: syncedUsersData, isLoading: isLoadingSynced } =
-    useSyncedAgentUsers(undefined, undefined, {
-      throwOnError: false,
-      enabled: showAssignments,
-    });
+  const {
+    data: syncedUsersData,
+    isLoading: isLoadingSynced,
+    error: syncedUsersError,
+  } = useSyncedAgentUsers(undefined, undefined, {
+    throwOnError: false,
+    enabled: showAssignments,
+  });
+  // The synced-users list is admin-only; a non-admin viewer's request is
+  // forbidden, leaving reach unknown. Distinguish that from a genuine zero so
+  // the Installs metric doesn't misreport "no data" as "no installs". Loading
+  // is a separate state, surfaced via the card's refreshing spinner.
+  const installsUnavailable = !isLoadingSynced && !!syncedUsersError;
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -436,7 +444,7 @@ export default function PluginDetail(): JSX.Element | null {
     assignments,
     syncedUsersData?.users ?? [],
     membersData?.members ?? [],
-    roleByUrn,
+    rolesData?.roles ?? [],
   );
 
   // Exclude servers already added to the plugin, keyed per backend.
@@ -615,10 +623,20 @@ export default function PluginDetail(): JSX.Element | null {
                   <MetricCard
                     title="Installs"
                     value={installs}
+                    displayValue={installsUnavailable ? "—" : undefined}
                     format="number"
                     icon="download"
                     isRefreshing={isLoadingSynced}
-                    subtext="Running the device agent"
+                    subtext={
+                      installsUnavailable
+                        ? "Requires admin access"
+                        : "Running the device agent"
+                    }
+                    tooltip={
+                      installsUnavailable
+                        ? "Install counts require organization admin access."
+                        : undefined
+                    }
                   />
                 </>
               )}
@@ -677,6 +695,7 @@ export default function PluginDetail(): JSX.Element | null {
               level="section"
             >
               <PluginSkillsSection
+                key={pluginId!}
                 pluginId={pluginId!}
                 viewMode="grid"
                 onMutated={(message) => offerPublish(message)}

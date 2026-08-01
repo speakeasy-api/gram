@@ -7,15 +7,20 @@ import { WILDCARD_PRINCIPAL } from "./principals";
 const EMAIL_PREFIX = "email:";
 const ROLE_PREFIX = "role:";
 const USER_PREFIX = "user:";
+const ALL_USERS_PRINCIPAL = "user:all";
 
 // countPluginInstalls estimates how many people actively running the device
 // agent actually receive this plugin, by intersecting the org's synced-agent
 // users with the plugin's assignment principals — the same coverage the agent's
 // getPlugins applies when deciding what reaches a device:
-//   *  / user:all      → everyone syncing is covered
+//   *                  → every synced identity, member or not (org wildcard)
+//   user:all           → every synced identity that resolves to an org member
 //   email:<addr>       → the synced user with that email
 //   user:<id>          → the member with that id
-//   role:<kind>:<id>   → every synced member holding that role
+//   role:<...>         → every synced member holding that role, matched against
+//                        both the canonical role URN and the legacy role:<slug>
+//                        principal (the backend still honors both — see
+//                        newRolePrincipals / AGE-1954)
 //
 // Marketplace installs (Claude/Cursor/Codex) ship every published plugin and
 // aren't attributed per plugin, so this count reflects device-agent reach only.
@@ -23,17 +28,30 @@ export function countPluginInstalls(
   assignments: PluginAssignment[],
   syncedUsers: SyncedAgentUser[],
   members: AccessMember[],
-  roleByUrn: Map<string, Role>,
+  roles: Role[],
 ): number {
   if (syncedUsers.length === 0) return 0;
 
-  // Everyone-style assignment: every synced user receives it, no further
-  // resolution needed.
-  const coversEveryone = assignments.some(
-    (a) =>
-      a.principalUrn === WILDCARD_PRINCIPAL || a.principalUrn === "user:all",
+  // Only the org wildcard reaches every synced identity regardless of
+  // membership — a synced email that isn't an active member still receives
+  // `*`-scoped plugins. `user:all` is member-scoped and handled in the loop.
+  const coversWildcard = assignments.some(
+    (a) => a.principalUrn === WILDCARD_PRINCIPAL,
   );
-  if (coversEveryone) return syncedUsers.length;
+  if (coversWildcard) return syncedUsers.length;
+
+  const coversAllMembers = assignments.some(
+    (a) => a.principalUrn === ALL_USERS_PRINCIPAL,
+  );
+
+  // A role assignment can be stored as either the canonical role principal URN
+  // or the legacy role:<slug> form, so index roles under both to match the
+  // agent's dual-principal role matching.
+  const roleIdByUrn = new Map<string, string>();
+  for (const role of roles) {
+    if (role.principalUrn) roleIdByUrn.set(role.principalUrn, role.id);
+    if (role.slug) roleIdByUrn.set(`${ROLE_PREFIX}${role.slug}`, role.id);
+  }
 
   const assignedEmails = new Set<string>();
   const assignedUserIds = new Set<string>();
@@ -43,9 +61,12 @@ export function countPluginInstalls(
     if (urn.startsWith(EMAIL_PREFIX)) {
       assignedEmails.add(urn.slice(EMAIL_PREFIX.length).toLowerCase());
     } else if (urn.startsWith(USER_PREFIX)) {
-      assignedUserIds.add(urn.slice(USER_PREFIX.length));
+      // user:all is not a concrete member id; it's handled by coversAllMembers.
+      if (urn !== ALL_USERS_PRINCIPAL) {
+        assignedUserIds.add(urn.slice(USER_PREFIX.length));
+      }
     } else if (urn.startsWith(ROLE_PREFIX)) {
-      const roleId = roleByUrn.get(urn)?.id;
+      const roleId = roleIdByUrn.get(urn);
       if (roleId) assignedRoleIds.add(roleId);
     }
   }
@@ -60,8 +81,14 @@ export function countPluginInstalls(
       covered++;
       continue;
     }
+    // Non-members can only be reached by email or the wildcard (handled above),
+    // never by user:all, user:<id>, or role: assignments.
     const member = memberByEmail.get(email);
     if (!member) continue;
+    if (coversAllMembers) {
+      covered++;
+      continue;
+    }
     if (assignedUserIds.has(member.id)) {
       covered++;
       continue;
