@@ -601,6 +601,68 @@ func BuildSummarizePayload(chatSummarizeBody string, chatSummarizeSessionToken s
 	return v, nil
 }
 
+// BuildSummarizeToolActivityPayload builds the payload for the chat
+// summarizeToolActivity endpoint from CLI flags.
+func BuildSummarizeToolActivityPayload(chatSummarizeToolActivityBody string, chatSummarizeToolActivitySessionToken string, chatSummarizeToolActivityProjectSlugInput string) (*chat.SummarizeToolActivityPayload, error) {
+	var err error
+	var body SummarizeToolActivityRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSummarizeToolActivityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"in_progress\": false,\n      \"tool_calls\": [\n         {\n            \"arguments\": \"abc123\",\n            \"name\": \"abc123\"\n         }\n      ],\n      \"user_message\": \"aaa\"\n   }'")
+		}
+		if body.ToolCalls == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+		}
+		if body.UserMessage != nil {
+			if utf8.RuneCountInString(*body.UserMessage) > 10000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_message", *body.UserMessage, utf8.RuneCountInString(*body.UserMessage), 10000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSummarizeToolActivitySessionToken != "" {
+			sessionToken = &chatSummarizeToolActivitySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSummarizeToolActivityProjectSlugInput != "" {
+			projectSlugInput = &chatSummarizeToolActivityProjectSlugInput
+		}
+	}
+	v := &chat.SummarizeToolActivityPayload{
+		UserMessage: body.UserMessage,
+		InProgress:  body.InProgress,
+	}
+	if body.ToolCalls != nil {
+		v.ToolCalls = make([]*chat.ToolActivityCall, len(body.ToolCalls))
+		for i, val := range body.ToolCalls {
+			if val == nil {
+				v.ToolCalls[i] = nil
+				continue
+			}
+			v.ToolCalls[i] = marshalToolActivityCallRequestBodyToChatToolActivityCall(val)
+		}
+	} else {
+		v.ToolCalls = []*chat.ToolActivityCall{}
+	}
+	{
+		var zero bool
+		if v.InProgress == zero {
+			v.InProgress = false
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSubmitFeedbackPayload builds the payload for the chat submitFeedback
 // endpoint from CLI flags.
 func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbackSessionToken string, chatSubmitFeedbackProjectSlugInput string, chatSubmitFeedbackChatSessionsToken string) (*chat.SubmitFeedbackPayload, error) {

@@ -334,6 +334,38 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeChat"}`)
 	})
 
+	Method("summarizeToolActivity", func() {
+		Description("Generate a short, human-readable summary of the tool activity in the current agent turn — a present- or past-tense 'task' label (e.g. \"Searching the web for pricing\") shown in place of a raw \"Calling N tools\" header. Stateless: the summary is derived from the supplied tool calls and optional user prompt and is not persisted.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("tool_calls", ArrayOf(ToolActivityCall), "The tool calls made so far in the current turn, in order.")
+			Attribute("user_message", String, "The user prompt that initiated the turn, used to ground the summary in the user's intent.", func() {
+				MaxLength(10000)
+			})
+			Attribute("in_progress", Boolean, "True while the tools are still running (produces a present-tense label); false once they have completed (past tense).", func() {
+				Default(false)
+			})
+			Required("tool_calls")
+		})
+
+		Result(SummarizeToolActivityResult)
+
+		HTTP(func() {
+			POST("/rpc/chat.summarizeToolActivity")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "summarizeToolActivity")
+		Meta("openapi:extension:x-speakeasy-name-override", "summarizeToolActivity")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeToolActivity"}`)
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -431,6 +463,17 @@ var SummarizeChatResult = Type("SummarizeChatResult", func() {
 	})
 	Attribute("cached", Boolean, "True when an existing summary was returned without regenerating")
 	Required("summary", "summary_generated_at", "cached")
+})
+
+var ToolActivityCall = Type("ToolActivityCall", func() {
+	Attribute("name", String, "The tool name.")
+	Attribute("arguments", String, "The tool arguments as a JSON string, if available.")
+	Required("name")
+})
+
+var SummarizeToolActivityResult = Type("SummarizeToolActivityResult", func() {
+	Attribute("summary", String, "A short, human-readable label describing what the agent is doing or did in this turn.")
+	Required("summary")
 })
 
 var ChatOverview = Type("ChatOverview", func() {

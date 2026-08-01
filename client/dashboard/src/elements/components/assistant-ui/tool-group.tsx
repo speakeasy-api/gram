@@ -1,16 +1,39 @@
-import { useAuiState } from "@assistant-ui/react";
+import { useAuiState, useThreadRuntime } from "@assistant-ui/react";
 import { useMemo, type FC, type PropsWithChildren } from "react";
 import { useElements } from "@/elements/hooks/useElements";
-import { humanizeToolName } from "@/elements/lib/humanize";
+import { useToolActivitySummary } from "@/elements/hooks/useToolActivitySummary";
 import { ToolUIGroup } from "@/elements/components/ui/tool-ui";
+import type { ToolActivityCall } from "@/elements/types";
+
+/**
+ * latestUserText returns the text of the most recent user message in the
+ * thread — the prompt that initiated the current turn — used to ground the
+ * tool-activity summary in the user's intent.
+ */
+function latestUserText(messages: readonly unknown[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i] as
+      | { role?: string; content?: Array<{ type?: string; text?: string }> }
+      | undefined;
+    if (message?.role !== "user") continue;
+    const text = (message.content ?? [])
+      .filter((part) => part?.type === "text" && typeof part.text === "string")
+      .map((part) => part.text)
+      .join("")
+      .trim();
+    return text.length > 0 ? text : undefined;
+  }
+  return undefined;
+}
 
 export const ToolGroup: FC<
   PropsWithChildren<{ startIndex: number; endIndex: number }>
 > = ({ children, startIndex, endIndex }) => {
   // startIndex/endIndex are inclusive indices into message.parts.
   // assistant-ui only groups consecutive tool-call parts, so every part
-  // in the range is a tool-call — the count is simply the range size.
-  const toolCount = endIndex - startIndex + 1;
+  // in the range is a tool-call.
+  const { config } = useElements();
+  const defaultExpanded = config.tools?.expandToolGroupsByDefault ?? false;
 
   const firstToolName = useAuiState(({ message }) => {
     const part = message.parts[startIndex];
@@ -23,34 +46,63 @@ export const ToolGroup: FC<
     return false;
   });
 
-  const { config } = useElements();
-  const defaultExpanded = config.tools?.expandToolGroupsByDefault ?? false;
-
-  const groupTitle = useMemo(() => {
-    if (toolCount === 0) return "No tools called";
-    if (toolCount === 1) {
-      return firstToolName
-        ? `Calling ${humanizeToolName(firstToolName)}...`
-        : "Calling tool...";
+  // Serialize the group's tool calls to a stable string so useAuiState only
+  // triggers a re-render when they actually change, then parse once.
+  const toolCallsJson = useAuiState(({ message }) => {
+    const calls: ToolActivityCall[] = [];
+    for (let i = startIndex; i <= endIndex; i++) {
+      const part = message.parts[i];
+      if (part?.type !== "tool-call") continue;
+      let args: string | undefined;
+      if (typeof part.argsText === "string" && part.argsText.length > 0) {
+        args = part.argsText;
+      } else if (part.args != null) {
+        try {
+          args = JSON.stringify(part.args);
+        } catch {
+          args = undefined;
+        }
+      }
+      calls.push({ name: part.toolName, arguments: args });
     }
-    return anyMessagePartsAreRunning
-      ? `Calling ${toolCount} tools...`
-      : `Executed ${toolCount} tools`;
-  }, [toolCount, firstToolName, anyMessagePartsAreRunning]);
+    return JSON.stringify(calls);
+  });
+  const toolCalls = useMemo<ToolActivityCall[]>(
+    () => JSON.parse(toolCallsJson) as ToolActivityCall[],
+    [toolCallsJson],
+  );
 
-  // If there's a custom component for the single tool, render children directly
-  if (firstToolName && config.tools?.components?.[firstToolName]) {
+  // The prompt that initiated this turn. This ToolGroup instance belongs to a
+  // single assistant message, and the user turn is already in the thread before
+  // the tools stream in, so reading it once (per stable runtime) is sufficient.
+  const runtime = useThreadRuntime();
+  const userMessage = useMemo(
+    () => latestUserText(runtime.getState().messages),
+    [runtime],
+  );
+
+  const { label } = useToolActivitySummary({
+    toolCalls,
+    inProgress: anyMessagePartsAreRunning,
+    userMessage,
+  });
+
+  // If there's a custom component for the single tool, render children directly.
+  if (
+    toolCalls.length === 1 &&
+    firstToolName &&
+    config.tools?.components?.[firstToolName]
+  ) {
     return children;
   }
 
-  // Single and multiple tool calls must share one wrapper element type —
-  // diverging branches would remount every card when a streaming turn grows
-  // the group.
+  // Present tool activity as a single human-readable "task" line with the
+  // individual calls collapsed behind it — users rarely need the raw
+  // inputs/outputs, so lead with what the agent is doing, not how.
   return (
     <div className="my-4 w-full max-w-xl">
       <ToolUIGroup
-        headerless={toolCount === 1}
-        title={groupTitle}
+        title={label}
         status={anyMessagePartsAreRunning ? "running" : "complete"}
         defaultExpanded={defaultExpanded}
       >

@@ -1870,6 +1870,18 @@ const (
 	// maxSummarizeMessageRunes caps one message body in the summarize transcript.
 	maxSummarizeMessageRunes   = 4000
 	summarizeCompletionTimeout = 60 * time.Second
+
+	// maxToolActivityCalls caps how many tool calls are described to the model
+	// when summarizing a single turn's activity.
+	maxToolActivityCalls = 20
+	// maxToolActivityArgumentRunes caps one tool call's argument blob so a large
+	// payload can't dominate the prompt.
+	maxToolActivityArgumentRunes = 600
+	// maxToolActivityUserMessageRunes caps the user prompt fed to the model.
+	maxToolActivityUserMessageRunes = 2000
+	// toolActivitySummaryTimeout bounds the summarization call. It runs on the hot
+	// path of a live turn, so it is kept short.
+	toolActivitySummaryTimeout = 15 * time.Second
 )
 
 func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) (*gen.SummarizeChatResult, error) {
@@ -1993,6 +2005,141 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		SummaryGeneratedAt: updated.SummaryGeneratedAt.Time.Format(time.RFC3339),
 		Cached:             false,
 	}, nil
+}
+
+// SummarizeToolActivity produces a short, human-readable label describing what
+// the agent is doing in the current turn (e.g. "Searching the web for pricing"),
+// shown in the chat UI in place of a raw "Calling N tools" header. It is
+// stateless — the summary is derived from the supplied tool calls and optional
+// user prompt and is never persisted.
+func (s *Service) SummarizeToolActivity(ctx context.Context, payload *gen.SummarizeToolActivityPayload) (*gen.SummarizeToolActivityResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if len(payload.ToolCalls) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no tool calls to summarize").LogError(ctx, s.logger)
+	}
+
+	if s.completionClient == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
+	}
+
+	prompt := buildToolActivityPrompt(payload)
+	if strings.TrimSpace(prompt) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no tool activity to summarize").LogError(ctx, s.logger)
+	}
+
+	tense := "the present tense (e.g. \"Searching the web for pricing\")"
+	if !payload.InProgress {
+		tense = "the past tense (e.g. \"Searched the web for pricing\")"
+	}
+	systemPrompt := "You label what an AI agent is doing in a single short phrase for a chat UI, " +
+		"like the activity line in the Claude mobile app. " +
+		"Given the user's request and the tools the agent is calling, reply with ONE concise phrase in " +
+		tense + " describing the agent's current task from the user's point of view. " +
+		"Rules: 3 to 8 words; no trailing punctuation; no surrounding quotes; " +
+		"do not mention \"tool\", \"function\", \"API\", or the raw tool names; " +
+		"describe the intent, not the mechanics. Reply with the phrase only."
+
+	summaryCtx, cancel := context.WithTimeout(ctx, toolActivitySummaryTimeout)
+	defer cancel()
+
+	response, err := s.completionClient.GetCompletion(summaryCtx, openrouter.CompletionRequest{
+		OrgID:     authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+		ChatID:    uuid.Nil,
+		Messages: []or.ChatMessages{
+			openrouter.CreateMessageSystem(systemPrompt),
+			openrouter.CreateMessageUser(prompt),
+		},
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     "",
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                nil,
+		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:              nil,
+		NormalizeOutboundMessages: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to summarize tool activity").LogError(ctx, s.logger)
+	}
+	if response == nil || response.Message == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "empty tool activity summary response").LogError(ctx, s.logger)
+	}
+
+	summary := sanitizeToolActivitySummary(openrouter.GetText(*response.Message))
+	if summary == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "empty tool activity summary response").LogError(ctx, s.logger)
+	}
+
+	return &gen.SummarizeToolActivityResult{Summary: summary}, nil
+}
+
+// buildToolActivityPrompt renders the user prompt plus the turn's tool calls
+// into a bounded prompt for the tool-activity summarizer.
+func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
+	var b strings.Builder
+
+	if payload.UserMessage != nil {
+		msg := strings.TrimSpace(StripLeadingEnvelopes(*payload.UserMessage))
+		msg = truncateRunes(msg, maxToolActivityUserMessageRunes)
+		if msg != "" {
+			b.WriteString("User request:\n")
+			b.WriteString(msg)
+			b.WriteString("\n\n")
+		}
+	}
+
+	b.WriteString("Tools the agent is calling, in order:\n")
+	calls := payload.ToolCalls
+	if len(calls) > maxToolActivityCalls {
+		calls = calls[:maxToolActivityCalls]
+	}
+	n := 0
+	for _, call := range calls {
+		if call == nil || strings.TrimSpace(call.Name) == "" {
+			continue
+		}
+		n++
+		b.WriteString(fmt.Sprintf("%d. %s", n, call.Name))
+		if call.Arguments != nil {
+			args := strings.TrimSpace(*call.Arguments)
+			args = truncateRunes(args, maxToolActivityArgumentRunes)
+			if args != "" && args != "{}" {
+				b.WriteString(" ")
+				b.WriteString(args)
+			}
+		}
+		b.WriteString("\n")
+	}
+	if n == 0 {
+		return ""
+	}
+	return b.String()
+}
+
+// sanitizeToolActivitySummary trims a model-produced activity label down to a
+// single clean line: first line only, no surrounding quotes, no trailing period.
+func sanitizeToolActivitySummary(s string) string {
+	s = strings.TrimSpace(s)
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	s = strings.Trim(s, "\"'`")
+	s = strings.TrimSpace(s)
+	s = strings.TrimRight(s, ".")
+	return strings.TrimSpace(s)
 }
 
 func formatOptionalTimestamptz(ts pgtype.Timestamptz) *string {

@@ -49,6 +49,12 @@ type Service interface {
 	// When a summary already exists and regenerate is false, returns the cached
 	// summary without calling the model.
 	Summarize(context.Context, *SummarizePayload) (res *SummarizeChatResult, err error)
+	// Generate a short, human-readable summary of the tool activity in the current
+	// agent turn — a present- or past-tense 'task' label (e.g. "Searching the web
+	// for pricing") shown in place of a raw "Calling N tools" header. Stateless:
+	// the summary is derived from the supplied tool calls and optional user prompt
+	// and is not persisted.
+	SummarizeToolActivity(context.Context, *SummarizeToolActivityPayload) (res *SummarizeToolActivityResult, err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 	// List the distinct agent sources present in this project's chats, for
@@ -78,7 +84,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "submitFeedback", "listSources"}
+var MethodNames = [11]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolActivity", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -597,6 +603,36 @@ type SummarizePayload struct {
 	ID string
 	// When true, regenerate and overwrite any existing summary. Defaults to false.
 	Regenerate bool
+}
+
+// SummarizeToolActivityPayload is the payload type of the chat service
+// summarizeToolActivity method.
+type SummarizeToolActivityPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The tool calls made so far in the current turn, in order.
+	ToolCalls []*ToolActivityCall
+	// The user prompt that initiated the turn, used to ground the summary in the
+	// user's intent.
+	UserMessage *string
+	// True while the tools are still running (produces a present-tense label);
+	// false once they have completed (past tense).
+	InProgress bool
+}
+
+// SummarizeToolActivityResult is the result type of the chat service
+// summarizeToolActivity method.
+type SummarizeToolActivityResult struct {
+	// A short, human-readable label describing what the agent is doing or did in
+	// this turn.
+	Summary string
+}
+
+type ToolActivityCall struct {
+	// The tool name.
+	Name string
+	// The tool arguments as a JSON string, if available.
+	Arguments *string
 }
 
 type WorkUnitsTrendBucket struct {
