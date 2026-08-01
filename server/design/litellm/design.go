@@ -98,7 +98,7 @@ var _ = Service("litellm", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("resourceSpans", ArrayOf(Any), "Standard OTLP ResourceSpans objects. OTLP integer fields use their canonical decimal-string JSON representation and trace/span IDs use lowercase hexadecimal strings.")
+			Attribute("resourceSpans", ArrayOf(Any), "Standard OTLP ResourceSpans objects. OTLP integer fields use their canonical decimal-string JSON representation and trace/span IDs use case-insensitive hexadecimal strings.")
 			Required("resourceSpans")
 		})
 

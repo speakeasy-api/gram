@@ -509,11 +509,16 @@ func newStartCommand() *cli.Command {
 				}
 			}()
 
-			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
+			chDB, clickhouseShutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			clickhouseShutdownRegistered := false
+			defer func() {
+				if !clickhouseShutdownRegistered {
+					_ = o11y.LogDefer(ctx, logger, func() error { return clickhouseShutdown(ctx) })
+				}
+			}()
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -719,6 +724,9 @@ func newStartCommand() *cli.Command {
 				if telemetryLoggerShutdown != nil {
 					errs = append(errs, telemetryLoggerShutdown(ctx))
 				}
+				if clickhouseShutdown != nil {
+					errs = append(errs, clickhouseShutdown(ctx))
+				}
 				if publishersShutdown != nil {
 					errs = append(errs, publishersShutdown(ctx))
 				}
@@ -729,6 +737,7 @@ func newStartCommand() *cli.Command {
 				return errors.Join(errs...)
 			})
 			dbShutdownRegistered = true
+			clickhouseShutdownRegistered = true
 
 			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
 			pubsubShutdown = shutdown

@@ -26,6 +26,7 @@ type TraceProcessor struct {
 	logBulk func(context.Context, []telemetry.LogParams) error
 	jobs    chan traceJob
 	stop    chan struct{}
+	done    chan struct{}
 	workers int
 
 	mu       sync.Mutex
@@ -55,6 +56,7 @@ func newTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		logBulk:            logBulk,
 		jobs:               make(chan traceJob, queueSize),
 		stop:               make(chan struct{}),
+		done:               make(chan struct{}),
 		workers:            workers,
 		mu:                 sync.Mutex{},
 		started:            false,
@@ -83,19 +85,20 @@ func (p *TraceProcessor) Start(ctx context.Context) {
 
 func (p *TraceProcessor) Shutdown(ctx context.Context) error {
 	p.mu.Lock()
-	if !p.started || p.stopping {
+	if !p.started {
 		p.mu.Unlock()
 		return nil
 	}
-	p.stopping = true
-	close(p.stop)
+	if !p.stopping {
+		p.stopping = true
+		close(p.stop)
+		go func() {
+			p.wg.Wait()
+			close(p.done)
+		}()
+	}
+	done := p.done
 	p.mu.Unlock()
-
-	done := make(chan struct{})
-	go func() {
-		p.wg.Wait()
-		close(done)
-	}()
 
 	select {
 	case <-done:

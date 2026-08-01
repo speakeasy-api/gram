@@ -350,6 +350,27 @@ func TestTraceProcessorQueueSaturationDropsWithoutBlocking(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestTraceProcessorShutdownRetriesWaitForWorkerCompletion(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	processor := newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}, 1, 1)
+	processor.Start(t.Context())
+	require.True(t, processor.Enqueue(t.Context(), []telemetry.LogParams{}))
+	<-entered
+
+	timedOut, cancel := context.WithTimeout(t.Context(), 0)
+	defer cancel()
+	require.ErrorIs(t, processor.Shutdown(timedOut), context.DeadlineExceeded)
+	close(release)
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
 func metricCounterValue(t *testing.T, reader *sdkmetric.ManualReader, name string) int64 {
 	t.Helper()
 	var metrics metricdata.ResourceMetrics
@@ -518,5 +539,52 @@ func TestOTLPAttributeLimitsAndRecursiveValues(t *testing.T) {
 	require.False(t, validID)
 	_, validID = normalizeOTLPID(strings.Repeat("0", 16), 16)
 	require.False(t, validID)
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestOTLPAttributeTypeAllowlistRejectsNestedValues(t *testing.T) {
+	t.Parallel()
+
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	sensitive := "fixture-sensitive-nested"
+	encodedSensitive := "Zml4dHVyZS1zZW5zaXRpdmUtbmVzdGVk"
+	nested := otlpAnyValue{KvlistValue: &otlpKeyValueList{Values: []otlpKeyValue{{Key: "content", Value: otlpAnyValue{StringValue: &sensitive}}}}}
+	result := service.sanitizeOTLPAttributes(t.Context(), []otlpKeyValue{
+		{Key: "gen_ai.request.model", Value: otlpAnyValue{ArrayValue: &otlpArrayValue{Values: []otlpAnyValue{{StringValue: &sensitive}}}}},
+		{Key: "gen_ai.usage.cost", Value: nested},
+		{Key: "gen_ai.usage.input_tokens", Value: otlpAnyValue{BytesValue: &encodedSensitive}},
+		{Key: "gen_ai.request.is_streaming", Value: otlpAnyValue{ArrayValue: &otlpArrayValue{Values: []otlpAnyValue{nested}}}},
+		{Key: "gen_ai.response.finish_reasons", Value: otlpAnyValue{ArrayValue: &otlpArrayValue{Values: []otlpAnyValue{nested}}}},
+	}, spanAttributeAllowlist)
+	require.Empty(t, result)
+
+	resources := service.sanitizeOTLPAttributes(t.Context(), []otlpKeyValue{{
+		Key: "service.name", Value: otlpAnyValue{KvlistValue: &otlpKeyValueList{Values: []otlpKeyValue{{Key: "content", Value: otlpAnyValue{StringValue: &sensitive}}}}},
+	}}, resourceAttributeAllowlist)
+	require.Empty(t, resources)
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestOTLPAttributeTypeAllowlistAcceptsSafeValues(t *testing.T) {
+	t.Parallel()
+
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	model := "safe-model"
+	finishReason := "stop"
+	streaming := true
+	tokens := jsonInt64(42)
+	cost := jsonFloat64(0.125)
+	result := service.sanitizeOTLPAttributes(t.Context(), []otlpKeyValue{
+		{Key: "gen_ai.request.model", Value: otlpAnyValue{StringValue: &model}},
+		{Key: "gen_ai.response.finish_reasons", Value: otlpAnyValue{ArrayValue: &otlpArrayValue{Values: []otlpAnyValue{{StringValue: &finishReason}}}}},
+		{Key: "gen_ai.request.is_streaming", Value: otlpAnyValue{BoolValue: &streaming}},
+		{Key: "gen_ai.usage.input_tokens", Value: otlpAnyValue{IntValue: &tokens}},
+		{Key: "gen_ai.usage.cost", Value: otlpAnyValue{DoubleValue: &cost}},
+	}, spanAttributeAllowlist)
+	require.Equal(t, "safe-model", result[attr.GenAIRequestModelKey])
+	require.Equal(t, []any{"stop"}, result[attr.GenAIResponseFinishReasonsKey])
+	require.Equal(t, true, result["gen_ai.request.is_streaming"])
+	require.Equal(t, int64(42), result[attr.GenAIUsageInputTokensKey])
+	require.InDelta(t, 0.125, result[attr.GenAIUsageCostKey], 1e-12)
 	require.NoError(t, processor.Shutdown(t.Context()))
 }
