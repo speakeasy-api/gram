@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -49,9 +51,33 @@ func TestMain(m *testing.M) {
 }
 
 type realTestInstance struct {
-	service *Service
-	hooks   *hooks.Service
-	conn    *pgxpool.Pool
+	service  *Service
+	hooks    *hooks.Service
+	conn     *pgxpool.Pool
+	observer *recordingMessageObserver
+}
+
+type recordingMessageObserver struct {
+	mu       sync.Mutex
+	projects []uuid.UUID
+}
+
+func (r *recordingMessageObserver) OnMessagesStored(_ context.Context, projectID uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.projects = append(r.projects, projectID)
+}
+
+func (r *recordingMessageObserver) count(projectID uuid.UUID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, observed := range r.projects {
+		if observed == projectID {
+			count++
+		}
+	}
+	return count
 }
 
 func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context, *realTestInstance) {
@@ -74,6 +100,8 @@ func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
 	t.Cleanup(func() { require.NoError(t, shutdownWriter(t.Context())) })
+	observer := &recordingMessageObserver{mu: sync.Mutex{}, projects: nil}
+	chatWriter.AddObserver(observer)
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
 	siteURL, err := url.Parse("https://app.example.test")
@@ -106,10 +134,11 @@ func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context
 		siteURL,
 		"test-jwt-secret",
 	)
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService)
+	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, callcache.New(cacheAdapter))
 	return ctx, &realTestInstance{
-		service: service,
-		hooks:   hookService,
-		conn:    conn,
+		service:  service,
+		hooks:    hookService,
+		conn:     conn,
+		observer: observer,
 	}
 }
