@@ -1877,6 +1877,9 @@ const (
 	// maxToolActivityNameRunes caps a single tool name in the prompt so an
 	// oversized name can't inflate the request.
 	maxToolActivityNameRunes = 128
+	// maxToolActivitySummaryRunes caps the label the model returns, so a
+	// non-conforming (paragraph-length) response can't blow out the header.
+	maxToolActivitySummaryRunes = 120
 	// maxToolActivityArgumentRunes caps one tool call's argument blob so a large
 	// payload can't dominate the prompt.
 	maxToolActivityArgumentRunes = 600
@@ -2138,7 +2141,9 @@ func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
 }
 
 // sanitizeToolActivitySummary trims a model-produced activity label down to a
-// single clean line: first line only, no surrounding quotes, no trailing period.
+// single clean line: first line only, no surrounding quotes, no trailing
+// period, and bounded to a short length so a model that ignores the prompt
+// can't return a paragraph that blows out the collapsed header.
 func sanitizeToolActivitySummary(s string) string {
 	s = strings.TrimSpace(s)
 	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
@@ -2147,7 +2152,19 @@ func sanitizeToolActivitySummary(s string) string {
 	s = strings.Trim(s, "\"'`")
 	s = strings.TrimSpace(s)
 	s = strings.TrimRight(s, ".")
-	return strings.TrimSpace(s)
+	s = strings.TrimSpace(s)
+
+	// Hard cap the label. The prompt asks for 3-8 words; this is the guardrail
+	// for when the model doesn't comply. Trim back to a word boundary so we
+	// don't cut mid-word.
+	if utf8.RuneCountInString(s) > maxToolActivitySummaryRunes {
+		s = truncateRunes(s, maxToolActivitySummaryRunes)
+		if idx := strings.LastIndexByte(s, ' '); idx > 0 {
+			s = s[:idx]
+		}
+		s = strings.TrimSpace(s)
+	}
+	return s
 }
 
 func formatOptionalTimestamptz(ts pgtype.Timestamptz) *string {

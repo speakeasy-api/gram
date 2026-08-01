@@ -2,7 +2,9 @@ package chat_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -49,6 +51,61 @@ func TestService_SummarizeToolActivity_Running(t *testing.T) {
 	require.Contains(t, prompt, "Why are my tool calls failing?")
 	require.Contains(t, prompt, "list_deployments")
 	require.Contains(t, prompt, "get_deployment_logs")
+	// Running turns must instruct the model to use the present tense.
+	require.Contains(t, prompt, "present tense")
+	require.NotContains(t, prompt, "past tense")
+	client.AssertExpectations(t)
+}
+
+func TestService_SummarizeToolActivity_CompletedUsesPastTense(t *testing.T) {
+	t.Parallel()
+
+	client := &mockCompletionClient{}
+	var captured openrouter.CompletionRequest
+	client.On("GetCompletion", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			captured, _ = args.Get(1).(openrouter.CompletionRequest)
+		}).
+		Return(assistantTextResponse("Searched the web for pricing"), nil).
+		Once()
+
+	ti := newTestChatServiceWithCompletion(t, client)
+	ctx := initSessionCtx(t, ti)
+
+	_, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+		InProgress: false,
+		ToolCalls:  []*gen.ToolActivityCall{{Name: "search_web"}},
+	})
+	require.NoError(t, err)
+
+	promptJSON, err := json.Marshal(captured.Messages)
+	require.NoError(t, err)
+	prompt := string(promptJSON)
+	require.Contains(t, prompt, "past tense")
+	require.NotContains(t, prompt, "present tense")
+	client.AssertExpectations(t)
+}
+
+func TestService_SummarizeToolActivity_BoundsLongOutput(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("word ", 200)
+	client := &mockCompletionClient{}
+	client.On("GetCompletion", mock.Anything, mock.Anything).
+		Return(assistantTextResponse(long), nil).
+		Once()
+
+	ti := newTestChatServiceWithCompletion(t, client)
+	ctx := initSessionCtx(t, ti)
+
+	res, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+		InProgress: true,
+		ToolCalls:  []*gen.ToolActivityCall{{Name: "search_web"}},
+	})
+	require.NoError(t, err)
+	// A non-conforming, paragraph-length response is capped, not passed through.
+	require.LessOrEqual(t, utf8.RuneCountInString(res.Summary), 120)
+	require.NotEmpty(t, res.Summary)
 	client.AssertExpectations(t)
 }
 
