@@ -502,7 +502,12 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			defer db.Close()
+			dbShutdownRegistered := false
+			defer func() {
+				if !dbShutdownRegistered {
+					db.Close()
+				}
+			}()
 
 			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
@@ -707,7 +712,9 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				var errs []error
 				if litellmTraceProcessor != nil {
-					errs = append(errs, litellmTraceProcessor.Shutdown(ctx))
+					if err := litellmTraceProcessor.Shutdown(ctx); err != nil {
+						return fmt.Errorf("shutdown LiteLLM trace processor: %w", err)
+					}
 				}
 				if telemetryLoggerShutdown != nil {
 					errs = append(errs, telemetryLoggerShutdown(ctx))
@@ -718,8 +725,10 @@ func newStartCommand() *cli.Command {
 				if pubsubShutdown != nil {
 					errs = append(errs, pubsubShutdown(ctx))
 				}
+				db.Close()
 				return errors.Join(errs...)
 			})
+			dbShutdownRegistered = true
 
 			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
 			pubsubShutdown = shutdown
