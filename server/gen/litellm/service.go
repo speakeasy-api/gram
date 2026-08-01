@@ -103,7 +103,7 @@ type TracesPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Standard OTLP ResourceSpans objects. OTLP integer fields use their canonical
-	// decimal-string JSON representation and trace/span IDs use lowercase
+	// decimal-string JSON representation and trace/span IDs use case-insensitive
 	// hexadecimal strings.
 	ResourceSpans []any
 }

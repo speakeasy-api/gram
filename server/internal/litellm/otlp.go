@@ -31,62 +31,77 @@ const (
 	litellmOTLPResourceURN = "litellm:otel:traces"
 )
 
-var spanAttributeAllowlist = map[string]attribute.Key{
-	"gen_ai.operation.name":                    attr.GenAIOperationNameKey,
-	"gen_ai.provider.name":                     attr.GenAIProviderNameKey,
-	"gen_ai.system":                            attribute.Key("gen_ai.system"),
-	"gen_ai.request.model":                     attr.GenAIRequestModelKey,
-	"gen_ai.response.model":                    attr.GenAIResponseModelKey,
-	"gen_ai.response.id":                       attr.GenAIResponseIDKey,
-	"gen_ai.response.finish_reasons":           attr.GenAIResponseFinishReasonsKey,
-	"gen_ai.conversation.id":                   attr.GenAIConversationIDKey,
-	"gen_ai.usage.input_tokens":                attr.GenAIUsageInputTokensKey,
-	"gen_ai.usage.output_tokens":               attr.GenAIUsageOutputTokensKey,
-	"gen_ai.usage.total_tokens":                attr.GenAIUsageTotalTokensKey,
-	"gen_ai.usage.prompt_tokens":               attribute.Key("gen_ai.usage.prompt_tokens"),
-	"gen_ai.usage.completion_tokens":           attribute.Key("gen_ai.usage.completion_tokens"),
-	"gen_ai.usage.cache_read.input_tokens":     attr.GenAIUsageCacheReadInputTokensKey,
-	"gen_ai.usage.cache_creation.input_tokens": attr.GenAIUsageCacheCreationInputTokensKey,
-	"gen_ai.usage.reasoning_tokens":            attr.GenAIUsageReasoningTokensKey,
-	"gen_ai.usage.cost":                        attr.GenAIUsageCostKey,
-	"gen_ai.request.is_streaming":              attribute.Key("gen_ai.request.is_streaming"),
-	"gen_ai.request.streaming":                 attribute.Key("gen_ai.request.streaming"),
-	"litellm.is_streaming":                     attribute.Key("litellm.is_streaming"),
-	"litellm.response.cost":                    attribute.Key("litellm.response.cost"),
-	"litellm.call_id":                          attr.LiteLLMCallIDKey,
-	"litellm_call_id":                          attr.LiteLLMCallIDKey,
-	"litellm.trace_id":                         attr.LiteLLMTraceIDKey,
-	"litellm_trace_id":                         attr.LiteLLMTraceIDKey,
-	"litellm.user_id":                          attr.LiteLLMUserIDKey,
-	"user_api_key_user_id":                     attr.LiteLLMUserIDKey,
-	"metadata.user_api_key_user_id":            attr.LiteLLMUserIDKey,
-	"litellm.user_email":                       attr.LiteLLMUserEmailKey,
-	"user_api_key_user_email":                  attr.LiteLLMUserEmailKey,
-	"metadata.user_api_key_user_email":         attr.LiteLLMUserEmailKey,
-	"litellm.team_id":                          attr.LiteLLMTeamIDKey,
-	"user_api_key_team_id":                     attr.LiteLLMTeamIDKey,
-	"metadata.user_api_key_team_id":            attr.LiteLLMTeamIDKey,
-	"litellm.team_alias":                       attr.LiteLLMTeamAliasKey,
-	"user_api_key_team_alias":                  attr.LiteLLMTeamAliasKey,
-	"metadata.user_api_key_team_alias":         attr.LiteLLMTeamAliasKey,
-	"litellm.org_id":                           attr.LiteLLMOrganizationIDKey,
-	"litellm.organization_id":                  attr.LiteLLMOrganizationIDKey,
-	"user_api_key_org_id":                      attr.LiteLLMOrganizationIDKey,
-	"metadata.user_api_key_org_id":             attr.LiteLLMOrganizationIDKey,
-	"user_api_key_end_user_id":                 attr.LiteLLMEndUserIDKey,
-	"metadata.user_api_key_end_user_id":        attr.LiteLLMEndUserIDKey,
+type otlpAttributeValueKind uint8
+
+const (
+	otlpAttributeString otlpAttributeValueKind = iota
+	otlpAttributeBool
+	otlpAttributeInteger
+	otlpAttributeNumber
+	otlpAttributeStringArray
+)
+
+type otlpAttributeSpec struct {
+	target attribute.Key
+	kind   otlpAttributeValueKind
 }
 
-var resourceAttributeAllowlist = map[string]attribute.Key{
-	"service.name":                attr.ServiceNameKey,
-	"service.namespace":           attribute.Key("service.namespace"),
-	"service.version":             attr.ServiceVersionKey,
-	"service.instance.id":         attribute.Key("service.instance.id"),
-	"deployment.environment":      attribute.Key("deployment.environment"),
-	"deployment.environment.name": attribute.Key("deployment.environment.name"),
-	"telemetry.sdk.name":          attribute.Key("telemetry.sdk.name"),
-	"telemetry.sdk.language":      attribute.Key("telemetry.sdk.language"),
-	"telemetry.sdk.version":       attribute.Key("telemetry.sdk.version"),
+var spanAttributeAllowlist = map[string]otlpAttributeSpec{
+	"gen_ai.operation.name":                    {target: attr.GenAIOperationNameKey, kind: otlpAttributeString},
+	"gen_ai.provider.name":                     {target: attr.GenAIProviderNameKey, kind: otlpAttributeString},
+	"gen_ai.system":                            {target: attribute.Key("gen_ai.system"), kind: otlpAttributeString},
+	"gen_ai.request.model":                     {target: attr.GenAIRequestModelKey, kind: otlpAttributeString},
+	"gen_ai.response.model":                    {target: attr.GenAIResponseModelKey, kind: otlpAttributeString},
+	"gen_ai.response.id":                       {target: attr.GenAIResponseIDKey, kind: otlpAttributeString},
+	"gen_ai.response.finish_reasons":           {target: attr.GenAIResponseFinishReasonsKey, kind: otlpAttributeStringArray},
+	"gen_ai.conversation.id":                   {target: attr.GenAIConversationIDKey, kind: otlpAttributeString},
+	"gen_ai.usage.input_tokens":                {target: attr.GenAIUsageInputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.output_tokens":               {target: attr.GenAIUsageOutputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.total_tokens":                {target: attr.GenAIUsageTotalTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.prompt_tokens":               {target: attribute.Key("gen_ai.usage.prompt_tokens"), kind: otlpAttributeInteger},
+	"gen_ai.usage.completion_tokens":           {target: attribute.Key("gen_ai.usage.completion_tokens"), kind: otlpAttributeInteger},
+	"gen_ai.usage.cache_read.input_tokens":     {target: attr.GenAIUsageCacheReadInputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.cache_creation.input_tokens": {target: attr.GenAIUsageCacheCreationInputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.reasoning_tokens":            {target: attr.GenAIUsageReasoningTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.cost":                        {target: attr.GenAIUsageCostKey, kind: otlpAttributeNumber},
+	"gen_ai.request.is_streaming":              {target: attribute.Key("gen_ai.request.is_streaming"), kind: otlpAttributeBool},
+	"gen_ai.request.streaming":                 {target: attribute.Key("gen_ai.request.streaming"), kind: otlpAttributeBool},
+	"litellm.is_streaming":                     {target: attribute.Key("litellm.is_streaming"), kind: otlpAttributeBool},
+	"litellm.response.cost":                    {target: attribute.Key("litellm.response.cost"), kind: otlpAttributeNumber},
+	"litellm.call_id":                          {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
+	"litellm_call_id":                          {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
+	"litellm.trace_id":                         {target: attr.LiteLLMTraceIDKey, kind: otlpAttributeString},
+	"litellm_trace_id":                         {target: attr.LiteLLMTraceIDKey, kind: otlpAttributeString},
+	"litellm.user_id":                          {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
+	"user_api_key_user_id":                     {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_user_id":            {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
+	"litellm.user_email":                       {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
+	"user_api_key_user_email":                  {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
+	"metadata.user_api_key_user_email":         {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
+	"litellm.team_id":                          {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
+	"user_api_key_team_id":                     {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_team_id":            {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
+	"litellm.team_alias":                       {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
+	"user_api_key_team_alias":                  {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
+	"metadata.user_api_key_team_alias":         {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
+	"litellm.org_id":                           {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"litellm.organization_id":                  {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"user_api_key_org_id":                      {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_org_id":             {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"user_api_key_end_user_id":                 {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_end_user_id":        {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
+}
+
+var resourceAttributeAllowlist = map[string]otlpAttributeSpec{
+	"service.name":                {target: attr.ServiceNameKey, kind: otlpAttributeString},
+	"service.namespace":           {target: attribute.Key("service.namespace"), kind: otlpAttributeString},
+	"service.version":             {target: attr.ServiceVersionKey, kind: otlpAttributeString},
+	"service.instance.id":         {target: attribute.Key("service.instance.id"), kind: otlpAttributeString},
+	"deployment.environment":      {target: attribute.Key("deployment.environment"), kind: otlpAttributeString},
+	"deployment.environment.name": {target: attribute.Key("deployment.environment.name"), kind: otlpAttributeString},
+	"telemetry.sdk.name":          {target: attribute.Key("telemetry.sdk.name"), kind: otlpAttributeString},
+	"telemetry.sdk.language":      {target: attribute.Key("telemetry.sdk.language"), kind: otlpAttributeString},
+	"telemetry.sdk.version":       {target: attribute.Key("telemetry.sdk.version"), kind: otlpAttributeString},
 }
 
 type otlpExportRequest struct {
@@ -561,11 +576,11 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 	return params
 }
 
-func (s *Service) sanitizeOTLPAttributes(ctx context.Context, values []otlpKeyValue, allowlist map[string]attribute.Key) map[attr.Key]any {
+func (s *Service) sanitizeOTLPAttributes(ctx context.Context, values []otlpKeyValue, allowlist map[string]otlpAttributeSpec) map[attr.Key]any {
 	result := make(map[attr.Key]any)
 	truncated := max(0, len(values)-maxOTLPAttributes)
 	for _, value := range values[:min(len(values), maxOTLPAttributes)] {
-		target, allowed := allowlist[value.Key]
+		spec, allowed := allowlist[value.Key]
 		if !allowed {
 			continue
 		}
@@ -574,16 +589,56 @@ func (s *Service) sanitizeOTLPAttributes(ctx context.Context, values []otlpKeyVa
 			truncated++
 			continue
 		}
+		if !validOTLPAttributeValue(converted, spec.kind) {
+			truncated++
+			continue
+		}
 		bounded, changed, ok := boundOTLPAttributeValue(converted)
 		if changed {
 			truncated++
 		}
 		if ok {
-			result[target] = bounded
+			result[spec.target] = bounded
 		}
 	}
 	s.traces.recordTruncatedAttributes(ctx, truncated)
 	return result
+}
+
+func validOTLPAttributeValue(value any, kind otlpAttributeValueKind) bool {
+	switch kind {
+	case otlpAttributeString:
+		_, ok := value.(string)
+		return ok
+	case otlpAttributeBool:
+		_, ok := value.(bool)
+		return ok
+	case otlpAttributeInteger:
+		_, ok := value.(int64)
+		return ok
+	case otlpAttributeNumber:
+		switch number := value.(type) {
+		case int64:
+			return true
+		case float64:
+			return !math.IsNaN(number) && !math.IsInf(number, 0)
+		default:
+			return false
+		}
+	case otlpAttributeStringArray:
+		values, ok := value.([]any)
+		if !ok {
+			return false
+		}
+		for _, item := range values {
+			if _, ok := item.(string); !ok {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func boundOTLPAttributeValue(value any) (bounded any, changed bool, ok bool) {

@@ -35,7 +35,7 @@ type IngestRequestBody struct {
 // HTTP request body.
 type TracesRequestBody struct {
 	// Standard OTLP ResourceSpans objects. OTLP integer fields use their canonical
-	// decimal-string JSON representation and trace/span IDs use lowercase
+	// decimal-string JSON representation and trace/span IDs use case-insensitive
 	// hexadecimal strings.
 	ResourceSpans []any `form:"resourceSpans,omitempty" json:"resourceSpans,omitempty" xml:"resourceSpans,omitempty"`
 }
