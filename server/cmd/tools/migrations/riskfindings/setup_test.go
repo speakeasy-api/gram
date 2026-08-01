@@ -107,15 +107,33 @@ func seedTenant(t *testing.T) *tenant {
 	}
 }
 
-func (tn *tenant) newChat(t *testing.T) uuid.UUID {
+// newChat seeds a chat with chat-level user attribution — the fallback the
+// source resolves when neither the anchor message nor a part's parent message
+// carries user ids.
+func (tn *tenant) newChat(t *testing.T, userID, externalUserID string) uuid.UUID {
 	t.Helper()
 	chatID, err := chatrepo.New(tn.pool).UpsertChat(t.Context(), chatrepo.UpsertChatParams{
 		ID:             uuid.Must(uuid.NewV7()),
 		ProjectID:      tn.projectID,
 		OrganizationID: tn.orgID,
+		UserID:         conv.ToPGText(userID),
+		ExternalUserID: conv.ToPGText(externalUserID),
 	})
 	require.NoError(t, err)
 	return chatID
+}
+
+// newProject seeds a second project in the tenant's org, for fixtures that
+// need a project mismatch.
+func (tn *tenant) newProject(t *testing.T, slug string) uuid.UUID {
+	t.Helper()
+	project, err := projectsrepo.New(tn.pool).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: tn.orgID,
+	})
+	require.NoError(t, err)
+	return project.ID
 }
 
 // newMessage seeds a chat message stamped with createdAt — the event time the
@@ -223,18 +241,19 @@ func (tn *tenant) newFinding(t *testing.T, messageID uuid.UUID, createdAt time.T
 }
 
 // newContentPartFinding seeds a risk_results row anchored to a chat content
-// part instead of a message (chat_message_id IS NULL), so the source's
-// chat_messages join misses: attribution stays empty and message_created_at
-// falls back to the finding's own created_at. Returns the finding id and the
-// content part id.
-func (tn *tenant) newContentPartFinding(t *testing.T, chatID uuid.UUID, createdAt time.Time) (findingID, partID uuid.UUID) {
+// part instead of a message (chat_message_id IS NULL). Both the part and the
+// finding are stamped with projectID, so passing the chat's own project makes
+// the part attributable while passing a different project trips the source's
+// cross-project guard (the part's chat is not in the part's project) and
+// leaves attribution empty. Returns the finding id and the content part id.
+func (tn *tenant) newContentPartFinding(t *testing.T, chatID, projectID uuid.UUID, createdAt time.Time) (findingID, partID uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
 	repo := testrepo.New(tn.pool)
 
 	partID, err := repo.InsertChatContentPartFixture(ctx, testrepo.InsertChatContentPartFixtureParams{
 		ChatID:          chatID,
-		ProjectID:       uuid.NullUUID{UUID: tn.projectID, Valid: true},
+		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
 		Kind:            "prompt_attachment",
 		ContentAssetUrl: "asset://test",
 	})
@@ -243,7 +262,7 @@ func (tn *tenant) newContentPartFinding(t *testing.T, chatID uuid.UUID, createdA
 	findingID = uuid.Must(uuid.NewV7())
 	require.NoError(t, repo.InsertContentPartRiskResultFixture(ctx, testrepo.InsertContentPartRiskResultFixtureParams{
 		ID:                findingID,
-		ProjectID:         tn.projectID,
+		ProjectID:         projectID,
 		OrganizationID:    tn.orgID,
 		RiskPolicyID:      tn.policyID,
 		RiskPolicyVersion: 1,

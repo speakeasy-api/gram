@@ -106,10 +106,17 @@ derived`, anything else `''`. `tool_call_id` is always left empty: Postgres
   the ClickHouse column DEFAULT — when there is no message) and `assistant_id`
   (the chat's most recent live `assistant_threads` link), mirroring the live
   writer's `GetChatMessageAttribution` lookup. Content-part-anchored rows stamp
-  `content_part_id` instead of `chat_message_id`; they have no `chat_messages`
-  join, so their attribution stays empty and their event time falls back.
-  `category` is computed from `(source, rule_id)` via
-  `internal/risk/categories`, same as the live writer.
+  `content_part_id` instead of `chat_message_id` and resolve attribution
+  through the part, mirroring the live `GetChatContentPartAttribution` lookup:
+  chat id from the part's chat, user ids parent-message-first with the same
+  guards (part live, part project = finding project, the part's chat in the
+  part's own project, the parent message in the part's own chat — any failed
+  guard leaves attribution fully empty rather than borrowing a foreign chat's
+  ids). Beyond the live part lookup, the backfill also stamps the parent
+  message's `created_at` (falling back to the finding's own) and the part
+  chat's assistant link, since it has the joins at hand. `category` is
+  computed from `(source, rule_id)` via `internal/risk/categories`, same as
+  the live writer.
 
 ## Flags
 

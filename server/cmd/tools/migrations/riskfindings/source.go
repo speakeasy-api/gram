@@ -61,21 +61,23 @@ type SourceRow struct {
 	FalsePositiveAt  *time.Time
 
 	// Denormalized attribution resolved by the source's LEFT JOINs, mirroring
-	// the live writer's GetChatMessageAttribution lookup: message-level user
-	// ids win over chat-level ones. All empty when the chat message no longer
-	// resolves (deleted chat, missing message) — including content-part-anchored
-	// rows, which have no chat_messages join at all.
+	// the live writer's lookups: GetChatMessageAttribution for message-anchored
+	// rows (message-level user ids win over chat-level ones) and
+	// GetChatContentPartAttribution for content-part-anchored rows (parent
+	// message first, then the part's chat, with the live project and chat-scope
+	// guards). All empty when the anchor no longer resolves or a guard rejects
+	// it (deleted chat/part, missing message, cross-project part).
 	ChatID         string
 	UserID         string
 	ExternalUserID string
 
-	// MessageCreatedAt is the scanned chat message's event time
-	// (chat_messages.created_at), falling back to the finding's own created_at
-	// when the row has no chat message (content-part anchors) — the same value
-	// the ClickHouse column DEFAULT computes.
+	// MessageCreatedAt is the scanned message's event time
+	// (chat_messages.created_at — the part's parent message for content-part
+	// anchors), falling back to the finding's own created_at when no message
+	// resolves — the same value the ClickHouse column DEFAULT computes.
 	MessageCreatedAt time.Time
-	// AssistantID is the chat's most recent live assistant_threads link, empty
-	// when the chat backs no live thread (or the row has no chat message).
+	// AssistantID is the anchor chat's most recent live assistant_threads
+	// link, empty when the chat backs no live thread or no chat resolves.
 	AssistantID string
 }
 
@@ -103,33 +105,60 @@ type SourceRow struct {
 // (the live FP mutation path — PR 3 — is deferred) without inflating counts.
 //
 // The LEFT JOINs denormalize attribution the same way the live writer's
-// GetChatMessageAttribution query does (risk/queries.sql): chat id plus
+// lookups do (risk/queries.sql):
+//
+// Message-anchored rows mirror GetChatMessageAttribution: chat id plus
 // resolved user ids, message-level values winning over chat-level ones, the
 // message event time, and the chat's most recent live assistant_threads link —
 // everything collapsing to ” (and message_created_at to the finding's own
 // created_at, matching the ClickHouse column DEFAULT) when the message or chat
-// is gone. Content-part-anchored rows have no cm, so their attribution stays
-// empty and their event time falls back the same way.
+// is gone.
+//
+// Content-part-anchored rows mirror GetChatContentPartAttribution: the part
+// resolves its chat and, parent-message-first, its user ids. The guards are
+// the live ones — the part must be live (deleted IS FALSE), its project must
+// match the finding's (a NULL project, i.e. deleted project, is unverifiable),
+// its chat must sit in the part's own project (nothing in the schema ties a
+// part's project to its chat's, so a part pointing at a foreign-project chat
+// is rejected outright rather than attributed), and the parent message must
+// sit in the part's own chat (a stale or forged parent id must not hand
+// another chat's user ids to this row). A part failing any guard keeps fully
+// empty attribution, exactly like the live writer's project re-check. Beyond
+// the live part lookup (which resolves no event time or assistant), the
+// backfill also takes the parent message's created_at when present and the
+// part chat's assistant link, since it has the joins at hand.
 const selectPage = `
 SELECT r.id, r.created_at, r.organization_id, r.project_id, r.risk_policy_id,
        r.risk_policy_version, r.chat_message_id, r.chat_content_part_id, r.source, r.found,
        r.rule_id, r.description,
        r.match, r.start_pos, r.end_pos, r.confidence, r.tags, r.spans, r.dead_letter_reason,
        r.excluded_at, r.excluded_exclusion_id, r.false_positive_at,
-       COALESCE(cm.chat_id::text, '') AS chat_id,
-       COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id,
-       COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id,
-       COALESCE(cm.created_at, r.created_at) AS message_created_at,
+       COALESCE(cm.chat_id::text, ccp.chat_id::text, '') AS chat_id,
+       COALESCE(NULLIF(cm.user_id, ''), NULLIF(pcm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id,
+       COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(pcm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id,
+       COALESCE(cm.created_at, pcm.created_at, r.created_at) AS message_created_at,
        COALESCE(thread.assistant_id::text, '') AS assistant_id
 FROM risk_results r
 LEFT JOIN chat_messages cm
   ON cm.id = r.chat_message_id
+LEFT JOIN chat_content_parts ccp
+  ON ccp.id = r.chat_content_part_id
+  AND ccp.deleted IS FALSE
+  AND ccp.project_id = r.project_id
+  AND EXISTS (
+    SELECT 1 FROM chats pc
+    WHERE pc.id = ccp.chat_id
+      AND pc.project_id = ccp.project_id
+  )
+LEFT JOIN chat_messages pcm
+  ON pcm.id = ccp.parent_chat_message_id
+  AND pcm.chat_id = ccp.chat_id
 LEFT JOIN chats c
-  ON c.id = cm.chat_id
+  ON c.id = COALESCE(cm.chat_id, ccp.chat_id)
   AND c.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT at.assistant_id FROM assistant_threads at
-  WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+  WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
   ORDER BY at.created_at DESC LIMIT 1
 ) thread ON TRUE
 WHERE ($1::text IS NULL OR r.organization_id = $1)

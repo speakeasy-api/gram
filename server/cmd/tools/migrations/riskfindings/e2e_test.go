@@ -20,6 +20,8 @@ type chFindingRow struct {
 	chatMessageID    string
 	contentPartID    string
 	chatID           string
+	userID           string
+	externalUserID   string
 	messageCreatedAt time.Time
 	assistantID      string
 	surface          string
@@ -42,6 +44,7 @@ func queryFindings(t *testing.T, conn clickhouse.Conn, orgID string) map[uuid.UU
 
 	rows, err := conn.Query(t.Context(), `
 		SELECT id, chat_message_id, content_part_id, chat_id,
+		       user_id, external_user_id,
 		       message_created_at, assistant_id,
 		       surface, field, path, tool_call_id,
 		       start_pos, end_pos, match_len, match_redacted,
@@ -61,6 +64,7 @@ func queryFindings(t *testing.T, conn clickhouse.Conn, orgID string) map[uuid.UU
 		)
 		require.NoError(t, rows.Scan(
 			&id, &row.chatMessageID, &row.contentPartID, &row.chatID,
+			&row.userID, &row.externalUserID,
 			&row.messageCreatedAt, &row.assistantID,
 			&row.surface, &row.field, &row.path, &row.toolCallID,
 			&row.startPos, &row.endPos, &row.matchLen, &row.matchRedacted,
@@ -91,7 +95,7 @@ func TestPipelineInsertsRevealMetadata(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-48 * time.Hour)
 	scanAt := base.Add(2 * time.Hour)
 
-	chatID := tn.newChat(t)
+	chatID := tn.newChat(t, "user_chat_1", "ext_chat_1")
 	assistantID, _ := tn.linkAssistant(t, chatID)
 	msgID := tn.newMessage(t, chatID, base)
 
@@ -119,8 +123,14 @@ func TestPipelineInsertsRevealMetadata(t *testing.T) {
 		spans: spans,
 	})
 
-	// D: a content-part-anchored finding (no chat message).
-	partFinding, partID := tn.newContentPartFinding(t, chatID, scanAt)
+	// D: a content-part-anchored finding (no chat message) in the chat's own
+	// project — attributable through the part's chat.
+	partFinding, partID := tn.newContentPartFinding(t, chatID, tn.projectID, scanAt)
+
+	// E: a content-part-anchored finding whose part claims a different project
+	// than its chat's — the cross-project guard must reject its attribution.
+	otherProject := tn.newProject(t, "backfill-b")
+	crossFinding, crossPartID := tn.newContentPartFinding(t, chatID, otherProject, scanAt)
 
 	source := NewSource(tn.pool)
 	sink := NewSink(conn, 16, 4, false, true)
@@ -129,19 +139,22 @@ func TestPipelineInsertsRevealMetadata(t *testing.T) {
 		pipeline.Criteria{CriteriaOrgID: tn.orgID}, 16,
 	))
 
-	require.EqualValues(t, 4, source.Scanned())
-	require.EqualValues(t, 6, sink.Inserted(), "3 single rows + 3 exploded span rows")
+	require.EqualValues(t, 5, source.Scanned())
+	require.EqualValues(t, 7, sink.Inserted(), "4 single rows + 3 exploded span rows")
 	require.NotEqual(t, uuid.Nil, sink.LastCommitted())
 
 	got := queryFindings(t, conn, tn.orgID)
-	require.Len(t, got, 6)
+	require.Len(t, got, 7)
 
 	// A: presidio email — full anchor + attribution, legacy_presidio surface,
-	// domain-only mask.
+	// domain-only mask. The message carries no user ids, so user attribution
+	// falls back to the chat level, mirroring GetChatMessageAttribution.
 	a := got[emailFinding]
 	require.Equal(t, msgID.String(), a.chatMessageID)
 	require.Empty(t, a.contentPartID)
 	require.Equal(t, chatID.String(), a.chatID)
+	require.Equal(t, "user_chat_1", a.userID)
+	require.Equal(t, "ext_chat_1", a.externalUserID)
 	require.True(t, base.Equal(a.messageCreatedAt), "email row stamps the message event time, got %s", a.messageCreatedAt)
 	require.Equal(t, assistantID.String(), a.assistantID)
 	require.Equal(t, surfaceLegacyPresidio, a.surface)
@@ -193,17 +206,34 @@ func TestPipelineInsertsRevealMetadata(t *testing.T) {
 	// Distinct span matches keep distinct fingerprints.
 	require.NotEqual(t, got[spanIDs[0]].globalHS256, got[spanIDs[1]].globalHS256)
 
-	// D: content-part anchor — no chat message, so the message anchor stays
-	// empty, attribution is unresolved, and the event time falls back to the
-	// finding's own created_at (the ClickHouse column DEFAULT semantics).
+	// D: content-part anchor in the chat's own project — no chat message, so
+	// the message anchor stays empty, but chat/user attribution and the
+	// assistant link resolve through the part's chat, mirroring the live
+	// GetChatContentPartAttribution semantics. The fixture part has no parent
+	// message, so the event time falls back to the finding's own created_at
+	// (the ClickHouse column DEFAULT semantics).
 	d := got[partFinding]
 	require.Empty(t, d.chatMessageID)
 	require.Equal(t, partID.String(), d.contentPartID)
-	require.Empty(t, d.chatID)
-	require.Empty(t, d.assistantID)
+	require.Equal(t, chatID.String(), d.chatID)
+	require.Equal(t, "user_chat_1", d.userID)
+	require.Equal(t, "ext_chat_1", d.externalUserID)
+	require.Equal(t, assistantID.String(), d.assistantID)
 	require.True(t, scanAt.Equal(d.messageCreatedAt), "part row falls back to scan time, got %s", d.messageCreatedAt)
 	require.Equal(t, surfaceLegacyPresidio, d.surface)
 	require.Equal(t, "***@example.com", d.matchRedacted)
+
+	// E: the part claims a project its chat is not in — the cross-project
+	// guard rejects the whole attribution (its chat would otherwise resolve a
+	// user and an assistant, as D proves), leaving only the anchor id.
+	e := got[crossFinding]
+	require.Empty(t, e.chatMessageID)
+	require.Equal(t, crossPartID.String(), e.contentPartID)
+	require.Empty(t, e.chatID)
+	require.Empty(t, e.userID)
+	require.Empty(t, e.externalUserID)
+	require.Empty(t, e.assistantID)
+	require.True(t, scanAt.Equal(e.messageCreatedAt), "cross-project part falls back to scan time, got %s", e.messageCreatedAt)
 }
 
 // TestPipelineRespectsFromBound proves the -from bound holds end to end: a
@@ -216,7 +246,7 @@ func TestPipelineRespectsFromBound(t *testing.T) {
 	require.NoError(t, err)
 
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-48 * time.Hour)
-	chatID := tn.newChat(t)
+	chatID := tn.newChat(t, "", "")
 	msgID := tn.newMessage(t, chatID, base)
 
 	before := tn.newFinding(t, msgID, base.Add(-time.Hour), findingSpec{
