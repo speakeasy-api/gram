@@ -21,6 +21,9 @@ guardrails:
       guardrail: generic_guardrail_api
       mode: [pre_call, post_call]
       api_base: https://example.test/rpc/litellm.ingest
+      headers:
+        Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY
+        Gram-Project: os.environ/GRAM_PROJECT_SLUG
       default_on: true
       streaming_end_of_stream_only: true
       extra_headers: [x-gram-session-id]
