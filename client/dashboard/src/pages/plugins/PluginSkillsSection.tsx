@@ -24,10 +24,12 @@ import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import {
   SkillPickerDialog,
   type SkillPickerResult,
 } from "../skills/SkillPickerDialog";
+import { PLUGIN_SKILLS_SECTION_ID } from "./plugin-detail-sections";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
@@ -186,30 +188,22 @@ export function PluginSkillsSection({
   }
 
   return (
-    <>
-      <div className="mb-3 flex items-center gap-3">
-        <div className="border-border flex-1 border-t" />
-        <div className="flex shrink-0 items-center gap-2">
-          <Text
-            small
-            muted
-            className="font-mono text-xs tracking-wide uppercase"
-          >
-            Skills
-          </Text>
-          {distributions.length > 0 && (
-            <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-              {distributions.length}
-            </span>
-          )}
-        </div>
-        <div className="border-border flex-1 border-t" />
-      </div>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <Text small muted className="max-w-md">
-          Skills distributed to this plugin ship inside the plugin package and
-          reach everyone who installs it.
-        </Text>
+    <SettingsSection id={PLUGIN_SKILLS_SECTION_ID}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <SettingsSection.Header>
+          <div className="flex items-center gap-2">
+            <SettingsSection.Title>Skills</SettingsSection.Title>
+            {distributions.length > 0 && (
+              <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                {distributions.length}
+              </span>
+            )}
+          </div>
+          <SettingsSection.Description>
+            Skills distributed to this plugin ship inside the plugin package and
+            reach everyone who installs it.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
         <RequireScope
           scope="skill:write"
           resourceId={project.id}
@@ -228,7 +222,7 @@ export function PluginSkillsSection({
           </Button>
         </RequireScope>
       </div>
-      <div className="mb-8">{listContent}</div>
+      {listContent}
 
       <SkillPickerDialog
         open={isAddSkillOpen}
@@ -241,7 +235,7 @@ export function PluginSkillsSection({
         emptyMessage="No skills available to add. Record a skill in this project first."
         onBatchComplete={handleAddSkillsComplete}
       />
-    </>
+    </SettingsSection>
   );
 }
 
