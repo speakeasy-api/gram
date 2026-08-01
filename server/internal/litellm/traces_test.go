@@ -284,6 +284,7 @@ func TestTraceLogParamsUsesObservedTimeForMissingOrOverflowingStartTime(t *testi
 	require.Len(t, params, 2)
 	for _, param := range params {
 		require.WithinRange(t, param.Timestamp, before, after)
+		require.NotContains(t, param.Attributes, "otel.span.duration_ms")
 	}
 	require.Equal(t, uint64(math.MaxUint64), params[1].Attributes["otel.span.start_time_unix_nano"])
 	require.NoError(t, processor.Shutdown(t.Context()))
@@ -291,6 +292,9 @@ func TestTraceLogParamsUsesObservedTimeForMissingOrOverflowingStartTime(t *testi
 
 func TestTraceProcessorQueueSaturationDropsWithoutBlocking(t *testing.T) {
 	t.Parallel()
+	require.Equal(t, 4, traceProcessorWorkers)
+	require.Equal(t, 16, traceProcessorQueueSize)
+	require.Equal(t, 256, maxOTLPSpansPerExport)
 
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
@@ -586,5 +590,33 @@ func TestOTLPAttributeTypeAllowlistAcceptsSafeValues(t *testing.T) {
 	require.Equal(t, true, result["gen_ai.request.is_streaming"])
 	require.Equal(t, int64(42), result[attr.GenAIUsageInputTokensKey])
 	require.InDelta(t, 0.125, result[attr.GenAIUsageCostKey], 1e-12)
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestOTLPAttributeTypeAllowlistRejectsNegativeUsageAndAcceptsZero(t *testing.T) {
+	t.Parallel()
+
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	negativeTokens := jsonInt64(-1)
+	negativeCost := jsonFloat64(-0.125)
+	negativeIntegerCost := jsonInt64(-1)
+	negative := service.sanitizeOTLPAttributes(t.Context(), []otlpKeyValue{
+		{Key: "gen_ai.usage.input_tokens", Value: otlpAnyValue{IntValue: &negativeTokens}},
+		{Key: "gen_ai.usage.cost", Value: otlpAnyValue{DoubleValue: &negativeCost}},
+		{Key: "litellm.response.cost", Value: otlpAnyValue{IntValue: &negativeIntegerCost}},
+	}, spanAttributeAllowlist)
+	require.Empty(t, negative)
+
+	zeroTokens := jsonInt64(0)
+	zeroCost := jsonFloat64(0)
+	zeroIntegerCost := jsonInt64(0)
+	zero := service.sanitizeOTLPAttributes(t.Context(), []otlpKeyValue{
+		{Key: "gen_ai.usage.input_tokens", Value: otlpAnyValue{IntValue: &zeroTokens}},
+		{Key: "gen_ai.usage.cost", Value: otlpAnyValue{DoubleValue: &zeroCost}},
+		{Key: "litellm.response.cost", Value: otlpAnyValue{IntValue: &zeroIntegerCost}},
+	}, spanAttributeAllowlist)
+	require.Equal(t, int64(0), zero[attr.GenAIUsageInputTokensKey])
+	require.InDelta(t, 0, zero[attr.GenAIUsageCostKey], 0)
+	require.Equal(t, int64(0), zero["litellm.response.cost"])
 	require.NoError(t, processor.Shutdown(t.Context()))
 }

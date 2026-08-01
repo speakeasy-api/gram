@@ -27,7 +27,7 @@ import (
 const (
 	maxOTLPAttributes      = 128
 	maxOTLPAttributeBytes  = 64 * 1024
-	maxOTLPSpansPerExport  = 1000
+	maxOTLPSpansPerExport  = 256
 	litellmOTLPResourceURN = "litellm:otel:traces"
 )
 
@@ -527,7 +527,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 				spanAttributes[attribute.Key("otel.span.status_code")] = otlpStatusCode(span.Status)
 				spanAttributes[attribute.Key("otel.span.start_time_unix_nano")] = uint64(span.StartTimeUnixNano)
 				spanAttributes[attribute.Key("otel.span.end_time_unix_nano")] = uint64(span.EndTimeUnixNano)
-				if end, start := uint64(span.EndTimeUnixNano), uint64(span.StartTimeUnixNano); end >= start {
+				if end, start := uint64(span.EndTimeUnixNano), uint64(span.StartTimeUnixNano); start > 0 && start <= math.MaxInt64 && end <= math.MaxInt64 && end >= start {
 					spanAttributes[attribute.Key("otel.span.duration_ms")] = float64(end-start) / float64(time.Millisecond)
 				}
 				if scopeSpans.Scope != nil {
@@ -614,14 +614,14 @@ func validOTLPAttributeValue(value any, kind otlpAttributeValueKind) bool {
 		_, ok := value.(bool)
 		return ok
 	case otlpAttributeInteger:
-		_, ok := value.(int64)
-		return ok
+		number, ok := value.(int64)
+		return ok && number >= 0
 	case otlpAttributeNumber:
 		switch number := value.(type) {
 		case int64:
-			return true
+			return number >= 0
 		case float64:
-			return !math.IsNaN(number) && !math.IsInf(number, 0)
+			return number >= 0 && !math.IsNaN(number) && !math.IsInf(number, 0)
 		default:
 			return false
 		}

@@ -718,7 +718,7 @@ func newStartCommand() *cli.Command {
 				var errs []error
 				if litellmTraceProcessor != nil {
 					if err := litellmTraceProcessor.Shutdown(ctx); err != nil {
-						return fmt.Errorf("shutdown LiteLLM trace processor: %w", err)
+						errs = append(errs, fmt.Errorf("shutdown LiteLLM trace processor: %w", err))
 					}
 				}
 				if telemetryLoggerShutdown != nil {
