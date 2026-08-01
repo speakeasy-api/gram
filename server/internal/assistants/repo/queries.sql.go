@@ -2576,7 +2576,12 @@ type RaiseAssistantWarmTtlSecondsParams struct {
 }
 
 func (q *Queries) RaiseAssistantWarmTtlSeconds(ctx context.Context, arg RaiseAssistantWarmTtlSecondsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, raiseAssistantWarmTtlSeconds, arg.WarmTtlSeconds, arg.AssistantID, arg.ProjectID, arg.FromWarmTtlSeconds)
+	result, err := q.db.Exec(ctx, raiseAssistantWarmTtlSeconds,
+		arg.WarmTtlSeconds,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.FromWarmTtlSeconds,
+	)
 	if err != nil {
 		return 0, err
 	}
