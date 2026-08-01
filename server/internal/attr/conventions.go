@@ -749,6 +749,14 @@ func SlogSpanID(v string) slog.Attr      { return slog.String(string(SpanIDKey),
 func TraceID(v string) attribute.KeyValue { return TraceIDKey.String(v) }
 func SlogTraceID(v string) slog.Attr      { return slog.String(string(TraceIDKey), v) }
 
+func SlogLiteLLMCallID(v string) slog.Attr {
+	return slog.String(string(LiteLLMCallIDKey), v)
+}
+
+func SlogLiteLLMTraceID(v string) slog.Attr {
+	return slog.String(string(LiteLLMTraceIDKey), v)
+}
+
 func DataDogGitCommitSHA(v string) attribute.KeyValue { return DataDogGitCommitSHAKey.String(v) }
 func SlogDataDogGitCommitSHA(v string) slog.Attr {
 	return slog.String(string(DataDogGitCommitSHAKey), v)

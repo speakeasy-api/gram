@@ -37,6 +37,20 @@ type AuthenticatedIngestOptions struct {
 	AllowWarnAcknowledgement     bool
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
+	OutputToolCalls              []any
+}
+
+// ResolvedActor is the exact actor selected by canonical hook attribution.
+type ResolvedActor struct {
+	UserID string
+	Email  string
+}
+
+// AuthenticatedIngestResult includes the public hook result and trusted
+// attribution details needed by in-process adapters.
+type AuthenticatedIngestResult struct {
+	Result *gen.IngestHookResult
+	Actor  ResolvedActor
 }
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
@@ -44,6 +58,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
+		OutputToolCalls:              nil,
 	}
 }
 
@@ -78,6 +93,16 @@ func (s *Service) IngestAuthenticated(ctx context.Context, authCtx *contextvalue
 // IngestAuthenticatedWithOptions bypasses transport authentication and applies
 // behavior selected by a trusted in-process caller.
 func (s *Service) IngestAuthenticatedWithOptions(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload, options AuthenticatedIngestOptions) (*gen.IngestHookResult, error) {
+	result, err := s.IngestAuthenticatedDetailed(ctx, authCtx, payload, options)
+	if err != nil {
+		return nil, err
+	}
+	return result.Result, nil
+}
+
+// IngestAuthenticatedDetailed bypasses transport authentication and returns
+// the canonical actor resolved during ingestion to trusted in-process callers.
+func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload, options AuthenticatedIngestOptions) (*AuthenticatedIngestResult, error) {
 	if payload == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "ingest payload is required")
 	}
@@ -95,10 +120,11 @@ func (s *Service) IngestAuthenticatedWithOptions(ctx context.Context, authCtx *c
 	payloadCopy.ApikeyToken = nil
 	payloadCopy.ProjectSlugInput = nil
 	options.SourceAttributes = maps.Clone(options.SourceAttributes)
+	options.OutputToolCalls = append([]any(nil), options.OutputToolCalls...)
 
 	ctx = contextvalues.SetAuthContext(ctx, &authCopy)
 	ctx = context.WithValue(ctx, authenticatedIngestOptionsKey{}, options)
-	return s.Ingest(ctx, &payloadCopy)
+	return s.ingest(ctx, &payloadCopy)
 }
 
 // Ingest is the feature-first hook endpoint; this path only accepts the
@@ -113,6 +139,14 @@ func (s *Service) IngestAuthenticatedWithOptions(ctx context.Context, authCtx *c
 // falling back to the token owner for personal keys and senders without a
 // device agent.
 func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *gen.IngestHookResult, err error) {
+	detailed, err := s.ingest(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	return detailed.Result, nil
+}
+
+func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *AuthenticatedIngestResult, err error) {
 	start := time.Now()
 	source := ""
 	eventType := ""
@@ -124,8 +158,8 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			outcome = hookMetricOutcomeFailure
 		}
 		decision := hookMetricDecisionNone
-		if res != nil {
-			decision = res.Decision
+		if res != nil && res.Result != nil {
+			decision = res.Result.Decision
 		}
 		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
 	}()
@@ -151,7 +185,10 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			attr.SlogHookSource(source),
 			attr.SlogHookEvent(eventType),
 		)
-		return canonicalAllowResult(), nil
+		return &AuthenticatedIngestResult{
+			Result: canonicalAllowResult(),
+			Actor:  ResolvedActor{UserID: "", Email: ""},
+		}, nil
 	}
 	orgSlug = authCtx.OrganizationSlug
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
@@ -215,9 +252,15 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
-		return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture), nil
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture),
+			Actor:  ResolvedActor(actor),
+		}, nil
 	}
-	return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), skillCapture), nil
+	return &AuthenticatedIngestResult{
+		Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), skillCapture),
+		Actor:  ResolvedActor(actor),
+	}, nil
 }
 
 type skillCaptureSignal struct {
@@ -1134,10 +1177,19 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		titleContent = content
 	case "assistant.responded":
 		content := canonicalMessageText(payload)
-		if strings.TrimSpace(content) == "" {
+		outputToolCalls := authenticatedIngestOptions(ctx).OutputToolCalls
+		if strings.TrimSpace(content) == "" && len(outputToolCalls) == 0 {
 			return nil
 		}
 		msg = baseMsg("assistant", content)
+		if len(outputToolCalls) > 0 {
+			toolCallsJSON, err := json.Marshal(outputToolCalls)
+			if err != nil {
+				return fmt.Errorf("marshal output tool calls: %w", err)
+			}
+			msg.FinishReason = conv.ToPGText("tool_calls")
+			msg.ToolCalls = toolCallsJSON
+		}
 		titleContent = content
 	case "tool.requested":
 		// Permission prompts (codex PermissionRequest) also normalize to
