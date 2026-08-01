@@ -47,18 +47,20 @@ type Service struct {
 	auth   authorizer
 	hooks  HookIngester
 	calls  *callcache.Cache
+	traces *TraceProcessor
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor) *Service {
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
 		logger: logger.With(attr.SlogComponent("litellm")),
 		auth:   auth.New(logger, db, sessionsManager, authzEngine),
 		hooks:  hookIngester,
 		calls:  calls,
+		traces: traces,
 	}
 }
 
@@ -66,7 +68,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	server.Traces = service.traceHTTPHandler()
+	srv.Mount(mux, server)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {

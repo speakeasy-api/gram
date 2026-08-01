@@ -698,23 +698,37 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
+			var (
+				litellmTraceProcessor   *litellm.TraceProcessor
+				telemetryLoggerShutdown func(context.Context) error
+				publishersShutdown      func(context.Context) error
+				pubsubShutdown          func(context.Context) error
+			)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				var errs []error
+				if litellmTraceProcessor != nil {
+					errs = append(errs, litellmTraceProcessor.Shutdown(ctx))
+				}
+				if telemetryLoggerShutdown != nil {
+					errs = append(errs, telemetryLoggerShutdown(ctx))
+				}
+				if publishersShutdown != nil {
+					errs = append(errs, publishersShutdown(ctx))
+				}
+				if pubsubShutdown != nil {
+					errs = append(errs, pubsubShutdown(ctx))
+				}
+				return errors.Join(errs...)
+			})
+
+			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
+			pubsubShutdown = shutdown
 			if err != nil {
-				shutdownFuncs = append(shutdownFuncs, pubsubShutdown)
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 
-			publishers, publishersShutdown, err := newPublishers(ctx, psbroker)
-			// Stop and flush the publishers before closing the Pub/Sub client
-			// they publish through. runShutdown executes shutdown funcs
-			// concurrently, so this ordering must be enforced inside a single
-			// func - appending the two separately would race the publisher
-			// flush against the client close and could drop in-flight messages.
-			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				stopErr := publishersShutdown(ctx)
-				closeErr := pubsubShutdown(ctx)
-				return errors.Join(stopErr, closeErr)
-			})
+			publishers, shutdown, err := newPublishers(ctx, psbroker)
+			publishersShutdown = shutdown
 			if err != nil {
 				return fmt.Errorf("failed to create publishers: %w", err)
 			}
@@ -722,7 +736,7 @@ func newStartCommand() *cli.Command {
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			telemetryLoggerShutdown = shutdown
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
@@ -937,6 +951,8 @@ func newStartCommand() *cli.Command {
 				otelForwarder.Shutdown(ctx)
 				return nil
 			})
+			litellmTraceProcessor = litellm.NewTraceProcessor(logger, meterProvider, telemLogger)
+			litellmTraceProcessor.Start(ctx)
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
 			if shutdown != nil {
@@ -1133,7 +1149,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, callcache.New(cache.NewRedisCacheAdapter(redisClient))))
+			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, callcache.New(cache.NewRedisCacheAdapter(redisClient)), litellmTraceProcessor))
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))

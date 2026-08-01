@@ -112,3 +112,47 @@ func BuildIngestPayload(litellmIngestBody string, litellmIngestApikeyToken strin
 
 	return v, nil
 }
+
+// BuildTracesPayload builds the payload for the litellm traces endpoint from
+// CLI flags.
+func BuildTracesPayload(litellmTracesBody string, litellmTracesApikeyToken string, litellmTracesProjectSlugInput string) (*litellm.TracesPayload, error) {
+	var err error
+	var body TracesRequestBody
+	{
+		err = json.Unmarshal([]byte(litellmTracesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceSpans\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.ResourceSpans == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("resourceSpans", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if litellmTracesApikeyToken != "" {
+			apikeyToken = &litellmTracesApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if litellmTracesProjectSlugInput != "" {
+			projectSlugInput = &litellmTracesProjectSlugInput
+		}
+	}
+	v := &litellm.TracesPayload{}
+	if body.ResourceSpans != nil {
+		v.ResourceSpans = make([]any, len(body.ResourceSpans))
+		for i, val := range body.ResourceSpans {
+			v.ResourceSpans[i] = val
+		}
+	} else {
+		v.ResourceSpans = []any{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

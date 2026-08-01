@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "litellm" service endpoints.
 type Endpoints struct {
 	Ingest goa.Endpoint
+	Traces goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "litellm" service with endpoints.
@@ -25,12 +26,14 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Ingest: NewIngestEndpoint(s, a.APIKeyAuth),
+		Traces: NewTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "litellm" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Ingest = m(e.Ingest)
+	e.Traces = m(e.Traces)
 }
 
 // NewIngestEndpoint returns an endpoint function that calls the method
@@ -70,5 +73,40 @@ func NewIngestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		}
 		vres := NewViewedLitellmIngestResult(res, "default")
 		return vres, nil
+	}
+}
+
+// NewTracesEndpoint returns an endpoint function that calls the method
+// "traces" of service "litellm".
+func NewTracesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TracesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Traces(ctx, p)
 	}
 }
