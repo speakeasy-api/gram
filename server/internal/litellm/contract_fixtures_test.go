@@ -3,11 +3,14 @@ package litellm
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,6 +39,10 @@ type contractFixtureCase struct {
 	actor              hooks.ResolvedActor
 	maxLines           int
 	blockedReason      string
+}
+
+type contractFixtureManifest struct {
+	Files map[string]string `json:"files"`
 }
 
 func readJSONLines(t *testing.T, file string) [][]byte {
@@ -94,6 +101,29 @@ func requireRecordedCallbackShape(t *testing.T, name string, callback map[string
 	if callback["request_headers"] != nil {
 		require.IsType(t, map[string]any{}, callback["request_headers"], name)
 	}
+}
+
+func TestContractFixtureManifest(t *testing.T) {
+	t.Parallel()
+	var manifest contractFixtureManifest
+	require.NoError(t, json.Unmarshal(testenv.ReadFixture(t, contractFixtureDir+"manifest.json"), &manifest))
+	require.NotEmpty(t, manifest.Files)
+
+	entries, err := os.ReadDir(contractFixtureDir)
+	require.NoError(t, err)
+	fixtureFiles := make([]string, 0, len(manifest.Files))
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".jsonl") {
+			fixtureFiles = append(fixtureFiles, entry.Name())
+		}
+	}
+	manifestFiles := make([]string, 0, len(manifest.Files))
+	for filename, expected := range manifest.Files {
+		manifestFiles = append(manifestFiles, filename)
+		sum := sha256.Sum256(testenv.ReadFixture(t, contractFixtureDir+filename))
+		require.Equal(t, expected, fmt.Sprintf("%x", sum), filename)
+	}
+	require.ElementsMatch(t, manifestFiles, fixtureFiles)
 }
 
 func TestContractFixtures(t *testing.T) {
