@@ -369,16 +369,17 @@ func parseAttributesWithExplicitResources(attrs map[attr.Key]any, explicitResour
 	spanAttrs := make(map[attr.Key]any)
 	resourceAttrs := make(map[attr.Key]any)
 	maps.Copy(resourceAttrs, explicitResourceAttrs)
+	explicitProvider, providerIsString := attrs[attr.GenAIProviderNameKey].(string)
+	inferModelProvider := !providerIsString || strings.TrimSpace(explicitProvider) == ""
+	if inferModelProvider {
+		if model, ok := attrs[attr.GenAIRequestModelKey].(string); ok {
+			spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
+		}
+	}
 
 	for k, v := range attrs {
-		// if there's an attribute related to a Gen AI request we want
-		// to infer the model provider for insights
-		if k == attr.GenAIRequestModelKey {
-			if model, ok := v.(string); ok {
-				if _, explicit := attrs[attr.GenAIProviderNameKey]; !explicit {
-					spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
-				}
-			}
+		if k == attr.GenAIProviderNameKey && inferModelProvider {
+			continue
 		}
 
 		if _, ok := ResourceAttributeKeys[k]; ok {

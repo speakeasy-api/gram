@@ -542,7 +542,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 				spanAttributes[attr.EventURNKey] = eventURN
 
 				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
-					Timestamp: timestampFromUnixNano(uint64(span.StartTimeUnixNano)),
+					Timestamp: timestampFromUnixNano(uint64(span.StartTimeUnixNano), observed),
 					ToolInfo: telemetry.ToolInfo{
 						ID:             "",
 						URN:            litellmOTLPResourceURN,
@@ -626,9 +626,9 @@ func lowCardinalityGenAIOperation(operation string) string {
 	}
 }
 
-func timestampFromUnixNano(value uint64) time.Time {
-	if value > math.MaxInt64 {
-		return time.Unix(0, 0).UTC()
+func timestampFromUnixNano(value uint64, fallback time.Time) time.Time {
+	if value == 0 || value > math.MaxInt64 {
+		return fallback
 	}
 	return time.Unix(0, int64(value)).UTC()
 }

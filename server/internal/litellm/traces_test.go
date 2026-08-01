@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -252,6 +253,7 @@ func TestTraceHTTPAcceptsJSONAndProtobufPlainAndGzip(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, gzipBody(t, protobufFixture), "application/x-protobuf", "gzip", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, protobufFixture, "application/protobuf", "", "valid-key", "project-test").Code)
 	require.NoError(t, processor.Shutdown(t.Context()))
+	require.Len(t, jobs, 5)
 
 	for range 5 {
 		params := <-jobs
@@ -259,6 +261,32 @@ func TestTraceHTTPAcceptsJSONAndProtobufPlainAndGzip(t *testing.T) {
 		require.Equal(t, "0123456789abcdef0123456789abcdef", params[0].Attributes["trace.id"])
 		require.Equal(t, "fixture-logical-trace", params[0].Attributes["gram.litellm.trace_id"])
 	}
+}
+
+func TestTraceLogParamsUsesObservedTimeForMissingOrOverflowingStartTime(t *testing.T) {
+	t.Parallel()
+
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	request := &otlpExportRequest{ResourceSpans: []otlpResourceSpans{{
+		Resource: nil,
+		ScopeSpans: []otlpScopeSpans{{
+			Scope: nil,
+			Spans: []otlpSpan{
+				{TraceID: "", SpanID: "", ParentSpanID: "", Name: "missing timestamp", Kind: 0, StartTimeUnixNano: 0, EndTimeUnixNano: 0, Attributes: nil, DroppedAttributesCount: 0, Status: nil},
+				{TraceID: "", SpanID: "", ParentSpanID: "", Name: "overflowing timestamp", Kind: 0, StartTimeUnixNano: jsonUint64(math.MaxUint64), EndTimeUnixNano: 0, Attributes: nil, DroppedAttributesCount: 0, Status: nil},
+			},
+		}},
+	}}}
+	before := time.Now().UTC()
+	params := service.traceLogParams(t.Context(), request, "org-test", uuid.NewString())
+	after := time.Now().UTC()
+
+	require.Len(t, params, 2)
+	for _, param := range params {
+		require.WithinRange(t, param.Timestamp, before, after)
+	}
+	require.Equal(t, uint64(math.MaxUint64), params[1].Attributes["otel.span.start_time_unix_nano"])
+	require.NoError(t, processor.Shutdown(t.Context()))
 }
 
 func TestTraceProcessorQueueSaturationDropsWithoutBlocking(t *testing.T) {
