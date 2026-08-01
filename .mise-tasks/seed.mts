@@ -3821,6 +3821,35 @@ async function seedObservabilityData(init: {
   const todayUtcStart = Math.floor(now / msPerDay) * msPerDay;
   const rawTtlBoundaryMs = todayUtcStart - RAW_TTL_SAFETY_DAYS * msPerDay;
   const rawTtlBoundaryNano = BigInt(rawTtlBoundaryMs) * BigInt(1_000_000);
+
+  // Days inside the ACTIVE billing cycle (anchor day 1 → the current UTC
+  // month) run heavier so the cycle lands clearly past the 50M contracted
+  // allowance and the billing page renders a real overage segment. The boost
+  // targets ~100M BILLED tokens for the cycle's elapsed days regardless of
+  // when the seed runs. The billed TUM population is much narrower than the
+  // raw telemetry inserted here (registry exclusions, cache reads dropped,
+  // stored-evidence gating): an unboosted seed bills ~350k tokens/day, the
+  // divisor below. The cap only guards against pathological division — it
+  // sits above the worst-case single-elapsed-day boost (~286x) so the
+  // overage renders whether the cycle is a day old or nearly sealed. Sole
+  // gap: on the cycle's first day the history (which ends yesterday) has no
+  // rows inside the cycle yet, so overage appears from day two. Run-date
+  // dependent, which is fine: the full-project delete preamble in chSQL
+  // resets every re-run.
+  const nowUtc = new Date(now);
+  const currentCycleStartMs = Date.UTC(
+    nowUtc.getUTCFullYear(),
+    nowUtc.getUTCMonth(),
+    1,
+  );
+  const elapsedCycleDays = Math.max(
+    1,
+    Math.floor((todayUtcStart - currentCycleStartMs) / msPerDay),
+  );
+  const currentCycleBoost = Math.min(
+    300,
+    Math.max(1, 100_000_000 / (elapsedCycleDays * 350_000)),
+  );
   const chBackfillInserts: string[] = [];
   // Risky history sessions also get a Postgres chat + one message so
   // seedRiskFindings can attach findings (risk_results FKs to chat_messages).
@@ -3885,14 +3914,28 @@ async function seedObservabilityData(init: {
           : null;
 
       // Cache-heavy token mix (agent sessions replay large cached prompts);
-      // ~15% are light API-style calls with little cache traffic.
+      // ~15% are light API-style calls with little cache traffic. Sessions
+      // in the active billing cycle carry the overage boost, divided by the
+      // day's weekend session damping so every in-cycle day contributes
+      // roughly the same volume — otherwise an early-month seed whose only
+      // elapsed days are a weekend would miss the overage target.
+      const cycleBoost =
+        dayStartMs >= currentCycleStartMs
+          ? currentCycleBoost / weekendFactor
+          : 1;
       const cacheDiv = r() < 0.15 ? 10 : 1;
-      const inputTokens = (800 + Math.floor(r() * 7_000)) * anonBoost;
-      const outputTokens = (300 + Math.floor(r() * 3_500)) * anonBoost;
-      const cacheReadTokens =
-        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost;
-      const cacheCreationTokens =
-        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
+      const inputTokens = Math.round(
+        (800 + Math.floor(r() * 7_000)) * anonBoost * cycleBoost,
+      );
+      const outputTokens = Math.round(
+        (300 + Math.floor(r() * 3_500)) * anonBoost * cycleBoost,
+      );
+      const cacheReadTokens = Math.round(
+        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
+      const cacheCreationTokens = Math.round(
+        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
       const cost = computeUsageCost(

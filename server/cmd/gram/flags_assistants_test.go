@@ -117,10 +117,10 @@ func newAssistantRuntimeCLIContext(t *testing.T, values map[string]string) *cli.
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	require.NoError(t, (&cli.StringFlag{Name: "server-url"}).Apply(set))
 	require.NoError(t, (&cli.StringFlag{Name: "environment"}).Apply(set))
-	for _, item := range functionsFlags {
+	for _, item := range functionsFlags() {
 		require.NoError(t, item.Apply(set))
 	}
-	for _, item := range assistantRuntimeFlags {
+	for _, item := range assistantRuntimeFlags() {
 		require.NoError(t, item.Apply(set))
 	}
 	for key, value := range values {

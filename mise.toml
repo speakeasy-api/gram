@@ -202,6 +202,7 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 JAEGER_WEB_PORT = "16686"
 PROMETHEUS_PORT = "9099"
+LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
 ## Default Gram API URL baked into the dashboard's inlined Elements code and
 ## used by the CLI to point to the correct Gram API server

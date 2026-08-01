@@ -1145,6 +1145,8 @@ func SlogOAuthPresentedAuthMethod(v string) slog.Attr {
 	return slog.String(string(OAuthPresentedAuthMethodKey), v)
 }
 
+func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
+
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
 

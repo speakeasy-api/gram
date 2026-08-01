@@ -216,10 +216,11 @@ func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.
 	}
 }
 
-// ManagedAssistantSkillsTools returns read-only skill management tools for the
-// project's managed assistant.
+// ManagedAssistantSkillsTools returns skill management tools for the project's
+// managed assistant.
 func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insights platformskills.SkillInsightsReader) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewCreateTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},

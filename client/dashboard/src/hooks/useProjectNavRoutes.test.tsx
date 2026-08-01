@@ -1,5 +1,7 @@
 import { renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AppRoute } from "@/routes";
 import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
@@ -10,6 +12,7 @@ const testState = vi.hoisted(() => ({
   projectId: "project_a",
   skillsEnabled: false,
   orgMemoryEnabled: false,
+  featureFlags: {} as Record<string, FeatureFlagResult>,
 }));
 
 function route(title: string, url: string): AppRoute {
@@ -56,10 +59,8 @@ vi.mock("@/routes", async () => {
   };
 });
 
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({
-    isFeatureEnabled: () => false,
-  }),
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => testState.featureFlags[flag],
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -80,6 +81,23 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
     return { data: { skillsEnabled: testState.skillsEnabled } };
   },
 }));
+
+function unavailableFeatureFlag(
+  status: "loading" | "missing" | "error",
+): FeatureFlagResult {
+  return { status };
+}
+
+beforeEach(() => {
+  testState.productFeatureOptions = undefined;
+  testState.projectId = "project_a";
+  testState.skillsEnabled = false;
+  testState.orgMemoryEnabled = false;
+  testState.featureFlags = {
+    [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
+  };
+});
 
 describe("useProjectNavRoutes", () => {
   it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
@@ -131,5 +149,34 @@ describe("useProjectNavRoutes", () => {
     expect(
       result.current.some((entry) => entry.route === routes.orgMemory),
     ).toBe(true);
+  });
+
+  it.each(["loading", "missing", "error"] as const)(
+    "preserves opt-in and opt-out navigation while flags are %s",
+    (status) => {
+      testState.featureFlags = {
+        [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
+      };
+
+      const { result } = renderHook(() => useProjectNavRoutes());
+      const navRoutes = result.current.map((entry) => entry.route);
+
+      expect(navRoutes).not.toContain(routes.assistants);
+      expect(navRoutes).toContain(routes.deployments);
+    },
+  );
+
+  it("uses resolved values for feature-gated navigation", () => {
+    testState.featureFlags = {
+      [FEATURE_FLAGS.assistants]: { status: "enabled" },
+      [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
+    };
+
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const navRoutes = result.current.map((entry) => entry.route);
+
+    expect(navRoutes).toContain(routes.assistants);
+    expect(navRoutes).not.toContain(routes.deployments);
   });
 });
