@@ -14,7 +14,7 @@ import (
 
 const (
 	traceProcessorWorkers   = 4
-	traceProcessorQueueSize = 128
+	traceProcessorQueueSize = 16
 )
 
 type traceJob struct {
