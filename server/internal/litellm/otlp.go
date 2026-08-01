@@ -622,6 +622,7 @@ func preflightOTLPProtobuf(data []byte) error {
 }
 
 func preflightProtobufResourceSpans(data []byte, counts *otlpCollectionCounts) error {
+	resourceAttributeCount := 0
 	for len(data) > 0 {
 		number, wireType, value, rest, err := consumeProtobufField(data)
 		if err != nil {
@@ -632,7 +633,7 @@ func preflightProtobufResourceSpans(data []byte, counts *otlpCollectionCounts) e
 			continue
 		}
 		if number == 1 {
-			if err := preflightProtobufAttributes(value, 1, counts); err != nil {
+			if err := preflightProtobufAttributes(value, 1, counts, &resourceAttributeCount); err != nil {
 				return err
 			}
 			continue
@@ -652,6 +653,7 @@ func preflightProtobufResourceSpans(data []byte, counts *otlpCollectionCounts) e
 }
 
 func preflightProtobufScopeSpans(data []byte, counts *otlpCollectionCounts) error {
+	scopeAttributeCount := 0
 	for len(data) > 0 {
 		number, wireType, value, rest, err := consumeProtobufField(data)
 		if err != nil {
@@ -662,7 +664,7 @@ func preflightProtobufScopeSpans(data []byte, counts *otlpCollectionCounts) erro
 			continue
 		}
 		if number == 1 {
-			if err := preflightProtobufAttributes(value, 3, counts); err != nil {
+			if err := preflightProtobufAttributes(value, 3, counts, &scopeAttributeCount); err != nil {
 				return err
 			}
 			continue
@@ -674,15 +676,15 @@ func preflightProtobufScopeSpans(data []byte, counts *otlpCollectionCounts) erro
 		if err := counts.validate(); err != nil {
 			return err
 		}
-		if err := preflightProtobufAttributes(value, 9, counts); err != nil {
+		attributeCount := 0
+		if err := preflightProtobufAttributes(value, 9, counts, &attributeCount); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func preflightProtobufAttributes(data []byte, attributesField protowire.Number, counts *otlpCollectionCounts) error {
-	attributeCount := 0
+func preflightProtobufAttributes(data []byte, attributesField protowire.Number, counts *otlpCollectionCounts, attributeCount *int) error {
 	for len(data) > 0 {
 		number, wireType, value, rest, err := consumeProtobufField(data)
 		if err != nil {
@@ -690,9 +692,9 @@ func preflightProtobufAttributes(data []byte, attributesField protowire.Number, 
 		}
 		data = rest
 		if number == attributesField && wireType == protowire.BytesType {
-			attributeCount++
-			if attributeCount > maxOTLPAttributes {
-				return fmt.Errorf("OTLP attribute collection contains too many KeyValues: %d", attributeCount)
+			*attributeCount++
+			if *attributeCount > maxOTLPAttributes {
+				return fmt.Errorf("OTLP attribute collection contains too many KeyValues: %d", *attributeCount)
 			}
 			if err := preflightProtobufKeyValue(value, counts, 1); err != nil {
 				return err
