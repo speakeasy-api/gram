@@ -27,6 +27,9 @@ import (
 const (
 	maxOTLPAttributes      = 128
 	maxOTLPAttributeBytes  = 64 * 1024
+	maxOTLPResourceBytes   = 8 * 1024
+	maxOTLPResourceGroups  = 256
+	maxOTLPScopeGroups     = 256
 	maxOTLPSpansPerExport  = 256
 	litellmOTLPResourceURN = "litellm:otel:traces"
 )
@@ -246,10 +249,41 @@ func decodeOTLPJSON(body []byte) (*otlpExportRequest, error) {
 	if err := ensureJSONEOF(decoder); err != nil {
 		return nil, err
 	}
+	if err := request.validateStructure(); err != nil {
+		return nil, err
+	}
 	if err := request.validateAnyValues(); err != nil {
 		return nil, err
 	}
 	return &request, nil
+}
+
+func (r *otlpExportRequest) validateStructure() error {
+	scopeGroups := 0
+	for _, resourceSpans := range r.ResourceSpans {
+		scopeGroups += len(resourceSpans.ScopeSpans)
+	}
+	return validateOTLPGroupCounts(len(r.ResourceSpans), scopeGroups)
+}
+
+func validateProtoOTLPStructure(request *collectortracev1.ExportTraceServiceRequest) error {
+	scopeGroups := 0
+	for _, resourceSpans := range request.ResourceSpans {
+		if resourceSpans != nil {
+			scopeGroups += len(resourceSpans.ScopeSpans)
+		}
+	}
+	return validateOTLPGroupCounts(len(request.ResourceSpans), scopeGroups)
+}
+
+func validateOTLPGroupCounts(resourceGroups, scopeGroups int) error {
+	if resourceGroups > maxOTLPResourceGroups {
+		return fmt.Errorf("OTLP trace export contains too many resource groups: %d", resourceGroups)
+	}
+	if scopeGroups > maxOTLPScopeGroups {
+		return fmt.Errorf("OTLP trace export contains too many scope groups: %d", scopeGroups)
+	}
+	return nil
 }
 
 func (r *otlpExportRequest) validateAnyValues() error {
@@ -490,7 +524,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 	for _, resourceSpans := range request.ResourceSpans {
 		resourceAttributes := map[attr.Key]any{}
 		if resourceSpans.Resource != nil {
-			resourceAttributes = s.sanitizeOTLPAttributes(ctx, resourceSpans.Resource.Attributes, resourceAttributeAllowlist)
+			resourceAttributes = s.sanitizeOTLPResourceAttributes(ctx, resourceSpans.Resource.Attributes)
 		}
 		for _, scopeSpans := range resourceSpans.ScopeSpans {
 			for _, span := range scopeSpans.Spans {
@@ -577,7 +611,17 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 }
 
 func (s *Service) sanitizeOTLPAttributes(ctx context.Context, values []otlpKeyValue, allowlist map[string]otlpAttributeSpec) map[attr.Key]any {
+	return s.sanitizeOTLPAttributesWithBudget(ctx, values, allowlist, 0)
+}
+
+func (s *Service) sanitizeOTLPResourceAttributes(ctx context.Context, values []otlpKeyValue) map[attr.Key]any {
+	return s.sanitizeOTLPAttributesWithBudget(ctx, values, resourceAttributeAllowlist, maxOTLPResourceBytes)
+}
+
+func (s *Service) sanitizeOTLPAttributesWithBudget(ctx context.Context, values []otlpKeyValue, allowlist map[string]otlpAttributeSpec, byteBudget int) map[attr.Key]any {
 	result := make(map[attr.Key]any)
+	retainedSizes := make(map[attr.Key]int)
+	retainedBytes := 2 // JSON object braces; entry accounting is conservatively one byte over for the first key.
 	truncated := max(0, len(values)-maxOTLPAttributes)
 	for _, value := range values[:min(len(values), maxOTLPAttributes)] {
 		spec, allowed := allowlist[value.Key]
@@ -593,13 +637,20 @@ func (s *Service) sanitizeOTLPAttributes(ctx context.Context, values []otlpKeyVa
 			truncated++
 			continue
 		}
-		bounded, changed, ok := boundOTLPAttributeValue(converted)
-		if changed {
+		encoded, err := json.Marshal(converted)
+		if err != nil || len(encoded) > maxOTLPAttributeBytes {
 			truncated++
+			continue
 		}
-		if ok {
-			result[spec.target] = bounded
+		entrySize := len(spec.target) + len(encoded) + 4
+		previousSize := retainedSizes[spec.target]
+		if byteBudget > 0 && retainedBytes-previousSize+entrySize > byteBudget {
+			truncated++
+			continue
 		}
+		result[spec.target] = converted
+		retainedSizes[spec.target] = entrySize
+		retainedBytes += entrySize - previousSize
 	}
 	s.traces.recordTruncatedAttributes(ctx, truncated)
 	return result
