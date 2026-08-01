@@ -53,6 +53,14 @@ const (
 	// staying up longer between turns; tune here if that trade shifts.
 	managedAssistantWarmTTLSeconds int64 = 300
 	managedAssistantMaxConcurrency int64 = 10
+
+	// legacyManagedAssistantWarmTTLSeconds is the warm window managed assistants
+	// were provisioned with before managedAssistantWarmTTLSeconds was widened to
+	// 300. The lazy heal targets this exact value — not "anything below the new
+	// default" — so a deliberately chosen custom window (including one shorter
+	// than the default, set via UpdateAssistant) is never overwritten. If the
+	// managed default is bumped again, add the intervening prior default(s) here.
+	legacyManagedAssistantWarmTTLSeconds int64 = 60
 )
 
 // ErrManagedAssistantNameTaken is returned by EnableManagedAssistant when a
@@ -141,19 +149,23 @@ func (s *ServiceCore) EnableManagedAssistant(
 	return assistantRecord{}, err
 }
 
-// raiseManagedAssistantWarmTTL lifts a managed assistant's stored
-// warm_ttl_seconds to the current managed default. The raise-only guard lives
-// in SQL (RaiseAssistantWarmTtlSeconds updates only when the stored value is
-// below the target), so this is a single effective write under concurrent
-// chat-opens, never lowers a deliberately longer window, and leaves updated_at
-// untouched. Returns the number of rows written: 1 when this call performed the
-// raise, 0 when the row was already at or above the target (already healed, or a
-// deliberately longer window) so no write was needed.
+// raiseManagedAssistantWarmTTL heals a managed assistant still on the legacy
+// warm window: it sets warm_ttl_seconds to the current managed default only when
+// the row currently holds exactly legacyManagedAssistantWarmTTLSeconds. Matching
+// the exact prior default (rather than "anything below the new default") means a
+// deliberately chosen custom window — including one shorter than the default,
+// set via UpdateAssistant — is never overwritten. The predicate lives in SQL, so
+// the heal is a single effective write under concurrent chat-opens (later racers
+// match no row) and updated_at is left untouched (this is an internal backfill,
+// not a user edit). Returns the number of rows written: 1 when this call
+// performed the heal, 0 when the row no longer holds the legacy value (already
+// healed, or a custom window).
 func (s *ServiceCore) raiseManagedAssistantWarmTTL(ctx context.Context, projectID, assistantID uuid.UUID) (int64, error) {
 	rows, err := assistantrepo.New(s.db).RaiseAssistantWarmTtlSeconds(ctx, assistantrepo.RaiseAssistantWarmTtlSecondsParams{
-		WarmTtlSeconds: managedAssistantWarmTTLSeconds,
-		AssistantID:    assistantID,
-		ProjectID:      projectID,
+		WarmTtlSeconds:     managedAssistantWarmTTLSeconds,
+		AssistantID:        assistantID,
+		ProjectID:          projectID,
+		FromWarmTtlSeconds: legacyManagedAssistantWarmTTLSeconds,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("raise managed assistant warm ttl: %w", err)
@@ -169,31 +181,32 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 		return assistantRecord{}, fmt.Errorf("get managed assistant: %w", err)
 	}
 	record := assistantRecordFromManagedRow(row)
-	// Lazily heal a stale warm window. warm_ttl_seconds is stored per-row at
-	// create time, so a bump to managedAssistantWarmTTLSeconds only reaches
-	// assistants created before it by rewriting the row. The dashboard resolves
-	// the managed assistant through here on every chat open — the only path that
-	// reliably runs for an already-provisioned assistant (the write-scoped ensure
-	// path fires only when one is missing) — so an assistant on the old 60s
-	// default is raised the next time its owner opens the chat, with no data
-	// migration. The write is one-time: once healed the guard below is false and
-	// this stays a pure read, so the steady state is read-only. The SQL is
-	// raise-only and leaves updated_at untouched (see raiseManagedAssistantWarmTTL),
-	// so a heal never disturbs the row's change timestamp. A repair failure must
-	// not fail the read: the assistant still works at its stored TTL, so log and
-	// carry on.
-	if record.WarmTTLSeconds < int(managedAssistantWarmTTLSeconds) {
+	// Lazily heal an assistant still on the legacy warm window. warm_ttl_seconds
+	// is stored per-row at create time, so widening managedAssistantWarmTTLSeconds
+	// only reaches assistants created before it by rewriting the row. The
+	// dashboard resolves the managed assistant through here on every chat open —
+	// the only path that reliably runs for an already-provisioned assistant (the
+	// write-scoped ensure path fires only when one is missing) — so an assistant
+	// on the legacy default is raised the next time its owner opens the chat, with
+	// no data migration. The guard is the *exact* legacy value, not "below the new
+	// default", so a deliberately chosen custom window (warm_ttl is user-settable
+	// via UpdateAssistant) is left alone. The heal is one-time: once healed the
+	// guard is false and this stays a pure read, so the steady state is read-only.
+	// updated_at is left untouched (see raiseManagedAssistantWarmTTL). A repair
+	// failure must not fail the read: the assistant still works at its stored TTL,
+	// so log and carry on.
+	if record.WarmTTLSeconds == int(legacyManagedAssistantWarmTTLSeconds) {
 		switch rows, err := s.raiseManagedAssistantWarmTTL(ctx, projectID, record.ID); {
 		case err != nil:
 			s.logger.WarnContext(ctx, "heal managed assistant warm ttl", attr.SlogError(err), attr.SlogAssistantID(record.ID.String()))
 		case rows > 0:
-			// This call performed the raise, so the row now holds the target.
+			// This call performed the heal, so the row now holds the default.
 			record.WarmTTLSeconds = int(managedAssistantWarmTTLSeconds)
 		default:
-			// No row written: a concurrent update already lifted warm_ttl to at
-			// least the target (possibly a deliberately longer window). The value
-			// read before the heal is stale, so re-read the authoritative one
-			// rather than assuming the target.
+			// No row written: a concurrent update changed warm_ttl away from the
+			// legacy value between the read and the heal. The value read before the
+			// heal is stale, so re-read the authoritative one rather than assuming
+			// the default.
 			if fresh, err := assistantrepo.New(s.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{
 				AssistantID: record.ID,
 				ProjectID:   projectID,

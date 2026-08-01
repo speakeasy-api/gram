@@ -236,6 +236,44 @@ func TestGetManagedAssistantPreservesLongerWarmTTL(t *testing.T) {
 	require.Equal(t, longer, stored.WarmTtlSeconds, "raise-only heal must leave a longer window untouched")
 }
 
+// TestGetManagedAssistantPreservesCustomShorterWarmTTL guards the heal's
+// exact-match guard: a deliberately chosen window below the default but not equal
+// to the legacy default must never be clobbered up to the default. Warm TTL is
+// user-settable via UpdateAssistant, so healing "anything below the default"
+// would silently overwrite such a choice on every chat open.
+func TestGetManagedAssistantPreservesCustomShorterWarmTTL(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_managed_custom_warm_ttl")
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	core := newProvisioningCore(t, conn)
+	projectID := newProvisioningProject(t, conn, "managed-custom-warm-ttl")
+
+	enabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	require.NoError(t, err)
+
+	// A custom window that is below the default yet not the legacy default.
+	custom := int64(120)
+	require.Less(t, custom, managedAssistantWarmTTLSeconds)
+	require.NotEqual(t, legacyManagedAssistantWarmTTLSeconds, custom, "test premise: custom value must differ from the legacy default")
+	_, err = assistantrepo.New(conn).UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
+		WarmTtlSeconds: pgtype.Int8{Int64: custom, Valid: true},
+		AssistantID:    enabled.ID,
+		ProjectID:      projectID,
+	})
+	require.NoError(t, err)
+
+	got, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, int(custom), got.WarmTTLSeconds, "resolve must not overwrite a deliberately chosen sub-default window")
+
+	stored, err := assistantrepo.New(conn).GetAssistant(ctx, assistantrepo.GetAssistantParams{AssistantID: enabled.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, custom, stored.WarmTtlSeconds, "the heal must leave a custom window untouched")
+}
+
 // TestEnableManagedAssistantFailsWhenNameTaken: a user assistant already
 // holding the managed name blocks enablement with an actionable error instead
 // of silently masking it as "no managed assistant".
