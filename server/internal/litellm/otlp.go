@@ -26,13 +26,15 @@ import (
 )
 
 const (
-	maxOTLPAttributes      = 128
-	maxOTLPAttributeBytes  = 64 * 1024
-	maxOTLPResourceBytes   = 8 * 1024
-	maxOTLPResourceGroups  = 256
-	maxOTLPScopeGroups     = 256
-	maxOTLPSpansPerExport  = 256
-	litellmOTLPResourceURN = "litellm:otel:traces"
+	maxOTLPAttributes       = 128
+	maxOTLPAttributeBytes   = 64 * 1024
+	maxOTLPResourceBytes    = 8 * 1024
+	maxOTLPResourceGroups   = 256
+	maxOTLPScopeGroups      = 256
+	maxOTLPSpansPerExport   = 256
+	maxOTLPNestedValueNodes = 4096
+	maxOTLPAnyValueDepth    = 32
+	litellmOTLPResourceURN  = "litellm:otel:traces"
 )
 
 type otlpAttributeValueKind uint8
@@ -266,10 +268,25 @@ type otlpCollectionCounts struct {
 	resourceGroups int
 	scopeGroups    int
 	spans          int
+	nestedNodes    int
 }
 
 func (c otlpCollectionCounts) validate() error {
-	return validateOTLPCollectionCounts(c.resourceGroups, c.scopeGroups, c.spans)
+	if err := validateOTLPCollectionCounts(c.resourceGroups, c.scopeGroups, c.spans); err != nil {
+		return err
+	}
+	if c.nestedNodes > maxOTLPNestedValueNodes {
+		return fmt.Errorf("OTLP trace export contains too many nested AnyValue nodes: %d", c.nestedNodes)
+	}
+	return nil
+}
+
+func (c *otlpCollectionCounts) addNestedNode(depth int) error {
+	if depth > maxOTLPAnyValueDepth {
+		return fmt.Errorf("OTLP trace export AnyValue nesting exceeds maximum depth: %d", depth)
+	}
+	c.nestedNodes++
+	return c.validate()
 }
 
 type otlpJSONCollection uint8
@@ -291,7 +308,7 @@ func preflightOTLPJSON(body []byte) error {
 		return fmt.Errorf("preflight OTLP JSON: expected top-level object")
 	}
 
-	counts := otlpCollectionCounts{resourceGroups: 0, scopeGroups: 0, spans: 0}
+	counts := otlpCollectionCounts{resourceGroups: 0, scopeGroups: 0, spans: 0, nestedNodes: 0}
 	if err := preflightJSONObject(decoder, &counts, "resourceSpans", otlpJSONResources); err != nil {
 		return err
 	}
@@ -314,12 +331,23 @@ func preflightJSONObject(decoder *json.Decoder, counts *otlpCollectionCounts, co
 		if err != nil {
 			return fmt.Errorf("preflight OTLP JSON field %q: %w", key, err)
 		}
-		if strings.EqualFold(key, collectionKey) && value == json.Delim('[') {
+		switch {
+		case strings.EqualFold(key, collectionKey) && value == json.Delim('['):
 			if err := preflightJSONArray(decoder, counts, collection); err != nil {
 				return err
 			}
-		} else if err := skipJSONValue(decoder, value); err != nil {
-			return err
+		case collection == otlpJSONScopes && strings.EqualFold(key, "resource") && value == json.Delim('{'):
+			if err := preflightJSONAttributesObject(decoder, counts); err != nil {
+				return err
+			}
+		case collection == otlpJSONSpans && strings.EqualFold(key, "scope") && value == json.Delim('{'):
+			if err := preflightJSONAttributesObject(decoder, counts); err != nil {
+				return err
+			}
+		default:
+			if err := skipJSONValue(decoder, value); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := decoder.Token(); err != nil {
@@ -345,13 +373,20 @@ func preflightJSONArray(decoder *json.Decoder, counts *otlpCollectionCounts, col
 		if err != nil {
 			return fmt.Errorf("preflight OTLP JSON collection: %w", err)
 		}
-		if value == json.Delim('{') && collection != otlpJSONSpans {
-			if collection == otlpJSONResources {
+		if value == json.Delim('{') {
+			switch collection {
+			case otlpJSONResources:
 				if err := preflightJSONObject(decoder, counts, "scopeSpans", otlpJSONScopes); err != nil {
 					return err
 				}
-			} else if err := preflightJSONObject(decoder, counts, "spans", otlpJSONSpans); err != nil {
-				return err
+			case otlpJSONScopes:
+				if err := preflightJSONObject(decoder, counts, "spans", otlpJSONSpans); err != nil {
+					return err
+				}
+			case otlpJSONSpans:
+				if err := preflightJSONAttributesObject(decoder, counts); err != nil {
+					return err
+				}
 			}
 		} else if err := skipJSONValue(decoder, value); err != nil {
 			return err
@@ -359,6 +394,157 @@ func preflightJSONArray(decoder *json.Decoder, counts *otlpCollectionCounts, col
 	}
 	if _, err := decoder.Token(); err != nil {
 		return fmt.Errorf("preflight OTLP JSON collection: %w", err)
+	}
+	return nil
+}
+
+func preflightJSONAttributesObject(decoder *json.Decoder, counts *otlpCollectionCounts) error {
+	for decoder.More() {
+		key, err := nextJSONKey(decoder)
+		if err != nil {
+			return err
+		}
+		value, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP attributes field %q: %w", key, err)
+		}
+		if strings.EqualFold(key, "attributes") && value == json.Delim('[') {
+			if err := preflightJSONKeyValues(decoder, counts, 1); err != nil {
+				return err
+			}
+		} else if err := skipJSONValue(decoder, value); err != nil {
+			return err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return fmt.Errorf("preflight OTLP attributes object: %w", err)
+	}
+	return nil
+}
+
+func preflightJSONKeyValues(decoder *json.Decoder, counts *otlpCollectionCounts, depth int) error {
+	for decoder.More() {
+		value, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP KeyValue: %w", err)
+		}
+		if value == json.Delim('{') {
+			if err := preflightJSONKeyValue(decoder, counts, depth); err != nil {
+				return err
+			}
+		} else if err := skipJSONValue(decoder, value); err != nil {
+			return err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return fmt.Errorf("preflight OTLP KeyValues: %w", err)
+	}
+	return nil
+}
+
+func preflightJSONKeyValue(decoder *json.Decoder, counts *otlpCollectionCounts, depth int) error {
+	for decoder.More() {
+		key, err := nextJSONKey(decoder)
+		if err != nil {
+			return err
+		}
+		value, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP KeyValue field %q: %w", key, err)
+		}
+		if strings.EqualFold(key, "value") && value == json.Delim('{') {
+			if err := preflightJSONAnyValue(decoder, counts, depth); err != nil {
+				return err
+			}
+		} else if err := skipJSONValue(decoder, value); err != nil {
+			return err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return fmt.Errorf("preflight OTLP KeyValue: %w", err)
+	}
+	return nil
+}
+
+func preflightJSONAnyValue(decoder *json.Decoder, counts *otlpCollectionCounts, depth int) error {
+	if depth > maxOTLPAnyValueDepth {
+		return fmt.Errorf("OTLP trace export AnyValue nesting exceeds maximum depth: %d", depth)
+	}
+	for decoder.More() {
+		key, err := nextJSONKey(decoder)
+		if err != nil {
+			return err
+		}
+		value, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP AnyValue field %q: %w", key, err)
+		}
+		switch {
+		case strings.EqualFold(key, "arrayValue") && value == json.Delim('{'):
+			if err := preflightJSONAnyValueContainer(decoder, counts, depth+1, false); err != nil {
+				return err
+			}
+		case strings.EqualFold(key, "kvlistValue") && value == json.Delim('{'):
+			if err := preflightJSONAnyValueContainer(decoder, counts, depth+1, true); err != nil {
+				return err
+			}
+		default:
+			if err := skipJSONValue(decoder, value); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return fmt.Errorf("preflight OTLP AnyValue: %w", err)
+	}
+	return nil
+}
+
+func preflightJSONAnyValueContainer(decoder *json.Decoder, counts *otlpCollectionCounts, childDepth int, keyValues bool) error {
+	for decoder.More() {
+		key, err := nextJSONKey(decoder)
+		if err != nil {
+			return err
+		}
+		value, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP AnyValue container field %q: %w", key, err)
+		}
+		if !strings.EqualFold(key, "values") || value != json.Delim('[') {
+			if err := skipJSONValue(decoder, value); err != nil {
+				return err
+			}
+			continue
+		}
+		for decoder.More() {
+			if err := counts.addNestedNode(childDepth); err != nil {
+				return err
+			}
+			child, err := decoder.Token()
+			if err != nil {
+				return fmt.Errorf("preflight OTLP nested AnyValue: %w", err)
+			}
+			if child != json.Delim('{') {
+				if err := skipJSONValue(decoder, child); err != nil {
+					return err
+				}
+				continue
+			}
+			if keyValues {
+				err = preflightJSONKeyValue(decoder, counts, childDepth)
+			} else {
+				err = preflightJSONAnyValue(decoder, counts, childDepth)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		if _, err := decoder.Token(); err != nil {
+			return fmt.Errorf("preflight OTLP nested AnyValue values: %w", err)
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return fmt.Errorf("preflight OTLP AnyValue container: %w", err)
 	}
 	return nil
 }
@@ -404,7 +590,7 @@ func skipJSONValue(decoder *json.Decoder, token json.Token) error {
 }
 
 func preflightOTLPProtobuf(data []byte) error {
-	counts := otlpCollectionCounts{resourceGroups: 0, scopeGroups: 0, spans: 0}
+	counts := otlpCollectionCounts{resourceGroups: 0, scopeGroups: 0, spans: 0, nestedNodes: 0}
 	for len(data) > 0 {
 		number, wireType, value, rest, err := consumeProtobufField(data)
 		if err != nil {
@@ -432,7 +618,16 @@ func preflightProtobufResourceSpans(data []byte, counts *otlpCollectionCounts) e
 			return fmt.Errorf("preflight OTLP protobuf resource group: %w", err)
 		}
 		data = rest
-		if number != 2 || wireType != protowire.BytesType {
+		if wireType != protowire.BytesType {
+			continue
+		}
+		if number == 1 {
+			if err := preflightProtobufAttributes(value, 1, counts); err != nil {
+				return err
+			}
+			continue
+		}
+		if number != 2 {
 			continue
 		}
 		counts.scopeGroups++
@@ -448,16 +643,105 @@ func preflightProtobufResourceSpans(data []byte, counts *otlpCollectionCounts) e
 
 func preflightProtobufScopeSpans(data []byte, counts *otlpCollectionCounts) error {
 	for len(data) > 0 {
-		number, wireType, _, rest, err := consumeProtobufField(data)
+		number, wireType, value, rest, err := consumeProtobufField(data)
 		if err != nil {
 			return fmt.Errorf("preflight OTLP protobuf scope group: %w", err)
 		}
 		data = rest
-		if number != 2 || wireType != protowire.BytesType {
+		if wireType != protowire.BytesType {
+			continue
+		}
+		if number == 1 {
+			if err := preflightProtobufAttributes(value, 3, counts); err != nil {
+				return err
+			}
+			continue
+		}
+		if number != 2 {
 			continue
 		}
 		counts.spans++
 		if err := counts.validate(); err != nil {
+			return err
+		}
+		if err := preflightProtobufAttributes(value, 9, counts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func preflightProtobufAttributes(data []byte, attributesField protowire.Number, counts *otlpCollectionCounts) error {
+	for len(data) > 0 {
+		number, wireType, value, rest, err := consumeProtobufField(data)
+		if err != nil {
+			return fmt.Errorf("preflight OTLP protobuf attributes: %w", err)
+		}
+		data = rest
+		if number == attributesField && wireType == protowire.BytesType {
+			if err := preflightProtobufKeyValue(value, counts, 1); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func preflightProtobufKeyValue(data []byte, counts *otlpCollectionCounts, depth int) error {
+	for len(data) > 0 {
+		number, wireType, value, rest, err := consumeProtobufField(data)
+		if err != nil {
+			return fmt.Errorf("preflight OTLP protobuf KeyValue: %w", err)
+		}
+		data = rest
+		if number == 2 && wireType == protowire.BytesType {
+			if err := preflightProtobufAnyValue(value, counts, depth); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func preflightProtobufAnyValue(data []byte, counts *otlpCollectionCounts, depth int) error {
+	if depth > maxOTLPAnyValueDepth {
+		return fmt.Errorf("OTLP trace export AnyValue nesting exceeds maximum depth: %d", depth)
+	}
+	for len(data) > 0 {
+		number, wireType, value, rest, err := consumeProtobufField(data)
+		if err != nil {
+			return fmt.Errorf("preflight OTLP protobuf AnyValue: %w", err)
+		}
+		data = rest
+		if wireType != protowire.BytesType || (number != 5 && number != 6) {
+			continue
+		}
+		if err := preflightProtobufAnyValueContainer(value, counts, depth+1, number == 6); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func preflightProtobufAnyValueContainer(data []byte, counts *otlpCollectionCounts, childDepth int, keyValues bool) error {
+	for len(data) > 0 {
+		number, wireType, value, rest, err := consumeProtobufField(data)
+		if err != nil {
+			return fmt.Errorf("preflight OTLP protobuf AnyValue container: %w", err)
+		}
+		data = rest
+		if number != 1 || wireType != protowire.BytesType {
+			continue
+		}
+		if err := counts.addNestedNode(childDepth); err != nil {
+			return err
+		}
+		if keyValues {
+			err = preflightProtobufKeyValue(value, counts, childDepth)
+		} else {
+			err = preflightProtobufAnyValue(value, counts, childDepth)
+		}
+		if err != nil {
 			return err
 		}
 	}
