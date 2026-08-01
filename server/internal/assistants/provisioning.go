@@ -147,13 +147,16 @@ func (s *ServiceCore) EnableManagedAssistant(
 // the caller can reflect it without a re-read.
 func (s *ServiceCore) raiseManagedAssistantWarmTTL(ctx context.Context, projectID, assistantID uuid.UUID) (int, error) {
 	warmTTL := int(managedAssistantWarmTTLSeconds)
+	// Only warm_ttl_seconds is set; the other nargs stay nil so UpdateAssistant's
+	// COALESCE leaves those columns untouched. Built through the conv helpers
+	// (not empty pgtype literals) to satisfy exhaustruct.
 	updated, err := assistantrepo.New(s.db).UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
-		Name:           pgtype.Text{},
-		Model:          pgtype.Text{},
-		Instructions:   pgtype.Text{},
+		Name:           conv.PtrToPGText(nil),
+		Model:          conv.PtrToPGText(nil),
+		Instructions:   conv.PtrToPGText(nil),
 		WarmTtlSeconds: conv.PtrToPGInt8(&warmTTL),
-		MaxConcurrency: pgtype.Int8{},
-		Status:         pgtype.Text{},
+		MaxConcurrency: conv.PtrToPGInt8(nil),
+		Status:         conv.PtrToPGText(nil),
 		AssistantID:    assistantID,
 		ProjectID:      projectID,
 	})
