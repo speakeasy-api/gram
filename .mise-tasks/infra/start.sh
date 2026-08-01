@@ -11,6 +11,19 @@
 # compose.yml and are not treated as orphans.
 docker compose up -d --remove-orphans || exit 1
 
+# One-time migration across ALL compose projects. Before the shared analyzer
+# existed, every worktree — and the main tree — ran its own gram-presidio under
+# its OWN project, and those legacy containers still hold host port 5050. The
+# --remove-orphans above only touches THIS worktree's project, so a leftover
+# analyzer in the main tree's (or another worktree's) project would still own
+# 5050 and block the shared `up` below from binding it. Remove every
+# gram-presidio container that is not the shared one, regardless of project.
+# Idempotent: once migrated there are none left and this is a no-op.
+docker ps -a --filter "label=com.docker.compose.service=gram-presidio" \
+  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+  | awk '$1 != "gram-shared" { print $2 }' \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
 # Presidio analyzer, shared across all worktrees under a fixed project name so a
 # worktree's COMPOSE_PROJECT_NAME cannot fork it into a second copy. Bringing it
 # up is idempotent, so every worktree can safely (re)assert it here. A failure

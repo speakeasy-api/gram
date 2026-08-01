@@ -40,13 +40,21 @@ fi
 
 # Presidio moved to the shared stack (compose.shared.yml) and must use the
 # default port so every worktree reaches the single shared copy. A pre-existing
-# worktree may still carry the old auto-generated remap for it. Only undo that
-# machine-generated state — never a value the developer set on purpose (e.g. a
-# custom analyzer URL). The old `zero:remap-ports` scheme always wrote
-# PRESIDIO_ANALYZER_URL as the mise.toml template `http://127.0.0.1:{{env.PRESIDIO_PORT}}`,
-# so that literal `{{env.PRESIDIO_PORT}}` marker is our proof the entries were
-# generated (and always emitted PRESIDIO_PORT alongside it). A hand-edited URL
-# won't contain the marker and is left untouched, as is the port beside it.
+# worktree may still carry the old auto-generated remap for it, which we reset
+# to the mise.toml defaults here — but only when we can prove it was machine
+# generated, so a worktree that never remapped (or was hand-edited) is left
+# entirely alone.
+#
+# The proof is the `{{env.PRESIDIO_PORT}}` template in PRESIDIO_ANALYZER_URL:
+# `zero:remap-ports` is the only thing that writes that literal
+# (`http://127.0.0.1:{{env.PRESIDIO_PORT}}`, copied verbatim from mise.toml), and
+# it always emitted PRESIDIO_PORT in the same pass. So the marker attests the
+# whole pair is generated, and both are reset together. If a developer has
+# deliberately pinned a custom analyzer (their own URL, without the template),
+# the marker is absent and neither key is touched. The one case this does not
+# distinguish is a hand-set PRESIDIO_PORT left beside the generated template URL;
+# that is reset too — acceptable, since keeping the generated URL alongside a
+# custom port is not a coherent configuration.
 if grep -E '^PRESIDIO_ANALYZER_URL[[:space:]]*=' mise.local.toml \
      | grep -qF '{{env.PRESIDIO_PORT}}'; then
   for key in PRESIDIO_ANALYZER_URL PRESIDIO_PORT; do
