@@ -210,9 +210,6 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload) error 
 }
 
 func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequest) error {
-	if countOTLPSpans(request) > maxOTLPSpansPerExport {
-		return oops.E(oops.CodeRequestTooLarge, nil, "OTLP trace export contains too many spans")
-	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
