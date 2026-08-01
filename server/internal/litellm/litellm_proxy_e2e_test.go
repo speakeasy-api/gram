@@ -407,7 +407,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 		testcontainers.WithEnv(map[string]string{
 			"GRAM_LITELLM_INGEST_KEY": apiKey,
 			"GRAM_PROJECT_SLUG":       *authCtx.ProjectSlug,
-			"REQUEST_TIMEOUT":         "3",
+			"REQUEST_TIMEOUT":         fmt.Sprintf("%d", proxyRequestTimeout/time.Second),
 		}),
 		testcontainers.WithCmd("--config", "/app/e2e-config.yaml", "--port", "4000"),
 		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/liveliness").WithPort("4000/tcp").WithStartupTimeout(3*time.Minute)),
