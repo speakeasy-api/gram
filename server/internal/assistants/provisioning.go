@@ -57,9 +57,14 @@ const (
 	// legacyManagedAssistantWarmTTLSeconds is the warm window managed assistants
 	// were provisioned with before managedAssistantWarmTTLSeconds was widened to
 	// 300. The lazy heal targets this exact value — not "anything below the new
-	// default" — so a deliberately chosen custom window (including one shorter
-	// than the default, set via UpdateAssistant) is never overwritten. If the
-	// managed default is bumped again, add the intervening prior default(s) here.
+	// default" — so a custom window set to any *other* value (e.g. a deliberately
+	// shorter 120s, set via UpdateAssistant) is left untouched. The one value it
+	// cannot distinguish is this legacy default itself: a window a user
+	// deliberately set to exactly 60s is indistinguishable from an un-migrated row
+	// and will be raised to 300. Inferring "stale default" from the stored value
+	// accepts that narrow ambiguity rather than paying for durable per-row
+	// "customized" metadata on a platform-managed field. If the managed default is
+	// bumped again, add the intervening prior default(s) here.
 	legacyManagedAssistantWarmTTLSeconds int64 = 60
 )
 
@@ -153,8 +158,11 @@ func (s *ServiceCore) EnableManagedAssistant(
 // warm window: it sets warm_ttl_seconds to the current managed default only when
 // the row currently holds exactly legacyManagedAssistantWarmTTLSeconds. Matching
 // the exact prior default (rather than "anything below the new default") means a
-// deliberately chosen custom window — including one shorter than the default,
-// set via UpdateAssistant — is never overwritten. The predicate lives in SQL, so
+// custom window set to any other value — e.g. a deliberately shorter 120s set via
+// UpdateAssistant — is left untouched; only a window still equal to the legacy
+// default is raised (a value a user deliberately set to exactly that default is
+// indistinguishable from an un-migrated row — see the constant's doc). The
+// predicate lives in SQL, so
 // the heal is a single effective write under concurrent chat-opens (later racers
 // match no row) and updated_at is left untouched (this is an internal backfill,
 // not a user edit). Returns the number of rows written: 1 when this call
@@ -189,8 +197,11 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 	// write-scoped ensure path fires only when one is missing) — so an assistant
 	// on the legacy default is raised the next time its owner opens the chat, with
 	// no data migration. The guard is the *exact* legacy value, not "below the new
-	// default", so a deliberately chosen custom window (warm_ttl is user-settable
-	// via UpdateAssistant) is left alone. The heal is one-time: once healed the
+	// default", so a custom window (warm_ttl is user-settable via UpdateAssistant)
+	// set to any value other than the legacy default is left alone — the lone
+	// ambiguity being a window deliberately set to exactly the legacy default, which
+	// reads as un-migrated (see legacyManagedAssistantWarmTTLSeconds). The heal is
+	// one-time: once healed the
 	// guard is false and this stays a pure read, so the steady state is read-only.
 	// updated_at is left untouched (see raiseManagedAssistantWarmTTL). A repair
 	// failure must not fail the read: the assistant still works at its stored TTL,
