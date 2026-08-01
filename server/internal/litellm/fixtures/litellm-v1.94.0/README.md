@@ -36,7 +36,7 @@ guardrails:
 - `openai-chat-tools.jsonl`: OpenAI Chat Completions, email-backed virtual key, tool definitions, historical tool calls, and output tool calls.
 - `openai-responses-tools.jsonl`: OpenAI Responses, email-less virtual key, tool definitions, historical tool calls, and output tool calls.
 - `anthropic-messages-tools.jsonl`: Anthropic Messages with the shared master key, Anthropic tool history, and output tool calls.
-- `passthrough-text.jsonl`: LiteLLM generic pass-through field targeting and text-only fallback. LiteLLM OSS requires an enterprise license to grant a virtual key access to a configured pass-through route, so this isolated route is intentionally unauthenticated; identity variants are recorded on standard routes. LiteLLM omits forwarded request headers on this route, so Gram falls back to the trace ID for session identity.
+- `passthrough-text.jsonl`: LiteLLM generic pass-through field targeting and text-only fallback. LiteLLM OSS requires an enterprise license to grant a virtual key access to a configured pass-through route, so this isolated route is intentionally unauthenticated; identity variants are recorded on standard routes. LiteLLM omits forwarded request headers on this route, so Gram falls back to the trace ID for session identity. Version 1.94.0 also drops the logging context before configured pass-through post-call dispatch, so the pinned image emits only the request callback; pass-through response capture is not supported by this version.
 - `streaming-chat.jsonl`: streaming request and the single end-of-stream cumulative response supported by Gram.
 - `end-user-identity.jsonl`: caller-controlled end-user ID on an email-less virtual key.
 - `shared-key-identity.jsonl`: virtual key with no bound user or email.
@@ -51,4 +51,4 @@ Docker must be running. From the repository root:
 mise run gen:litellm-contract-fixtures
 ```
 
-The task verifies the image digest and running image ID, records deterministic route traffic, rejects unsafe emails, credentials, authorization/cookie headers, and non-fixture organization IDs, then atomically replaces the generated JSON/JSONL files. CI consumes the checked-in corpus and does not run Docker generation.
+The task verifies the image digest and running image ID, records deterministic route traffic, rejects unsafe emails, credentials, authorization/cookie headers, and non-fixture organization IDs, then replaces generated JSONL files and writes the hash manifest last. CI verifies the complete manifest so interrupted or manually edited output fails the suite. CI consumes the checked-in corpus and does not run Docker generation.

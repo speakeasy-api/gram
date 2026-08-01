@@ -569,6 +569,8 @@ def main():
             {"input": "pass-through prompt", "ignored": "not selected"},
             email_less_key,
             {"x-gram-session-id": "fixture-passthrough-session"},
+            # v1.94.0 strips litellm_logging_obj before configured pass-through
+            # post-call dispatch, so the real pinned image emits only pre-call.
             expected=1,
         )
         cases["streaming-chat.jsonl"] = record_case(
@@ -620,10 +622,15 @@ def main():
             assert_safe(manifest_raw, "manifest.json")
             (temp / "manifest.json").write_bytes(manifest_raw)
             OUTPUT.mkdir(parents=True, exist_ok=True)
-            for stale in OUTPUT.glob("*.json*"):
-                stale.unlink()
-            for generated in temp.iterdir():
-                os.replace(generated, OUTPUT / generated.name)
+            for filename in sorted(cases):
+                os.replace(temp / filename, OUTPUT / filename)
+            for stale in OUTPUT.glob("*.jsonl"):
+                if stale.name not in cases:
+                    stale.unlink()
+            # The manifest is the commit marker for the generated set. Tests
+            # reject interrupted or manually edited output by verifying every
+            # listed hash and rejecting unlisted JSONL files.
+            os.replace(temp / "manifest.json", OUTPUT / "manifest.json")
         print(f"recorded {len(cases)} fixture sequences from {IMAGE}")
     finally:
         try:

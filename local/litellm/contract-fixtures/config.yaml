@@ -24,6 +24,11 @@ general_settings:
       target: os.environ/FIXTURE_TEXT_TARGET
       auth: false
       methods: [POST]
+      # LiteLLM 1.94.0 models per-endpoint guardrails as a map keyed by the
+      # globally registered guardrail name. Its configured pass-through path
+      # applies request_fields but drops the logging context before post-call
+      # dispatch, so response_fields is retained here as the intended contract
+      # even though the pinned version emits no response callback.
       guardrails:
         fixture-contract:
           request_fields: [input]
