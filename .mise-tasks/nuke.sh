@@ -13,6 +13,11 @@ fi
 
 docker compose --profile "*" down --volumes --remove-orphans
 
+# Shared services live under a fixed project (compose.shared.yml). nuke means
+# "destroy all infra", so tear these down too — `./zero` recreates them. Note
+# this affects every worktree that shares them.
+docker compose -f compose.shared.yml -p gram-shared down --volumes --remove-orphans
+
 # dev-idp's SQLite database lives outside docker -- nuke it too so a
 # follow-up `./zero` boots from a clean mock-workos/oauth2 state.
 rm -rf local/devidp

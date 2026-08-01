@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
 
+# Stateless services shared across all worktrees, under a fixed project name so
+# a worktree's COMPOSE_PROJECT_NAME cannot fork them into a second copy. Bringing
+# them up is idempotent, so every worktree can safely (re)assert them here.
+docker compose -f compose.shared.yml -p gram-shared up -d || exit 1
+
 docker compose up -d || exit 1
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
