@@ -375,6 +375,23 @@ func TestTraceProcessorShutdownRetriesWaitForWorkerCompletion(t *testing.T) {
 	require.NoError(t, processor.Shutdown(t.Context()))
 }
 
+func TestTraceProcessorRecordsPersistenceFailuresBySpanCount(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(t.Context())) })
+	wantErr := errors.New("persistence unavailable")
+	processor := newTraceProcessor(testenv.NewLogger(t), meterProvider, func(context.Context, []telemetry.LogParams) error {
+		return wantErr
+	}, 1, 1)
+	processor.Start(t.Context())
+
+	require.True(t, processor.Enqueue(t.Context(), make([]telemetry.LogParams, 3)))
+	require.NoError(t, processor.Shutdown(t.Context()))
+	require.EqualValues(t, 3, metricCounterValue(t, reader, "litellm.otel.spans.persistence_failed"))
+}
+
 func metricCounterValue(t *testing.T, reader *sdkmetric.ManualReader, name string) int64 {
 	t.Helper()
 	var metrics metricdata.ResourceMetrics

@@ -36,6 +36,7 @@ type TraceProcessor struct {
 
 	accepted           metric.Int64Counter
 	dropped            metric.Int64Counter
+	persistenceFailed  metric.Int64Counter
 	truncatedAttrs     metric.Int64Counter
 	invalidIdentifiers metric.Int64Counter
 }
@@ -48,6 +49,7 @@ func newTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/litellm")
 	accepted, _ := meter.Int64Counter("litellm.otel.spans.accepted", metric.WithDescription("LiteLLM OTLP spans accepted into the processing queue"))
 	dropped, _ := meter.Int64Counter("litellm.otel.spans.dropped", metric.WithDescription("LiteLLM OTLP spans dropped because the processing queue was full"))
+	persistenceFailed, _ := meter.Int64Counter("litellm.otel.spans.persistence_failed", metric.WithDescription("LiteLLM OTLP spans permanently lost because telemetry persistence failed"))
 	truncatedAttrs, _ := meter.Int64Counter("litellm.otel.attributes.truncated", metric.WithDescription("LiteLLM OTLP attributes truncated or dropped by ingest limits"))
 	invalidIdentifiers, _ := meter.Int64Counter("litellm.otel.identifiers.invalid", metric.WithDescription("Invalid LiteLLM OTLP trace and span identifiers omitted during ingest"))
 
@@ -64,6 +66,7 @@ func newTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		wg:                 sync.WaitGroup{},
 		accepted:           accepted,
 		dropped:            dropped,
+		persistenceFailed:  persistenceFailed,
 		truncatedAttrs:     truncatedAttrs,
 		invalidIdentifiers: invalidIdentifiers,
 	}
@@ -153,6 +156,7 @@ func (p *TraceProcessor) run(ctx context.Context) {
 
 func (p *TraceProcessor) process(ctx context.Context, job traceJob) {
 	if err := p.logBulk(ctx, job.spans); err != nil {
+		p.persistenceFailed.Add(ctx, int64(len(job.spans)), metric.WithAttributes(attr.Reason("log_bulk_error")))
 		p.logger.WarnContext(ctx, "persist LiteLLM OTLP trace export", attr.SlogError(err))
 	}
 }
