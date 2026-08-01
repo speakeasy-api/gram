@@ -563,19 +563,31 @@ export default function PluginDetail(): JSX.Element | null {
                   {description}
                 </SettingsSection.Description>
               </SettingsSection.Header>
-              <PluginInstallControl
-                plugin={{
-                  name: plugin.name,
-                  slug: plugin.slug,
-                  description: plugin.description,
-                }}
-                publishStatus={publishStatus}
-                isDownloadMenuOpen={isDownloadMenuOpen}
-                onDownloadMenuOpenChange={setIsDownloadMenuOpen}
-                onDownload={(platform) => void handleDownload(platform)}
-                isInstallSheetOpen={isInstallSheetOpen}
-                onInstallSheetOpenChange={setIsInstallSheetOpen}
-              />
+              <Stack
+                direction="horizontal"
+                gap={2}
+                align="center"
+                className="shrink-0"
+              >
+                <MarketplaceSyncButton
+                  publishStatus={publishStatus}
+                  isPending={publishMutation.isPending}
+                  onSync={() => handlePublish([])}
+                />
+                <PluginInstallControl
+                  plugin={{
+                    name: plugin.name,
+                    slug: plugin.slug,
+                    description: plugin.description,
+                  }}
+                  publishStatus={publishStatus}
+                  isDownloadMenuOpen={isDownloadMenuOpen}
+                  onDownloadMenuOpenChange={setIsDownloadMenuOpen}
+                  onDownload={(platform) => void handleDownload(platform)}
+                  isInstallSheetOpen={isInstallSheetOpen}
+                  onInstallSheetOpenChange={setIsInstallSheetOpen}
+                />
+              </Stack>
             </div>
 
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -1016,6 +1028,41 @@ function MarketplaceBanner({
       onSetup={onSetup}
       onAddCollaborators={onManageCollaborators}
     />
+  );
+}
+
+// Always-available manual re-sync for a connected marketplace. The banner only
+// surfaces a Sync action when it detects unpublished changes; this button lets
+// the user force a republish at any time (e.g. to recover from a failed push or
+// re-run the generator), restoring the old detail page's persistent Sync
+// control. Renders nothing until the project is connected — the not-connected
+// publish path lives in the marketplace banner.
+function MarketplaceSyncButton({
+  publishStatus,
+  isPending,
+  onSync,
+}: {
+  publishStatus: PublishStatusResult | undefined;
+  isPending: boolean;
+  onSync: () => void;
+}): JSX.Element | null {
+  if (!publishStatus?.connected) return null;
+
+  const hasUnpublishedChanges = publishStatus.upToDate === false;
+
+  return (
+    <Button variant="secondary" onClick={onSync} disabled={isPending}>
+      <Button.LeftIcon>
+        <Icon name="refresh-cw" className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>
+        {isPending
+          ? "Syncing..."
+          : hasUnpublishedChanges
+            ? "Sync changes"
+            : "Sync"}
+      </Button.Text>
+    </Button>
   );
 }
 
