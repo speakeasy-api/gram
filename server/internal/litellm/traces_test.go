@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +22,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -263,6 +267,60 @@ func TestTraceHTTPAcceptsJSONAndProtobufPlainAndGzip(t *testing.T) {
 	}
 }
 
+func TestTraceHTTPAcceptsEmptyExportWithoutEnqueue(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(t.Context())) })
+	var callbackCalls atomic.Int64
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	service, processor := newTraceTestService(t, authorizer, meterProvider, func(context.Context, []telemetry.LogParams) error {
+		callbackCalls.Add(1)
+		return nil
+	})
+
+	response := serveTraceRequest(t, mountedTraceMux(service), []byte(`{"resourceSpans":[{"scopeSpans":[]}]}`), "application/json", "", "valid-key", "project-test")
+	require.Equal(t, http.StatusAccepted, response.Code)
+	require.NoError(t, processor.Shutdown(t.Context()))
+	require.Zero(t, callbackCalls.Load())
+	require.Zero(t, metricCounterValueOrZero(t, reader, "litellm.otel.spans.accepted"))
+}
+
+func TestOTLPStructureLimitsAllowBoundary(t *testing.T) {
+	t.Parallel()
+
+	request := &otlpExportRequest{ResourceSpans: make([]otlpResourceSpans, maxOTLPResourceGroups)}
+	request.ResourceSpans[0].ScopeSpans = make([]otlpScopeSpans, maxOTLPScopeGroups)
+	require.NoError(t, request.validateStructure())
+
+	protobufRequest := &collectortracev1.ExportTraceServiceRequest{ResourceSpans: make([]*tracev1.ResourceSpans, maxOTLPResourceGroups)}
+	protobufRequest.ResourceSpans[0] = &tracev1.ResourceSpans{Resource: nil, ScopeSpans: make([]*tracev1.ScopeSpans, maxOTLPScopeGroups), SchemaUrl: ""}
+	require.NoError(t, validateProtoOTLPStructure(protobufRequest))
+}
+
+func TestOTLPJSONRejectsExcessEmptyResourceGroups(t *testing.T) {
+	t.Parallel()
+
+	groups := make([]string, maxOTLPResourceGroups+1)
+	for index := range groups {
+		groups[index] = `{}`
+	}
+	request, err := decodeOTLPJSON([]byte(`{"resourceSpans":[` + strings.Join(groups, ",") + `]}`))
+	require.Error(t, err)
+	require.Nil(t, request)
+}
+
+func TestOTLPProtobufRejectsExcessEmptyScopeGroups(t *testing.T) {
+	t.Parallel()
+
+	request := &collectortracev1.ExportTraceServiceRequest{ResourceSpans: []*tracev1.ResourceSpans{{
+		Resource: nil, ScopeSpans: make([]*tracev1.ScopeSpans, maxOTLPScopeGroups+1), SchemaUrl: "",
+	}}}
+	require.Error(t, validateProtoOTLPStructure(request))
+}
+
 func TestTraceLogParamsUsesObservedTimeForMissingOrOverflowingStartTime(t *testing.T) {
 	t.Parallel()
 
@@ -394,6 +452,19 @@ func TestTraceProcessorRecordsPersistenceFailuresBySpanCount(t *testing.T) {
 
 func metricCounterValue(t *testing.T, reader *sdkmetric.ManualReader, name string) int64 {
 	t.Helper()
+	result, found := metricCounterValueIfPresent(t, reader, name)
+	require.True(t, found, "metric not found: %s", name)
+	return result
+}
+
+func metricCounterValueOrZero(t *testing.T, reader *sdkmetric.ManualReader, name string) int64 {
+	t.Helper()
+	result, _ := metricCounterValueIfPresent(t, reader, name)
+	return result
+}
+
+func metricCounterValueIfPresent(t *testing.T, reader *sdkmetric.ManualReader, name string) (int64, bool) {
+	t.Helper()
 	var metrics metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &metrics))
 	for _, scope := range metrics.ScopeMetrics {
@@ -407,11 +478,10 @@ func metricCounterValue(t *testing.T, reader *sdkmetric.ManualReader, name strin
 			for _, point := range sum.DataPoints {
 				result += point.Value
 			}
-			return result
+			return result, true
 		}
 	}
-	require.Fail(t, "metric not found", name)
-	return 0
+	return 0, false
 }
 
 func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
@@ -635,5 +705,34 @@ func TestOTLPAttributeTypeAllowlistRejectsNegativeUsageAndAcceptsZero(t *testing
 	require.Equal(t, int64(0), zero[attr.GenAIUsageInputTokensKey])
 	require.InDelta(t, 0, zero[attr.GenAIUsageCostKey], 0)
 	require.Equal(t, int64(0), zero["litellm.response.cost"])
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestOTLPResourceAttributeBudgetDropsOverflow(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(t.Context())) })
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, meterProvider, func(context.Context, []telemetry.LogParams) error { return nil })
+	safe := "litellm"
+	large := strings.Repeat("x", maxOTLPResourceBytes/3)
+	values := make([]otlpKeyValue, 0, len(resourceAttributeAllowlist))
+	values = append(values, otlpKeyValue{Key: "service.name", Value: otlpAnyValue{StringValue: &safe}})
+	for _, key := range []string{
+		"service.namespace", "service.version", "service.instance.id", "deployment.environment",
+		"deployment.environment.name", "telemetry.sdk.name", "telemetry.sdk.language", "telemetry.sdk.version",
+	} {
+		value := large
+		values = append(values, otlpKeyValue{Key: key, Value: otlpAnyValue{StringValue: &value}})
+	}
+
+	result := service.sanitizeOTLPResourceAttributes(t.Context(), values)
+	require.Equal(t, "litellm", result[attr.ServiceNameKey])
+	require.Less(t, len(result), len(values))
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded), maxOTLPResourceBytes)
+	require.EqualValues(t, len(values)-len(result), metricCounterValue(t, reader, "litellm.otel.attributes.truncated"))
 	require.NoError(t, processor.Shutdown(t.Context()))
 }

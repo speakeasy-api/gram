@@ -76,6 +76,8 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 		protobufRequest := &collectortracev1.ExportTraceServiceRequest{ResourceSpans: nil}
 		if unmarshalErr := proto.Unmarshal(body, protobufRequest); unmarshalErr != nil {
 			err = fmt.Errorf("decode OTLP protobuf: %w", unmarshalErr)
+		} else if structureErr := validateProtoOTLPStructure(protobufRequest); structureErr != nil {
+			err = structureErr
 		} else {
 			request = exportRequestFromProto(protobufRequest)
 		}
@@ -186,6 +188,9 @@ func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequ
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 	params := s.traceLogParams(ctx, request, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	if len(params) == 0 {
+		return nil
+	}
 	s.traces.Enqueue(ctx, params)
 	return nil
 }
