@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/metric"
 
@@ -15,6 +16,7 @@ import (
 const (
 	traceProcessorWorkers   = 4
 	traceProcessorQueueSize = 16
+	tracePersistenceTimeout = 5 * time.Second
 )
 
 type traceJob struct {
@@ -42,7 +44,7 @@ type TraceProcessor struct {
 }
 
 func NewTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, telemetryLogger *telemetry.Logger) *TraceProcessor {
-	return newTraceProcessor(logger, meterProvider, telemetryLogger.LogBulk, traceProcessorWorkers, traceProcessorQueueSize)
+	return newTraceProcessor(logger, meterProvider, telemetryLogger.LogBulkBounded, traceProcessorWorkers, traceProcessorQueueSize)
 }
 
 func newTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int) *TraceProcessor {
@@ -155,6 +157,8 @@ func (p *TraceProcessor) run(ctx context.Context) {
 }
 
 func (p *TraceProcessor) process(ctx context.Context, job traceJob) {
+	persistenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tracePersistenceTimeout)
+	defer cancel()
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			p.persistenceFailed.Add(ctx, int64(len(job.spans)), metric.WithAttributes(attr.Reason("log_bulk_panic")))
@@ -164,7 +168,7 @@ func (p *TraceProcessor) process(ctx context.Context, job traceJob) {
 			)
 		}
 	}()
-	if err := p.logBulk(ctx, job.spans); err != nil {
+	if err := p.logBulk(persistenceCtx, job.spans); err != nil {
 		p.persistenceFailed.Add(ctx, int64(len(job.spans)), metric.WithAttributes(attr.Reason("log_bulk_error")))
 		p.logger.WarnContext(ctx, "persist LiteLLM OTLP trace export", attr.SlogError(err))
 	}

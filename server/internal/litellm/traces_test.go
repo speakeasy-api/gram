@@ -197,6 +197,23 @@ func protobufTraceWithAttributeCounts(resourceCount, scopeCount, spanCount int) 
 	return appendProtobufMessages(nil, 1, resourceSpans, 1)
 }
 
+func TestPreflightProtobufAggregatesMergedResourceAttributes(t *testing.T) {
+	t.Parallel()
+
+	resourceFragment := appendProtobufMessages(nil, 1, nil, maxOTLPAttributes/2+1)
+	resourceSpans := appendProtobufMessages(nil, 1, resourceFragment, 2)
+	require.ErrorContains(t, preflightOTLPProtobuf(appendProtobufMessages(nil, 1, resourceSpans, 1)), "too many KeyValues")
+}
+
+func TestPreflightProtobufAggregatesMergedScopeAttributes(t *testing.T) {
+	t.Parallel()
+
+	scopeFragment := appendProtobufMessages(nil, 3, nil, maxOTLPAttributes/2+1)
+	scopeSpans := appendProtobufMessages(nil, 1, scopeFragment, 2)
+	resourceSpans := appendProtobufMessages(nil, 2, scopeSpans, 1)
+	require.ErrorContains(t, preflightOTLPProtobuf(appendProtobufMessages(nil, 1, resourceSpans, 1)), "too many KeyValues")
+}
+
 func TestTraceHTTPAuthenticatesBeforeReadingBody(t *testing.T) {
 	t.Parallel()
 
@@ -793,6 +810,29 @@ func TestTraceProcessorShutdownRetriesWaitForWorkerCompletion(t *testing.T) {
 	defer cancel()
 	require.ErrorIs(t, processor.Shutdown(timedOut), context.DeadlineExceeded)
 	close(release)
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestTraceProcessorBoundsPersistenceAttempts(t *testing.T) {
+	t.Parallel()
+
+	deadline := make(chan struct {
+		value time.Time
+		ok    bool
+	}, 1)
+	processor := newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), func(ctx context.Context, _ []telemetry.LogParams) error {
+		value, ok := ctx.Deadline()
+		deadline <- struct {
+			value time.Time
+			ok    bool
+		}{value: value, ok: ok}
+		return nil
+	}, 1, 1)
+	processor.Start(t.Context())
+	require.True(t, processor.Enqueue(t.Context(), []telemetry.LogParams{}))
+	got := <-deadline
+	require.True(t, got.ok)
+	require.WithinDuration(t, time.Now().Add(tracePersistenceTimeout), got.value, time.Second)
 	require.NoError(t, processor.Shutdown(t.Context()))
 }
 
