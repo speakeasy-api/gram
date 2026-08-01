@@ -39,23 +39,22 @@ else
 fi
 
 # Presidio moved to the shared stack (compose.shared.yml) and must use the
-# default port so every worktree reaches the single shared copy. Drop any
-# per-worktree remap a pre-existing worktree may still carry for it (and its
-# dependent URL) so they fall back to the mise.toml defaults.
-shared_stale=(
-  PRESIDIO_PORT PRESIDIO_ANALYZER_URL
-)
-removed=0
-for key in "${shared_stale[@]}"; do
-  # mise writes `KEY = "..."` in the [env] table; match either spacing.
-  if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
-    mise unset --file mise.local.toml "$key"
-    echo "  - ${key} (now shared, using default)"
-    removed=$((removed + 1))
-  fi
-done
-if [ "$removed" -gt 0 ]; then
-  echo "✅ Removed ${removed} stale shared-service override(s) from mise.local.toml."
+# default port so every worktree reaches the single shared copy. A pre-existing
+# worktree may still carry the old auto-generated remap for it. Only undo that
+# machine-generated state — never a value the developer set on purpose (e.g. a
+# custom analyzer URL). The old `zero:remap-ports` scheme always wrote
+# PRESIDIO_ANALYZER_URL as the mise.toml template `http://127.0.0.1:{{env.PRESIDIO_PORT}}`,
+# so that literal `{{env.PRESIDIO_PORT}}` marker is our proof the entries were
+# generated (and always emitted PRESIDIO_PORT alongside it). A hand-edited URL
+# won't contain the marker and is left untouched, as is the port beside it.
+if grep -E '^PRESIDIO_ANALYZER_URL[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.PRESIDIO_PORT}}'; then
+  for key in PRESIDIO_ANALYZER_URL PRESIDIO_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated PRESIDIO_PORT / PRESIDIO_ANALYZER_URL to the shared defaults."
 fi
 
 if [ "${usage_no_migrate:-false}" = "true" ]; then

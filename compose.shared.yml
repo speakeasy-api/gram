@@ -17,9 +17,17 @@
 #   docker compose -f compose.shared.yml -p gram-shared up -d
 #   docker compose -f compose.shared.yml -p gram-shared down
 #
-# PRESIDIO_PORT is deliberately NOT remapped per worktree (see
-# zero:remap-ports), so every worktree reaches this single shared analyzer on
-# the same default host port.
+# The host port is a hardcoded literal, NOT ${PRESIDIO_PORT}. As a single
+# shared singleton it must land on the same fixed host port no matter which
+# worktree starts it — interpolating per-worktree env would let a worktree that
+# still carries a stale PRESIDIO_PORT remap (not yet cleaned by git:worksync)
+# recreate this container republished on a different port, fragmenting the
+# shared stack for everyone else. Keep this literal in sync with PRESIDIO_PORT's
+# default in mise.toml (5050), which is what every worktree's app connects to.
+#
+# Bound to 127.0.0.1: Presidio is an unauthenticated PII-analysis service and
+# only ever called by local host processes, so it must not be reachable on the
+# host's external interfaces.
 name: gram-shared
 
 services:
@@ -27,7 +35,7 @@ services:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
     ports:
-      - "${PRESIDIO_PORT}:3000"
+      - "127.0.0.1:5050:3000"
     healthcheck:
       test:
         [
