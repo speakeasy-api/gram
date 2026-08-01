@@ -190,6 +190,9 @@ func readLimitedTraceBody(reader io.Reader) ([]byte, error) {
 }
 
 func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload) error {
+	if payload == nil {
+		return oops.E(oops.CodeBadRequest, nil, "trace payload is required")
+	}
 	body, err := json.Marshal(struct {
 		ResourceSpans []any `json:"resourceSpans"`
 	}{ResourceSpans: payload.ResourceSpans})

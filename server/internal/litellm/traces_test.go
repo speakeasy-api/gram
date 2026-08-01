@@ -610,6 +610,17 @@ func TestTraceHTTPAcceptsEmptyExportWithoutEnqueue(t *testing.T) {
 	require.Zero(t, metricCounterValueOrZero(t, reader, "litellm.otel.spans.accepted"))
 }
 
+func TestTracesRejectsNilPayload(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	err := service.Traces(t.Context(), nil)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, http.StatusBadRequest, oopsErr.HTTPStatus(t.Context()))
+}
+
 func TestTraceHTTPAcceptsCollectionLimitBoundaries(t *testing.T) {
 	t.Parallel()
 
