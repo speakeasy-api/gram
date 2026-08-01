@@ -342,7 +342,10 @@ var _ = Service("chat", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("tool_calls", ArrayOf(ToolActivityCall), "The tool calls made so far in the current turn, in order.")
+			Attribute("tool_calls", ArrayOf(ToolActivityCall), "The most recent tool calls in the current turn, in order (the service summarizes at most 20).", func() {
+				MinLength(1)
+				MaxLength(20)
+			})
 			Attribute("user_message", String, "The user prompt that initiated the turn, used to ground the summary in the user's intent.", func() {
 				MaxLength(10000)
 			})
@@ -466,8 +469,12 @@ var SummarizeChatResult = Type("SummarizeChatResult", func() {
 })
 
 var ToolActivityCall = Type("ToolActivityCall", func() {
-	Attribute("name", String, "The tool name.")
-	Attribute("arguments", String, "The tool arguments as a JSON string, if available.")
+	Attribute("name", String, "The tool name.", func() {
+		MaxLength(256)
+	})
+	Attribute("arguments", String, "The tool arguments as a JSON string, if available. Only the first 600 characters are used.", func() {
+		MaxLength(600)
+	})
 	Required("name")
 })
 

@@ -130,4 +130,49 @@ describe("useToolActivitySummary", () => {
     });
     expect(result.current.label).toBe("Searching the web for pricing");
   });
+
+  it("does not reuse the present-tense label after the tools complete", async () => {
+    // Present tense while running; the completion (past-tense) summary fails.
+    summarizeMock.mockImplementation(async ({ inProgress }) =>
+      inProgress ? "Searching the web for pricing" : null,
+    );
+
+    const { result, rerender } = renderHook(
+      (props) => useToolActivitySummary(props),
+      {
+        initialProps: {
+          toolCalls: [{ name: "search_web" }],
+          inProgress: true,
+        } as Parameters<typeof useToolActivitySummary>[0],
+      },
+    );
+
+    await flushSummary();
+    expect(result.current.label).toBe("Searching the web for pricing");
+
+    // On completion the present-tense label must not linger; the past-tense
+    // heuristic stands in immediately, and stays when the summary fails.
+    rerender({ toolCalls: [{ name: "search_web" }], inProgress: false });
+    expect(result.current.label).toBe("Used Search Web");
+
+    await flushSummary();
+    expect(result.current.label).toBe("Used Search Web");
+  });
+
+  it("never summarizes when disabled (custom-rendered tool)", async () => {
+    summarizeMock.mockResolvedValue("should not appear");
+
+    const { result } = renderHook(() =>
+      useToolActivitySummary({
+        toolCalls: [{ name: "search_web" }],
+        inProgress: true,
+        enabled: false,
+      }),
+    );
+
+    expect(result.current.label).toBe("Calling Search Web…");
+    await flushSummary();
+    expect(result.current.label).toBe("Calling Search Web…");
+    expect(summarizeMock).not.toHaveBeenCalled();
+  });
 });

@@ -67496,7 +67496,9 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolActivityCall'
-                    description: The tool calls made so far in the current turn, in order.
+                    description: The most recent tool calls in the current turn, in order (the service summarizes at most 20).
+                    minItems: 1
+                    maxItems: 20
                 user_message:
                     type: string
                     description: The user prompt that initiated the turn, used to ground the summary in the user's intent.
@@ -67947,10 +67949,12 @@ components:
             properties:
                 arguments:
                     type: string
-                    description: The tool arguments as a JSON string, if available.
+                    description: The tool arguments as a JSON string, if available. Only the first 600 characters are used.
+                    maxLength: 600
                 name:
                     type: string
                     description: The tool name.
+                    maxLength: 256
             required:
                 - name
         ToolAnnotations:

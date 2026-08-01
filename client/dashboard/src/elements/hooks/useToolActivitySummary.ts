@@ -9,7 +9,9 @@ import type { ToolActivityCall } from "@/elements/types";
 /** How long to wait after the tool set stops changing before summarizing. */
 const SUMMARIZE_DEBOUNCE_MS = 400;
 /** Cap per-call arguments sent over the wire; the server bounds them again. */
-const MAX_ARGUMENT_CHARS = 1000;
+const MAX_ARGUMENT_CHARS = 600;
+/** Cap how many calls are sent; the server summarizes at most this many. */
+const MAX_TOOL_CALLS = 20;
 
 export interface ToolActivitySummary {
   /** The label to show as the tool-group header. */
@@ -28,6 +30,13 @@ export interface UseToolActivitySummaryInput {
   toolCalls: ToolActivityCall[];
   inProgress: boolean;
   userMessage?: string;
+  /**
+   * When false, skip enrichment entirely (heuristic only). Used for tool groups
+   * rendered by a custom component, which never display this label — no reason
+   * to spend a model call on them.
+   * @default true
+   */
+  enabled?: boolean;
 }
 
 /**
@@ -37,30 +46,41 @@ export interface UseToolActivitySummaryInput {
  *
  * It shows an instant heuristic label immediately, then — when the host app
  * provides `config.tools.summarizeToolActivity` — swaps in an LLM-generated
- * summary once it resolves. The enriched label is cached per (tool-set, phase),
- * so the running→complete transition costs at most one extra call.
+ * summary once it resolves. The enriched label is cached per (tool-set, phase,
+ * prompt), so the running→complete transition costs at most one extra call.
  *
  * As more tool calls arrive within the same turn (no interleaved agent text),
  * the summary re-generates. While the *nature* of the work is unchanged — the
  * same set of tools, just more calls — the last label is retained to avoid
  * flicker; but when the agent materially shifts what it's doing (the set of
  * distinct tools changes), the stale label is dropped immediately so the header
- * reflects the new activity rather than what the agent was doing before.
+ * reflects the new activity. Retention is scoped to the running phase, so a
+ * completed group never keeps showing a present-tense label if its final
+ * summary fails to arrive.
  */
 export function useToolActivitySummary({
   toolCalls,
   inProgress,
   userMessage,
+  enabled = true,
 }: UseToolActivitySummaryInput): ToolActivitySummary {
   const { config } = useElements();
-  const summarizer = config.tools?.summarizeToolActivity;
+  const summarizer = enabled ? config.tools?.summarizeToolActivity : undefined;
 
-  // A stable key over what actually changes the summary: the ordered tool names
-  // and the running/complete phase. Argument churn during streaming is
-  // deliberately excluded so we don't re-summarize on every token.
+  // The set of distinct tools captures the *nature* of the activity.
+  const materialSignature = useMemo(
+    () => [...new Set(toolCalls.map((call) => call.name))].sort().join("|"),
+    [toolCalls],
+  );
+
+  // A key over everything that should change the summary: the ordered tool
+  // names, the running/complete phase, and the user's prompt. Argument churn
+  // during streaming is deliberately excluded so we don't re-summarize on every
+  // token.
   const key = useMemo(
-    () => `${toolCalls.map((call) => call.name).join("|")}::${inProgress}`,
-    [toolCalls, inProgress],
+    () =>
+      `${toolCalls.map((call) => call.name).join("|")}::${inProgress}::${userMessage ?? ""}`,
+    [toolCalls, inProgress, userMessage],
   );
 
   const heuristic = useMemo(
@@ -74,11 +94,23 @@ export function useToolActivitySummary({
   // Keys whose enrichment attempt has finished (success OR failure), so a failed
   // summary stops the shimmer instead of pending forever.
   const [settledByKey, setSettledByKey] = useState<Record<string, true>>({});
+  // The most recent enriched label plus the activity signature it described.
+  // Held in state (not a render-written ref) so retention stays consistent under
+  // concurrent/StrictMode rendering.
+  const [lastEnriched, setLastEnriched] = useState<{
+    summary: string;
+    signature: string;
+  } | null>(null);
 
   // Latest render inputs, read inside the debounced effect so it doesn't need
   // to depend on (and re-fire for) unstable array/string identities.
-  const inputRef = useRef({ toolCalls, userMessage, inProgress });
-  inputRef.current = { toolCalls, userMessage, inProgress };
+  const inputRef = useRef({
+    toolCalls,
+    userMessage,
+    inProgress,
+    materialSignature,
+  });
+  inputRef.current = { toolCalls, userMessage, inProgress, materialSignature };
 
   const enrichedRef = useRef(enrichedByKey);
   enrichedRef.current = enrichedByKey;
@@ -96,7 +128,8 @@ export function useToolActivitySummary({
     if (!wasRunningRef.current) return;
     if (enrichedRef.current[key]) return;
 
-    const { toolCalls, userMessage, inProgress } = inputRef.current;
+    const { toolCalls, userMessage, inProgress, materialSignature } =
+      inputRef.current;
     if (toolCalls.length === 0) return;
 
     const controller = new AbortController();
@@ -105,7 +138,10 @@ export function useToolActivitySummary({
         let summary: string | null = null;
         try {
           summary = await summarizer({
-            toolCalls: toolCalls.map((call) => ({
+            // Only the most recent calls matter for the current task, and the
+            // server bounds the count too — send a recent window, not the whole
+            // (unbounded) turn history.
+            toolCalls: toolCalls.slice(-MAX_TOOL_CALLS).map((call) => ({
               name: call.name,
               arguments: call.arguments?.slice(0, MAX_ARGUMENT_CHARS),
             })),
@@ -121,6 +157,7 @@ export function useToolActivitySummary({
         const trimmed = summary?.trim();
         if (trimmed) {
           setEnrichedByKey((prev) => ({ ...prev, [key]: trimmed }));
+          setLastEnriched({ summary: trimmed, signature: materialSignature });
         }
         // Mark the attempt as finished either way so `pending` (and the header
         // shimmer) resolves even when the summary failed or came back empty.
@@ -136,39 +173,22 @@ export function useToolActivitySummary({
     };
   }, [key, summarizer]);
 
-  // The set of distinct tools captures the *nature* of the activity. As long as
-  // that set is unchanged (the agent is just doing more of the same), retain the
-  // last enriched label so growth doesn't flicker the header back to the
-  // heuristic. But when the signature changes — the agent has materially shifted
-  // what it's doing within the turn — drop the now-stale label immediately so
-  // the header reflects the new activity (heuristic first, then the new summary
-  // once it lands) rather than lingering on what the agent was doing before.
-  const materialSignature = useMemo(
-    () => [...new Set(toolCalls.map((call) => call.name))].sort().join("|"),
-    [toolCalls],
-  );
-
-  const lastEnrichedRef = useRef<{
-    summary: string;
-    signature: string;
-  } | null>(null);
   const current = enrichedByKey[key];
-  if (current) {
-    lastEnrichedRef.current = {
-      summary: current,
-      signature: materialSignature,
-    };
-  }
 
+  // Retain the last enriched label across pure growth of the same activity to
+  // avoid flicker — but only while running. On completion we don't reuse the
+  // present-tense label; the past-tense heuristic stands in until the final
+  // summary arrives, so a failed completion summary can't leave "Searching…"
+  // frozen on a finished group.
   const retained =
-    lastEnrichedRef.current?.signature === materialSignature
-      ? lastEnrichedRef.current.summary
+    inProgress && lastEnriched?.signature === materialSignature
+      ? lastEnriched.summary
       : undefined;
 
   // Pending while we're actively working toward the label for the current
   // activity: a summarizer is configured, this is a live turn, and the current
-  // (tool-set, phase) has neither produced an enriched summary nor finished
-  // trying. This keeps the header shimmering through the post-completion and
+  // (tool-set, phase, prompt) has neither produced an enriched summary nor
+  // finished trying. Keeps the header shimmering through the post-completion and
   // material-change windows, then stops.
   const pending =
     Boolean(summarizer) &&

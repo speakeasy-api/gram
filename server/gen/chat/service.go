@@ -610,7 +610,8 @@ type SummarizePayload struct {
 type SummarizeToolActivityPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
-	// The tool calls made so far in the current turn, in order.
+	// The most recent tool calls in the current turn, in order (the service
+	// summarizes at most 20).
 	ToolCalls []*ToolActivityCall
 	// The user prompt that initiated the turn, used to ground the summary in the
 	// user's intent.
@@ -631,7 +632,8 @@ type SummarizeToolActivityResult struct {
 type ToolActivityCall struct {
 	// The tool name.
 	Name string
-	// The tool arguments as a JSON string, if available.
+	// The tool arguments as a JSON string, if available. Only the first 600
+	// characters are used.
 	Arguments *string
 }
 

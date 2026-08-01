@@ -898,8 +898,19 @@ export interface ToolsConfig {
    * @example
    * tools: {
    *   summarizeToolActivity: async ({ toolCalls, userMessage, inProgress, signal }) => {
-   *     const res = await fetch("/rpc/chat.summarizeToolActivity", { signal, ... });
-   *     return (await res.json()).summary;
+   *     const res = await fetch("/rpc/chat.summarizeToolActivity", {
+   *       method: "POST",
+   *       credentials: "include",
+   *       signal,
+   *       headers: { "Content-Type": "application/json" },
+   *       body: JSON.stringify({
+   *         tool_calls: toolCalls,
+   *         user_message: userMessage,
+   *         in_progress: inProgress,
+   *       }),
+   *     });
+   *     if (!res.ok) return null;
+   *     return (await res.json()).summary ?? null;
    *   },
    * }
    */

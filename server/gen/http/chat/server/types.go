@@ -46,7 +46,8 @@ type SummarizeRequestBody struct {
 // SummarizeToolActivityRequestBody is the type of the "chat" service
 // "summarizeToolActivity" endpoint HTTP request body.
 type SummarizeToolActivityRequestBody struct {
-	// The tool calls made so far in the current turn, in order.
+	// The most recent tool calls in the current turn, in order (the service
+	// summarizes at most 20).
 	ToolCalls []*ToolActivityCallRequestBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// The user prompt that initiated the turn, used to ground the summary in the
 	// user's intent.
@@ -2452,7 +2453,8 @@ type ChatTotalsResponseBody struct {
 type ToolActivityCallRequestBody struct {
 	// The tool name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The tool arguments as a JSON string, if available.
+	// The tool arguments as a JSON string, if available. Only the first 600
+	// characters are used.
 	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 }
 
@@ -4409,6 +4411,12 @@ func ValidateSummarizeToolActivityRequestBody(body *SummarizeToolActivityRequest
 	if body.ToolCalls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
 	}
+	if len(body.ToolCalls) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_calls", body.ToolCalls, len(body.ToolCalls), 1, true))
+	}
+	if len(body.ToolCalls) > 20 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_calls", body.ToolCalls, len(body.ToolCalls), 20, false))
+	}
 	for _, e := range body.ToolCalls {
 		if e != nil {
 			if err2 := ValidateToolActivityCallRequestBody(e); err2 != nil {
@@ -4446,6 +4454,16 @@ func ValidateSubmitFeedbackRequestBody(body *SubmitFeedbackRequestBody) (err err
 func ValidateToolActivityCallRequestBody(body *ToolActivityCallRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 256, false))
+		}
+	}
+	if body.Arguments != nil {
+		if utf8.RuneCountInString(*body.Arguments) > 600 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.arguments", *body.Arguments, utf8.RuneCountInString(*body.Arguments), 600, false))
+		}
 	}
 	return
 }

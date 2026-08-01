@@ -81,18 +81,22 @@ export const ToolGroup: FC<
     [runtime],
   );
 
+  // A single tool with a custom component renders directly and never shows this
+  // label, so don't spend a summarization call on it.
+  const hasCustomComponent =
+    toolCalls.length === 1 &&
+    !!firstToolName &&
+    !!config.tools?.components?.[firstToolName];
+
   const { label, pending } = useToolActivitySummary({
     toolCalls,
     inProgress: anyMessagePartsAreRunning,
     userMessage,
+    enabled: !hasCustomComponent,
   });
 
   // If there's a custom component for the single tool, render children directly.
-  if (
-    toolCalls.length === 1 &&
-    firstToolName &&
-    config.tools?.components?.[firstToolName]
-  ) {
+  if (hasCustomComponent) {
     return children;
   }
 

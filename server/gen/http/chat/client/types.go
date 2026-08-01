@@ -9,6 +9,7 @@ package client
 
 import (
 	"encoding/json"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -45,7 +46,8 @@ type SummarizeRequestBody struct {
 // SummarizeToolActivityRequestBody is the type of the "chat" service
 // "summarizeToolActivity" endpoint HTTP request body.
 type SummarizeToolActivityRequestBody struct {
-	// The tool calls made so far in the current turn, in order.
+	// The most recent tool calls in the current turn, in order (the service
+	// summarizes at most 20).
 	ToolCalls []*ToolActivityCallRequestBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// The user prompt that initiated the turn, used to ground the summary in the
 	// user's intent.
@@ -2451,7 +2453,8 @@ type ChatTotalsResponseBody struct {
 type ToolActivityCallRequestBody struct {
 	// The tool name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The tool arguments as a JSON string, if available.
+	// The tool arguments as a JSON string, if available. Only the first 600
+	// characters are used.
 	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 }
 
@@ -7444,6 +7447,20 @@ func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
 	}
 	if body.RiskOnly == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risk_only", "body"))
+	}
+	return
+}
+
+// ValidateToolActivityCallRequestBody runs the validations defined on
+// ToolActivityCallRequestBody
+func ValidateToolActivityCallRequestBody(body *ToolActivityCallRequestBody) (err error) {
+	if utf8.RuneCountInString(body.Name) > 256 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 256, false))
+	}
+	if body.Arguments != nil {
+		if utf8.RuneCountInString(*body.Arguments) > 600 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.arguments", *body.Arguments, utf8.RuneCountInString(*body.Arguments), 600, false))
+		}
 	}
 	return
 }

@@ -1,6 +1,7 @@
 package chat_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -39,8 +40,15 @@ func TestService_SummarizeToolActivity_Running(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Investigating failing tool calls", res.Summary)
 
-	// The prompt should mention the user's request and the tool names.
+	// The prompt (system + user) must actually carry the user's request and the
+	// tool names — the feature hinges on buildToolActivityPrompt rendering them.
 	require.Len(t, captured.Messages, 2)
+	promptJSON, err := json.Marshal(captured.Messages)
+	require.NoError(t, err)
+	prompt := string(promptJSON)
+	require.Contains(t, prompt, "Why are my tool calls failing?")
+	require.Contains(t, prompt, "list_deployments")
+	require.Contains(t, prompt, "get_deployment_logs")
 	client.AssertExpectations(t)
 }
 

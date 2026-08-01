@@ -1874,6 +1874,9 @@ const (
 	// maxToolActivityCalls caps how many tool calls are described to the model
 	// when summarizing a single turn's activity.
 	maxToolActivityCalls = 20
+	// maxToolActivityNameRunes caps a single tool name in the prompt so an
+	// oversized name can't inflate the request.
+	maxToolActivityNameRunes = 128
 	// maxToolActivityArgumentRunes caps one tool call's argument blob so a large
 	// payload can't dominate the prompt.
 	maxToolActivityArgumentRunes = 600
@@ -2106,8 +2109,10 @@ func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
 
 	b.WriteString("Tools the agent is calling, in order:\n")
 	calls := payload.ToolCalls
+	// Keep the most recent calls, not the oldest — the label should reflect what
+	// the agent is doing now.
 	if len(calls) > maxToolActivityCalls {
-		calls = calls[:maxToolActivityCalls]
+		calls = calls[len(calls)-maxToolActivityCalls:]
 	}
 	n := 0
 	for _, call := range calls {
@@ -2115,7 +2120,7 @@ func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
 			continue
 		}
 		n++
-		b.WriteString(fmt.Sprintf("%d. %s", n, call.Name))
+		b.WriteString(fmt.Sprintf("%d. %s", n, truncateRunes(call.Name, maxToolActivityNameRunes)))
 		if call.Arguments != nil {
 			args := strings.TrimSpace(*call.Arguments)
 			args = truncateRunes(args, maxToolActivityArgumentRunes)
