@@ -26,7 +26,10 @@ import (
 
 const maxTraceBodyBytes = 4 * 1024 * 1024
 
-var errTraceBodyTooLarge = errors.New("LiteLLM OTLP trace body exceeds 4 MiB")
+var (
+	errTraceBodyTooLarge = errors.New("LiteLLM OTLP trace body exceeds 4 MiB")
+	errTooManyOTLPSpans  = errors.New("OTLP trace export contains too many spans")
+)
 
 func (s *Service) traceHTTPHandler() http.Handler {
 	return oops.ErrHandle(s.logger, s.serveTracesHTTP)
@@ -74,7 +77,9 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 		request, err = decodeOTLPJSON(body)
 	default:
 		protobufRequest := &collectortracev1.ExportTraceServiceRequest{ResourceSpans: nil}
-		if unmarshalErr := proto.Unmarshal(body, protobufRequest); unmarshalErr != nil {
+		if preflightErr := preflightOTLPProtobuf(body); preflightErr != nil {
+			err = preflightErr
+		} else if unmarshalErr := proto.Unmarshal(body, protobufRequest); unmarshalErr != nil {
 			err = fmt.Errorf("decode OTLP protobuf: %w", unmarshalErr)
 		} else if structureErr := validateProtoOTLPStructure(protobufRequest); structureErr != nil {
 			err = structureErr
@@ -83,6 +88,9 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 		}
 	}
 	if err != nil {
+		if errors.Is(err, errTooManyOTLPSpans) {
+			return oops.E(oops.CodeRequestTooLarge, err, "OTLP trace export contains too many spans")
+		}
 		return oops.E(oops.CodeBadRequest, err, "invalid OTLP trace export")
 	}
 	if err := s.ingestTraceExport(ctx, request); err != nil {
@@ -174,6 +182,9 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload) error 
 	}
 	request, err := decodeOTLPJSON(body)
 	if err != nil {
+		if errors.Is(err, errTooManyOTLPSpans) {
+			return oops.E(oops.CodeRequestTooLarge, err, "OTLP trace export contains too many spans")
+		}
 		return oops.E(oops.CodeBadRequest, err, "invalid OTLP trace export")
 	}
 	return s.ingestTraceExport(ctx, request)
