@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
 
+# This worktree's own stack, first — with --remove-orphans. A pre-existing
+# worktree (and the main tree) still runs a gram-presidio container under its own
+# project that compose.yml no longer declares; removing it here, BEFORE asserting
+# the shared analyzer below, frees the old host port (5050 on the main tree,
+# which never remapped it) so the shared `up` can bind it in this same run
+# instead of losing the port to the stale container and only converging next
+# time. Profile-gated services (litellm, tunnel, local-registry) stay declared in
+# compose.yml and are not treated as orphans.
+docker compose up -d --remove-orphans || exit 1
+
 # Presidio analyzer, shared across all worktrees under a fixed project name so a
 # worktree's COMPOSE_PROJECT_NAME cannot fork it into a second copy. Bringing it
 # up is idempotent, so every worktree can safely (re)assert it here. A failure
@@ -8,13 +18,6 @@
 # worktree's own databases, so warn and continue rather than aborting.
 docker compose -f compose.shared.yml -p gram-shared up -d \
   || echo "⚠️  Shared Presidio analyzer failed to start; continuing. PII scanning stays degraded until it is up." >&2
-
-# --remove-orphans clears the now-shared gram-presidio container that a
-# pre-existing worktree still runs under its own project (compose.yml no longer
-# declares it), so the duplicate ~1 GB analyzer stops. Profile-gated services
-# (litellm, tunnel, local-registry) remain declared in compose.yml and are not
-# treated as orphans.
-docker compose up -d --remove-orphans || exit 1
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of
