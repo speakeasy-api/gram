@@ -81,7 +81,7 @@ export const ToolGroup: FC<
     [runtime],
   );
 
-  const { label } = useToolActivitySummary({
+  const { label, pending } = useToolActivitySummary({
     toolCalls,
     inProgress: anyMessagePartsAreRunning,
     userMessage,
@@ -104,6 +104,9 @@ export const ToolGroup: FC<
       <ToolUIGroup
         title={label}
         status={anyMessagePartsAreRunning ? "running" : "complete"}
+        // Shimmer while the tools run and while the label is still settling (an
+        // enriched summary in flight after completion / on a material change).
+        titleShimmer={anyMessagePartsAreRunning || pending}
         defaultExpanded={defaultExpanded}
       >
         {children}

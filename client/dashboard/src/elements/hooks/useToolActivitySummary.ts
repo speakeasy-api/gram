@@ -16,6 +16,12 @@ export interface ToolActivitySummary {
   label: string;
   /** True once an LLM-enriched summary has replaced the heuristic. */
   enriched: boolean;
+  /**
+   * True while the label for the current activity is still being determined —
+   * an enriched summary is debouncing or in flight. Drives the header shimmer
+   * so the line reads as "still settling", not final.
+   */
+  pending: boolean;
 }
 
 export interface UseToolActivitySummaryInput {
@@ -65,6 +71,9 @@ export function useToolActivitySummary({
   const [enrichedByKey, setEnrichedByKey] = useState<Record<string, string>>(
     {},
   );
+  // Keys whose enrichment attempt has finished (success OR failure), so a failed
+  // summary stops the shimmer instead of pending forever.
+  const [settledByKey, setSettledByKey] = useState<Record<string, true>>({});
 
   // Latest render inputs, read inside the debounced effect so it doesn't need
   // to depend on (and re-fire for) unstable array/string identities.
@@ -93,8 +102,9 @@ export function useToolActivitySummary({
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void (async () => {
+        let summary: string | null = null;
         try {
-          const summary = await summarizer({
+          summary = await summarizer({
             toolCalls: toolCalls.map((call) => ({
               name: call.name,
               arguments: call.arguments?.slice(0, MAX_ARGUMENT_CHARS),
@@ -103,14 +113,20 @@ export function useToolActivitySummary({
             inProgress,
             signal: controller.signal,
           });
-          if (controller.signal.aborted) return;
-          const trimmed = summary?.trim();
-          if (trimmed) {
-            setEnrichedByKey((prev) => ({ ...prev, [key]: trimmed }));
-          }
         } catch {
           // Swallow — the heuristic label is a fine fallback.
+          summary = null;
         }
+        if (controller.signal.aborted) return;
+        const trimmed = summary?.trim();
+        if (trimmed) {
+          setEnrichedByKey((prev) => ({ ...prev, [key]: trimmed }));
+        }
+        // Mark the attempt as finished either way so `pending` (and the header
+        // shimmer) resolves even when the summary failed or came back empty.
+        setSettledByKey((prev) =>
+          prev[key] ? prev : { ...prev, [key]: true },
+        );
       })();
     }, SUMMARIZE_DEBOUNCE_MS);
 
@@ -149,9 +165,21 @@ export function useToolActivitySummary({
       ? lastEnrichedRef.current.summary
       : undefined;
 
+  // Pending while we're actively working toward the label for the current
+  // activity: a summarizer is configured, this is a live turn, and the current
+  // (tool-set, phase) has neither produced an enriched summary nor finished
+  // trying. This keeps the header shimmering through the post-completion and
+  // material-change windows, then stops.
+  const pending =
+    Boolean(summarizer) &&
+    wasRunningRef.current &&
+    toolCalls.length > 0 &&
+    !current &&
+    !settledByKey[key];
+
   const enrichedLabel = current ?? retained;
   if (!summarizer || !enrichedLabel) {
-    return { label: heuristic, enriched: false };
+    return { label: heuristic, enriched: false, pending };
   }
-  return { label: enrichedLabel, enriched: true };
+  return { label: enrichedLabel, enriched: true, pending };
 }

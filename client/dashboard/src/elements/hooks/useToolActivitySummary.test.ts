@@ -41,14 +41,35 @@ describe("useToolActivitySummary", () => {
       }),
     );
 
-    // Instant heuristic before the model responds.
+    // Instant heuristic before the model responds — shimmering while it settles.
     expect(result.current.label).toBe("Calling Search Web…");
     expect(result.current.enriched).toBe(false);
+    expect(result.current.pending).toBe(true);
 
     await flushSummary();
 
     expect(result.current.label).toBe("Searching the web for pricing");
     expect(result.current.enriched).toBe(true);
+    expect(result.current.pending).toBe(false);
+  });
+
+  it("stops shimmering (pending) even when the summary fails", async () => {
+    summarizeMock.mockRejectedValue(new Error("boom"));
+
+    const { result } = renderHook(() =>
+      useToolActivitySummary({
+        toolCalls: [{ name: "search_web" }],
+        inProgress: true,
+      }),
+    );
+
+    expect(result.current.pending).toBe(true);
+
+    await flushSummary();
+
+    // Failure resolves pending so the header doesn't shimmer forever.
+    expect(result.current.pending).toBe(false);
+    expect(result.current.label).toBe("Calling Search Web…");
   });
 
   it("updates the summary when new tool calls materially change the activity", async () => {

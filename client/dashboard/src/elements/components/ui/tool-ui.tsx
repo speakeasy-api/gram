@@ -1159,6 +1159,12 @@ interface ToolUIGroupProps {
   defaultExpanded?: boolean;
   /** Render without the group header, showing children directly. */
   headerless?: boolean;
+  /**
+   * Force the title shimmer independent of `status`. Use to keep the header
+   * animating while its label is still being determined even though the tools
+   * themselves have finished. Defaults to `status === "running"`.
+   */
+  titleShimmer?: boolean;
   /** Child tool UI components */
   children: React.ReactNode;
   /** Additional class names */
@@ -1171,6 +1177,7 @@ function ToolUIGroup({
   status = "complete",
   defaultExpanded = false,
   headerless = false,
+  titleShimmer,
   children,
   className,
 }: ToolUIGroupProps): React.JSX.Element {
@@ -1210,7 +1217,7 @@ function ToolUIGroup({
           <span
             className={cn(
               "flex-1 text-sm font-medium",
-              status === "running" && "shimmer",
+              (titleShimmer ?? status === "running") && "shimmer",
             )}
           >
             {title}
