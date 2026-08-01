@@ -3,6 +3,7 @@ package litellm
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
+	goahttp "goa.design/goa/v3/http"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -241,6 +243,41 @@ func TestRealHooksPersistsToolCallOnlyResponse(t *testing.T) {
 	require.Equal(t, "assistant", messages[1].Role)
 	require.Empty(t, messages[1].Content)
 	require.NotEmpty(t, messages[1].ToolCalls)
+}
+
+func TestRealHooksFixtureToolsNeverBecomeExecutions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.auth = fixedAuthorizer{authCtx: authCtx}
+	mux := goahttp.NewMuxer()
+	Attach(mux, ti.service)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	for _, raw := range readJSONLines(t, "openai-chat-tools.jsonl") {
+		_, response := postContractFixture(t, server.Client(), server.URL, raw)
+		require.Equal(t, map[string]any{"action": "NONE"}, response)
+	}
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID("fixture-chat-session"),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	require.Equal(t, []string{"user", "assistant"}, []string{messages[0].Role, messages[1].Role})
+	require.Equal(t, "latest chat block one\nlatest chat block two", messages[0].Content)
+	require.Equal(t, "chat answer", messages[1].Content)
+	require.NotEmpty(t, messages[1].ToolCalls)
+	for _, stored := range messages {
+		require.NotEqual(t, "tool", stored.Role)
+		require.Empty(t, stored.ToolCallID.String)
+		require.Empty(t, stored.ToolUrn.Kind)
+		require.Empty(t, stored.ToolUrn.Source)
+		require.Empty(t, stored.ToolUrn.Name)
+		require.False(t, stored.ToolOutcome.Valid)
+	}
 }
 
 func TestRealHooksResponseCacheMissDoesNotUseIntegrationKeyOwner(t *testing.T) {
