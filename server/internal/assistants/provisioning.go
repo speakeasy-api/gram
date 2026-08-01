@@ -38,7 +38,20 @@ const (
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.
-	managedAssistantWarmTTLSeconds int64 = 60
+	//
+	// warmTTL is how long the assistant's Fly VM is kept alive after it goes
+	// idle. One VM serves every thread (chat) under an assistant, so the window
+	// is per-VM: it stays up until the assistant's *last* active thread has been
+	// quiet for warmTTL. The managed ("Project") assistant is an interactive
+	// dashboard chat: a user reads a reply, thinks, and follows up — gaps of a
+	// minute or two between turns are the norm. At 60s the VM was torn down
+	// inside that think-time gap, so nearly every follow-up (and every re-opened
+	// or newly opened chat that found the VM idle) paid a full Fly cold boot —
+	// the dominant contributor to the multi-second "first response" latency.
+	// Widen the window to cover ordinary think-time so an active project stays on
+	// a warm VM across back-to-back chats. The cost is a shared-CPU/1GB machine
+	// staying up longer between turns; tune here if that trade shifts.
+	managedAssistantWarmTTLSeconds int64 = 300
 	managedAssistantMaxConcurrency int64 = 10
 )
 
@@ -94,6 +107,8 @@ func (s *ServiceCore) EnableManagedAssistant(
 		if err := s.ensureDashboardTrigger(ctx, s.db, organizationID, projectID, existing.ID, existing.Name); err != nil {
 			return assistantRecord{}, err
 		}
+		// GetManagedAssistant already healed a stale warm window (see there), so
+		// `existing` carries the current value — nothing to repair here.
 		return existing, nil
 	case errors.Is(err, pgx.ErrNoRows):
 		// fall through to create
@@ -126,6 +141,28 @@ func (s *ServiceCore) EnableManagedAssistant(
 	return assistantRecord{}, err
 }
 
+// raiseManagedAssistantWarmTTL rewrites a managed assistant's stored warm_ttl
+// to the current managed default. Callers gate on the row being below the
+// default, so this only ever raises the window. Returns the value now stored so
+// the caller can reflect it without a re-read.
+func (s *ServiceCore) raiseManagedAssistantWarmTTL(ctx context.Context, projectID, assistantID uuid.UUID) (int, error) {
+	warmTTL := int(managedAssistantWarmTTLSeconds)
+	updated, err := assistantrepo.New(s.db).UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
+		Name:           pgtype.Text{},
+		Model:          pgtype.Text{},
+		Instructions:   pgtype.Text{},
+		WarmTtlSeconds: conv.PtrToPGInt8(&warmTTL),
+		MaxConcurrency: pgtype.Int8{},
+		Status:         pgtype.Text{},
+		AssistantID:    assistantID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("raise managed assistant warm ttl: %w", err)
+	}
+	return conv.SafeInt(updated.WarmTtlSeconds), nil
+}
+
 // GetManagedAssistant resolves a project's managed assistant and hydrates its
 // management read model. Returns pgx.ErrNoRows when the feature isn't enabled for the project.
 func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UUID) (assistantRecord, error) {
@@ -134,6 +171,22 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 		return assistantRecord{}, fmt.Errorf("get managed assistant: %w", err)
 	}
 	record := assistantRecordFromManagedRow(row)
+	// Lazily heal a stale warm window. warmTTL is stored per-row at create time,
+	// so a bump to managedAssistantWarmTTLSeconds only reaches assistants created
+	// before it by rewriting the row. The dashboard reads the managed assistant
+	// through here on every chat open, so an assistant provisioned under the old
+	// 60s default is raised to the current default the next time its owner opens
+	// the chat — no data migration needed. Raise-only (never lower) so a
+	// deliberately longer window is preserved; guarded so it is a one-time write
+	// that no-ops once healed. A repair failure must not fail the read: the
+	// assistant still works at its stored TTL, so log and carry on.
+	if record.WarmTTLSeconds < int(managedAssistantWarmTTLSeconds) {
+		if healed, err := s.raiseManagedAssistantWarmTTL(ctx, projectID, record.ID); err != nil {
+			s.logger.WarnContext(ctx, "heal managed assistant warm ttl", attr.SlogError(err), attr.SlogAssistantID(record.ID.String()))
+		} else {
+			record.WarmTTLSeconds = healed
+		}
+	}
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
