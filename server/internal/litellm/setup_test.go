@@ -82,12 +82,18 @@ func (r *recordingMessageObserver) count(projectID uuid.UUID) int {
 
 func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context, *realTestInstance) {
 	t.Helper()
+	return newRealTestServiceWithScannerFactory(t, func(*pgxpool.Pool) risk.RiskScanner { return scanner })
+}
+
+func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgxpool.Pool) risk.RiskScanner) (context.Context, *realTestInstance) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
 	conn, err := testInfra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+	scanner := scannerFactory(conn)
 	redisClient, err := testInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)

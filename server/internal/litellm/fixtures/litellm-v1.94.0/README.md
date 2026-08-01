@@ -43,6 +43,29 @@ guardrails:
 
 Every JSONL line is the callback body as received by the local recorder after the documented normalization. There are no synthetic default-stream callback files in this corpus; unsupported repeated callbacks are documented above rather than presented as recorded support.
 
+## Real proxy end-to-end test
+
+Docker must be running. Run the first-class local suite from the repository root:
+
+```sh
+mise run test:litellm-e2e
+```
+
+The suite starts the exact image in `manifest.json` and uses a synthetic local inference provider with real Gram auth, hooks, risk enforcement, capture, Redis idempotency, Postgres persistence, and durable risk analysis. It does not use external provider credentials. It verifies:
+
+The test clones the canonical stanza with `default_on: false` only so each normal and outage posture can be selected independently; customer configuration keeps the documented `default_on: true`.
+
+- Safe non-streaming requests return the fixture completion and capture exactly one user and one assistant message in the explicit session.
+- A synthetic-secret policy violation returns the configured block message before a provider call, captures one blocked user message, and produces a durable gitleaks finding tied to that message.
+- Safe streaming returns valid SSE and captures the user and assistant messages; a blocked stream is rejected before the provider and captures only the user message.
+- A 503 guardrail outage fails closed before provider execution and captures nothing.
+- The explicit `unreachable_fallback: fail_open` variant completes through the provider and captures nothing during the outage.
+- A callback that persists the request and then exceeds the global timeout fails before provider execution; resending with the same `x-litellm-call-id` completes once and leaves exactly one user and one assistant message.
+
+LiteLLM 1.94.0 does not retry a guardrail timeout. Deduplication applies when a client or gateway resends with the same call ID; an ordinary retry with a new call ID is a distinct call. Output blocking is not qualified by this suite. Streaming uses the required `streaming_end_of_stream_only: true`; DNO-738 tracks repeated default streaming callbacks.
+
+This is not part of normal pull-request CI because the large third-party image introduces registry, network, and startup failure modes unrelated to most changes. The manual workflow runs the same mise task. To qualify a new LiteLLM version, update the fixture manifest through the sanctioned contract-fixture regeneration workflow, regenerate the fixture corpus, and require this suite to pass before documenting the version as supported.
+
 ## Regeneration
 
 Docker must be running. From the repository root:
