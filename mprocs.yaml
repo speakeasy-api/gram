@@ -1,18 +1,16 @@
 # mprocs configuration
 web_port: 35294
 procs:
-  # Shared across worktrees under the fixed `gram-shared` project — see
-  # compose.shared.yml — so their logs come from that project, not the default.
   otel-collector:
-    cmd: ["docker", "compose", "-f", "compose.shared.yml", "-p", "gram-shared", "logs", "-f", "otel-collector"]
+    cmd: ["docker", "compose", "logs", "-f", "otel-collector"]
     stop:
       send-keys: ["<C-c>"]
   jaeger:
-    cmd: ["docker", "compose", "-f", "compose.shared.yml", "-p", "gram-shared", "logs", "-f", "jaeger"]
+    cmd: ["docker", "compose", "logs", "-f", "jaeger"]
     stop:
       send-keys: ["<C-c>"]
   prometheus:
-    cmd: ["docker", "compose", "-f", "compose.shared.yml", "-p", "gram-shared", "logs", "-f", "prometheus"]
+    cmd: ["docker", "compose", "logs", "-f", "prometheus"]
     stop:
       send-keys: ["<C-c>"]
   dev-idp:

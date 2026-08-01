@@ -1,12 +1,15 @@
 # Shared infra — one copy across ALL git worktrees.
 #
-# These services hold no per-worktree state: the Presidio analyzer is a
-# stateless /analyze HTTP service, and jaeger/prometheus/otel-collector are dev
-# observability sinks whose data is tagged by service/project rather than owned
-# by a worktree. Running one copy for every worktree wasted ~1.5 GB per extra
-# worktree (Presidio alone loads a ~1 GB spaCy model), so they live here under a
-# FIXED project name instead of the per-worktree `COMPOSE_PROJECT_NAME` used by
-# compose.yml.
+# The Presidio analyzer is a stateless /analyze HTTP service: it holds no
+# per-worktree state and loads a ~1 GB spaCy model, so running one copy per
+# worktree wasted the most memory of anything in the stack. It lives here under
+# a FIXED project name instead of the per-worktree `COMPOSE_PROJECT_NAME` used
+# by compose.yml.
+#
+# (Jaeger/Prometheus/OTel-collector are intentionally NOT shared: their signals
+# would collide across worktrees — same-commit worktrees emit identical
+# Prometheus series and intermixed traces — so they stay per-worktree in
+# compose.yml.)
 #
 # Always manage this file with an explicit fixed project so a worktree's
 # COMPOSE_PROJECT_NAME cannot fork it into a second copy:
@@ -14,40 +17,12 @@
 #   docker compose -f compose.shared.yml -p gram-shared up -d
 #   docker compose -f compose.shared.yml -p gram-shared down
 #
-# The ports below (PRESIDIO_PORT, OTLP_GRPC_PORT, JAEGER_WEB_PORT,
-# PROMETHEUS_PORT) are deliberately NOT remapped per worktree (see
-# zero:remap-ports), so every worktree reaches this single shared stack on the
-# same default host ports.
+# PRESIDIO_PORT is deliberately NOT remapped per worktree (see
+# zero:remap-ports), so every worktree reaches this single shared analyzer on
+# the same default host port.
 name: gram-shared
 
 services:
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.127.0
-    restart: unless-stopped
-    volumes:
-      - ./local/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
-    ports:
-      - "${OTLP_GRPC_PORT}:4317"
-    depends_on:
-      - jaeger
-
-  jaeger:
-    image: jaegertracing/jaeger:2.17.0
-    restart: unless-stopped
-    ports:
-      - "${JAEGER_WEB_PORT}:16686"
-
-  prometheus:
-    image: prom/prometheus:v3.4.0
-    restart: unless-stopped
-    volumes:
-      - ./local/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "${PROMETHEUS_PORT}:9090"
-    depends_on:
-      - otel-collector
-
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
@@ -64,7 +39,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-volumes:
-  prometheus_data:
-    driver: local

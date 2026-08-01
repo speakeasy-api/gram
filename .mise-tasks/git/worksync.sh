@@ -38,15 +38,12 @@ else
   echo "✅ Added ${added} env var declaration(s) to mise.local.toml."
 fi
 
-# Stateless services moved to the shared stack (compose.shared.yml) must use the
-# default ports so every worktree reaches the single shared copy. Drop any
-# per-worktree remaps a pre-existing worktree may still carry for them (and
-# their dependents) so they fall back to the mise.toml defaults.
+# Presidio moved to the shared stack (compose.shared.yml) and must use the
+# default port so every worktree reaches the single shared copy. Drop any
+# per-worktree remap a pre-existing worktree may still carry for it (and its
+# dependent URL) so they fall back to the mise.toml defaults.
 shared_stale=(
   PRESIDIO_PORT PRESIDIO_ANALYZER_URL
-  OTLP_GRPC_PORT OTEL_EXPORTER_OTLP_ENDPOINT
-  JAEGER_WEB_PORT
-  PROMETHEUS_PORT
 )
 removed=0
 for key in "${shared_stale[@]}"; do

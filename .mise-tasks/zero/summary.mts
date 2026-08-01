@@ -118,12 +118,9 @@ async function pokeDockerService(
   serviceName: string,
   displayName: string,
   url: string,
-  // Shared services (compose.shared.yml) live under the fixed `gram-shared`
-  // project, not this worktree's default project, so they need explicit args.
-  composeArgs: string[] = [],
 ) {
   let result =
-    await $`docker compose ${composeArgs} ps ${serviceName} --format json`.nothrow();
+    await $`docker compose ps ${serviceName} --format json`.nothrow();
   if (!result.ok) {
     return row(displayName, false, url);
   }
@@ -169,7 +166,6 @@ await pokeDockerService(
   "jaeger",
   "Jaeger",
   `http://localhost:${jaegerWebPort}`,
-  ["-f", "compose.shared.yml", "-p", "gram-shared"],
 );
 
 const clickhouseHTTPPort = process.env["CLICKHOUSE_HTTP_PORT"] ?? "8123";
