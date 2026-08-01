@@ -540,7 +540,7 @@ func serverPort(t *testing.T, rawURL string) int {
 
 func (h *proxyHarness) request(scenario, sessionID, callID, guardrail, text string, stream bool) proxyResponse {
 	h.t.Helper()
-	prompt := fmt.Sprintf("scenario=%s session=%s call=%s %s", scenario, sessionID, callID, text)
+	prompt := h.prompt(scenario, sessionID, callID, text)
 	model := "fixture-openai"
 	if scenario == "timeout" {
 		model = "fixture-timeout"
