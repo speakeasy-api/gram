@@ -218,8 +218,6 @@ func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequ
 	if len(params) == 0 {
 		return nil
 	}
-	if !s.traces.Enqueue(ctx, params) {
-		return oops.E(oops.CodeUnavailable, nil, "LiteLLM OTLP trace processor is temporarily unavailable")
-	}
+	s.traces.Enqueue(ctx, params)
 	return nil
 }

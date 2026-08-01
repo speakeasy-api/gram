@@ -150,6 +150,14 @@ func jsonTraceWithAnyValues(resourceValue, scopeValue, spanValue string) []byte 
 	return []byte(`{"resourceSpans":[{"resource":{"attributes":[{"key":"unknown.resource","value":` + resourceValue + `}]},"scopeSpans":[{"scope":{"attributes":[{"key":"unknown.scope","value":` + scopeValue + `}]},"spans":[{"attributes":[{"key":"unknown.span","value":` + spanValue + `}]}]}]}]}`)
 }
 
+func repeatedJSONKeyValues(count int) string {
+	return strings.TrimSuffix(strings.Repeat(`{"key":"unknown","value":{}},`, count), ",")
+}
+
+func jsonTraceWithAttributeCounts(resourceCount, scopeCount, spanCount int) []byte {
+	return []byte(`{"resourceSpans":[{"resource":{"attributes":[` + repeatedJSONKeyValues(resourceCount) + `]},"scopeSpans":[{"scope":{"attributes":[` + repeatedJSONKeyValues(scopeCount) + `]},"spans":[{"attributes":[` + repeatedJSONKeyValues(spanCount) + `]}]}]}]}`)
+}
+
 func protobufArrayAnyValue(count int) []byte {
 	return appendProtobufMessages(nil, 5, appendProtobufMessages(nil, 1, nil, count), 1)
 }
@@ -171,6 +179,17 @@ func protobufTraceWithAnyValues(resourceValue, scopeValue, spanValue []byte) []b
 	resource := appendProtobufMessages(nil, 1, appendProtobufMessages(nil, 2, resourceValue, 1), 1)
 	scope := appendProtobufMessages(nil, 3, appendProtobufMessages(nil, 2, scopeValue, 1), 1)
 	span := appendProtobufMessages(nil, 9, appendProtobufMessages(nil, 2, spanValue, 1), 1)
+	scopeSpans := appendProtobufMessages(nil, 1, scope, 1)
+	scopeSpans = appendProtobufMessages(scopeSpans, 2, span, 1)
+	resourceSpans := appendProtobufMessages(nil, 1, resource, 1)
+	resourceSpans = appendProtobufMessages(resourceSpans, 2, scopeSpans, 1)
+	return appendProtobufMessages(nil, 1, resourceSpans, 1)
+}
+
+func protobufTraceWithAttributeCounts(resourceCount, scopeCount, spanCount int) []byte {
+	resource := appendProtobufMessages(nil, 1, nil, resourceCount)
+	scope := appendProtobufMessages(nil, 3, nil, scopeCount)
+	span := appendProtobufMessages(nil, 9, nil, spanCount)
 	scopeSpans := appendProtobufMessages(nil, 1, scope, 1)
 	scopeSpans = appendProtobufMessages(scopeSpans, 2, span, 1)
 	resourceSpans := appendProtobufMessages(nil, 1, resource, 1)
@@ -344,6 +363,74 @@ func TestTraceHTTPRejectsProtobufCollectionsOverLimit(t *testing.T) {
 		response := serveTraceRequest(t, mux, test.body, "application/x-protobuf", "", "valid-key", "project-test")
 		require.Equal(t, test.status, response.Code, test.name)
 	}
+}
+
+func TestTraceHTTPEnforcesJSONAttributeLimits(t *testing.T) {
+	t.Parallel()
+
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	var persisted atomic.Int64
+	service, processor := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
+		persisted.Add(1)
+		return nil
+	})
+	mux := mountedTraceMux(service)
+	tests := []struct {
+		name   string
+		body   []byte
+		status int
+	}{
+		{name: "boundary", body: jsonTraceWithAttributeCounts(maxOTLPAttributes, maxOTLPAttributes, maxOTLPAttributes), status: http.StatusAccepted},
+		{name: "resource excess", body: jsonTraceWithAttributeCounts(maxOTLPAttributes+1, 0, 0), status: http.StatusBadRequest},
+		{name: "scope excess", body: jsonTraceWithAttributeCounts(0, maxOTLPAttributes+1, 0), status: http.StatusBadRequest},
+		{name: "span excess", body: jsonTraceWithAttributeCounts(0, 0, maxOTLPAttributes+1), status: http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		if test.status == http.StatusAccepted {
+			require.NoError(t, preflightOTLPJSON(test.body), test.name)
+		} else {
+			require.Error(t, preflightOTLPJSON(test.body), test.name)
+		}
+		response := serveTraceRequest(t, mux, test.body, "application/json", "", "valid-key", "project-test")
+		require.Equal(t, test.status, response.Code, test.name)
+	}
+	require.NoError(t, processor.Shutdown(t.Context()))
+	require.EqualValues(t, 1, persisted.Load())
+}
+
+func TestTraceHTTPEnforcesProtobufAttributeLimits(t *testing.T) {
+	t.Parallel()
+
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	var persisted atomic.Int64
+	service, processor := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
+		persisted.Add(1)
+		return nil
+	})
+	mux := mountedTraceMux(service)
+	tests := []struct {
+		name   string
+		body   []byte
+		status int
+	}{
+		{name: "boundary", body: protobufTraceWithAttributeCounts(maxOTLPAttributes, maxOTLPAttributes, maxOTLPAttributes), status: http.StatusAccepted},
+		{name: "resource excess", body: protobufTraceWithAttributeCounts(maxOTLPAttributes+1, 0, 0), status: http.StatusBadRequest},
+		{name: "scope excess", body: protobufTraceWithAttributeCounts(0, maxOTLPAttributes+1, 0), status: http.StatusBadRequest},
+		{name: "span excess", body: protobufTraceWithAttributeCounts(0, 0, maxOTLPAttributes+1), status: http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		if test.status == http.StatusAccepted {
+			require.NoError(t, preflightOTLPProtobuf(test.body), test.name)
+		} else {
+			require.Error(t, preflightOTLPProtobuf(test.body), test.name)
+		}
+		response := serveTraceRequest(t, mux, test.body, "application/x-protobuf", "", "valid-key", "project-test")
+		require.Equal(t, test.status, response.Code, test.name)
+	}
+	require.NoError(t, processor.Shutdown(t.Context()))
+	require.EqualValues(t, 1, persisted.Load())
 }
 
 func TestTraceHTTPEnforcesJSONNestedAnyValueLimits(t *testing.T) {
@@ -599,13 +686,13 @@ func TestTraceLogParamsUsesObservedTimeForMissingOrOverflowingStartTime(t *testi
 	require.Len(t, params, 2)
 	for _, param := range params {
 		require.WithinRange(t, param.Timestamp, before, after)
-		require.NotContains(t, param.Attributes, "otel.span.duration_ms")
+		require.NotContains(t, param.Attributes, attr.OTelSpanDurationMSKey)
 	}
-	require.Equal(t, uint64(math.MaxUint64), params[1].Attributes["otel.span.start_time_unix_nano"])
+	require.Equal(t, uint64(math.MaxUint64), params[1].Attributes[attr.OTelSpanStartTimeUnixNanoKey])
 	require.NoError(t, processor.Shutdown(t.Context()))
 }
 
-func TestTraceHTTPQueueSaturationReturnsUnavailable(t *testing.T) {
+func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, 4, traceProcessorWorkers)
 	require.Equal(t, 16, traceProcessorQueueSize)
@@ -667,7 +754,7 @@ func TestTraceHTTPQueueSaturationReturnsUnavailable(t *testing.T) {
 		traces: processor,
 	}
 	response := serveTraceRequest(t, mountedTraceMux(service), []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"0123456789abcdef","name":"queue test"}]}]}]}`), "application/json", "", "valid-key", "project-test")
-	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Equal(t, http.StatusAccepted, response.Code)
 	require.EqualValues(t, 1, metricCounterValue(t, reader, "litellm.otel.spans.dropped"))
 
 	releaseWorkers()
@@ -940,7 +1027,7 @@ func TestOTLPAttributeLimitsAndRecursiveValues(t *testing.T) {
 	unknownOperation := service.traceLogParams(t.Context(), request, "org-test", uuid.NewString())
 	require.Len(t, unknownOperation, 1)
 	require.Equal(t, "urn:telemetry:provider_otel:span:unknown", unknownOperation[0].Attributes[attr.EventURNKey])
-	require.Equal(t, "arbitrary high-cardinality span", unknownOperation[0].Attributes["otel.span.name"])
+	require.Equal(t, "arbitrary high-cardinality span", unknownOperation[0].Attributes[attr.OTelSpanNameKey])
 
 	_, validID := normalizeOTLPID(strings.Repeat("0", 32), 32)
 	require.False(t, validID)
@@ -990,7 +1077,7 @@ func TestOTLPAttributeTypeAllowlistAcceptsSafeValues(t *testing.T) {
 	}, spanAttributeAllowlist)
 	require.Equal(t, "safe-model", result[attr.GenAIRequestModelKey])
 	require.Equal(t, []any{"stop"}, result[attr.GenAIResponseFinishReasonsKey])
-	require.Equal(t, true, result["gen_ai.request.is_streaming"])
+	require.Equal(t, true, result[attr.GenAIRequestIsStreamingKey])
 	require.Equal(t, int64(42), result[attr.GenAIUsageInputTokensKey])
 	require.InDelta(t, 0.125, result[attr.GenAIUsageCostKey], 1e-12)
 	require.NoError(t, processor.Shutdown(t.Context()))
@@ -1020,7 +1107,7 @@ func TestOTLPAttributeTypeAllowlistRejectsNegativeUsageAndAcceptsZero(t *testing
 	}, spanAttributeAllowlist)
 	require.Equal(t, int64(0), zero[attr.GenAIUsageInputTokensKey])
 	require.InDelta(t, 0, zero[attr.GenAIUsageCostKey], 0)
-	require.Equal(t, int64(0), zero["litellm.response.cost"])
+	require.Equal(t, int64(0), zero[attr.LiteLLMResponseCostKey])
 	require.NoError(t, processor.Shutdown(t.Context()))
 }
 
