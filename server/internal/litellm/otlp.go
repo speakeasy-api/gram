@@ -55,7 +55,7 @@ type otlpAttributeSpec struct {
 var spanAttributeAllowlist = map[string]otlpAttributeSpec{
 	"gen_ai.operation.name":                    {target: attr.GenAIOperationNameKey, kind: otlpAttributeString},
 	"gen_ai.provider.name":                     {target: attr.GenAIProviderNameKey, kind: otlpAttributeString},
-	"gen_ai.system":                            {target: attribute.Key("gen_ai.system"), kind: otlpAttributeString},
+	"gen_ai.system":                            {target: attr.GenAISystemKey, kind: otlpAttributeString},
 	"gen_ai.request.model":                     {target: attr.GenAIRequestModelKey, kind: otlpAttributeString},
 	"gen_ai.response.model":                    {target: attr.GenAIResponseModelKey, kind: otlpAttributeString},
 	"gen_ai.response.id":                       {target: attr.GenAIResponseIDKey, kind: otlpAttributeString},
@@ -64,16 +64,16 @@ var spanAttributeAllowlist = map[string]otlpAttributeSpec{
 	"gen_ai.usage.input_tokens":                {target: attr.GenAIUsageInputTokensKey, kind: otlpAttributeInteger},
 	"gen_ai.usage.output_tokens":               {target: attr.GenAIUsageOutputTokensKey, kind: otlpAttributeInteger},
 	"gen_ai.usage.total_tokens":                {target: attr.GenAIUsageTotalTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.prompt_tokens":               {target: attribute.Key("gen_ai.usage.prompt_tokens"), kind: otlpAttributeInteger},
-	"gen_ai.usage.completion_tokens":           {target: attribute.Key("gen_ai.usage.completion_tokens"), kind: otlpAttributeInteger},
+	"gen_ai.usage.prompt_tokens":               {target: attr.GenAIUsagePromptTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.completion_tokens":           {target: attr.GenAIUsageCompletionTokensKey, kind: otlpAttributeInteger},
 	"gen_ai.usage.cache_read.input_tokens":     {target: attr.GenAIUsageCacheReadInputTokensKey, kind: otlpAttributeInteger},
 	"gen_ai.usage.cache_creation.input_tokens": {target: attr.GenAIUsageCacheCreationInputTokensKey, kind: otlpAttributeInteger},
 	"gen_ai.usage.reasoning_tokens":            {target: attr.GenAIUsageReasoningTokensKey, kind: otlpAttributeInteger},
 	"gen_ai.usage.cost":                        {target: attr.GenAIUsageCostKey, kind: otlpAttributeNumber},
-	"gen_ai.request.is_streaming":              {target: attribute.Key("gen_ai.request.is_streaming"), kind: otlpAttributeBool},
-	"gen_ai.request.streaming":                 {target: attribute.Key("gen_ai.request.streaming"), kind: otlpAttributeBool},
-	"litellm.is_streaming":                     {target: attribute.Key("litellm.is_streaming"), kind: otlpAttributeBool},
-	"litellm.response.cost":                    {target: attribute.Key("litellm.response.cost"), kind: otlpAttributeNumber},
+	"gen_ai.request.is_streaming":              {target: attr.GenAIRequestIsStreamingKey, kind: otlpAttributeBool},
+	"gen_ai.request.streaming":                 {target: attr.GenAIRequestStreamingKey, kind: otlpAttributeBool},
+	"litellm.is_streaming":                     {target: attr.LiteLLMIsStreamingKey, kind: otlpAttributeBool},
+	"litellm.response.cost":                    {target: attr.LiteLLMResponseCostKey, kind: otlpAttributeNumber},
 	"litellm.call_id":                          {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
 	"litellm_call_id":                          {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
 	"litellm.trace_id":                         {target: attr.LiteLLMTraceIDKey, kind: otlpAttributeString},
@@ -100,14 +100,14 @@ var spanAttributeAllowlist = map[string]otlpAttributeSpec{
 
 var resourceAttributeAllowlist = map[string]otlpAttributeSpec{
 	"service.name":                {target: attr.ServiceNameKey, kind: otlpAttributeString},
-	"service.namespace":           {target: attribute.Key("service.namespace"), kind: otlpAttributeString},
+	"service.namespace":           {target: attr.ServiceNamespaceKey, kind: otlpAttributeString},
 	"service.version":             {target: attr.ServiceVersionKey, kind: otlpAttributeString},
-	"service.instance.id":         {target: attribute.Key("service.instance.id"), kind: otlpAttributeString},
-	"deployment.environment":      {target: attribute.Key("deployment.environment"), kind: otlpAttributeString},
-	"deployment.environment.name": {target: attribute.Key("deployment.environment.name"), kind: otlpAttributeString},
-	"telemetry.sdk.name":          {target: attribute.Key("telemetry.sdk.name"), kind: otlpAttributeString},
-	"telemetry.sdk.language":      {target: attribute.Key("telemetry.sdk.language"), kind: otlpAttributeString},
-	"telemetry.sdk.version":       {target: attribute.Key("telemetry.sdk.version"), kind: otlpAttributeString},
+	"service.instance.id":         {target: attr.ServiceInstanceIDKey, kind: otlpAttributeString},
+	"deployment.environment":      {target: attr.DeploymentEnvironmentKey, kind: otlpAttributeString},
+	"deployment.environment.name": {target: attr.ServiceEnvKey, kind: otlpAttributeString},
+	"telemetry.sdk.name":          {target: attr.TelemetrySDKNameKey, kind: otlpAttributeString},
+	"telemetry.sdk.language":      {target: attr.TelemetrySDKLanguageKey, kind: otlpAttributeString},
+	"telemetry.sdk.version":       {target: attr.TelemetrySDKVersionKey, kind: otlpAttributeString},
 }
 
 type otlpExportRequest struct {
@@ -423,7 +423,12 @@ func preflightJSONAttributesObject(decoder *json.Decoder, counts *otlpCollection
 }
 
 func preflightJSONKeyValues(decoder *json.Decoder, counts *otlpCollectionCounts, depth int) error {
+	attributeCount := 0
 	for decoder.More() {
+		attributeCount++
+		if attributeCount > maxOTLPAttributes {
+			return fmt.Errorf("OTLP attribute collection contains too many KeyValues: %d", attributeCount)
+		}
 		value, err := decoder.Token()
 		if err != nil {
 			return fmt.Errorf("preflight OTLP KeyValue: %w", err)
@@ -516,7 +521,12 @@ func preflightJSONAnyValueContainer(decoder *json.Decoder, counts *otlpCollectio
 			}
 			continue
 		}
+		keyValueCount := 0
 		for decoder.More() {
+			keyValueCount++
+			if keyValues && keyValueCount > maxOTLPAttributes {
+				return fmt.Errorf("OTLP nested KeyValue collection contains too many entries: %d", keyValueCount)
+			}
 			if err := counts.addNestedNode(childDepth); err != nil {
 				return err
 			}
@@ -672,6 +682,7 @@ func preflightProtobufScopeSpans(data []byte, counts *otlpCollectionCounts) erro
 }
 
 func preflightProtobufAttributes(data []byte, attributesField protowire.Number, counts *otlpCollectionCounts) error {
+	attributeCount := 0
 	for len(data) > 0 {
 		number, wireType, value, rest, err := consumeProtobufField(data)
 		if err != nil {
@@ -679,6 +690,10 @@ func preflightProtobufAttributes(data []byte, attributesField protowire.Number, 
 		}
 		data = rest
 		if number == attributesField && wireType == protowire.BytesType {
+			attributeCount++
+			if attributeCount > maxOTLPAttributes {
+				return fmt.Errorf("OTLP attribute collection contains too many KeyValues: %d", attributeCount)
+			}
 			if err := preflightProtobufKeyValue(value, counts, 1); err != nil {
 				return err
 			}
@@ -724,6 +739,7 @@ func preflightProtobufAnyValue(data []byte, counts *otlpCollectionCounts, depth 
 }
 
 func preflightProtobufAnyValueContainer(data []byte, counts *otlpCollectionCounts, childDepth int, keyValues bool) error {
+	keyValueCount := 0
 	for len(data) > 0 {
 		number, wireType, value, rest, err := consumeProtobufField(data)
 		if err != nil {
@@ -732,6 +748,10 @@ func preflightProtobufAnyValueContainer(data []byte, counts *otlpCollectionCount
 		data = rest
 		if number != 1 || wireType != protowire.BytesType {
 			continue
+		}
+		keyValueCount++
+		if keyValues && keyValueCount > maxOTLPAttributes {
+			return fmt.Errorf("OTLP nested KeyValue collection contains too many entries: %d", keyValueCount)
 		}
 		if err := counts.addNestedNode(childDepth); err != nil {
 			return err
@@ -1064,7 +1084,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 					invalidIDs++
 				}
 				if parentID, ok := normalizeOTLPID(span.ParentSpanID, 16); ok {
-					spanAttributes[attribute.Key("span.parent_id")] = parentID
+					spanAttributes[attr.SpanParentIDKey] = parentID
 				} else if span.ParentSpanID != "" {
 					invalidIDs++
 				}
@@ -1078,20 +1098,20 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 				spanAttributes[attr.EventSourceKey] = string(telemetry.EventSourceHook)
 				spanAttributes[attr.ResourceURNKey] = litellmOTLPResourceURN
 				if keepSpanName {
-					spanAttributes[attribute.Key("otel.span.name")] = spanName
+					spanAttributes[attr.OTelSpanNameKey] = spanName
 				}
-				spanAttributes[attribute.Key("otel.span.kind")] = otlpSpanKind(int32(span.Kind))
-				spanAttributes[attribute.Key("otel.span.status_code")] = otlpStatusCode(span.Status)
-				spanAttributes[attribute.Key("otel.span.start_time_unix_nano")] = uint64(span.StartTimeUnixNano)
-				spanAttributes[attribute.Key("otel.span.end_time_unix_nano")] = uint64(span.EndTimeUnixNano)
+				spanAttributes[attr.OTelSpanKindKey] = otlpSpanKind(int32(span.Kind))
+				spanAttributes[attr.OTelSpanStatusCodeKey] = otlpStatusCode(span.Status)
+				spanAttributes[attr.OTelSpanStartTimeUnixNanoKey] = uint64(span.StartTimeUnixNano)
+				spanAttributes[attr.OTelSpanEndTimeUnixNanoKey] = uint64(span.EndTimeUnixNano)
 				if end, start := uint64(span.EndTimeUnixNano), uint64(span.StartTimeUnixNano); start > 0 && start <= math.MaxInt64 && end <= math.MaxInt64 && end >= start {
-					spanAttributes[attribute.Key("otel.span.duration_ms")] = float64(end-start) / float64(time.Millisecond)
+					spanAttributes[attr.OTelSpanDurationMSKey] = float64(end-start) / float64(time.Millisecond)
 				}
 				if scopeSpans.Scope != nil {
 					if scopeSpans.Scope.Name != "" {
 						name, changed, keep := boundOTLPAttributeValue(scopeSpans.Scope.Name)
 						if keep {
-							spanAttributes[attribute.Key("otel.scope.name")] = name
+							spanAttributes[attr.OTelScopeNameKey] = name
 						}
 						if changed {
 							s.traces.recordTruncatedAttributes(ctx, 1)
@@ -1100,7 +1120,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 					if scopeSpans.Scope.Version != "" {
 						version, changed, keep := boundOTLPAttributeValue(scopeSpans.Scope.Version)
 						if keep {
-							spanAttributes[attribute.Key("otel.scope.version")] = version
+							spanAttributes[attr.OTelScopeVersionKey] = version
 						}
 						if changed {
 							s.traces.recordTruncatedAttributes(ctx, 1)
