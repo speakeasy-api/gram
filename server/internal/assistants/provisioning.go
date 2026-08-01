@@ -141,29 +141,23 @@ func (s *ServiceCore) EnableManagedAssistant(
 	return assistantRecord{}, err
 }
 
-// raiseManagedAssistantWarmTTL rewrites a managed assistant's stored warm_ttl
-// to the current managed default. Callers gate on the row being below the
-// default, so this only ever raises the window. Returns the value now stored so
-// the caller can reflect it without a re-read.
-func (s *ServiceCore) raiseManagedAssistantWarmTTL(ctx context.Context, projectID, assistantID uuid.UUID) (int, error) {
-	warmTTL := int(managedAssistantWarmTTLSeconds)
-	// Only warm_ttl_seconds is set; the other nargs stay nil so UpdateAssistant's
-	// COALESCE leaves those columns untouched. Built through the conv helpers
-	// (not empty pgtype literals) to satisfy exhaustruct.
-	updated, err := assistantrepo.New(s.db).UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
-		Name:           conv.PtrToPGText(nil),
-		Model:          conv.PtrToPGText(nil),
-		Instructions:   conv.PtrToPGText(nil),
-		WarmTtlSeconds: conv.PtrToPGInt8(&warmTTL),
-		MaxConcurrency: conv.PtrToPGInt8(nil),
-		Status:         conv.PtrToPGText(nil),
+// raiseManagedAssistantWarmTTL lifts a managed assistant's stored
+// warm_ttl_seconds to the current managed default. The raise-only guard lives
+// in SQL (RaiseAssistantWarmTtlSeconds updates only when the stored value is
+// below the target), so this is a single effective write under concurrent
+// chat-opens, never lowers a deliberately longer window, and leaves updated_at
+// untouched. The row is guaranteed to sit at the default afterwards — whether
+// this call or a racing one did the write — so the caller reflects the target
+// without a re-read.
+func (s *ServiceCore) raiseManagedAssistantWarmTTL(ctx context.Context, projectID, assistantID uuid.UUID) error {
+	if _, err := assistantrepo.New(s.db).RaiseAssistantWarmTtlSeconds(ctx, assistantrepo.RaiseAssistantWarmTtlSecondsParams{
+		WarmTtlSeconds: managedAssistantWarmTTLSeconds,
 		AssistantID:    assistantID,
 		ProjectID:      projectID,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("raise managed assistant warm ttl: %w", err)
+	}); err != nil {
+		return fmt.Errorf("raise managed assistant warm ttl: %w", err)
 	}
-	return conv.SafeInt(updated.WarmTtlSeconds), nil
+	return nil
 }
 
 // GetManagedAssistant resolves a project's managed assistant and hydrates its
@@ -174,20 +168,26 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 		return assistantRecord{}, fmt.Errorf("get managed assistant: %w", err)
 	}
 	record := assistantRecordFromManagedRow(row)
-	// Lazily heal a stale warm window. warmTTL is stored per-row at create time,
-	// so a bump to managedAssistantWarmTTLSeconds only reaches assistants created
-	// before it by rewriting the row. The dashboard reads the managed assistant
-	// through here on every chat open, so an assistant provisioned under the old
-	// 60s default is raised to the current default the next time its owner opens
-	// the chat — no data migration needed. Raise-only (never lower) so a
-	// deliberately longer window is preserved; guarded so it is a one-time write
-	// that no-ops once healed. A repair failure must not fail the read: the
-	// assistant still works at its stored TTL, so log and carry on.
+	// Lazily heal a stale warm window. warm_ttl_seconds is stored per-row at
+	// create time, so a bump to managedAssistantWarmTTLSeconds only reaches
+	// assistants created before it by rewriting the row. The dashboard resolves
+	// the managed assistant through here on every chat open — the only path that
+	// reliably runs for an already-provisioned assistant (the write-scoped ensure
+	// path fires only when one is missing) — so an assistant on the old 60s
+	// default is raised the next time its owner opens the chat, with no data
+	// migration. The write is one-time: once healed the guard below is false and
+	// this stays a pure read, so the steady state is read-only. The SQL is
+	// raise-only and leaves updated_at untouched (see raiseManagedAssistantWarmTTL),
+	// so a heal never disturbs the row's change timestamp. A repair failure must
+	// not fail the read: the assistant still works at its stored TTL, so log and
+	// carry on.
 	if record.WarmTTLSeconds < int(managedAssistantWarmTTLSeconds) {
-		if healed, err := s.raiseManagedAssistantWarmTTL(ctx, projectID, record.ID); err != nil {
+		if err := s.raiseManagedAssistantWarmTTL(ctx, projectID, record.ID); err != nil {
 			s.logger.WarnContext(ctx, "heal managed assistant warm ttl", attr.SlogError(err), attr.SlogAssistantID(record.ID.String()))
 		} else {
-			record.WarmTTLSeconds = healed
+			// The row now sits at the default (this write or a racing one); reflect
+			// it without a re-read. updated_at is intentionally unchanged.
+			record.WarmTTLSeconds = int(managedAssistantWarmTTLSeconds)
 		}
 	}
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {

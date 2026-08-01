@@ -493,6 +493,24 @@ WHERE id = @assistant_id
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
 
+-- name: RaiseAssistantWarmTtlSeconds :execrows
+-- Atomically raise an assistant's warm_ttl_seconds to @warm_ttl_seconds, but
+-- only when the stored value is strictly below it. The `warm_ttl_seconds <`
+-- guard lives in the WHERE, not in application memory, so the heal is a single
+-- effective write even when concurrent chat-opens race to repair the same stale
+-- row: the first update lifts the value and every later one matches no row. It
+-- is genuinely raise-only — a deliberately longer window can never be lowered,
+-- because a stored value already at or above the target fails the guard.
+-- updated_at is deliberately left untouched: this is an internal, system-driven
+-- backfill of an infra field, not a user edit, so it must not disturb the row's
+-- change timestamp (and a GET that heals then returns the row stays consistent).
+UPDATE assistants
+SET warm_ttl_seconds = @warm_ttl_seconds
+WHERE id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND warm_ttl_seconds < @warm_ttl_seconds;
+
 -- name: DeleteAssistant :exec
 UPDATE assistants
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
