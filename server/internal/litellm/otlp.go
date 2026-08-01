@@ -1258,16 +1258,6 @@ func normalizeOTLPID(value string, length int) (string, bool) {
 	return strings.ToLower(value), true
 }
 
-func countOTLPSpans(request *otlpExportRequest) int {
-	count := 0
-	for _, resourceSpans := range request.ResourceSpans {
-		for _, scopeSpans := range resourceSpans.ScopeSpans {
-			count += len(scopeSpans.Spans)
-		}
-	}
-	return count
-}
-
 func lowCardinalityGenAIOperation(operation string) string {
 	switch operation {
 	case "chat", "embeddings", "text_completion":
