@@ -42,7 +42,8 @@ type contractFixtureCase struct {
 }
 
 type contractFixtureManifest struct {
-	Files map[string]string `json:"files"`
+	Files     map[string]string `json:"files"`
+	OTELFiles map[string]string `json:"otel_files"`
 }
 
 func readJSONLines(t *testing.T, file string) [][]byte {
@@ -124,6 +125,10 @@ func TestContractFixtureManifest(t *testing.T) {
 		require.Equal(t, expected, fmt.Sprintf("%x", sum), filename)
 	}
 	require.ElementsMatch(t, manifestFiles, fixtureFiles)
+	for filename, expected := range manifest.OTELFiles {
+		sum := sha256.Sum256(testenv.ReadFixture(t, contractFixtureDir+filename))
+		require.Equal(t, expected, fmt.Sprintf("%x", sum), filename)
+	}
 }
 
 func TestContractFixtures(t *testing.T) {

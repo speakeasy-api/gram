@@ -403,6 +403,7 @@ const (
 	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
 	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
 	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey      = attribute.Key("gram.litellm.user_email")
 	LiteLLMTeamIDKey         = attribute.Key("gram.litellm.team_id")
 	LiteLLMTeamAliasKey      = attribute.Key("gram.litellm.team_alias")
 	LiteLLMEndUserIDKey      = attribute.Key("gram.litellm.end_user_id")

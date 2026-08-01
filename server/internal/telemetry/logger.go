@@ -375,7 +375,9 @@ func parseAttributesWithExplicitResources(attrs map[attr.Key]any, explicitResour
 		// to infer the model provider for insights
 		if k == attr.GenAIRequestModelKey {
 			if model, ok := v.(string); ok {
-				spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
+				if _, explicit := attrs[attr.GenAIProviderNameKey]; !explicit {
+					spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
+				}
 			}
 		}
 

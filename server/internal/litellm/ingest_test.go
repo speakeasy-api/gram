@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -151,6 +152,7 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 		auth:   fixedAuthorizer{authCtx: authCtx},
 		hooks:  ingester,
 		calls:  callcache.New(newMemoryCache()),
+		traces: newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
 	}
 }
 

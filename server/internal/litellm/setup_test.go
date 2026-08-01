@@ -7,7 +7,9 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -25,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -51,10 +54,12 @@ func TestMain(m *testing.M) {
 }
 
 type realTestInstance struct {
-	service  *Service
-	hooks    *hooks.Service
-	conn     *pgxpool.Pool
-	observer *recordingMessageObserver
+	service   *Service
+	hooks     *hooks.Service
+	conn      *pgxpool.Pool
+	chConn    clickhouse.Conn
+	telemetry *telemetry.Logger
+	observer  *recordingMessageObserver
 }
 
 type recordingMessageObserver struct {
@@ -101,6 +106,17 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	chConn, err := testInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
+	telemetryLogger := telemetry.NewLogger(
+		ctx,
+		logger,
+		tracerProvider,
+		meterProvider,
+		chConn,
+		func(context.Context, string) (bool, error) { return true, nil },
+		func(context.Context, string) (bool, error) { return false, nil },
+		telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)),
+		telemetry.NewNoopLogPublisher(logger),
+	)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
@@ -140,11 +156,20 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		siteURL,
 		"test-jwt-secret",
 	)
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, callcache.New(cacheAdapter))
+	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger)
+	traceProcessor.Start(ctx)
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		require.NoError(t, traceProcessor.Shutdown(shutdownCtx))
+	})
+	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, callcache.New(cacheAdapter), traceProcessor)
 	return ctx, &realTestInstance{
-		service:  service,
-		hooks:    hookService,
-		conn:     conn,
-		observer: observer,
+		service:   service,
+		hooks:     hookService,
+		conn:      conn,
+		chConn:    chConn,
+		telemetry: telemetryLogger,
+		observer:  observer,
 	}
 }
