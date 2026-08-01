@@ -18,8 +18,12 @@ type FindingSpan struct {
 	EndPos   int    `json:"end_pos"`
 }
 
-// ToolView is one tool invocation surfaced from a message's recorded tool calls.
+// ToolView is one tool invocation surfaced from a message's recorded tool
+// calls. CallID is the recorded call id (e.g. an OpenAI-style "call_..." id),
+// empty when the recording agent sent none or the caller has no id (realtime
+// single-call scans).
 type ToolView struct {
+	CallID    string
 	Name      string
 	Server    string
 	Function  string
@@ -33,9 +37,11 @@ type MessageView struct {
 	Tools   []ToolView
 }
 
-// NewToolView destructures a tool-call name and pairs it with raw arguments.
-func NewToolView(name, arguments string) ToolView {
+// NewToolView destructures a tool-call name and pairs it with the recorded
+// call id and raw arguments.
+func NewToolView(callID, name, arguments string) ToolView {
 	return ToolView{
+		CallID:    callID,
 		Name:      name,
 		Server:    toolref.MCPServerOf(name),
 		Function:  toolref.MCPFunctionOf(name),

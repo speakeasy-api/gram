@@ -508,7 +508,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		// transcript rows; recommended CEL over tool_calls therefore evaluates
 		// against this single call. That can scan more than batch for unusual
 		// mixed-call transcripts, which is the accepted fail-closed asymmetry.
-		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+		// No recorded call id reaches this path, so spans fall back to
+		// grouping per tool name.
+		view.Tools = []ra.ToolView{ra.NewToolView("", toolName, text)}
 	}
 
 	// Policy application gates detection: include narrows scope (alongside
@@ -768,7 +770,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 
 	toolCalls := make([]customruleanalyzer.ScanToolCall, 0, len(view.Tools))
 	for _, t := range view.Tools {
-		toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{Name: t.Name, Arguments: t.Arguments})
+		toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{ID: t.CallID, Name: t.Name, Arguments: t.Arguments})
 	}
 
 	findings, err := s.customRuleScanner.Scan(ctx, customruleanalyzer.ScanRequest{

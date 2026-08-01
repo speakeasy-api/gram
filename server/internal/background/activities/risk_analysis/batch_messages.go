@@ -229,7 +229,7 @@ func batchMessageView(msg batchMessage) MessageView {
 		if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
 			continue
 		}
-		view.Tools = append(view.Tools, NewToolView(c.Function.Name, c.Function.Arguments))
+		view.Tools = append(view.Tools, NewToolView(c.ID, c.Function.Name, c.Function.Arguments))
 	}
 	return view
 }

@@ -42,7 +42,7 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 
 	view := MessageView{
 		Type:  message.ToolRequest,
-		Tools: []ToolView{NewToolView("shell:run_bash_command", `{"command":"DROP TABLE users"}`)},
+		Tools: []ToolView{NewToolView("", "shell:run_bash_command", `{"command":"DROP TABLE users"}`)},
 	}
 
 	findings := scanCEL(t, view, rules)
@@ -59,6 +59,52 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 	require.Contains(t, byMatch, "DROP TABLE")
 }
 
+// Recorded call ids anchor findings per call: two calls to the same tool keep
+// distinct group keys and carry their own call id for the reveal metadata.
+func TestScanCELRules_SameToolTwiceGroupsPerCall(t *testing.T) {
+	t.Parallel()
+	rules := celRules(t, customrules.Rule{
+		RuleID:        "custom.rm",
+		DetectionExpr: `tool_calls.filter(t, t.args.get("command").matchRegex("rm -rf")).size() > 0`,
+	})
+
+	view := MessageView{
+		Type: message.ToolRequest,
+		Tools: []ToolView{
+			NewToolView("call_1", "shell:run", `{"command":"rm -rf /tmp"}`),
+			NewToolView("call_2", "shell:run", `{"command":"rm -rf /var"}`),
+		},
+	}
+
+	findings := scanCEL(t, view, rules)
+	require.Len(t, findings, 2)
+
+	groupKeys := []string{findings[0].SpanGroupKey, findings[1].SpanGroupKey}
+	callIDs := []string{findings[0].McpLookupToolCallID, findings[1].McpLookupToolCallID}
+	require.ElementsMatch(t, []string{"call_1", "call_2"}, groupKeys)
+	require.ElementsMatch(t, []string{"call_1", "call_2"}, callIDs)
+}
+
+// Without recorded ids the group key falls back to the tool name and no call
+// id is claimed.
+func TestScanCELRules_NoCallIDFallsBackToName(t *testing.T) {
+	t.Parallel()
+	rules := celRules(t, customrules.Rule{
+		RuleID:        "custom.rm",
+		DetectionExpr: `tool_calls.exists(t, t.args.get("command").matchRegex("rm -rf"))`,
+	})
+
+	view := MessageView{
+		Type:  message.ToolRequest,
+		Tools: []ToolView{NewToolView("", "shell:run", `{"command":"rm -rf /tmp"}`)},
+	}
+
+	findings := scanCEL(t, view, rules)
+	require.Len(t, findings, 1)
+	require.Equal(t, "shell:run", findings[0].SpanGroupKey)
+	require.Empty(t, findings[0].McpLookupToolCallID)
+}
+
 // Correlation does not cross tools.
 func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 	t.Parallel()
@@ -70,8 +116,8 @@ func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 	view := MessageView{
 		Type: message.ToolRequest,
 		Tools: []ToolView{
-			NewToolView("shell:run_bash_command", `{"command":"ls"}`),
-			NewToolView("db:query", `{"command":"DROP TABLE users"}`),
+			NewToolView("", "shell:run_bash_command", `{"command":"ls"}`),
+			NewToolView("", "db:query", `{"command":"DROP TABLE users"}`),
 		},
 	}
 

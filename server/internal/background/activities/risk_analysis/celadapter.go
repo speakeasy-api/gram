@@ -15,7 +15,7 @@ import (
 func celMessage(view MessageView) celenv.Message {
 	tools := make([]celenv.Tool, len(view.Tools))
 	for i, t := range view.Tools {
-		tools[i] = celenv.Tool{Name: t.Name, Server: t.Server, Function: t.Function, Args: t.Arguments}
+		tools[i] = celenv.Tool{CallID: t.CallID, Name: t.Name, Server: t.Server, Function: t.Function, Args: t.Arguments}
 	}
 	return celenv.Message{Content: view.Content, Type: view.Type, Tools: tools}
 }
@@ -70,8 +70,8 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 				Source:              SourceCustom,
 				Confidence:          1.0,
 				DeadLetterReason:    "",
-				McpLookupToolCallID: "",
-				SpanGroupKey:        s.ToolCallID,
+				McpLookupToolCallID: s.ToolCallID,
+				SpanGroupKey:        s.GroupKey(),
 				Field:               s.Target,
 				Path:                s.Path,
 			})

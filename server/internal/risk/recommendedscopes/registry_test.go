@@ -157,8 +157,8 @@ func TestPromptInjectionScopeBehavior(t *testing.T) {
 				Type:    "tool_request",
 				Content: "",
 				Tools: []celenv.Tool{
-					{Name: "Read", Server: "", Function: "", Args: ""},
-					{Name: "Grep", Server: "", Function: "", Args: ""},
+					{CallID: "", Name: "Read", Server: "", Function: "", Args: ""},
+					{CallID: "", Name: "Grep", Server: "", Function: "", Args: ""},
 				},
 			},
 			exempt: true,
@@ -169,8 +169,8 @@ func TestPromptInjectionScopeBehavior(t *testing.T) {
 				Type:    "tool_request",
 				Content: "",
 				Tools: []celenv.Tool{
-					{Name: "Read", Server: "", Function: "", Args: ""},
-					{Name: "Bash", Server: "", Function: "", Args: ""},
+					{CallID: "", Name: "Read", Server: "", Function: "", Args: ""},
+					{CallID: "", Name: "Bash", Server: "", Function: "", Args: ""},
 				},
 			},
 			exempt: false,

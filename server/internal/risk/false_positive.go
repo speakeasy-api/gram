@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -181,6 +182,12 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 				falsePositiveAt = row.FalsePositiveAt.Time.UTC().Format(time.RFC3339)
 			}
 
+			// Per-source default only: the Postgres row carries no span context
+			// here, so field-level precision (field/path/tool_call_id) on
+			// FP-mirrored custom rows is accepted loss until the FP flow moves
+			// onto ClickHouse.
+			surface := scanners.FindingSurface(row.Source, "", "")
+
 			msg := riskv1.Finding_builder{
 				Id:                &id,
 				RequestId:         conv.PtrEmpty(""),
@@ -199,6 +206,7 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 				Source:            &row.Source,
 				Confidence:        &row.Confidence.Float64,
 				FalsePositiveAt:   &falsePositiveAt,
+				Surface:           &surface,
 			}.Build()
 
 			results = append(results, s.findingsPub.Publish(detached, msg))

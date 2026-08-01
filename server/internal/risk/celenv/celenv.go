@@ -31,7 +31,11 @@ import (
 )
 
 // Tool is one tool call exposed to expressions as an element of `tool_calls`.
+// CallID is the recorded call id (e.g. an OpenAI-style "call_..." id) used for
+// span attribution only — expressions cannot reference it. Empty when the
+// caller has none (realtime single-call scans, agents that record no ids).
 type Tool struct {
+	CallID   string
 	Name     string
 	Server   string
 	Function string
@@ -47,13 +51,29 @@ type Message struct {
 
 // Span is one matched substring, attributed to the field (and optionally the
 // tool call and JSON path) it matched in. Detection evaluation returns a slice.
+// ToolCallID is the recorded call id of the tool the span matched in — empty
+// for body fields and for calls recorded without ids — while ToolName is that
+// tool's name, kept alongside so consumers can group per-name when no id
+// exists.
 type Span struct {
 	Target     string
 	ToolCallID string
+	ToolName   string
 	Path       string
 	Start      int
 	End        int
 	Value      string
+}
+
+// GroupKey is the key findings derived from this span group under: the
+// recorded call id when one exists — so two calls to the same tool stay
+// distinct — falling back to the tool name for calls recorded without ids
+// (and to "" for body fields, which never had a tool to group by).
+func (s Span) GroupKey() string {
+	if s.ToolCallID != "" {
+		return s.ToolCallID
+	}
+	return s.ToolName
 }
 
 // fieldType is the opaque CEL type of the message field variables. Authors never
@@ -199,13 +219,13 @@ func activation(msg Message, coll *collector) map[string]any {
 		if !applies {
 			return &fieldVal{name: name, values: nil, coll: coll}
 		}
-		return &fieldVal{name: name, values: []fieldValue{{toolCallID: "", path: "", text: msg.Content}}, coll: coll}
+		return &fieldVal{name: name, values: []fieldValue{{toolCallID: "", toolName: "", path: "", text: msg.Content}}, coll: coll}
 	}
 
 	tools := make([]any, len(msg.Tools))
 	for i, t := range msg.Tools {
 		one := func(name, text string) *fieldVal {
-			return &fieldVal{name: name, values: []fieldValue{{toolCallID: t.Name, path: "", text: text}}, coll: coll}
+			return &fieldVal{name: name, values: []fieldValue{{toolCallID: t.CallID, toolName: t.Name, path: "", text: text}}, coll: coll}
 		}
 		tools[i] = celTool{
 			Name:     one("tool.name", t.Name),
@@ -231,9 +251,10 @@ type collector struct {
 }
 
 // fieldValue is one underlying string a field matches against, with the tool
-// call and JSON path it came from for span attribution.
+// call (id and name) and JSON path it came from for span attribution.
 type fieldValue struct {
 	toolCallID string
+	toolName   string
 	path       string
 	text       string
 }
@@ -274,6 +295,7 @@ func (f *fieldVal) get(path string) *fieldVal {
 		}
 		out.values = append(out.values, fieldValue{
 			toolCallID: v.toolCallID,
+			toolName:   v.toolName,
 			path:       joinPath(v.path, norm),
 			text:       res.String(),
 		})
@@ -289,6 +311,7 @@ func (f *fieldVal) record(v fieldValue, start, end int) {
 	f.coll.spans = append(f.coll.spans, Span{
 		Target:     f.name,
 		ToolCallID: v.toolCallID,
+		ToolName:   v.toolName,
 		Path:       v.path,
 		Start:      start,
 		End:        end,

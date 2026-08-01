@@ -29,6 +29,9 @@ message CustomRulesAnalysis {
   message ToolCall {
     string name = 1;
     string arguments = 2;
+    // The call id recorded on the message's tool_calls entry (e.g. an
+    // OpenAI-style "call_..." id). Empty when the recording agent sent none.
+    string id = 3;
   }
 
   option (gcp.pubsub.v1.topic) = {

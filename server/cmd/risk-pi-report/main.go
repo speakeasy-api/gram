@@ -84,10 +84,10 @@ func (c labeledCase) scopeView() ra.MessageView {
 	switch {
 	case len(c.ToolCalls) > 0:
 		for _, tc := range c.ToolCalls {
-			view.Tools = append(view.Tools, ra.NewToolView(tc.Name, tc.Args))
+			view.Tools = append(view.Tools, ra.NewToolView("", tc.Name, tc.Args))
 		}
 	case typ == message.ToolRequest && c.Tool != "":
-		view.Tools = []ra.ToolView{ra.NewToolView(c.Tool, c.Text)}
+		view.Tools = []ra.ToolView{ra.NewToolView("", c.Tool, c.Text)}
 	}
 	return view
 }

@@ -10,12 +10,14 @@ DESCRIPTOR: _descriptor.FileDescriptor
 class CustomRulesAnalysis(_message.Message):
     __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "kind", "tool_calls", "custom_rule_ids", "content_part_id")
     class ToolCall(_message.Message):
-        __slots__ = ("name", "arguments")
+        __slots__ = ("name", "arguments", "id")
         NAME_FIELD_NUMBER: _ClassVar[int]
         ARGUMENTS_FIELD_NUMBER: _ClassVar[int]
+        ID_FIELD_NUMBER: _ClassVar[int]
         name: str
         arguments: str
-        def __init__(self, name: _Optional[str] = ..., arguments: _Optional[str] = ...) -> None: ...
+        id: str
+        def __init__(self, name: _Optional[str] = ..., arguments: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     CHAT_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]

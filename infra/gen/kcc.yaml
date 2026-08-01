@@ -41,6 +41,7 @@ pubsub:
           message ToolCall {
             string name = 1;
             string arguments = 2;
+            string id = 3;
           }
         }
       type: PROTOCOL_BUFFER
@@ -71,6 +72,10 @@ pubsub:
           string dead_letter_reason = 17;
           string content_part_id = 18;
           string false_positive_at = 19;
+          string surface = 20;
+          string field = 21;
+          string path = 22;
+          string tool_call_id = 23;
         }
       type: PROTOCOL_BUFFER
   - labels:

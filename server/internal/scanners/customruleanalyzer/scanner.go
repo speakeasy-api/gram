@@ -25,8 +25,11 @@ type ScanRequest struct {
 	ToolCalls     []ScanToolCall
 }
 
-// ScanToolCall is one tool invocation carried in the message.
+// ScanToolCall is one tool invocation carried in the message. ID is the
+// recorded call id (e.g. an OpenAI-style "call_..." id), empty when the
+// recording agent sent none.
 type ScanToolCall struct {
+	ID        string
 	Name      string
 	Arguments string
 }
@@ -143,12 +146,12 @@ func (s *Scanner) evaluate(rules []customrules.Rule, msg celenv.Message) ([]scan
 				Tags:         []string{},
 				Source:       Source,
 				Confidence:   1.0,
-				SpanGroupKey: s.ToolCallID,
+				SpanGroupKey: s.GroupKey(),
 				Field:        s.Target,
 				Path:         s.Path,
 
 				DeadLetterReason:    "",
-				McpLookupToolCallID: "",
+				McpLookupToolCallID: s.ToolCallID,
 			})
 		}
 	}
@@ -163,6 +166,7 @@ func celMessageFromMessage(m ScanMessage) celenv.Message {
 	tools := make([]celenv.Tool, 0, len(m.ToolCalls))
 	for _, tc := range m.ToolCalls {
 		tools = append(tools, celenv.Tool{
+			CallID:   tc.ID,
 			Name:     tc.Name,
 			Server:   toolref.MCPServerOf(tc.Name),
 			Function: toolref.MCPFunctionOf(tc.Name),
