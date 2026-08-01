@@ -1,0 +1,28 @@
+name: LiteLLM real proxy E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  litellm-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Install Go dependencies
+        run: mise run install:go
+
+      - name: Test
+        run: mise run test:litellm-e2e
