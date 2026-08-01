@@ -90,7 +90,7 @@ import {
   PLUGIN_SKILLS_SECTION_ID,
 } from "./plugin-detail-sections";
 import { countPluginInstalls } from "./plugin-reach";
-import { memberMapByUrn, roleMapByUrn } from "./principals";
+import { describePrincipal, memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
@@ -145,9 +145,13 @@ export default function PluginDetail(): JSX.Element | null {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
   const [serverSearch, setServerSearch] = useState("");
-  // The component stays mounted when only :pluginId changes, so a stale search
-  // would filter the new plugin's server list.
-  useEffect(() => setServerSearch(""), [pluginId]);
+  const [assignmentSearch, setAssignmentSearch] = useState("");
+  // The component stays mounted when only :pluginId changes, so stale searches
+  // would filter the new plugin's lists.
+  useEffect(() => {
+    setServerSearch("");
+    setAssignmentSearch("");
+  }, [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
   // Polled so the publish-freshness badges/banner pick up the Temporal
@@ -489,6 +493,24 @@ export default function PluginDetail(): JSX.Element | null {
     );
   }
 
+  // Client-side search over the assignments section, matching on the resolved
+  // principal label (role name, member name, email, "Everyone") plus email.
+  const normalizedAssignmentSearch = assignmentSearch.trim().toLowerCase();
+  const filteredAssignments = normalizedAssignmentSearch
+    ? assignments.filter((a) => {
+        const { label } = describePrincipal(
+          a.principalUrn,
+          roleByUrn,
+          memberByUrn,
+        );
+        const email = memberByUrn.get(a.principalUrn)?.email ?? "";
+        return (
+          label.toLowerCase().includes(normalizedAssignmentSearch) ||
+          email.toLowerCase().includes(normalizedAssignmentSearch)
+        );
+      })
+    : assignments;
+
   let assignmentsContent: JSX.Element;
   if (assignments.length === 0) {
     assignmentsContent = (
@@ -497,10 +519,14 @@ export default function PluginDetail(): JSX.Element | null {
         subtitle="Assign this plugin to roles, users, or emails to deliver it to their devices."
       />
     );
+  } else if (filteredAssignments.length === 0) {
+    assignmentsContent = (
+      <SectionEmptyState title="No assignments match your search" />
+    );
   } else {
     assignmentsContent = (
       <PluginAssignmentsList
-        assignments={assignments}
+        assignments={filteredAssignments}
         roleByUrn={roleByUrn}
         memberByUrn={memberByUrn}
       />
@@ -690,16 +716,26 @@ export default function PluginDetail(): JSX.Element | null {
                     regardless.
                   </SettingsSection.Description>
                 </SettingsSection.Header>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsAssignmentsOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <Icon name="users" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Manage assignments</Button.Text>
-                </Button>
+                <div className="flex items-center gap-2">
+                  {assignments.length > 0 && (
+                    <SearchBar
+                      value={assignmentSearch}
+                      onChange={setAssignmentSearch}
+                      placeholder="Search assignments"
+                      className="h-9 w-56"
+                    />
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAssignmentsOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="users" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Manage assignments</Button.Text>
+                  </Button>
+                </div>
               </div>
               {assignmentsContent}
             </SettingsSection>
@@ -761,13 +797,12 @@ export default function PluginDetail(): JSX.Element | null {
                   </Text>
                   <Text small muted className="max-w-xl">
                     {isDefaultPlugin
-                      ? "The default plugin can't be deleted — new MCP servers publish to it automatically."
+                      ? "This is the default plugin new MCP servers publish to. Deleting it removes the plugin from all assigned users on the next publish."
                       : "Deleting removes this plugin from all assigned users on the next publish."}
                   </Text>
                 </div>
                 <Button
                   variant="destructive-secondary"
-                  disabled={isDefaultPlugin}
                   onClick={() => setIsDeleteOpen(true)}
                 >
                   Delete plugin
