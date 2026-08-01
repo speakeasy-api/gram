@@ -2039,6 +2039,9 @@ func (s *Service) SummarizeToolActivity(ctx context.Context, payload *gen.Summar
 		"like the activity line in the Claude mobile app. " +
 		"Given the user's request and the tools the agent is calling, reply with ONE concise phrase in " +
 		tense + " describing the agent's current task from the user's point of view. " +
+		"The tools are listed in the order the agent called them; if the nature of the work has " +
+		"shifted over the turn, describe what the agent is doing NOW, weighting the most recent tools, " +
+		"rather than what it started with. " +
 		"Rules: 3 to 8 words; no trailing punctuation; no surrounding quotes; " +
 		"do not mention \"tool\", \"function\", \"API\", or the raw tool names; " +
 		"describe the intent, not the mechanics. Reply with the phrase only."

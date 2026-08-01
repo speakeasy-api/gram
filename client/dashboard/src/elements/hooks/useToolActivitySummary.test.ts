@@ -1,0 +1,112 @@
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ToolActivitySummaryInput } from "@/elements/types";
+
+const summarizeMock =
+  vi.fn<(input: ToolActivitySummaryInput) => Promise<string | null>>();
+
+vi.mock("@/elements/hooks/useElements", () => ({
+  useElements: () => ({
+    config: { tools: { summarizeToolActivity: summarizeMock } },
+  }),
+}));
+
+import { useToolActivitySummary } from "./useToolActivitySummary";
+
+/** Advance past the summarize debounce and flush the resolved summary. */
+async function flushSummary() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(500);
+  });
+}
+
+describe("useToolActivitySummary", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    summarizeMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows the heuristic immediately, then swaps in the LLM summary", async () => {
+    summarizeMock.mockResolvedValue("Searching the web for pricing");
+
+    const { result } = renderHook(() =>
+      useToolActivitySummary({
+        toolCalls: [{ name: "search_web" }],
+        inProgress: true,
+        userMessage: "find pricing",
+      }),
+    );
+
+    // Instant heuristic before the model responds.
+    expect(result.current.label).toBe("Calling Search Web…");
+    expect(result.current.enriched).toBe(false);
+
+    await flushSummary();
+
+    expect(result.current.label).toBe("Searching the web for pricing");
+    expect(result.current.enriched).toBe(true);
+  });
+
+  it("updates the summary when new tool calls materially change the activity", async () => {
+    summarizeMock.mockImplementation(async ({ toolCalls }) => {
+      return toolCalls.some((call) => call.name === "edit_file")
+        ? "Editing configuration files"
+        : "Searching the web for pricing";
+    });
+
+    const { result, rerender } = renderHook(
+      (props) => useToolActivitySummary(props),
+      {
+        initialProps: {
+          toolCalls: [{ name: "search_web" }],
+          inProgress: true,
+          userMessage: "fix the config",
+        } as Parameters<typeof useToolActivitySummary>[0],
+      },
+    );
+
+    await flushSummary();
+    expect(result.current.label).toBe("Searching the web for pricing");
+
+    // The agent pivots to editing — a materially different set of tools, no
+    // interleaved text. The stale "Searching…" label must not linger.
+    rerender({
+      toolCalls: [{ name: "search_web" }, { name: "edit_file" }],
+      inProgress: true,
+      userMessage: "fix the config",
+    });
+    expect(result.current.label).not.toBe("Searching the web for pricing");
+
+    await flushSummary();
+    expect(result.current.label).toBe("Editing configuration files");
+  });
+
+  it("retains the label across pure growth of the same tool set", async () => {
+    summarizeMock.mockResolvedValue("Searching the web for pricing");
+
+    const { result, rerender } = renderHook(
+      (props) => useToolActivitySummary(props),
+      {
+        initialProps: {
+          toolCalls: [{ name: "search_web" }],
+          inProgress: true,
+        } as Parameters<typeof useToolActivitySummary>[0],
+      },
+    );
+
+    await flushSummary();
+    expect(result.current.label).toBe("Searching the web for pricing");
+
+    // Another call to the same tool: same nature, so the label is retained (no
+    // flicker back to the heuristic) even before the next summary resolves.
+    rerender({
+      toolCalls: [{ name: "search_web" }, { name: "search_web" }],
+      inProgress: true,
+    });
+    expect(result.current.label).toBe("Searching the web for pricing");
+  });
+});

@@ -31,10 +31,15 @@ export interface UseToolActivitySummaryInput {
  *
  * It shows an instant heuristic label immediately, then — when the host app
  * provides `config.tools.summarizeToolActivity` — swaps in an LLM-generated
- * summary once it resolves. The enriched label is cached per (tool-set, phase)
- * so the running→complete transition costs at most one extra call, and the last
- * enriched label is retained across transitions so the header never flickers
- * back to the mechanical text.
+ * summary once it resolves. The enriched label is cached per (tool-set, phase),
+ * so the running→complete transition costs at most one extra call.
+ *
+ * As more tool calls arrive within the same turn (no interleaved agent text),
+ * the summary re-generates. While the *nature* of the work is unchanged — the
+ * same set of tools, just more calls — the last label is retained to avoid
+ * flicker; but when the agent materially shifts what it's doing (the set of
+ * distinct tools changes), the stale label is dropped immediately so the header
+ * reflects the new activity rather than what the agent was doing before.
  */
 export function useToolActivitySummary({
   toolCalls,
@@ -115,16 +120,36 @@ export function useToolActivitySummary({
     };
   }, [key, summarizer]);
 
-  // Retain the most recent enriched label so a phase/tool-set change doesn't
-  // briefly regress the header to the mechanical heuristic while the next
-  // summary is in flight.
-  const lastEnrichedRef = useRef<string | null>(null);
+  // The set of distinct tools captures the *nature* of the activity. As long as
+  // that set is unchanged (the agent is just doing more of the same), retain the
+  // last enriched label so growth doesn't flicker the header back to the
+  // heuristic. But when the signature changes — the agent has materially shifted
+  // what it's doing within the turn — drop the now-stale label immediately so
+  // the header reflects the new activity (heuristic first, then the new summary
+  // once it lands) rather than lingering on what the agent was doing before.
+  const materialSignature = useMemo(
+    () => [...new Set(toolCalls.map((call) => call.name))].sort().join("|"),
+    [toolCalls],
+  );
+
+  const lastEnrichedRef = useRef<{
+    summary: string;
+    signature: string;
+  } | null>(null);
   const current = enrichedByKey[key];
   if (current) {
-    lastEnrichedRef.current = current;
+    lastEnrichedRef.current = {
+      summary: current,
+      signature: materialSignature,
+    };
   }
 
-  const enrichedLabel = current ?? lastEnrichedRef.current;
+  const retained =
+    lastEnrichedRef.current?.signature === materialSignature
+      ? lastEnrichedRef.current.summary
+      : undefined;
+
+  const enrichedLabel = current ?? retained;
   if (!summarizer || !enrichedLabel) {
     return { label: heuristic, enriched: false };
   }
