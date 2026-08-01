@@ -146,18 +146,19 @@ func (s *ServiceCore) EnableManagedAssistant(
 // in SQL (RaiseAssistantWarmTtlSeconds updates only when the stored value is
 // below the target), so this is a single effective write under concurrent
 // chat-opens, never lowers a deliberately longer window, and leaves updated_at
-// untouched. The row is guaranteed to sit at the default afterwards — whether
-// this call or a racing one did the write — so the caller reflects the target
-// without a re-read.
-func (s *ServiceCore) raiseManagedAssistantWarmTTL(ctx context.Context, projectID, assistantID uuid.UUID) error {
-	if _, err := assistantrepo.New(s.db).RaiseAssistantWarmTtlSeconds(ctx, assistantrepo.RaiseAssistantWarmTtlSecondsParams{
+// untouched. Returns the number of rows written: 1 when this call performed the
+// raise, 0 when the row was already at or above the target (already healed, or a
+// deliberately longer window) so no write was needed.
+func (s *ServiceCore) raiseManagedAssistantWarmTTL(ctx context.Context, projectID, assistantID uuid.UUID) (int64, error) {
+	rows, err := assistantrepo.New(s.db).RaiseAssistantWarmTtlSeconds(ctx, assistantrepo.RaiseAssistantWarmTtlSecondsParams{
 		WarmTtlSeconds: managedAssistantWarmTTLSeconds,
 		AssistantID:    assistantID,
 		ProjectID:      projectID,
-	}); err != nil {
-		return fmt.Errorf("raise managed assistant warm ttl: %w", err)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("raise managed assistant warm ttl: %w", err)
 	}
-	return nil
+	return rows, nil
 }
 
 // GetManagedAssistant resolves a project's managed assistant and hydrates its
@@ -182,12 +183,25 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 	// not fail the read: the assistant still works at its stored TTL, so log and
 	// carry on.
 	if record.WarmTTLSeconds < int(managedAssistantWarmTTLSeconds) {
-		if err := s.raiseManagedAssistantWarmTTL(ctx, projectID, record.ID); err != nil {
+		switch rows, err := s.raiseManagedAssistantWarmTTL(ctx, projectID, record.ID); {
+		case err != nil:
 			s.logger.WarnContext(ctx, "heal managed assistant warm ttl", attr.SlogError(err), attr.SlogAssistantID(record.ID.String()))
-		} else {
-			// The row now sits at the default (this write or a racing one); reflect
-			// it without a re-read. updated_at is intentionally unchanged.
+		case rows > 0:
+			// This call performed the raise, so the row now holds the target.
 			record.WarmTTLSeconds = int(managedAssistantWarmTTLSeconds)
+		default:
+			// No row written: a concurrent update already lifted warm_ttl to at
+			// least the target (possibly a deliberately longer window). The value
+			// read before the heal is stale, so re-read the authoritative one
+			// rather than assuming the target.
+			if fresh, err := assistantrepo.New(s.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{
+				AssistantID: record.ID,
+				ProjectID:   projectID,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "re-read managed assistant warm ttl after no-op heal", attr.SlogError(err), attr.SlogAssistantID(record.ID.String()))
+			} else {
+				record.WarmTTLSeconds = conv.SafeInt(fresh.WarmTtlSeconds)
+			}
 		}
 	}
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {

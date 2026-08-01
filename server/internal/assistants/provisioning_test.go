@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -163,6 +164,76 @@ func TestGetManagedAssistantNoRows(t *testing.T) {
 
 	_, err = core.GetManagedAssistant(ctx, projectID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+// TestGetManagedAssistantHealsStaleWarmTTL verifies the lazy warm-window heal:
+// an assistant left on an older, shorter warm_ttl is raised to the current
+// managed default the next time it is resolved (the path the dashboard hits on
+// every chat open), and the new value is persisted — not merely reflected in the
+// response.
+func TestGetManagedAssistantHealsStaleWarmTTL(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_managed_heal_warm_ttl")
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	core := newProvisioningCore(t, conn)
+	projectID := newProvisioningProject(t, conn, "managed-heal-warm-ttl")
+
+	enabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	require.NoError(t, err)
+
+	// Simulate an assistant provisioned under the old, shorter default.
+	stale := int64(60)
+	require.Less(t, stale, managedAssistantWarmTTLSeconds, "test premise: stale value must be below the current default")
+	_, err = assistantrepo.New(conn).UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
+		WarmTtlSeconds: pgtype.Int8{Int64: stale, Valid: true},
+		AssistantID:    enabled.ID,
+		ProjectID:      projectID,
+	})
+	require.NoError(t, err)
+
+	got, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, int(managedAssistantWarmTTLSeconds), got.WarmTTLSeconds, "resolve must heal a stale warm window to the managed default")
+
+	stored, err := assistantrepo.New(conn).GetAssistant(ctx, assistantrepo.GetAssistantParams{AssistantID: enabled.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, managedAssistantWarmTTLSeconds, stored.WarmTtlSeconds, "heal must persist the raised warm window")
+}
+
+// TestGetManagedAssistantPreservesLongerWarmTTL verifies the heal is raise-only:
+// a deliberately longer warm window is never lowered to the managed default, and
+// the resolve reports the true stored value rather than assuming the default.
+func TestGetManagedAssistantPreservesLongerWarmTTL(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_managed_preserve_warm_ttl")
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	core := newProvisioningCore(t, conn)
+	projectID := newProvisioningProject(t, conn, "managed-preserve-warm-ttl")
+
+	enabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	require.NoError(t, err)
+
+	longer := managedAssistantWarmTTLSeconds * 2
+	_, err = assistantrepo.New(conn).UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
+		WarmTtlSeconds: pgtype.Int8{Int64: longer, Valid: true},
+		AssistantID:    enabled.ID,
+		ProjectID:      projectID,
+	})
+	require.NoError(t, err)
+
+	got, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, int(longer), got.WarmTTLSeconds, "resolve must not lower a longer warm window")
+
+	stored, err := assistantrepo.New(conn).GetAssistant(ctx, assistantrepo.GetAssistantParams{AssistantID: enabled.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, longer, stored.WarmTtlSeconds, "raise-only heal must leave a longer window untouched")
 }
 
 // TestEnableManagedAssistantFailsWhenNameTaken: a user assistant already
