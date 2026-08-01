@@ -572,8 +572,8 @@ func (v otlpAnyValue) validate() error {
 			count++
 		}
 	}
-	if count != 1 {
-		return fmt.Errorf("AnyValue must contain exactly one value field")
+	if count > 1 {
+		return fmt.Errorf("AnyValue must contain at most one value field")
 	}
 	if v.ArrayValue != nil {
 		for _, child := range v.ArrayValue.Values {

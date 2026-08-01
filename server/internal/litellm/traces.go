@@ -51,14 +51,30 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 		return err
 	}
 
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	contentTypes := r.Header.Values("Content-Type")
+	if len(contentTypes) > 1 {
+		return oops.E(oops.CodeBadRequest, nil, "Content-Type must be provided exactly once")
+	}
+	contentType := ""
+	if len(contentTypes) == 1 {
+		contentType = contentTypes[0]
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return oops.E(oops.CodeUnsupportedMedia, err, "unsupported OTLP content type")
 	}
 	if mediaType != "application/json" && mediaType != "application/x-protobuf" && mediaType != "application/protobuf" {
 		return oops.E(oops.CodeUnsupportedMedia, nil, "unsupported OTLP content type")
 	}
-	contentEncoding, err := validateTraceContentEncoding(r.Header.Get("Content-Encoding"))
+	contentEncodings := r.Header.Values("Content-Encoding")
+	if len(contentEncodings) > 1 {
+		return oops.E(oops.CodeBadRequest, nil, "Content-Encoding must not be repeated")
+	}
+	contentEncoding := ""
+	if len(contentEncodings) == 1 {
+		contentEncoding = contentEncodings[0]
+	}
+	contentEncoding, err = validateTraceContentEncoding(contentEncoding)
 	if err != nil {
 		return oops.E(oops.CodeUnsupportedMedia, err, "unsupported OTLP content encoding")
 	}
@@ -202,6 +218,8 @@ func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequ
 	if len(params) == 0 {
 		return nil
 	}
-	s.traces.Enqueue(ctx, params)
+	if !s.traces.Enqueue(ctx, params) {
+		return oops.E(oops.CodeUnavailable, nil, "LiteLLM OTLP trace processor is temporarily unavailable")
+	}
 	return nil
 }

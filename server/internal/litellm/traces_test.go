@@ -173,6 +173,7 @@ func TestTraceHTTPValidatesMediaEncodingAndBodyLimits(t *testing.T) {
 	valid := []byte(`{"resourceSpans":[]}`)
 
 	require.Equal(t, http.StatusBadRequest, serveTraceRequest(t, mux, []byte("{"), "application/json", "", "valid-key", "project-test").Code)
+	require.Equal(t, http.StatusUnsupportedMediaType, serveTraceRequest(t, mux, valid, "", "", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusUnsupportedMediaType, serveTraceRequest(t, mux, valid, "text/plain", "", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusUnsupportedMediaType, serveTraceRequest(t, mux, valid, "application/json", "br", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusRequestEntityTooLarge, serveTraceRequest(t, mux, bytes.Repeat([]byte("x"), maxTraceBodyBytes+1), "application/json", "", "valid-key", "project-test").Code)
@@ -189,6 +190,30 @@ func TestTraceHTTPValidatesMediaEncodingAndBodyLimits(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	mux.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusAccepted, recorder.Code)
+}
+
+func TestTraceHTTPRejectsRepeatedContentHeaders(t *testing.T) {
+	t.Parallel()
+
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	service, _ := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	mux := mountedTraceMux(service)
+	for _, header := range []string{"Content-Type", "Content-Encoding"} {
+		reader := &trackingReader{}
+		req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", reader)
+		req.Header.Set(constants.APIKeyHeader, "valid-key")
+		req.Header.Set(constants.ProjectHeader, "project-test")
+		if header == "Content-Encoding" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.Header.Add(header, "application/json")
+		req.Header.Add(header, "gzip")
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, req)
+		require.Equal(t, http.StatusBadRequest, recorder.Code, header)
+		require.Zero(t, reader.reads, header)
+	}
 }
 
 func TestTraceHTTPRejectsEncodingBeforeReadingBody(t *testing.T) {
@@ -282,6 +307,47 @@ func TestTraceHTTPRejectsNestedAnyValueWithMultipleFields(t *testing.T) {
 	body := []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"attributes":[{"key":"unknown","value":{"arrayValue":{"values":[{"stringValue":"one","intValue":"2"}]}}}]}]}]}]}`)
 	response := serveTraceRequest(t, mountedTraceMux(service), body, "application/json", "", "valid-key", "project-test")
 	require.Equal(t, http.StatusBadRequest, response.Code)
+}
+
+func TestTraceHTTPAcceptsEmptyAnyValues(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(t.Context())) })
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	jobs := make(chan []telemetry.LogParams, 2)
+	service, processor := newTraceTestService(t, authorizer, meterProvider, func(_ context.Context, params []telemetry.LogParams) error {
+		jobs <- params
+		return nil
+	})
+	mux := mountedTraceMux(service)
+	jsonBody := []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"attributes":[{"key":"gen_ai.request.model","value":{}},{"key":"unknown.attribute","value":{}}]}]}]}]}`)
+	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, jsonBody, "application/json", "", "valid-key", "project-test").Code)
+	require.EqualValues(t, 1, metricCounterValue(t, reader, "litellm.otel.attributes.truncated"))
+
+	allowed := protowire.AppendTag(nil, 1, protowire.BytesType)
+	allowed = protowire.AppendString(allowed, "gen_ai.request.model")
+	allowed = appendProtobufMessages(allowed, 2, nil, 1)
+	unknown := protowire.AppendTag(nil, 1, protowire.BytesType)
+	unknown = protowire.AppendString(unknown, "unknown.attribute")
+	unknown = appendProtobufMessages(unknown, 2, nil, 1)
+	span := appendProtobufMessages(nil, 9, allowed, 1)
+	span = appendProtobufMessages(span, 9, unknown, 1)
+	scope := appendProtobufMessages(nil, 2, span, 1)
+	resource := appendProtobufMessages(nil, 2, scope, 1)
+	protobufBody := appendProtobufMessages(nil, 1, resource, 1)
+	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, protobufBody, "application/x-protobuf", "", "valid-key", "project-test").Code)
+	require.EqualValues(t, 2, metricCounterValue(t, reader, "litellm.otel.attributes.truncated"))
+
+	require.NoError(t, processor.Shutdown(t.Context()))
+	for range 2 {
+		params := <-jobs
+		require.Len(t, params, 1)
+		require.NotContains(t, params[0].Attributes, attr.GenAIRequestModelKey)
+		require.NotContains(t, params[0].Attributes, "unknown.attribute")
+	}
 }
 
 func TestTraceHTTPAcceptsJSONAndProtobufPlainAndGzip(t *testing.T) {
@@ -417,7 +483,7 @@ func TestTraceLogParamsUsesObservedTimeForMissingOrOverflowingStartTime(t *testi
 	require.NoError(t, processor.Shutdown(t.Context()))
 }
 
-func TestTraceProcessorQueueSaturationDropsWithoutBlocking(t *testing.T) {
+func TestTraceHTTPQueueSaturationReturnsUnavailable(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, 4, traceProcessorWorkers)
 	require.Equal(t, 16, traceProcessorQueueSize)
@@ -471,7 +537,7 @@ func TestTraceProcessorQueueSaturationDropsWithoutBlocking(t *testing.T) {
 		traces: processor,
 	}
 	response := serveTraceRequest(t, mountedTraceMux(service), []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"0123456789abcdef","name":"queue test"}]}]}]}`), "application/json", "", "valid-key", "project-test")
-	require.Equal(t, http.StatusAccepted, response.Code)
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
 	require.EqualValues(t, 1, metricCounterValue(t, reader, "litellm.otel.spans.dropped"))
 
 	close(release)
@@ -519,6 +585,32 @@ func TestTraceProcessorRecordsPersistenceFailuresBySpanCount(t *testing.T) {
 	require.EqualValues(t, 3, metricCounterValue(t, reader, "litellm.otel.spans.persistence_failed"))
 }
 
+func TestTraceProcessorRecoversPersistencePanic(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(t.Context())) })
+	calls := 0
+	persisted := make(chan struct{}, 1)
+	processor := newTraceProcessor(testenv.NewLogger(t), meterProvider, func(context.Context, []telemetry.LogParams) error {
+		calls++
+		if calls == 1 {
+			panic("persistence panic")
+		}
+		persisted <- struct{}{}
+		return nil
+	}, 1, 2)
+	processor.Start(t.Context())
+
+	require.True(t, processor.Enqueue(t.Context(), make([]telemetry.LogParams, 3)))
+	require.True(t, processor.Enqueue(t.Context(), make([]telemetry.LogParams, 1)))
+	require.NoError(t, processor.Shutdown(t.Context()))
+	require.Equal(t, 2, calls)
+	require.Len(t, persisted, 1)
+	require.EqualValues(t, 3, metricCounterValueForReason(t, reader, "litellm.otel.spans.persistence_failed", "log_bulk_panic"))
+}
+
 func metricCounterValue(t *testing.T, reader *sdkmetric.ManualReader, name string) int64 {
 	t.Helper()
 	result, found := metricCounterValueIfPresent(t, reader, name)
@@ -551,6 +643,31 @@ func metricCounterValueIfPresent(t *testing.T, reader *sdkmetric.ManualReader, n
 		}
 	}
 	return 0, false
+}
+
+func metricCounterValueForReason(t *testing.T, reader *sdkmetric.ManualReader, name, reason string) int64 {
+	t.Helper()
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &metrics))
+	for _, scope := range metrics.ScopeMetrics {
+		for _, candidate := range scope.Metrics {
+			if candidate.Name != name {
+				continue
+			}
+			sum, ok := candidate.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			var result int64
+			for _, point := range sum.DataPoints {
+				value, ok := point.Attributes.Value(attr.ReasonKey)
+				if ok && value.AsString() == reason {
+					result += point.Value
+				}
+			}
+			return result
+		}
+	}
+	require.Fail(t, "metric not found", name)
+	return 0
 }
 
 func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {

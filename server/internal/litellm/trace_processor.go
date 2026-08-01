@@ -155,6 +155,15 @@ func (p *TraceProcessor) run(ctx context.Context) {
 }
 
 func (p *TraceProcessor) process(ctx context.Context, job traceJob) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			p.persistenceFailed.Add(ctx, int64(len(job.spans)), metric.WithAttributes(attr.Reason("log_bulk_panic")))
+			p.logger.ErrorContext(ctx, "persist LiteLLM OTLP trace export callback panicked",
+				attr.SlogEvent("litellm_otel_log_bulk_panic"),
+				attr.SlogError(fmt.Errorf("telemetry persistence callback panic: %v", recovered)),
+			)
+		}
+	}()
 	if err := p.logBulk(ctx, job.spans); err != nil {
 		p.persistenceFailed.Add(ctx, int64(len(job.spans)), metric.WithAttributes(attr.Reason("log_bulk_error")))
 		p.logger.WarnContext(ctx, "persist LiteLLM OTLP trace export", attr.SlogError(err))
