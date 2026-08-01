@@ -50,6 +50,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
@@ -143,6 +144,10 @@ export default function PluginDetail(): JSX.Element | null {
     useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
+  const [serverSearch, setServerSearch] = useState("");
+  // The component stays mounted when only :pluginId changes, so a stale search
+  // would filter the new plugin's server list.
+  useEffect(() => setServerSearch(""), [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
   // Polled so the publish-freshness badges/banner pick up the Temporal
@@ -446,13 +451,24 @@ export default function PluginDetail(): JSX.Element | null {
   const marketplaceDefaultName =
     marketplaceSettings?.marketplaceName ?? marketplaceSettings?.defaultName;
 
+  // Client-side search over the server section, matching on the displayed name.
+  const normalizedServerSearch = serverSearch.trim().toLowerCase();
+  const filteredServers = normalizedServerSearch
+    ? servers.filter((s) =>
+        s.displayName.toLowerCase().includes(normalizedServerSearch),
+      )
+    : servers;
+
+  // Distinguish "nothing added yet" from "no search matches".
   let serversContent: JSX.Element;
   if (servers.length === 0) {
     serversContent = <SectionEmptyState title="No servers added yet" />;
+  } else if (filteredServers.length === 0) {
+    serversContent = <SectionEmptyState title="No servers match your search" />;
   } else {
     serversContent = (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        {servers.map((server) => (
+        {filteredServers.map((server) => (
           <PluginServerCard
             key={server.id}
             server={server}
@@ -590,16 +606,26 @@ export default function PluginDetail(): JSX.Element | null {
                   plugin gets these servers.
                 </SettingsSection.Description>
               </SettingsSection.Header>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsAddServerOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Server</Button.Text>
-              </Button>
+              <div className="flex items-center gap-2">
+                {servers.length > 0 && (
+                  <SearchBar
+                    value={serverSearch}
+                    onChange={setServerSearch}
+                    placeholder="Search servers"
+                    className="h-9 w-56"
+                  />
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsAddServerOpen(true)}
+                >
+                  <Button.LeftIcon>
+                    <Icon name="plus" className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add Server</Button.Text>
+                </Button>
+              </div>
             </div>
             {serversContent}
           </SettingsSection>
@@ -614,7 +640,6 @@ export default function PluginDetail(): JSX.Element | null {
             >
               <PluginSkillsSection
                 pluginId={pluginId!}
-                searchQuery=""
                 viewMode="grid"
                 onMutated={(message) => offerPublish(message)}
               />

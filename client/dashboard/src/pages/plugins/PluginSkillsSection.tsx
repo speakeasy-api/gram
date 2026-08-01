@@ -4,6 +4,7 @@ import { Button as UiButton } from "@/components/ui/Button";
 import { DotCard } from "@/components/ui/DotCard";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
@@ -39,13 +40,10 @@ import { SectionEmptyState } from "./SectionEmptyState";
  */
 export function PluginSkillsSection({
   pluginId,
-  searchQuery,
   viewMode,
   onMutated,
 }: {
   pluginId: string;
-  /** Page-level search query; narrows the listed skill distributions. */
-  searchQuery: string;
   /** Page-level entry layout shared with the server section. */
   viewMode: ViewMode;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
@@ -54,6 +52,7 @@ export function PluginSkillsSection({
   const project = useProject();
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const distributionsQuery = useSkillDistributionsInfinite(
     { pluginId, limit: 50 },
@@ -75,7 +74,7 @@ export function PluginSkillsSection({
 
   // Case-insensitive match on the card's visible labels: the skill display
   // name and its mono slug-style name.
-  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedSearch = search.trim().toLowerCase();
   const filteredDistributions = useMemo(() => {
     if (!normalizedSearch) return distributions;
     return distributions.filter(
@@ -204,23 +203,33 @@ export function PluginSkillsSection({
             reach everyone who installs it.
           </SettingsSection.Description>
         </SettingsSection.Header>
-        <RequireScope
-          scope="skill:write"
-          resourceId={project.id}
-          level="component"
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!isMembershipLoaded}
-            onClick={() => setIsAddSkillOpen(true)}
+        <div className="flex items-center gap-2">
+          {distributions.length > 0 && (
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search skills"
+              className="h-9 w-56"
+            />
+          )}
+          <RequireScope
+            scope="skill:write"
+            resourceId={project.id}
+            level="component"
           >
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Skill</Button.Text>
-          </Button>
-        </RequireScope>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!isMembershipLoaded}
+              onClick={() => setIsAddSkillOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Skill</Button.Text>
+            </Button>
+          </RequireScope>
+        </div>
       </div>
       {listContent}
 
