@@ -22,10 +22,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
-	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -119,6 +118,18 @@ func gzipBody(t *testing.T, body []byte) []byte {
 	return compressed.Bytes()
 }
 
+func repeatedJSONObjects(count int) string {
+	return strings.TrimSuffix(strings.Repeat("{},", count), ",")
+}
+
+func appendProtobufMessages(data []byte, field protowire.Number, message []byte, count int) []byte {
+	for range count {
+		data = protowire.AppendTag(data, field, protowire.BytesType)
+		data = protowire.AppendBytes(data, message)
+	}
+	return data
+}
+
 func TestTraceHTTPAuthenticatesBeforeReadingBody(t *testing.T) {
 	t.Parallel()
 
@@ -166,6 +177,9 @@ func TestTraceHTTPValidatesMediaEncodingAndBodyLimits(t *testing.T) {
 	require.Equal(t, http.StatusUnsupportedMediaType, serveTraceRequest(t, mux, valid, "application/json", "br", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusRequestEntityTooLarge, serveTraceRequest(t, mux, bytes.Repeat([]byte("x"), maxTraceBodyBytes+1), "application/json", "", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusRequestEntityTooLarge, serveTraceRequest(t, mux, gzipBody(t, bytes.Repeat([]byte(" "), maxTraceBodyBytes+1)), "application/json", "gzip", "valid-key", "project-test").Code)
+	malformedProtobuf := []byte{0x0a, 0x80}
+	require.Error(t, preflightOTLPProtobuf(malformedProtobuf))
+	require.Equal(t, http.StatusBadRequest, serveTraceRequest(t, mux, malformedProtobuf, "application/x-protobuf", "", "valid-key", "project-test").Code)
 
 	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", bytes.NewReader(valid))
 	req.ContentLength = maxTraceBodyBytes + 100
@@ -204,7 +218,7 @@ func (r *trackingReader) Read([]byte) (int, error) {
 	return 0, errors.New("body must not be read")
 }
 
-func TestTraceHTTPRejectsExportOverSpanLimit(t *testing.T) {
+func TestTraceHTTPRejectsJSONCollectionsOverLimit(t *testing.T) {
 	t.Parallel()
 
 	authCtx := testAuthContext()
@@ -213,17 +227,50 @@ func TestTraceHTTPRejectsExportOverSpanLimit(t *testing.T) {
 		require.Fail(t, "oversized export must not reach LogBulk")
 		return nil
 	})
-	var body strings.Builder
-	body.WriteString(`{"resourceSpans":[{"scopeSpans":[{"spans":[`)
-	for index := range maxOTLPSpansPerExport + 1 {
-		if index > 0 {
-			body.WriteByte(',')
-		}
-		body.WriteString(`{}`)
+	mux := mountedTraceMux(service)
+	tests := []struct {
+		name   string
+		body   []byte
+		status int
+	}{
+		{name: "resource groups", body: []byte(`{"resourceSpans":[` + repeatedJSONObjects(maxOTLPResourceGroups+1) + `]}`), status: http.StatusBadRequest},
+		{name: "scope groups", body: []byte(`{"resourceSpans":[{"scopeSpans":[` + repeatedJSONObjects(maxOTLPScopeGroups+1) + `]}]}`), status: http.StatusBadRequest},
+		{name: "spans", body: []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[` + repeatedJSONObjects(maxOTLPSpansPerExport+1) + `]}]}]}`), status: http.StatusRequestEntityTooLarge},
+		{name: "case-insensitive spans", body: []byte(`{"ResourceSpans":[{"ScopeSpans":[{"Spans":[` + repeatedJSONObjects(maxOTLPSpansPerExport+1) + `]}]}]}`), status: http.StatusRequestEntityTooLarge},
 	}
-	body.WriteString(`]}]}]}`)
-	response := serveTraceRequest(t, mountedTraceMux(service), []byte(body.String()), "application/json", "", "valid-key", "project-test")
-	require.Equal(t, http.StatusRequestEntityTooLarge, response.Code)
+	for _, test := range tests {
+		require.Error(t, preflightOTLPJSON(test.body), test.name)
+		response := serveTraceRequest(t, mux, test.body, "application/json", "", "valid-key", "project-test")
+		require.Equal(t, test.status, response.Code, test.name)
+	}
+}
+
+func TestTraceHTTPRejectsProtobufCollectionsOverLimit(t *testing.T) {
+	t.Parallel()
+
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	service, _ := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
+		require.Fail(t, "oversized export must not reach LogBulk")
+		return nil
+	})
+	mux := mountedTraceMux(service)
+	scopeGroups := appendProtobufMessages(nil, 2, nil, maxOTLPScopeGroups+1)
+	spans := appendProtobufMessages(nil, 2, nil, maxOTLPSpansPerExport+1)
+	tests := []struct {
+		name   string
+		body   []byte
+		status int
+	}{
+		{name: "resource groups", body: appendProtobufMessages(nil, 1, nil, maxOTLPResourceGroups+1), status: http.StatusBadRequest},
+		{name: "scope groups", body: appendProtobufMessages(nil, 1, scopeGroups, 1), status: http.StatusBadRequest},
+		{name: "spans", body: appendProtobufMessages(nil, 1, appendProtobufMessages(nil, 2, spans, 1), 1), status: http.StatusRequestEntityTooLarge},
+	}
+	for _, test := range tests {
+		require.Error(t, preflightOTLPProtobuf(test.body), test.name)
+		response := serveTraceRequest(t, mux, test.body, "application/x-protobuf", "", "valid-key", "project-test")
+		require.Equal(t, test.status, response.Code, test.name)
+	}
 }
 
 func TestTraceHTTPRejectsNestedAnyValueWithMultipleFields(t *testing.T) {
@@ -288,37 +335,59 @@ func TestTraceHTTPAcceptsEmptyExportWithoutEnqueue(t *testing.T) {
 	require.Zero(t, metricCounterValueOrZero(t, reader, "litellm.otel.spans.accepted"))
 }
 
-func TestOTLPStructureLimitsAllowBoundary(t *testing.T) {
+func TestTraceHTTPAcceptsCollectionLimitBoundaries(t *testing.T) {
 	t.Parallel()
 
-	request := &otlpExportRequest{ResourceSpans: make([]otlpResourceSpans, maxOTLPResourceGroups)}
-	request.ResourceSpans[0].ScopeSpans = make([]otlpScopeSpans, maxOTLPScopeGroups)
-	require.NoError(t, request.validateStructure())
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	service, _ := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	mux := mountedTraceMux(service)
 
-	protobufRequest := &collectortracev1.ExportTraceServiceRequest{ResourceSpans: make([]*tracev1.ResourceSpans, maxOTLPResourceGroups)}
-	protobufRequest.ResourceSpans[0] = &tracev1.ResourceSpans{Resource: nil, ScopeSpans: make([]*tracev1.ScopeSpans, maxOTLPScopeGroups), SchemaUrl: ""}
-	require.NoError(t, validateProtoOTLPStructure(protobufRequest))
-}
-
-func TestOTLPJSONRejectsExcessEmptyResourceGroups(t *testing.T) {
-	t.Parallel()
-
-	groups := make([]string, maxOTLPResourceGroups+1)
-	for index := range groups {
-		groups[index] = `{}`
+	jsonScopes := make([]string, maxOTLPScopeGroups)
+	for index := range jsonScopes {
+		jsonScopes[index] = `{}`
 	}
-	request, err := decodeOTLPJSON([]byte(`{"resourceSpans":[` + strings.Join(groups, ",") + `]}`))
-	require.Error(t, err)
-	require.Nil(t, request)
+	jsonScopes[0] = `{"spans":[` + repeatedJSONObjects(maxOTLPSpansPerExport) + `]}`
+	jsonResources := make([]string, maxOTLPResourceGroups)
+	for index := range jsonResources {
+		jsonResources[index] = `{}`
+	}
+	jsonResources[0] = `{"scopeSpans":[` + strings.Join(jsonScopes, ",") + `]}`
+	jsonBody := []byte(`{"resourceSpans":[` + strings.Join(jsonResources, ",") + `]}`)
+	require.NoError(t, preflightOTLPJSON(jsonBody))
+	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, jsonBody, "application/json", "", "valid-key", "project-test").Code)
+
+	protobufSpans := appendProtobufMessages(nil, 2, nil, maxOTLPSpansPerExport)
+	protobufResource := appendProtobufMessages(nil, 2, protobufSpans, 1)
+	protobufResource = appendProtobufMessages(protobufResource, 2, nil, maxOTLPScopeGroups-1)
+	protobufBody := appendProtobufMessages(nil, 1, protobufResource, 1)
+	protobufBody = appendProtobufMessages(protobufBody, 1, nil, maxOTLPResourceGroups-1)
+	require.NoError(t, preflightOTLPProtobuf(protobufBody))
+	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, protobufBody, "application/x-protobuf", "", "valid-key", "project-test").Code)
 }
 
-func TestOTLPProtobufRejectsExcessEmptyScopeGroups(t *testing.T) {
+func TestTraceHTTPAcceptsProtobufUnknownFields(t *testing.T) {
 	t.Parallel()
 
-	request := &collectortracev1.ExportTraceServiceRequest{ResourceSpans: []*tracev1.ResourceSpans{{
-		Resource: nil, ScopeSpans: make([]*tracev1.ScopeSpans, maxOTLPScopeGroups+1), SchemaUrl: "",
-	}}}
-	require.Error(t, validateProtoOTLPStructure(request))
+	unknown := protowire.AppendTag(nil, 100, protowire.VarintType)
+	unknown = protowire.AppendVarint(unknown, 1)
+	unknown = protowire.AppendTag(unknown, 101, protowire.Fixed32Type)
+	unknown = protowire.AppendFixed32(unknown, 2)
+	unknown = protowire.AppendTag(unknown, 102, protowire.Fixed64Type)
+	unknown = protowire.AppendFixed64(unknown, 3)
+	unknown = protowire.AppendTag(unknown, 103, protowire.BytesType)
+	unknown = protowire.AppendBytes(unknown, []byte("unknown"))
+	unknown = protowire.AppendTag(unknown, 104, protowire.StartGroupType)
+	unknown = protowire.AppendTag(unknown, 105, protowire.VarintType)
+	unknown = protowire.AppendVarint(unknown, 4)
+	unknown = protowire.AppendTag(unknown, 104, protowire.EndGroupType)
+	require.NoError(t, preflightOTLPProtobuf(unknown))
+
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	service, _ := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	response := serveTraceRequest(t, mountedTraceMux(service), unknown, "application/x-protobuf", "", "valid-key", "project-test")
+	require.Equal(t, http.StatusAccepted, response.Code)
 }
 
 func TestTraceLogParamsUsesObservedTimeForMissingOrOverflowingStartTime(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -241,6 +242,9 @@ func parseJSONInteger(data []byte, bitSize int) (int64, error) {
 }
 
 func decodeOTLPJSON(body []byte) (*otlpExportRequest, error) {
+	if err := preflightOTLPJSON(body); err != nil {
+		return nil, err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	var request otlpExportRequest
 	if err := decoder.Decode(&request); err != nil {
@@ -258,30 +262,265 @@ func decodeOTLPJSON(body []byte) (*otlpExportRequest, error) {
 	return &request, nil
 }
 
+type otlpCollectionCounts struct {
+	resourceGroups int
+	scopeGroups    int
+	spans          int
+}
+
+func (c otlpCollectionCounts) validate() error {
+	return validateOTLPCollectionCounts(c.resourceGroups, c.scopeGroups, c.spans)
+}
+
+type otlpJSONCollection uint8
+
+const (
+	otlpJSONResources otlpJSONCollection = iota
+	otlpJSONScopes
+	otlpJSONSpans
+)
+
+func preflightOTLPJSON(body []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	token, err := decoder.Token()
+	if err != nil {
+		return fmt.Errorf("preflight OTLP JSON: %w", err)
+	}
+	if token != json.Delim('{') {
+		return fmt.Errorf("preflight OTLP JSON: expected top-level object")
+	}
+
+	counts := otlpCollectionCounts{resourceGroups: 0, scopeGroups: 0, spans: 0}
+	if err := preflightJSONObject(decoder, &counts, "resourceSpans", otlpJSONResources); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("preflight OTLP JSON: multiple values")
+		}
+		return fmt.Errorf("preflight trailing OTLP JSON: %w", err)
+	}
+	return nil
+}
+
+func preflightJSONObject(decoder *json.Decoder, counts *otlpCollectionCounts, collectionKey string, collection otlpJSONCollection) error {
+	for decoder.More() {
+		key, err := nextJSONKey(decoder)
+		if err != nil {
+			return err
+		}
+		value, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP JSON field %q: %w", key, err)
+		}
+		if strings.EqualFold(key, collectionKey) && value == json.Delim('[') {
+			if err := preflightJSONArray(decoder, counts, collection); err != nil {
+				return err
+			}
+		} else if err := skipJSONValue(decoder, value); err != nil {
+			return err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return fmt.Errorf("preflight OTLP JSON object: %w", err)
+	}
+	return nil
+}
+
+func preflightJSONArray(decoder *json.Decoder, counts *otlpCollectionCounts, collection otlpJSONCollection) error {
+	for decoder.More() {
+		switch collection {
+		case otlpJSONResources:
+			counts.resourceGroups++
+		case otlpJSONScopes:
+			counts.scopeGroups++
+		case otlpJSONSpans:
+			counts.spans++
+		}
+		if err := counts.validate(); err != nil {
+			return err
+		}
+		value, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP JSON collection: %w", err)
+		}
+		if value == json.Delim('{') && collection != otlpJSONSpans {
+			if collection == otlpJSONResources {
+				if err := preflightJSONObject(decoder, counts, "scopeSpans", otlpJSONScopes); err != nil {
+					return err
+				}
+			} else if err := preflightJSONObject(decoder, counts, "spans", otlpJSONSpans); err != nil {
+				return err
+			}
+		} else if err := skipJSONValue(decoder, value); err != nil {
+			return err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return fmt.Errorf("preflight OTLP JSON collection: %w", err)
+	}
+	return nil
+}
+
+func nextJSONKey(decoder *json.Decoder) (string, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return "", fmt.Errorf("preflight OTLP JSON key: %w", err)
+	}
+	key, ok := token.(string)
+	if !ok {
+		return "", fmt.Errorf("preflight OTLP JSON: expected object key")
+	}
+	return key, nil
+}
+
+func skipJSONValue(decoder *json.Decoder, token json.Token) error {
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	if delimiter != '{' && delimiter != '[' {
+		return fmt.Errorf("preflight OTLP JSON: unexpected delimiter %q", delimiter)
+	}
+	depth := 1
+	for depth > 0 {
+		token, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("preflight OTLP JSON value: %w", err)
+		}
+		delimiter, ok := token.(json.Delim)
+		if !ok {
+			continue
+		}
+		switch delimiter {
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+		}
+	}
+	return nil
+}
+
+func preflightOTLPProtobuf(data []byte) error {
+	counts := otlpCollectionCounts{resourceGroups: 0, scopeGroups: 0, spans: 0}
+	for len(data) > 0 {
+		number, wireType, value, rest, err := consumeProtobufField(data)
+		if err != nil {
+			return fmt.Errorf("preflight OTLP protobuf export: %w", err)
+		}
+		data = rest
+		if number != 1 || wireType != protowire.BytesType {
+			continue
+		}
+		counts.resourceGroups++
+		if err := counts.validate(); err != nil {
+			return err
+		}
+		if err := preflightProtobufResourceSpans(value, &counts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func preflightProtobufResourceSpans(data []byte, counts *otlpCollectionCounts) error {
+	for len(data) > 0 {
+		number, wireType, value, rest, err := consumeProtobufField(data)
+		if err != nil {
+			return fmt.Errorf("preflight OTLP protobuf resource group: %w", err)
+		}
+		data = rest
+		if number != 2 || wireType != protowire.BytesType {
+			continue
+		}
+		counts.scopeGroups++
+		if err := counts.validate(); err != nil {
+			return err
+		}
+		if err := preflightProtobufScopeSpans(value, counts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func preflightProtobufScopeSpans(data []byte, counts *otlpCollectionCounts) error {
+	for len(data) > 0 {
+		number, wireType, _, rest, err := consumeProtobufField(data)
+		if err != nil {
+			return fmt.Errorf("preflight OTLP protobuf scope group: %w", err)
+		}
+		data = rest
+		if number != 2 || wireType != protowire.BytesType {
+			continue
+		}
+		counts.spans++
+		if err := counts.validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func consumeProtobufField(data []byte) (protowire.Number, protowire.Type, []byte, []byte, error) {
+	number, wireType, tagLength := protowire.ConsumeTag(data)
+	if tagLength < 0 {
+		return 0, 0, nil, nil, fmt.Errorf("consume protobuf tag: %w", protowire.ParseError(tagLength))
+	}
+	data = data[tagLength:]
+	if wireType == protowire.BytesType {
+		value, fieldLength := protowire.ConsumeBytes(data)
+		if fieldLength < 0 {
+			return 0, 0, nil, nil, fmt.Errorf("consume protobuf bytes: %w", protowire.ParseError(fieldLength))
+		}
+		return number, wireType, value, data[fieldLength:], nil
+	}
+	fieldLength := protowire.ConsumeFieldValue(number, wireType, data)
+	if fieldLength < 0 {
+		return 0, 0, nil, nil, fmt.Errorf("consume protobuf field value: %w", protowire.ParseError(fieldLength))
+	}
+	return number, wireType, nil, data[fieldLength:], nil
+}
+
 func (r *otlpExportRequest) validateStructure() error {
 	scopeGroups := 0
+	spans := 0
 	for _, resourceSpans := range r.ResourceSpans {
 		scopeGroups += len(resourceSpans.ScopeSpans)
+		for _, scopeSpans := range resourceSpans.ScopeSpans {
+			spans += len(scopeSpans.Spans)
+		}
 	}
-	return validateOTLPGroupCounts(len(r.ResourceSpans), scopeGroups)
+	return validateOTLPCollectionCounts(len(r.ResourceSpans), scopeGroups, spans)
 }
 
 func validateProtoOTLPStructure(request *collectortracev1.ExportTraceServiceRequest) error {
 	scopeGroups := 0
+	spans := 0
 	for _, resourceSpans := range request.ResourceSpans {
 		if resourceSpans != nil {
 			scopeGroups += len(resourceSpans.ScopeSpans)
+			for _, scopeSpans := range resourceSpans.ScopeSpans {
+				if scopeSpans != nil {
+					spans += len(scopeSpans.Spans)
+				}
+			}
 		}
 	}
-	return validateOTLPGroupCounts(len(request.ResourceSpans), scopeGroups)
+	return validateOTLPCollectionCounts(len(request.ResourceSpans), scopeGroups, spans)
 }
 
-func validateOTLPGroupCounts(resourceGroups, scopeGroups int) error {
+func validateOTLPCollectionCounts(resourceGroups, scopeGroups, spans int) error {
 	if resourceGroups > maxOTLPResourceGroups {
 		return fmt.Errorf("OTLP trace export contains too many resource groups: %d", resourceGroups)
 	}
 	if scopeGroups > maxOTLPScopeGroups {
 		return fmt.Errorf("OTLP trace export contains too many scope groups: %d", scopeGroups)
+	}
+	if spans > maxOTLPSpansPerExport {
+		return fmt.Errorf("%w: %d", errTooManyOTLPSpans, spans)
 	}
 	return nil
 }
