@@ -158,6 +158,8 @@ const shutdownDrainTimeout = 60 * time.Second
 
 func newStartCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
+	dbClose := func() {}
+	clickhouseShutdown := noopShutdown
 
 	flags := []cli.Flag{
 		&cli.StringFlag{
@@ -502,23 +504,13 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			dbShutdownRegistered := false
-			defer func() {
-				if !dbShutdownRegistered {
-					db.Close()
-				}
-			}()
+			dbClose = db.Close
 
-			chDB, clickhouseShutdown, err := newClickhouseClient(ctx, logger, c)
+			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
-			clickhouseShutdownRegistered := false
-			defer func() {
-				if !clickhouseShutdownRegistered {
-					_ = o11y.LogDefer(ctx, logger, func() error { return clickhouseShutdown(ctx) })
-				}
-			}()
+			clickhouseShutdown = shutdown
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -724,20 +716,14 @@ func newStartCommand() *cli.Command {
 				if telemetryLoggerShutdown != nil {
 					errs = append(errs, telemetryLoggerShutdown(ctx))
 				}
-				if clickhouseShutdown != nil {
-					errs = append(errs, clickhouseShutdown(ctx))
-				}
 				if publishersShutdown != nil {
 					errs = append(errs, publishersShutdown(ctx))
 				}
 				if pubsubShutdown != nil {
 					errs = append(errs, pubsubShutdown(ctx))
 				}
-				db.Close()
 				return errors.Join(errs...)
 			})
-			dbShutdownRegistered = true
-			clickhouseShutdownRegistered = true
 
 			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
 			pubsubShutdown = shutdown
@@ -1565,6 +1551,9 @@ func newStartCommand() *cli.Command {
 			return loadConfigFromFile(ctx, flags)
 		},
 		After: func(c *cli.Context) error {
+			ctx := context.WithoutCancel(c.Context)
+			defer dbClose()
+			defer o11y.LogDefer(ctx, PullLogger(c.Context), func() error { return clickhouseShutdown(ctx) })
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}

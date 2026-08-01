@@ -130,6 +130,54 @@ func appendProtobufMessages(data []byte, field protowire.Number, message []byte,
 	return data
 }
 
+func jsonArrayAnyValue(count int) string {
+	return `{"arrayValue":{"values":[` + repeatedJSONObjects(count) + `]}}`
+}
+
+func nestedJSONAnyValue(depth int) string {
+	value := `{}`
+	for level := 1; level < depth; level++ {
+		if level%2 == 0 {
+			value = `{"kvlistValue":{"values":[{"value":` + value + `}]}}`
+		} else {
+			value = `{"arrayValue":{"values":[` + value + `]}}`
+		}
+	}
+	return value
+}
+
+func jsonTraceWithAnyValues(resourceValue, scopeValue, spanValue string) []byte {
+	return []byte(`{"resourceSpans":[{"resource":{"attributes":[{"key":"unknown.resource","value":` + resourceValue + `}]},"scopeSpans":[{"scope":{"attributes":[{"key":"unknown.scope","value":` + scopeValue + `}]},"spans":[{"attributes":[{"key":"unknown.span","value":` + spanValue + `}]}]}]}]}`)
+}
+
+func protobufArrayAnyValue(count int) []byte {
+	return appendProtobufMessages(nil, 5, appendProtobufMessages(nil, 1, nil, count), 1)
+}
+
+func nestedProtobufAnyValue(depth int) []byte {
+	var value []byte
+	for level := 1; level < depth; level++ {
+		if level%2 == 0 {
+			keyValue := appendProtobufMessages(nil, 2, value, 1)
+			value = appendProtobufMessages(nil, 6, appendProtobufMessages(nil, 1, keyValue, 1), 1)
+		} else {
+			value = appendProtobufMessages(nil, 5, appendProtobufMessages(nil, 1, value, 1), 1)
+		}
+	}
+	return value
+}
+
+func protobufTraceWithAnyValues(resourceValue, scopeValue, spanValue []byte) []byte {
+	resource := appendProtobufMessages(nil, 1, appendProtobufMessages(nil, 2, resourceValue, 1), 1)
+	scope := appendProtobufMessages(nil, 3, appendProtobufMessages(nil, 2, scopeValue, 1), 1)
+	span := appendProtobufMessages(nil, 9, appendProtobufMessages(nil, 2, spanValue, 1), 1)
+	scopeSpans := appendProtobufMessages(nil, 1, scope, 1)
+	scopeSpans = appendProtobufMessages(scopeSpans, 2, span, 1)
+	resourceSpans := appendProtobufMessages(nil, 1, resource, 1)
+	resourceSpans = appendProtobufMessages(resourceSpans, 2, scopeSpans, 1)
+	return appendProtobufMessages(nil, 1, resourceSpans, 1)
+}
+
 func TestTraceHTTPAuthenticatesBeforeReadingBody(t *testing.T) {
 	t.Parallel()
 
@@ -296,6 +344,80 @@ func TestTraceHTTPRejectsProtobufCollectionsOverLimit(t *testing.T) {
 		response := serveTraceRequest(t, mux, test.body, "application/x-protobuf", "", "valid-key", "project-test")
 		require.Equal(t, test.status, response.Code, test.name)
 	}
+}
+
+func TestTraceHTTPEnforcesJSONNestedAnyValueLimits(t *testing.T) {
+	t.Parallel()
+
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	var persisted atomic.Int64
+	service, processor := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
+		persisted.Add(1)
+		return nil
+	})
+	mux := mountedTraceMux(service)
+	resourceNodes := maxOTLPNestedValueNodes / 3
+	scopeNodes := maxOTLPNestedValueNodes / 3
+	spanNodes := maxOTLPNestedValueNodes - resourceNodes - scopeNodes
+	tests := []struct {
+		name   string
+		body   []byte
+		status int
+	}{
+		{name: "node boundary", body: jsonTraceWithAnyValues(jsonArrayAnyValue(resourceNodes), jsonArrayAnyValue(scopeNodes), jsonArrayAnyValue(spanNodes)), status: http.StatusAccepted},
+		{name: "node excess", body: jsonTraceWithAnyValues(jsonArrayAnyValue(resourceNodes), jsonArrayAnyValue(scopeNodes), jsonArrayAnyValue(spanNodes+1)), status: http.StatusBadRequest},
+		{name: "depth boundary", body: jsonTraceWithAnyValues(`{}`, `{}`, nestedJSONAnyValue(maxOTLPAnyValueDepth)), status: http.StatusAccepted},
+		{name: "depth excess", body: jsonTraceWithAnyValues(`{}`, `{}`, nestedJSONAnyValue(maxOTLPAnyValueDepth+1)), status: http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		if test.status == http.StatusAccepted {
+			require.NoError(t, preflightOTLPJSON(test.body), test.name)
+		} else {
+			require.Error(t, preflightOTLPJSON(test.body), test.name)
+		}
+		response := serveTraceRequest(t, mux, test.body, "application/json", "", "valid-key", "project-test")
+		require.Equal(t, test.status, response.Code, test.name)
+	}
+	require.NoError(t, processor.Shutdown(t.Context()))
+	require.EqualValues(t, 2, persisted.Load())
+}
+
+func TestTraceHTTPEnforcesProtobufNestedAnyValueLimits(t *testing.T) {
+	t.Parallel()
+
+	authCtx := testAuthContext()
+	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
+	var persisted atomic.Int64
+	service, processor := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
+		persisted.Add(1)
+		return nil
+	})
+	mux := mountedTraceMux(service)
+	resourceNodes := maxOTLPNestedValueNodes / 3
+	scopeNodes := maxOTLPNestedValueNodes / 3
+	spanNodes := maxOTLPNestedValueNodes - resourceNodes - scopeNodes
+	tests := []struct {
+		name   string
+		body   []byte
+		status int
+	}{
+		{name: "node boundary", body: protobufTraceWithAnyValues(protobufArrayAnyValue(resourceNodes), protobufArrayAnyValue(scopeNodes), protobufArrayAnyValue(spanNodes)), status: http.StatusAccepted},
+		{name: "node excess", body: protobufTraceWithAnyValues(protobufArrayAnyValue(resourceNodes), protobufArrayAnyValue(scopeNodes), protobufArrayAnyValue(spanNodes+1)), status: http.StatusBadRequest},
+		{name: "depth boundary", body: protobufTraceWithAnyValues(nil, nil, nestedProtobufAnyValue(maxOTLPAnyValueDepth)), status: http.StatusAccepted},
+		{name: "depth excess", body: protobufTraceWithAnyValues(nil, nil, nestedProtobufAnyValue(maxOTLPAnyValueDepth+1)), status: http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		if test.status == http.StatusAccepted {
+			require.NoError(t, preflightOTLPProtobuf(test.body), test.name)
+		} else {
+			require.Error(t, preflightOTLPProtobuf(test.body), test.name)
+		}
+		response := serveTraceRequest(t, mux, test.body, "application/x-protobuf", "", "valid-key", "project-test")
+		require.Equal(t, test.status, response.Code, test.name)
+	}
+	require.NoError(t, processor.Shutdown(t.Context()))
+	require.EqualValues(t, 2, persisted.Load())
 }
 
 func TestTraceHTTPRejectsNestedAnyValueWithMultipleFields(t *testing.T) {
@@ -508,6 +630,14 @@ func TestTraceHTTPQueueSaturationReturnsUnavailable(t *testing.T) {
 		return nil
 	}, traceProcessorWorkers, traceProcessorQueueSize)
 	processor.Start(t.Context())
+	var releaseOnce sync.Once
+	releaseWorkers := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(func() {
+		releaseWorkers()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		require.NoError(t, processor.Shutdown(ctx))
+	})
 
 	span := []telemetry.LogParams{{
 		Timestamp: time.Unix(0, 1),
@@ -540,7 +670,7 @@ func TestTraceHTTPQueueSaturationReturnsUnavailable(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, response.Code)
 	require.EqualValues(t, 1, metricCounterValue(t, reader, "litellm.otel.spans.dropped"))
 
-	close(release)
+	releaseWorkers()
 	require.NoError(t, processor.Shutdown(t.Context()))
 	mu.Lock()
 	require.Equal(t, traceProcessorWorkers+traceProcessorQueueSize, calls)
