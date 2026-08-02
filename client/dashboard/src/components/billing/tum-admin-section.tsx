@@ -12,7 +12,9 @@ import {
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { cyclesFromTum } from "./billing-cycles";
+import { ContractPriceEstimator } from "./contract-price-estimator";
 
 // Platform-admin form for the org's contracted tokens-under-management
 // terms: monthly allowance, alert email, and the billing cycle anchor day.
@@ -89,6 +91,16 @@ function ContractForm({
     parsedAnchorDay < 1 ||
     parsedAnchorDay > 31;
 
+  const cycles = useMemo(() => cyclesFromTum(initial), [initial]);
+
+  // The estimator prices whatever baseline the admin is currently proposing,
+  // so a limit typed into the field above moves the contract value before
+  // it's saved — that's the sizing workflow. A half-typed invalid entry falls
+  // back to the saved terms instead of blanking the estimate out mid-keystroke.
+  const estimatorBaseline = limitInvalid
+    ? (initial.monthlyTokenLimit ?? null)
+    : (parsedLimit ?? null);
+
   const handleSave = () => {
     mutation.mutate({
       request: {
@@ -102,59 +114,70 @@ function ContractForm({
   };
 
   return (
-    <Stack gap={4} className="max-w-md">
-      <Stack gap={2}>
-        <Label htmlFor="tum-monthly-limit">
-          Allowed TUM per month (tokens)
-        </Label>
-        <Input
-          id="tum-monthly-limit"
-          type="number"
-          min={0}
-          placeholder="Leave empty for no contracted limit"
-          value={tokenLimit}
-          onChange={setTokenLimit}
+    <Stack gap={8}>
+      <Stack gap={4} className="max-w-md">
+        <Stack gap={2}>
+          <Label htmlFor="tum-monthly-limit">
+            Allowed TUM per month (tokens)
+          </Label>
+          <Input
+            id="tum-monthly-limit"
+            type="number"
+            min={0}
+            placeholder="Leave empty for no contracted limit"
+            value={tokenLimit}
+            onChange={setTokenLimit}
+          />
+        </Stack>
+        <Stack gap={2}>
+          <Label htmlFor="tum-alert-email">Alert email</Label>
+          <Input
+            id="tum-alert-email"
+            type="email"
+            placeholder="billing-alerts@customer.com"
+            value={alertEmail}
+            onChange={setAlertEmail}
+          />
+        </Stack>
+        <Stack gap={2}>
+          <Label htmlFor="tum-anchor-day">
+            Billing cycle anchor day (1–31)
+          </Label>
+          <Input
+            id="tum-anchor-day"
+            type="number"
+            min={1}
+            max={31}
+            value={anchorDay}
+            onChange={setAnchorDay}
+          />
+        </Stack>
+        <Stack direction="horizontal" align="center" gap={3}>
+          <Button
+            onClick={handleSave}
+            disabled={mutation.isPending || limitInvalid || anchorDayInvalid}
+          >
+            {mutation.isPending ? "SAVING..." : "SAVE CONTRACT TERMS"}
+          </Button>
+          {mutation.isSuccess && !mutation.isPending && (
+            <Text muted small>
+              Saved.
+            </Text>
+          )}
+          {mutation.isError && (
+            <Text small className="text-destructive">
+              Failed to save contract terms.
+            </Text>
+          )}
+        </Stack>
+      </Stack>
+
+      <div className="border-border border-t pt-6">
+        <ContractPriceEstimator
+          baselineTokens={estimatorBaseline}
+          cycles={cycles}
         />
-      </Stack>
-      <Stack gap={2}>
-        <Label htmlFor="tum-alert-email">Alert email</Label>
-        <Input
-          id="tum-alert-email"
-          type="email"
-          placeholder="billing-alerts@customer.com"
-          value={alertEmail}
-          onChange={setAlertEmail}
-        />
-      </Stack>
-      <Stack gap={2}>
-        <Label htmlFor="tum-anchor-day">Billing cycle anchor day (1–31)</Label>
-        <Input
-          id="tum-anchor-day"
-          type="number"
-          min={1}
-          max={31}
-          value={anchorDay}
-          onChange={setAnchorDay}
-        />
-      </Stack>
-      <Stack direction="horizontal" align="center" gap={3}>
-        <Button
-          onClick={handleSave}
-          disabled={mutation.isPending || limitInvalid || anchorDayInvalid}
-        >
-          {mutation.isPending ? "SAVING..." : "SAVE CONTRACT TERMS"}
-        </Button>
-        {mutation.isSuccess && !mutation.isPending && (
-          <Text muted small>
-            Saved.
-          </Text>
-        )}
-        {mutation.isError && (
-          <Text small className="text-destructive">
-            Failed to save contract terms.
-          </Text>
-        )}
-      </Stack>
+      </div>
     </Stack>
   );
 }
