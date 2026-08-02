@@ -12,9 +12,19 @@ import {
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
 import { cyclesFromTum } from "./billing-cycles";
-import { ContractPriceEstimator } from "./contract-price-estimator";
+
+// Split out of the initial bundle. The contract terms are what an admin comes
+// to this section to change; the estimate is a read-only aside built entirely
+// from data already on the page. Loading it lazily keeps the pricing module
+// and its arithmetic off the billing page's first paint — the form is
+// interactive before the estimator's chunk has even been fetched.
+const ContractPriceEstimator = React.lazy(() =>
+  import("./contract-price-estimator").then((mod) => ({
+    default: mod.ContractPriceEstimator,
+  })),
+);
 
 // Platform-admin form for the org's contracted tokens-under-management
 // terms: monthly allowance, alert email, and the billing cycle anchor day.
@@ -173,10 +183,23 @@ function ContractForm({
       </Stack>
 
       <div className="border-border border-t pt-6">
-        <ContractPriceEstimator
-          baselineTokens={estimatorBaseline}
-          cycles={cycles}
-        />
+        <Suspense
+          fallback={
+            <div className="space-y-4">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-9 w-full max-w-lg" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <Skeleton className="h-44 w-full" />
+                <Skeleton className="h-44 w-full" />
+              </div>
+            </div>
+          }
+        >
+          <ContractPriceEstimator
+            baselineTokens={estimatorBaseline}
+            cycles={cycles}
+          />
+        </Suspense>
       </div>
     </Stack>
   );
