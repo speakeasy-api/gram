@@ -17,6 +17,7 @@ import (
 	"github.com/tidwall/gjson"
 	"go.temporal.io/sdk/testsuite"
 	goahttp "goa.design/goa/v3/http"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -203,6 +204,69 @@ func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
 	require.Equal(t, traceID, gjson.Get(logs[0].Attributes, "gen_ai.conversation.id").String())
 	require.EqualValues(t, 18, gjson.Get(logs[0].Attributes, "gen_ai.usage.total_tokens").Int())
 	require.Equal(t, "urn:telemetry:provider_otel:span:chat", gjson.Get(logs[0].Attributes, "gram.event.urn").String())
+}
+
+func TestOTLPMetricsPersistOnlyOperationalRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.auth = fixedAuthorizer{authCtx: authCtx}
+
+	now := time.Now().UTC()
+	request := liteLLMMetricFixture()
+	for _, resourceMetrics := range request.ResourceMetrics {
+		for _, scopeMetrics := range resourceMetrics.ScopeMetrics {
+			for _, metric := range scopeMetrics.Metrics {
+				for _, point := range metric.GetHistogram().DataPoints {
+					point.StartTimeUnixNano = uint64(now.Add(-time.Minute).UnixNano())
+					point.TimeUnixNano = uint64(now.UnixNano())
+				}
+			}
+		}
+	}
+	body, err := protojson.Marshal(request)
+	require.NoError(t, err)
+	for range 2 {
+		response := serveMetricRequest(t, mountedTraceMux(ti.service), body, "application/json", "", "fixture-key", "fixture-project")
+		require.Equal(t, http.StatusAccepted, response.Code)
+	}
+	require.NoError(t, ti.service.metrics.Shutdown(t.Context()))
+
+	query := telemetryrepo.New(ti.chConn)
+	var logs []telemetryrepo.TelemetryLog
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+		var queryErr error
+		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     now.Add(-time.Second).UnixNano(),
+			TimeEnd:       now.Add(time.Second).UnixNano(),
+			GramURNs:      []string{litellmOTLPMetricsURN},
+			SortOrder:     "asc",
+			Cursor:        "",
+			Limit:         100,
+		})
+		assert.NoError(collect, queryErr)
+		assert.Len(collect, logs, 2*len(litellmMetricNames))
+	}, 10*time.Second, 50*time.Millisecond)
+
+	for _, log := range logs {
+		require.Equal(t, litellmMetricEventURN, gjson.Get(log.Attributes, "gram.event.urn").String())
+		require.NotEmpty(t, gjson.Get(log.Attributes, "gram.metric.name").String())
+		require.False(t, gjson.Get(log.Attributes, "gen_ai.usage.input_tokens").Exists())
+		require.False(t, gjson.Get(log.Attributes, "gen_ai.usage.output_tokens").Exists())
+		require.False(t, gjson.Get(log.Attributes, "gen_ai.usage.cost").Exists())
+	}
+	var aggregateRows uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, "SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id = ?", authCtx.ProjectID.String()).Scan(&aggregateRows))
+	require.Zero(t, aggregateRows)
+	var sessionRows uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, "SELECT count() FROM chat_session_summaries WHERE gram_project_id = ?", authCtx.ProjectID.String()).Scan(&sessionRows))
+	require.Zero(t, sessionRows)
+	require.Zero(t, ti.observer.count(*authCtx.ProjectID))
 }
 
 func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {

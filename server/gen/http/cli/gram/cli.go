@@ -119,7 +119,7 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
-		"litellm (ingest|traces)",
+		"litellm (ingest|traces|metrics)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
@@ -1168,6 +1168,11 @@ func ParseEndpoint(
 		litellmTracesBodyFlag             = litellmTracesFlags.String("body", "REQUIRED", "")
 		litellmTracesApikeyTokenFlag      = litellmTracesFlags.String("apikey-token", "", "")
 		litellmTracesProjectSlugInputFlag = litellmTracesFlags.String("project-slug-input", "", "")
+
+		litellmMetricsFlags                = flag.NewFlagSet("metrics", flag.ExitOnError)
+		litellmMetricsBodyFlag             = litellmMetricsFlags.String("body", "REQUIRED", "")
+		litellmMetricsApikeyTokenFlag      = litellmMetricsFlags.String("apikey-token", "", "")
+		litellmMetricsProjectSlugInputFlag = litellmMetricsFlags.String("project-slug-input", "", "")
 
 		mcpEndpointsFlags = flag.NewFlagSet("mcp-endpoints", flag.ContinueOnError)
 
@@ -3320,6 +3325,7 @@ func ParseEndpoint(
 	litellmFlags.Usage = litellmUsage
 	litellmIngestFlags.Usage = litellmIngestUsage
 	litellmTracesFlags.Usage = litellmTracesUsage
+	litellmMetricsFlags.Usage = litellmMetricsUsage
 
 	mcpEndpointsFlags.Usage = mcpEndpointsUsage
 	mcpEndpointsCreateMcpEndpointFlags.Usage = mcpEndpointsCreateMcpEndpointUsage
@@ -4547,6 +4553,9 @@ func ParseEndpoint(
 
 			case "traces":
 				epf = litellmTracesFlags
+
+			case "metrics":
+				epf = litellmMetricsFlags
 
 			}
 
@@ -6370,6 +6379,9 @@ func ParseEndpoint(
 			case "traces":
 				endpoint = c.Traces()
 				data, err = litellmc.BuildTracesPayload(*litellmTracesBodyFlag, *litellmTracesApikeyTokenFlag, *litellmTracesProjectSlugInputFlag)
+			case "metrics":
+				endpoint = c.Metrics()
+				data, err = litellmc.BuildMetricsPayload(*litellmMetricsBodyFlag, *litellmMetricsApikeyTokenFlag, *litellmMetricsProjectSlugInputFlag)
 			}
 		case "mcp-endpoints":
 			c := mcpendpointsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11951,6 +11963,7 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    ingest: Evaluates and captures a LiteLLM model request before it reaches the provider.`)
 	fmt.Fprintln(os.Stderr, `    traces: Accepts LiteLLM OTLP trace exports. Send the standard OTLP JSON ExportTraceServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
+	fmt.Fprintln(os.Stderr, `    metrics: Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s litellm COMMAND --help\n", os.Args[0])
@@ -11997,6 +12010,28 @@ func litellmTracesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm traces --body '{\n      \"resourceSpans\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmMetricsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm metrics", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm metrics --body '{\n      \"resourceMetrics\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpEndpointsUsage displays the usage of the mcp-endpoints command and its

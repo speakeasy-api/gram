@@ -49,6 +49,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	agentChatID := uuid.NewString()
 	failedChatID := uuid.NewString()
 	liteLLMChatID := uuid.NewString()
+	metricChatID := uuid.NewString()
 
 	// A Claude session: two turns (different models) plus a successful tool
 	// call.
@@ -95,6 +96,12 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 		gramURN: "litellm:otel:traces", eventURN: "urn:telemetry:provider_otel:span:text_completion",
 		requestModel: "completion-group", responseModel: "", email: "lee@example.com",
 		inputTokens: 40, outputTokens: 10, cost: 0.5,
+	})
+	insertLiteLLMSpan(t, ctx, liteLLMSpanParams{
+		projectID: projectID, timestamp: now.Add(-3 * time.Minute), chatID: metricChatID, callID: uuid.NewString(),
+		gramURN: "litellm:otel:metrics", eventURN: "urn:telemetry:provider_otel:metric:litellm",
+		requestModel: "must-not-form-a-session", responseModel: "openai/gpt-4o", email: "metric@example.com",
+		inputTokens: 999, outputTokens: 999, cost: 999,
 	})
 	// A Cursor usage session.
 	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
@@ -153,6 +160,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	for _, s := range summaryRes.Sessions {
 		byChat[s.GramChatID] = s
 	}
+	require.NotContains(t, byChat, metricChatID)
 	claude := byChat[claudeChatID]
 	require.NotNil(t, claude)
 	require.Equal(t, int64(2), claude.MessageCount)

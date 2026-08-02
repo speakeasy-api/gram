@@ -24,11 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-const maxTraceBodyBytes = 4 * 1024 * 1024
+const maxOTLPBodyBytes = 4 * 1024 * 1024
 
 var (
-	errTraceBodyTooLarge = errors.New("LiteLLM OTLP trace body exceeds 4 MiB")
-	errTooManyOTLPSpans  = errors.New("OTLP trace export contains too many spans")
+	errOTLPBodyTooLarge = errors.New("LiteLLM OTLP body exceeds 4 MiB")
+	errTooManyOTLPSpans = errors.New("OTLP trace export contains too many spans")
 )
 
 func (s *Service) traceHTTPHandler() http.Handler {
@@ -46,45 +46,14 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 		span.End()
 	}()
 
-	ctx, err := s.authenticateTraceRequest(ctx, r.Header)
+	ctx, err := s.authenticateOTLPRequest(ctx, r.Header)
 	if err != nil {
 		return err
 	}
 
-	contentTypes := r.Header.Values("Content-Type")
-	if len(contentTypes) > 1 {
-		return oops.E(oops.CodeBadRequest, nil, "Content-Type must be provided exactly once")
-	}
-	contentType := ""
-	if len(contentTypes) == 1 {
-		contentType = contentTypes[0]
-	}
-	mediaType, _, err := mime.ParseMediaType(contentType)
+	mediaType, body, err := readOTLPRequest(r)
 	if err != nil {
-		return oops.E(oops.CodeUnsupportedMedia, err, "unsupported OTLP content type")
-	}
-	if mediaType != "application/json" && mediaType != "application/x-protobuf" && mediaType != "application/protobuf" {
-		return oops.E(oops.CodeUnsupportedMedia, nil, "unsupported OTLP content type")
-	}
-	contentEncodings := r.Header.Values("Content-Encoding")
-	if len(contentEncodings) > 1 {
-		return oops.E(oops.CodeBadRequest, nil, "Content-Encoding must not be repeated")
-	}
-	contentEncoding := ""
-	if len(contentEncodings) == 1 {
-		contentEncoding = contentEncodings[0]
-	}
-	contentEncoding, err = validateTraceContentEncoding(contentEncoding)
-	if err != nil {
-		return oops.E(oops.CodeUnsupportedMedia, err, "unsupported OTLP content encoding")
-	}
-
-	body, err := readTraceBody(r, contentEncoding)
-	if err != nil {
-		if errors.Is(err, errTraceBodyTooLarge) {
-			return oops.E(oops.CodeRequestTooLarge, err, "OTLP trace request is too large")
-		}
-		return oops.E(oops.CodeBadRequest, err, "invalid OTLP trace request body")
+		return err
 	}
 
 	var request *otlpExportRequest
@@ -116,7 +85,46 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 	return nil
 }
 
-func (s *Service) authenticateTraceRequest(ctx context.Context, header http.Header) (context.Context, error) {
+func readOTLPRequest(r *http.Request) (string, []byte, error) {
+	contentTypes := r.Header.Values("Content-Type")
+	if len(contentTypes) > 1 {
+		return "", nil, oops.E(oops.CodeBadRequest, nil, "Content-Type must be provided exactly once")
+	}
+	contentType := ""
+	if len(contentTypes) == 1 {
+		contentType = contentTypes[0]
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return "", nil, oops.E(oops.CodeUnsupportedMedia, err, "unsupported OTLP content type")
+	}
+	if mediaType != "application/json" && mediaType != "application/x-protobuf" && mediaType != "application/protobuf" {
+		return "", nil, oops.E(oops.CodeUnsupportedMedia, nil, "unsupported OTLP content type")
+	}
+	contentEncodings := r.Header.Values("Content-Encoding")
+	if len(contentEncodings) > 1 {
+		return "", nil, oops.E(oops.CodeBadRequest, nil, "Content-Encoding must not be repeated")
+	}
+	contentEncoding := ""
+	if len(contentEncodings) == 1 {
+		contentEncoding = contentEncodings[0]
+	}
+	contentEncoding, err = validateOTLPContentEncoding(contentEncoding)
+	if err != nil {
+		return "", nil, oops.E(oops.CodeUnsupportedMedia, err, "unsupported OTLP content encoding")
+	}
+
+	body, err := readOTLPBody(r, contentEncoding)
+	if err != nil {
+		if errors.Is(err, errOTLPBodyTooLarge) {
+			return "", nil, oops.E(oops.CodeRequestTooLarge, err, "OTLP request is too large")
+		}
+		return "", nil, oops.E(oops.CodeBadRequest, err, "invalid OTLP request body")
+	}
+	return mediaType, body, nil
+}
+
+func (s *Service) authenticateOTLPRequest(ctx context.Context, header http.Header) (context.Context, error) {
 	keyScheme := &security.APIKeyScheme{
 		Name:           constants.KeySecurityScheme,
 		Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
@@ -143,19 +151,19 @@ func credentialHeader(value string) string {
 	return value
 }
 
-var errUnsupportedTraceEncoding = errors.New("unsupported LiteLLM OTLP content encoding")
+var errUnsupportedOTLPEncoding = errors.New("unsupported LiteLLM OTLP content encoding")
 
-func validateTraceContentEncoding(value string) (string, error) {
+func validateOTLPContentEncoding(value string) (string, error) {
 	switch encoding := strings.ToLower(strings.TrimSpace(value)); encoding {
 	case "", "gzip":
 		return encoding, nil
 	default:
-		return "", errUnsupportedTraceEncoding
+		return "", errUnsupportedOTLPEncoding
 	}
 }
 
-func readTraceBody(r *http.Request, contentEncoding string) ([]byte, error) {
-	compressed, err := readLimitedTraceBody(r.Body)
+func readOTLPBody(r *http.Request, contentEncoding string) ([]byte, error) {
+	compressed, err := readLimitedOTLPBody(r.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -167,24 +175,24 @@ func readTraceBody(r *http.Request, contentEncoding string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("open gzip OTLP body: %w", err)
 		}
-		decompressed, readErr := readLimitedTraceBody(reader)
+		decompressed, readErr := readLimitedOTLPBody(reader)
 		o11y.NoLogDefer(reader.Close)
 		if readErr != nil {
 			return nil, readErr
 		}
 		return decompressed, nil
 	default:
-		return nil, errUnsupportedTraceEncoding
+		return nil, errUnsupportedOTLPEncoding
 	}
 }
 
-func readLimitedTraceBody(reader io.Reader) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(reader, maxTraceBodyBytes+1))
+func readLimitedOTLPBody(reader io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, maxOTLPBodyBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read OTLP trace body: %w", err)
+		return nil, fmt.Errorf("read OTLP body: %w", err)
 	}
-	if len(body) > maxTraceBodyBytes {
-		return nil, errTraceBodyTooLarge
+	if len(body) > maxOTLPBodyBytes {
+		return nil, errOTLPBodyTooLarge
 	}
 	return body, nil
 }

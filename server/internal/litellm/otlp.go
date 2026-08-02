@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -112,6 +113,14 @@ var spanAttributeAllowlist = map[string]otlpAttributeSpec{
 	"litellm.metadata.user_api_key_org_id":      {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
 	"litellm.metadata.user_api_key_alias":       {target: attr.LiteLLMAPIKeyAliasKey, kind: otlpAttributeString},
 	"litellm.metadata.user_api_key_end_user_id": {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
+}
+
+var metricAttributeAllowlist = map[string]otlpAttributeSpec{
+	"gen_ai.operation.name": {target: attr.GenAIOperationNameKey, kind: otlpAttributeString},
+	"gen_ai.system":         {target: attr.GenAISystemKey, kind: otlpAttributeString},
+	"gen_ai.request.model":  {target: attr.GenAIRequestModelKey, kind: otlpAttributeString},
+	"gen_ai.framework":      {target: attribute.Key("gen_ai.framework"), kind: otlpAttributeString},
+	"gen_ai.token.type":     {target: attribute.Key("gen_ai.token.type"), kind: otlpAttributeString},
 }
 
 var resourceAttributeAllowlist = map[string]otlpAttributeSpec{
@@ -1146,24 +1155,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 					spanAttributes[attr.OTelSpanDurationMSKey] = float64(end-start) / float64(time.Millisecond)
 				}
 				if scopeSpans.Scope != nil {
-					if scopeSpans.Scope.Name != "" {
-						name, changed, keep := boundOTLPAttributeValue(scopeSpans.Scope.Name)
-						if keep {
-							spanAttributes[attr.OTelScopeNameKey] = name
-						}
-						if changed {
-							s.traces.recordTruncatedAttributes(ctx, 1)
-						}
-					}
-					if scopeSpans.Scope.Version != "" {
-						version, changed, keep := boundOTLPAttributeValue(scopeSpans.Scope.Version)
-						if keep {
-							spanAttributes[attr.OTelScopeVersionKey] = version
-						}
-						if changed {
-							s.traces.recordTruncatedAttributes(ctx, 1)
-						}
-					}
+					maps.Copy(spanAttributes, s.otlpScopeAttributes(ctx, scopeSpans.Scope.Name, scopeSpans.Scope.Version))
 				}
 
 				deriveLiteLLMTotalTokens(spanAttributes)
@@ -1202,6 +1194,20 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 		}
 	}
 	return params
+}
+
+func (s *Service) otlpScopeAttributes(ctx context.Context, name, version string) map[attr.Key]any {
+	result := make(map[attr.Key]any, 2)
+	for key, value := range map[attr.Key]string{attr.OTelScopeNameKey: name, attr.OTelScopeVersionKey: version} {
+		bounded, changed, keep := boundOTLPAttributeValue(value)
+		if keep {
+			result[key] = bounded
+		}
+		if changed {
+			s.traces.recordTruncatedAttributes(ctx, 1)
+		}
+	}
+	return result
 }
 
 func (s *Service) sanitizeOTLPAttributes(ctx context.Context, values []otlpKeyValue, allowlist map[string]otlpAttributeSpec) map[attr.Key]any {

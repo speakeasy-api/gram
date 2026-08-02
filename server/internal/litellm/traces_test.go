@@ -68,19 +68,23 @@ func (a *traceTestAuthorizer) Authorize(ctx context.Context, value string, schem
 func newTraceTestService(t *testing.T, authorizer authorizer, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error) (*Service, *TraceProcessor) {
 	t.Helper()
 	processor := newTraceProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize)
+	metricProcessor := newMetricProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize)
 	processor.Start(t.Context())
+	metricProcessor.Start(t.Context())
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		require.NoError(t, processor.Shutdown(ctx))
+		require.NoError(t, metricProcessor.Shutdown(ctx))
 	})
 	return &Service{
-		tracer: testenv.NewTracerProvider(t).Tracer("test"),
-		logger: testenv.NewLogger(t),
-		auth:   authorizer,
-		hooks:  nil,
-		calls:  nil,
-		traces: processor,
+		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
+		logger:  testenv.NewLogger(t),
+		auth:    authorizer,
+		hooks:   nil,
+		calls:   nil,
+		traces:  processor,
+		metrics: metricProcessor,
 	}, processor
 }
 
@@ -227,7 +231,7 @@ func TestTraceHTTPAuthenticatesBeforeReadingBody(t *testing.T) {
 	malformed := serveTraceRequest(t, mux, []byte("{"), "application/json", "", "", "project-test")
 	require.Equal(t, http.StatusUnauthorized, malformed.Code)
 
-	oversized := serveTraceRequest(t, mux, bytes.Repeat([]byte("x"), maxTraceBodyBytes+1), "application/json", "", "", "project-test")
+	oversized := serveTraceRequest(t, mux, bytes.Repeat([]byte("x"), maxOTLPBodyBytes+1), "application/json", "", "", "project-test")
 	require.Equal(t, http.StatusUnauthorized, oversized.Code)
 
 	wrongKey := serveTraceRequest(t, mux, []byte("{"), "application/json", "", "wrong-key", "project-test")
@@ -262,14 +266,14 @@ func TestTraceHTTPValidatesMediaEncodingAndBodyLimits(t *testing.T) {
 	require.Equal(t, http.StatusUnsupportedMediaType, serveTraceRequest(t, mux, valid, "", "", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusUnsupportedMediaType, serveTraceRequest(t, mux, valid, "text/plain", "", "valid-key", "project-test").Code)
 	require.Equal(t, http.StatusUnsupportedMediaType, serveTraceRequest(t, mux, valid, "application/json", "br", "valid-key", "project-test").Code)
-	require.Equal(t, http.StatusRequestEntityTooLarge, serveTraceRequest(t, mux, bytes.Repeat([]byte("x"), maxTraceBodyBytes+1), "application/json", "", "valid-key", "project-test").Code)
-	require.Equal(t, http.StatusRequestEntityTooLarge, serveTraceRequest(t, mux, gzipBody(t, bytes.Repeat([]byte(" "), maxTraceBodyBytes+1)), "application/json", "gzip", "valid-key", "project-test").Code)
+	require.Equal(t, http.StatusRequestEntityTooLarge, serveTraceRequest(t, mux, bytes.Repeat([]byte("x"), maxOTLPBodyBytes+1), "application/json", "", "valid-key", "project-test").Code)
+	require.Equal(t, http.StatusRequestEntityTooLarge, serveTraceRequest(t, mux, gzipBody(t, bytes.Repeat([]byte(" "), maxOTLPBodyBytes+1)), "application/json", "gzip", "valid-key", "project-test").Code)
 	malformedProtobuf := []byte{0x0a, 0x80}
 	require.Error(t, preflightOTLPProtobuf(malformedProtobuf))
 	require.Equal(t, http.StatusBadRequest, serveTraceRequest(t, mux, malformedProtobuf, "application/x-protobuf", "", "valid-key", "project-test").Code)
 
 	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", bytes.NewReader(valid))
-	req.ContentLength = maxTraceBodyBytes + 100
+	req.ContentLength = maxOTLPBodyBytes + 100
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Gram-Key", "valid-key")
 	req.Header.Set("Gram-Project", "project-test")
@@ -776,12 +780,13 @@ func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 	authCtx := testAuthContext()
 	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
 	service := &Service{
-		tracer: testenv.NewTracerProvider(t).Tracer("test"),
-		logger: testenv.NewLogger(t),
-		auth:   authorizer,
-		hooks:  nil,
-		calls:  nil,
-		traces: processor,
+		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
+		logger:  testenv.NewLogger(t),
+		auth:    authorizer,
+		hooks:   nil,
+		calls:   nil,
+		traces:  processor,
+		metrics: nil,
 	}
 	response := serveTraceRequest(t, mountedTraceMux(service), []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"0123456789abcdef","name":"queue test"}]}]}]}`), "application/json", "", "valid-key", "project-test")
 	require.Equal(t, http.StatusAccepted, response.Code)

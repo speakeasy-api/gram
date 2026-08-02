@@ -42,25 +42,27 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	auth   authorizer
-	hooks  HookIngester
-	calls  *callcache.Cache
-	traces *TraceProcessor
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	auth    authorizer
+	hooks   HookIngester
+	calls   *callcache.Cache
+	traces  *TraceProcessor
+	metrics *MetricProcessor
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor) *Service {
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger: logger.With(attr.SlogComponent("litellm")),
-		auth:   auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:  hookIngester,
-		calls:  calls,
-		traces: traces,
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:  logger.With(attr.SlogComponent("litellm")),
+		auth:    auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:   hookIngester,
+		calls:   calls,
+		traces:  traces,
+		metrics: metrics,
 	}
 }
 
@@ -70,6 +72,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	server.Traces = service.traceHTTPHandler()
+	server.Metrics = service.metricHTTPHandler()
 	srv.Mount(mux, server)
 }
 

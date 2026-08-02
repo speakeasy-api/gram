@@ -122,9 +122,11 @@ func TestForwarderSendSuccessNoWarning(t *testing.T) {
 	require.NotContains(t, buf.String(), "otel forward", "successful forward should not emit a warning")
 }
 
-func TestMiddlewareDoesNotInterceptLiteLLMTraceIngest(t *testing.T) {
+func TestMiddlewareDoesNotInterceptLiteLLMIngest(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", http.NoBody)
-	require.False(t, shouldIntercept(req))
+	for _, path := range []string{"/rpc/litellm.otel/v1/traces", "/rpc/litellm.otel/v1/metrics"} {
+		req := httptest.NewRequest(http.MethodPost, path, http.NoBody)
+		require.False(t, shouldIntercept(req), path)
+	}
 }

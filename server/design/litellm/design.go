@@ -118,4 +118,35 @@ var _ = Service("litellm", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "ingestOTLPTraces")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
+
+	Method("metrics", func() {
+		Meta("openapi:generate", "false")
+		Description("Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.")
+		Error(string(oops.CodeRequestTooLarge), func() { Description(oops.CodeRequestTooLarge.UserMessage()) })
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("resourceMetrics", ArrayOf(Any), "Standard OTLP ResourceMetrics objects. OTLP integer fields use their canonical decimal-string JSON representation.")
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/litellm.otel/v1/metrics") //nolint:glint // LiteLLM uses the standard OTLP HTTP path suffix
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusAccepted)
+			Response(string(oops.CodeRequestTooLarge), StatusRequestEntityTooLarge, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "ingestLiteLLMOTLPMetrics")
+		Meta("openapi:extension:x-speakeasy-name-override", "ingestOTLPMetrics")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
 })
