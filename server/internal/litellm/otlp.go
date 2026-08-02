@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,7 +45,6 @@ const (
 	otlpAttributeBool
 	otlpAttributeInteger
 	otlpAttributeNumber
-	otlpAttributeStringArray
 )
 
 type otlpAttributeSpec struct {
@@ -53,49 +53,65 @@ type otlpAttributeSpec struct {
 }
 
 var spanAttributeAllowlist = map[string]otlpAttributeSpec{
-	"gen_ai.operation.name":                    {target: attr.GenAIOperationNameKey, kind: otlpAttributeString},
-	"gen_ai.provider.name":                     {target: attr.GenAIProviderNameKey, kind: otlpAttributeString},
-	"gen_ai.system":                            {target: attr.GenAISystemKey, kind: otlpAttributeString},
-	"gen_ai.request.model":                     {target: attr.GenAIRequestModelKey, kind: otlpAttributeString},
-	"gen_ai.response.model":                    {target: attr.GenAIResponseModelKey, kind: otlpAttributeString},
-	"gen_ai.response.id":                       {target: attr.GenAIResponseIDKey, kind: otlpAttributeString},
-	"gen_ai.response.finish_reasons":           {target: attr.GenAIResponseFinishReasonsKey, kind: otlpAttributeStringArray},
-	"gen_ai.conversation.id":                   {target: attr.GenAIConversationIDKey, kind: otlpAttributeString},
-	"gen_ai.usage.input_tokens":                {target: attr.GenAIUsageInputTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.output_tokens":               {target: attr.GenAIUsageOutputTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.total_tokens":                {target: attr.GenAIUsageTotalTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.prompt_tokens":               {target: attr.GenAIUsagePromptTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.completion_tokens":           {target: attr.GenAIUsageCompletionTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.cache_read.input_tokens":     {target: attr.GenAIUsageCacheReadInputTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.cache_creation.input_tokens": {target: attr.GenAIUsageCacheCreationInputTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.reasoning_tokens":            {target: attr.GenAIUsageReasoningTokensKey, kind: otlpAttributeInteger},
-	"gen_ai.usage.cost":                        {target: attr.GenAIUsageCostKey, kind: otlpAttributeNumber},
-	"gen_ai.request.is_streaming":              {target: attr.GenAIRequestIsStreamingKey, kind: otlpAttributeBool},
-	"gen_ai.request.streaming":                 {target: attr.GenAIRequestStreamingKey, kind: otlpAttributeBool},
-	"litellm.is_streaming":                     {target: attr.LiteLLMIsStreamingKey, kind: otlpAttributeBool},
-	"litellm.response.cost":                    {target: attr.LiteLLMResponseCostKey, kind: otlpAttributeNumber},
-	"litellm.call_id":                          {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
-	"litellm_call_id":                          {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
-	"litellm.trace_id":                         {target: attr.LiteLLMTraceIDKey, kind: otlpAttributeString},
-	"litellm_trace_id":                         {target: attr.LiteLLMTraceIDKey, kind: otlpAttributeString},
-	"litellm.user_id":                          {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
-	"user_api_key_user_id":                     {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
-	"metadata.user_api_key_user_id":            {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
-	"litellm.user_email":                       {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
-	"user_api_key_user_email":                  {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
-	"metadata.user_api_key_user_email":         {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
-	"litellm.team_id":                          {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
-	"user_api_key_team_id":                     {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
-	"metadata.user_api_key_team_id":            {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
-	"litellm.team_alias":                       {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
-	"user_api_key_team_alias":                  {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
-	"metadata.user_api_key_team_alias":         {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
-	"litellm.org_id":                           {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
-	"litellm.organization_id":                  {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
-	"user_api_key_org_id":                      {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
-	"metadata.user_api_key_org_id":             {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
-	"user_api_key_end_user_id":                 {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
-	"metadata.user_api_key_end_user_id":        {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
+	"gen_ai.operation.name":                     {target: attr.GenAIOperationNameKey, kind: otlpAttributeString},
+	"gen_ai.provider.name":                      {target: attr.GenAIProviderNameKey, kind: otlpAttributeString},
+	"gen_ai.system":                             {target: attr.GenAISystemKey, kind: otlpAttributeString},
+	"gen_ai.request.model":                      {target: attr.GenAIRequestModelKey, kind: otlpAttributeString},
+	"gen_ai.response.model":                     {target: attr.GenAIResponseModelKey, kind: otlpAttributeString},
+	"gen_ai.response.id":                        {target: attr.GenAIResponseIDKey, kind: otlpAttributeString},
+	"gen_ai.conversation.id":                    {target: attr.GenAIConversationIDKey, kind: otlpAttributeString},
+	"gen_ai.usage.input_tokens":                 {target: attr.GenAIUsageInputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.output_tokens":                {target: attr.GenAIUsageOutputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.total_tokens":                 {target: attr.GenAIUsageTotalTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.prompt_tokens":                {target: attr.GenAIUsagePromptTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.completion_tokens":            {target: attr.GenAIUsageCompletionTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.cache_read.input_tokens":      {target: attr.GenAIUsageCacheReadInputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.cache_creation.input_tokens":  {target: attr.GenAIUsageCacheCreationInputTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.reasoning_tokens":             {target: attr.GenAIUsageReasoningTokensKey, kind: otlpAttributeInteger},
+	"gen_ai.usage.cost":                         {target: attr.GenAIUsageCostKey, kind: otlpAttributeNumber},
+	"gen_ai.request.is_streaming":               {target: attr.GenAIRequestIsStreamingKey, kind: otlpAttributeBool},
+	"gen_ai.request.streaming":                  {target: attr.GenAIRequestIsStreamingKey, kind: otlpAttributeBool},
+	"litellm.is_streaming":                      {target: attr.GenAIRequestIsStreamingKey, kind: otlpAttributeBool},
+	"litellm.request.streaming":                 {target: attr.GenAIRequestIsStreamingKey, kind: otlpAttributeBool},
+	"llm.is_streaming":                          {target: attr.GenAIRequestIsStreamingKey, kind: otlpAttributeBool},
+	"litellm.response.cost":                     {target: attr.GenAIUsageCostKey, kind: otlpAttributeNumber},
+	"litellm.cost.total":                        {target: attr.GenAIUsageCostKey, kind: otlpAttributeNumber},
+	"litellm.cost.input":                        {target: attr.LiteLLMInputCostKey, kind: otlpAttributeNumber},
+	"litellm.cost.output":                       {target: attr.LiteLLMOutputCostKey, kind: otlpAttributeNumber},
+	"litellm.cost.cache_read":                   {target: attr.LiteLLMCacheReadCostKey, kind: otlpAttributeNumber},
+	"litellm.cost.cache_creation":               {target: attr.LiteLLMCacheWriteCostKey, kind: otlpAttributeNumber},
+	"litellm.provider.model":                    {target: attr.GenAIResponseModelKey, kind: otlpAttributeString},
+	"litellm.call_id":                           {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
+	"litellm_call_id":                           {target: attr.LiteLLMCallIDKey, kind: otlpAttributeString},
+	"litellm.trace_id":                          {target: attr.LiteLLMTraceIDKey, kind: otlpAttributeString},
+	"litellm_trace_id":                          {target: attr.LiteLLMTraceIDKey, kind: otlpAttributeString},
+	"litellm.user_id":                           {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
+	"user_api_key_user_id":                      {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_user_id":             {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
+	"litellm.user_email":                        {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
+	"user_api_key_user_email":                   {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
+	"metadata.user_api_key_user_email":          {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
+	"litellm.team_id":                           {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
+	"user_api_key_team_id":                      {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_team_id":             {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
+	"litellm.team_alias":                        {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
+	"user_api_key_team_alias":                   {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
+	"metadata.user_api_key_team_alias":          {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
+	"litellm.org_id":                            {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"litellm.organization_id":                   {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"user_api_key_org_id":                       {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_org_id":              {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"user_api_key_end_user_id":                  {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
+	"metadata.user_api_key_end_user_id":         {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
+	"litellm.team.id":                           {target: attr.LiteLLMTeamIDKey, kind: otlpAttributeString},
+	"litellm.team.alias":                        {target: attr.LiteLLMTeamAliasKey, kind: otlpAttributeString},
+	"litellm.api_key.hash":                      {target: attr.LiteLLMAPIKeyHashKey, kind: otlpAttributeString},
+	"litellm.end_user.id":                       {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
+	"litellm.metadata.user_api_key_user_id":     {target: attr.LiteLLMUserIDKey, kind: otlpAttributeString},
+	"litellm.metadata.user_api_key_user_email":  {target: attr.LiteLLMUserEmailKey, kind: otlpAttributeString},
+	"litellm.metadata.user_api_key_org_id":      {target: attr.LiteLLMOrganizationIDKey, kind: otlpAttributeString},
+	"litellm.metadata.user_api_key_alias":       {target: attr.LiteLLMAPIKeyAliasKey, kind: otlpAttributeString},
+	"litellm.metadata.user_api_key_end_user_id": {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
 }
 
 var resourceAttributeAllowlist = map[string]otlpAttributeSpec{
@@ -1150,9 +1166,22 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 					}
 				}
 
-				operation, _ := spanAttributes[attr.GenAIOperationNameKey].(string)
-				operation = lowCardinalityGenAIOperation(operation)
-				eventURN := urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderOTEL, urn.TelemetryEventKindSpan, operation).String()
+				deriveLiteLLMTotalTokens(spanAttributes)
+				operation := liteLLMModelOperation(spanAttributes, int32(span.Kind))
+				userInfo := telemetry.UserInfoByID("")
+				if operation != "unknown" {
+					callID, _ := spanAttributes[attr.LiteLLMCallIDKey].(string)
+					traceID, _ := spanAttributes[attr.LiteLLMTraceIDKey].(string)
+					if conversationID := conv.Default(traceID, callID); conversationID != "" {
+						spanAttributes[attr.GenAIConversationIDKey] = conversationID
+					}
+					if email, _ := spanAttributes[attr.LiteLLMUserEmailKey].(string); email != "" {
+						userInfo = telemetry.UserInfoByEmail(email)
+					}
+				} else {
+					stripLiteLLMUsageAttributes(spanAttributes)
+				}
+				eventURN := liteLLMEventURN(operation)
 				spanAttributes[attr.EventURNKey] = eventURN
 
 				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
@@ -1166,7 +1195,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 						FunctionID:     nil,
 						OrganizationID: organizationID,
 					},
-					UserInfo:   telemetry.UserInfoByID(""),
+					UserInfo:   userInfo,
 					Attributes: spanAttributes,
 				}, observed, resourceAttributes))
 			}
@@ -1241,17 +1270,6 @@ func validOTLPAttributeValue(value any, kind otlpAttributeValueKind) bool {
 		default:
 			return false
 		}
-	case otlpAttributeStringArray:
-		values, ok := value.([]any)
-		if !ok {
-			return false
-		}
-		for _, item := range values {
-			if _, ok := item.(string); !ok {
-				return false
-			}
-		}
-		return true
 	default:
 		return false
 	}
@@ -1284,6 +1302,71 @@ func lowCardinalityGenAIOperation(operation string) string {
 		return operation
 	default:
 		return "unknown"
+	}
+}
+
+func liteLLMModelOperation(attributes map[attr.Key]any, kind int32) string {
+	operation, _ := attributes[attr.GenAIOperationNameKey].(string)
+	operation = lowCardinalityGenAIOperation(operation)
+	if operation == "unknown" || tracev1.Span_SpanKind(kind) != tracev1.Span_SPAN_KIND_CLIENT {
+		return "unknown"
+	}
+	for _, key := range []attr.Key{
+		attr.GenAIRequestModelKey,
+		attr.GenAIResponseModelKey,
+		attr.LiteLLMCallIDKey,
+		attr.GenAIUsageInputTokensKey,
+		attr.GenAIUsageOutputTokensKey,
+		attr.GenAIUsageTotalTokensKey,
+		attr.GenAIUsageCostKey,
+	} {
+		if _, ok := attributes[key]; ok {
+			return operation
+		}
+	}
+	return "unknown"
+}
+
+func liteLLMEventURN(operation string) string {
+	return urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderOTEL, urn.TelemetryEventKindSpan, operation).String()
+}
+
+func deriveLiteLLMTotalTokens(attributes map[attr.Key]any) {
+	if _, exists := attributes[attr.GenAIUsageTotalTokensKey]; exists {
+		return
+	}
+	input, hasInput := attributes[attr.GenAIUsageInputTokensKey].(int64)
+	output, hasOutput := attributes[attr.GenAIUsageOutputTokensKey].(int64)
+	if (!hasInput && !hasOutput) || input > math.MaxInt64-output {
+		return
+	}
+	attributes[attr.GenAIUsageTotalTokensKey] = input + output
+}
+
+func stripLiteLLMUsageAttributes(attributes map[attr.Key]any) {
+	for _, key := range []attr.Key{
+		attr.GenAIProviderNameKey,
+		attr.GenAISystemKey,
+		attr.GenAIRequestModelKey,
+		attr.GenAIResponseModelKey,
+		attr.GenAIResponseIDKey,
+		attr.GenAIConversationIDKey,
+		attr.GenAIUsageInputTokensKey,
+		attr.GenAIUsageOutputTokensKey,
+		attr.GenAIUsageTotalTokensKey,
+		attr.GenAIUsagePromptTokensKey,
+		attr.GenAIUsageCompletionTokensKey,
+		attr.GenAIUsageCacheReadInputTokensKey,
+		attr.GenAIUsageCacheCreationInputTokensKey,
+		attr.GenAIUsageReasoningTokensKey,
+		attr.GenAIUsageCostKey,
+		attr.GenAIRequestIsStreamingKey,
+		attr.LiteLLMInputCostKey,
+		attr.LiteLLMOutputCostKey,
+		attr.LiteLLMCacheReadCostKey,
+		attr.LiteLLMCacheWriteCostKey,
+	} {
+		delete(attributes, key)
 	}
 }
 
