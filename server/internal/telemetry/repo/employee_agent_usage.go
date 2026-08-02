@@ -20,7 +20,7 @@ type SearchEmployeeAgentUsageParams struct {
 // accept:
 //
 //   - Scope is canonical observed agent usage only — Claude Code, Codex, Cursor,
-//     and Claude Chat — matching the costs/billing pages. Gram-hosted chat
+//     Claude Chat, and LiteLLM — matching the costs/billing pages. Gram-hosted chat
 //     completions and duplicate usage-metric rows are excluded.
 //   - Users are keyed by email. Identities that never carry an email in the
 //     window are absent here; surface them via ListEmaillessIdentities.

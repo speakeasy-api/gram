@@ -76,6 +76,13 @@ const (
 		"toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND " +
 		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
 		")"
+	// sessionLiteLLMUsageRowPredicate matches only normalized LiteLLM client
+	// model spans. Resource provenance plus the closed event-URN set excludes
+	// guardrail, infrastructure, and metric rows from usage aggregates.
+	sessionLiteLLMUsageRowPredicate = "(" +
+		"gram_urn = 'litellm:otel:traces' AND " +
+		"event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')" +
+		")"
 	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode completed
 	// tool-call hook rows (they have no OTEL stream). The hook.event guard excludes
 	// the PreToolUse companion row; provider names are not tool calls.
@@ -107,11 +114,11 @@ const (
 	// usage rows, and opencode assistant.responded rows. This is the sumIf guard
 	// for every token/cost measure, keeping session totals aligned with the
 	// aggregate.
-	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + ")"
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + ")"
 	// sessionSourceRowPredicate admits every row class the session list derives
 	// from, matching the aggregate MV's WHERE clause so the two views cover the
 	// same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 
 	// Token/cost measures are source-aware: Claude api_request rows carry usage
 	// on flat attributes (input_tokens, cost_usd, …), Codex response.completed
@@ -158,17 +165,21 @@ const (
 	sessionModelExpr = "multiIf(" +
 		sessionClaudeAPIRequestPredicate + " AND toString(attributes.model) != '', toString(attributes.model), " +
 		sessionClaudeAPIRequestPredicate + " AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model), " +
+		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model), " +
+		sessionLiteLLMUsageRowPredicate + ", toString(attributes.gen_ai.request.model), " +
 		"toString(attributes.gen_ai.response.model))"
 
 	// sessionMessageIDExpr identifies a distinct message/turn per row: Claude
 	// api_request rows are one turn each (unique prompt.id); Codex
 	// response.completed and opencode assistant.responded rows are one turn each
 	// but carry no stable turn id, so they fall back to the row id (count-per-row,
-	// same degradation as the tool-call dedup); generic rows key off
-	// gen_ai.response.id. Counted distinct for message_count.
+	// same degradation as the tool-call dedup). LiteLLM uses call ID, response ID,
+	// then row ID. Generic rows key off gen_ai.response.id.
 	sessionMessageIDExpr = "multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toString(attributes.prompt.id), " +
-		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + "), toString(id), " +
+		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), " +
+		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), " +
+		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + "), toString(id), " +
 		"toString(attributes.gen_ai.response.id))"
 	sessionMessageCountExpr = "uniqExactIf(" + sessionMessageIDExpr + ", " + sessionMessageIDExpr + " != '')"
 )
