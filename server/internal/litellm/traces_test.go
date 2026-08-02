@@ -1399,6 +1399,38 @@ func TestEnrichTraceAttributionUsesPreCallCache(t *testing.T) {
 	require.NotContains(t, spans[1].Attributes, attr.LiteLLMTraceIDKey)
 }
 
+func TestEnrichTraceAttributionPreservesOTLPActorWhenCachedActorIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	calls := callcache.New(newMemoryCache())
+	require.NoError(t, calls.Store(t.Context(), callcache.Record{
+		ProjectID: projectID,
+		CallID:    "call-id",
+		TraceID:   "cached-trace",
+		SessionID: "cached-session",
+		UserID:    "",
+		Email:     "",
+	}))
+	spans := []telemetry.LogParams{{
+		Timestamp: time.Time{},
+		ToolInfo: telemetry.ToolInfo{
+			ID: "", URN: litellmOTLPResourceURN, Name: "litellm", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: "org-id",
+		},
+		UserInfo: telemetry.UserInfoByEmail("otel@example.test"),
+		Attributes: map[attr.Key]any{
+			attr.LiteLLMCallIDKey: "call-id",
+			attr.EventURNKey:      liteLLMEventURN("chat"),
+		},
+	}}
+
+	enrichTraceAttribution(t.Context(), testenv.NewLogger(t), calls, spans)
+	require.Empty(t, spans[0].UserInfo.UserID())
+	require.Equal(t, "otel@example.test", spans[0].UserInfo.Email())
+	require.Equal(t, "cached-session", spans[0].Attributes[attr.GenAIConversationIDKey])
+	require.Equal(t, "cached-trace", spans[0].Attributes[attr.LiteLLMTraceIDKey])
+}
+
 func TestOTLPResourceAttributeBudgetDropsOverflow(t *testing.T) {
 	t.Parallel()
 

@@ -94,7 +94,9 @@ func enrichTraceAttribution(ctx context.Context, logger *slog.Logger, calls *cal
 		if !attribution.found {
 			continue
 		}
-		spans[index].UserInfo = telemetry.UserInfoByIDAndEmail(attribution.record.UserID, attribution.record.Email)
+		if attribution.record.UserID != "" || attribution.record.Email != "" {
+			spans[index].UserInfo = telemetry.UserInfoByIDAndEmail(attribution.record.UserID, attribution.record.Email)
+		}
 		if attribution.record.SessionID != "" {
 			spans[index].Attributes[attr.GenAIConversationIDKey] = attribution.record.SessionID
 		}
