@@ -228,12 +228,12 @@ func (s *Service) metricLogParams(ctx context.Context, request *collectorv1.Expo
 	for _, resourceMetrics := range request.GetResourceMetrics() {
 		resourceAttrs := map[attr.Key]any{}
 		if resource := resourceFromProto(resourceMetrics.GetResource()); resource != nil {
-			resourceAttrs = s.sanitizeOTLPResourceAttributes(ctx, resource.Attributes)
+			resourceAttrs = s.sanitizeOTLPMetricResourceAttributes(ctx, resource.Attributes)
 		}
 		for _, scopeMetrics := range resourceMetrics.GetScopeMetrics() {
 			scopeAttrs := map[attr.Key]any{}
 			if scope := scopeMetrics.GetScope(); scope != nil {
-				scopeAttrs = s.otlpScopeAttributes(ctx, scope.GetName(), scope.GetVersion())
+				scopeAttrs = s.otlpScopeAttributes(ctx, s.metrics.TraceProcessor, scope.GetName(), scope.GetVersion())
 			}
 			for _, metric := range scopeMetrics.GetMetrics() {
 				if _, supported := litellmMetricNames[metric.GetName()]; !supported {
@@ -247,7 +247,7 @@ func (s *Service) metricLogParams(ctx context.Context, request *collectorv1.Expo
 					if point == nil {
 						continue
 					}
-					attrs := s.sanitizeOTLPAttributes(ctx, keyValuesFromProto(point.GetAttributes()), metricAttributeAllowlist)
+					attrs := s.sanitizeOTLPMetricAttributes(ctx, keyValuesFromProto(point.GetAttributes()))
 					attrs[attr.HookSourceKey] = "litellm"
 					attrs[attr.EventSourceKey] = string(telemetry.EventSourceHook)
 					attrs[attr.ResourceURNKey] = litellmOTLPMetricsURN
@@ -258,7 +258,7 @@ func (s *Service) metricLogParams(ctx context.Context, request *collectorv1.Expo
 						attrs[attr.Key("metric.unit")] = unit
 					}
 					if changed {
-						s.traces.recordTruncatedAttributes(ctx, 1)
+						s.metrics.recordTruncatedAttributes(ctx, 1)
 					}
 					attrs[attr.Key("metric.aggregation_temporality")] = histogram.GetAggregationTemporality().String()
 					attrs[attr.Key("metric.start_time_unix_nano")] = point.GetStartTimeUnixNano()
