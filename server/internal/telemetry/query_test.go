@@ -1070,7 +1070,7 @@ func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Now().UTC()
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	base := liteLLMSpanParams{
 		projectID: projectID, timestamp: now.Add(-10 * time.Minute), chatID: uuid.NewString(), callID: uuid.NewString(),
 		gramURN: "litellm:otel:traces", eventURN: "urn:telemetry:provider_otel:span:chat",
@@ -1087,6 +1087,7 @@ func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
 	spoofed := base
 	spoofed.gramURN = "other:otel:traces"
 	insertLiteLLMSpan(t, ctx, spoofed)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, base.timestamp, uuid.NewString(), 0.25, 20, 5, 0, 0, "opus", "claude@example.test", "Engineering", nil, "main", "", "", "", "")
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -1095,21 +1096,32 @@ func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
 	require.Eventually(t, func() bool {
 		res, err := ti.service.Query(ctx, &gen.QueryPayload{
 			From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
-			Filters: []*gen.QueryFilter{{Dimension: "hook_source", Values: []string{"litellm"}}},
-			TopN:    10, SortBy: "total_cost",
+			TopN: 10, SortBy: "total_cost",
 		})
-		if err != nil || res == nil || len(res.Table) != 1 {
+		if err != nil || res == nil || len(res.Table) != 2 {
 			return false
 		}
 		result = res
-		return res.Table[0].Measures.TotalTokens == 18
+		return res.Table[0].GroupValue == "claude-code" && res.Table[1].GroupValue == "litellm"
 	}, 10*time.Second, 200*time.Millisecond)
 
-	require.Equal(t, "litellm", result.Table[0].GroupValue)
-	require.EqualValues(t, 11, result.Table[0].Measures.TotalInputTokens)
-	require.EqualValues(t, 7, result.Table[0].Measures.TotalOutputTokens)
-	require.EqualValues(t, 18, result.Table[0].Measures.TotalTokens)
-	require.InDelta(t, 0.125, result.Table[0].Measures.TotalCost, 1e-9)
+	require.EqualValues(t, 20, result.Table[0].Measures.TotalInputTokens)
+	require.EqualValues(t, 5, result.Table[0].Measures.TotalOutputTokens)
+	require.EqualValues(t, 25, result.Table[0].Measures.TotalTokens)
+	require.InDelta(t, 0.25, result.Table[0].Measures.TotalCost, 1e-9)
+	require.EqualValues(t, 11, result.Table[1].Measures.TotalInputTokens)
+	require.EqualValues(t, 7, result.Table[1].Measures.TotalOutputTokens)
+	require.EqualValues(t, 18, result.Table[1].Measures.TotalTokens)
+	require.InDelta(t, 0.125, result.Table[1].Measures.TotalCost, 1e-9)
+
+	filtered, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
+		Filters: []*gen.QueryFilter{{Dimension: "hook_source", Values: []string{"litellm"}}},
+		TopN:    10, SortBy: "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Table, 1)
+	require.Equal(t, "litellm", filtered.Table[0].GroupValue)
 }
 
 func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
