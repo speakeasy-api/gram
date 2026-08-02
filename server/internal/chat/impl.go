@@ -2125,7 +2125,7 @@ func buildToolActivityPrompt(req *summarizeToolActivityRequest) string {
 			continue
 		}
 		n++
-		b.WriteString(fmt.Sprintf("%d. %s", n, truncateRunes(call.Name, maxToolActivityNameRunes)))
+		fmt.Fprintf(&b, "%d. %s", n, truncateRunes(call.Name, maxToolActivityNameRunes))
 		if call.Arguments != nil {
 			args := strings.TrimSpace(*call.Arguments)
 			args = truncateRunes(args, maxToolActivityArgumentRunes)
