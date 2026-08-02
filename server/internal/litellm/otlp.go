@@ -190,7 +190,10 @@ func (v *jsonInt64) UnmarshalJSON(data []byte) error {
 type jsonUint64 uint64
 
 func (v *jsonUint64) UnmarshalJSON(data []byte) error {
-	value := strings.Trim(string(data), `"`)
+	value, err := decodeOTLPNumericJSON(data)
+	if err != nil {
+		return err
+	}
 	parsed, err := strconv.ParseUint(value, 10, 64)
 	if err != nil {
 		return fmt.Errorf("parse OTLP unsigned integer: %w", err)
@@ -202,7 +205,10 @@ func (v *jsonUint64) UnmarshalJSON(data []byte) error {
 type jsonFloat64 float64
 
 func (v *jsonFloat64) UnmarshalJSON(data []byte) error {
-	value := strings.Trim(string(data), `"`)
+	value, err := decodeOTLPNumericJSON(data)
+	if err != nil {
+		return err
+	}
 	var parsed float64
 	switch value {
 	case "NaN":
@@ -212,7 +218,6 @@ func (v *jsonFloat64) UnmarshalJSON(data []byte) error {
 	case "-Infinity":
 		parsed = math.Inf(-1)
 	default:
-		var err error
 		parsed, err = strconv.ParseFloat(value, 64)
 		if err != nil {
 			return fmt.Errorf("parse OTLP double: %w", err)
@@ -235,12 +240,27 @@ func (v *jsonInt32) UnmarshalJSON(data []byte) error {
 }
 
 func parseJSONInteger(data []byte, bitSize int) (int64, error) {
-	value := strings.Trim(string(data), `"`)
+	value, err := decodeOTLPNumericJSON(data)
+	if err != nil {
+		return 0, err
+	}
 	parsed, err := strconv.ParseInt(value, 10, bitSize)
 	if err != nil {
 		return 0, fmt.Errorf("parse OTLP integer: %w", err)
 	}
 	return parsed, nil
+}
+
+func decodeOTLPNumericJSON(data []byte) (string, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || data[0] != '"' {
+		return string(data), nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return "", fmt.Errorf("decode OTLP numeric string: %w", err)
+	}
+	return value, nil
 }
 
 func decodeOTLPJSON(body []byte) (*otlpExportRequest, error) {
