@@ -3,6 +3,8 @@ package litellm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 	"go.temporal.io/sdk/testsuite"
 	goahttp "goa.design/goa/v3/http"
 
@@ -128,6 +131,78 @@ func TestRealHooksPersistsMixedCaseMemberAndDedupesRetry(t *testing.T) {
 	require.Equal(t, "litellm", messages[0].Source.String)
 	require.Equal(t, userID, messages[0].UserID.String)
 	require.Equal(t, conv.NormalizeEmail(storedEmail), messages[0].ExternalUserID.String)
+}
+
+func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	userID := "user_" + uuid.NewString()
+	storedEmail := "Trace." + uuid.NewString() + "@Example.Test"
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       storedEmail,
+		DisplayName: "Trace Member",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+
+	callID := "trace-call-" + uuid.NewString()
+	traceID := "trace-session-" + uuid.NewString()
+	payload := testPayload()
+	payload.LitellmCallID = &callID
+	payload.LitellmTraceID = &traceID
+	payload.Texts = []string{"joined prompt"}
+	payload.RequestData.UserAPIKeyUserEmail = new(storedEmail)
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(traceID),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+
+	ti.service.auth = fixedAuthorizer{authCtx: authCtx}
+	start := time.Now().UTC()
+	body := fmt.Appendf(nil, `{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"0123456789abcdef","name":"chat model","kind":3,"startTimeUnixNano":"%d","endTimeUnixNano":"%d","attributes":[{"key":"gen_ai.operation.name","value":{"stringValue":"chat"}},{"key":"gen_ai.request.model","value":{"stringValue":"model-group"}},{"key":"litellm.provider.model","value":{"stringValue":"openai/gpt-4o"}},{"key":"litellm.call_id","value":{"stringValue":"%s"}},{"key":"litellm.trace_id","value":{"stringValue":"otel-trace"}},{"key":"litellm.metadata.user_api_key_user_email","value":{"stringValue":"otel@example.test"}},{"key":"gen_ai.usage.input_tokens","value":{"intValue":"11"}},{"key":"gen_ai.usage.output_tokens","value":{"intValue":"7"}},{"key":"litellm.cost.total","value":{"doubleValue":0.125}}]}]}]}]}`, start.UnixNano(), start.Add(125*time.Millisecond).UnixNano(), callID)
+	response := serveTraceRequest(t, mountedTraceMux(ti.service), body, "application/json", "", "fixture-key", "fixture-project")
+	require.Equal(t, http.StatusAccepted, response.Code)
+	require.NoError(t, ti.service.traces.Shutdown(t.Context()))
+
+	query := telemetryrepo.New(ti.chConn)
+	var logs []telemetryrepo.TelemetryLog
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+		var queryErr error
+		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     start.Add(-time.Second).UnixNano(),
+			TimeEnd:       start.Add(time.Second).UnixNano(),
+			GramURNs:      []string{litellmOTLPResourceURN},
+			SortOrder:     "asc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		assert.NoError(collect, queryErr)
+		assert.Len(collect, logs, 1)
+	}, 10*time.Second, 50*time.Millisecond)
+
+	require.Equal(t, messages[0].UserID.String, gjson.Get(logs[0].Attributes, "user.id").String())
+	require.Equal(t, conv.NormalizeEmail(storedEmail), gjson.Get(logs[0].Attributes, "user.email").String())
+	require.Equal(t, callID, gjson.Get(logs[0].Attributes, "gram.litellm.call_id").String())
+	require.Equal(t, traceID, gjson.Get(logs[0].Attributes, "gram.litellm.trace_id").String())
+	require.Equal(t, traceID, gjson.Get(logs[0].Attributes, "gen_ai.conversation.id").String())
+	require.EqualValues(t, 18, gjson.Get(logs[0].Attributes, "gen_ai.usage.total_tokens").Int())
+	require.Equal(t, "urn:telemetry:provider_otel:span:chat", gjson.Get(logs[0].Attributes, "gram.event.urn").String())
 }
 
 func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {

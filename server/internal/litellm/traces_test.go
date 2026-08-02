@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -29,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -1004,10 +1006,24 @@ func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
 	}
 	require.True(t, invalidFound)
 
-	require.Equal(t, "0123456789abcdef0123456789abcdef", gjson.Get(logs[0].Attributes, "trace.id").String())
-	require.Equal(t, "fixture-logical-trace", gjson.Get(logs[0].Attributes, "gram.litellm.trace_id").String())
-	require.Equal(t, "openai", gjson.Get(logs[0].Attributes, "gen_ai.provider.name").String())
-	require.EqualValues(t, 11, gjson.Get(logs[0].Attributes, "gen_ai.usage.input_tokens").Int())
+	for _, log := range logs[:2] {
+		require.Equal(t, "0123456789abcdef0123456789abcdef", gjson.Get(log.Attributes, "trace.id").String())
+		require.Equal(t, "fixture-logical-trace", gjson.Get(log.Attributes, "gram.litellm.trace_id").String())
+		require.Equal(t, "fixture-call-id", gjson.Get(log.Attributes, "gram.litellm.call_id").String())
+		require.Equal(t, "fixture-logical-trace", gjson.Get(log.Attributes, "gen_ai.conversation.id").String())
+		require.Equal(t, "openai", gjson.Get(log.Attributes, "gen_ai.provider.name").String())
+		require.Equal(t, "fixture-model", gjson.Get(log.Attributes, "gen_ai.request.model").String())
+		require.Equal(t, "fixture-model-v2", gjson.Get(log.Attributes, "gen_ai.response.model").String())
+		require.Equal(t, "fixture-response-id", gjson.Get(log.Attributes, "gen_ai.response.id").String())
+		require.EqualValues(t, 11, gjson.Get(log.Attributes, "gen_ai.usage.input_tokens").Int())
+		require.EqualValues(t, 7, gjson.Get(log.Attributes, "gen_ai.usage.output_tokens").Int())
+		require.EqualValues(t, 18, gjson.Get(log.Attributes, "gen_ai.usage.total_tokens").Int())
+		require.InDelta(t, 0.00125, gjson.Get(log.Attributes, "gen_ai.usage.cost").Float(), 0.0000001)
+		require.InDelta(t, 125, gjson.Get(log.Attributes, "otel.span.duration_ms").Float(), 0.000001)
+		require.True(t, gjson.Get(log.Attributes, "gen_ai.request.is_streaming").Bool())
+		require.Equal(t, "urn:telemetry:provider_otel:span:chat", gjson.Get(log.Attributes, "gram.event.urn").String())
+		require.False(t, gjson.Get(log.Attributes, "gen_ai.response.finish_reasons").Exists())
+	}
 }
 
 func TestOTLPAttributeLimitsAndRecursiveValues(t *testing.T) {
@@ -1033,7 +1049,7 @@ func TestOTLPAttributeLimitsAndRecursiveValues(t *testing.T) {
 		Key:   "gen_ai.response.finish_reasons",
 		Value: otlpAnyValue{ArrayValue: &otlpArrayValue{Values: []otlpAnyValue{{StringValue: &finish}}}},
 	}}, spanAttributeAllowlist)
-	require.Equal(t, []any{"stop"}, recursive["gen_ai.response.finish_reasons"])
+	require.Empty(t, recursive)
 
 	nonFinite, err := decodeOTLPJSON([]byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"attributes":[{"key":"gen_ai.usage.cost","value":{"doubleValue":"NaN"}}]}]}]}]}`))
 	require.NoError(t, err)
@@ -1143,19 +1159,16 @@ func TestOTLPAttributeTypeAllowlistAcceptsSafeValues(t *testing.T) {
 
 	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
 	model := "safe-model"
-	finishReason := "stop"
 	streaming := true
 	tokens := jsonInt64(42)
 	cost := jsonFloat64(0.125)
 	result := service.sanitizeOTLPAttributes(t.Context(), []otlpKeyValue{
 		{Key: "gen_ai.request.model", Value: otlpAnyValue{StringValue: &model}},
-		{Key: "gen_ai.response.finish_reasons", Value: otlpAnyValue{ArrayValue: &otlpArrayValue{Values: []otlpAnyValue{{StringValue: &finishReason}}}}},
 		{Key: "gen_ai.request.is_streaming", Value: otlpAnyValue{BoolValue: &streaming}},
 		{Key: "gen_ai.usage.input_tokens", Value: otlpAnyValue{IntValue: &tokens}},
 		{Key: "gen_ai.usage.cost", Value: otlpAnyValue{DoubleValue: &cost}},
 	}, spanAttributeAllowlist)
 	require.Equal(t, "safe-model", result[attr.GenAIRequestModelKey])
-	require.Equal(t, []any{"stop"}, result[attr.GenAIResponseFinishReasonsKey])
 	require.Equal(t, true, result[attr.GenAIRequestIsStreamingKey])
 	require.Equal(t, int64(42), result[attr.GenAIUsageInputTokensKey])
 	require.InDelta(t, 0.125, result[attr.GenAIUsageCostKey], 1e-12)
@@ -1186,8 +1199,204 @@ func TestOTLPAttributeTypeAllowlistRejectsNegativeUsageAndAcceptsZero(t *testing
 	}, spanAttributeAllowlist)
 	require.Equal(t, int64(0), zero[attr.GenAIUsageInputTokensKey])
 	require.InDelta(t, 0, zero[attr.GenAIUsageCostKey], 0)
-	require.Equal(t, int64(0), zero[attr.LiteLLMResponseCostKey])
 	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestOTLPV2AttributesNormalizeToCanonicalUsage(t *testing.T) {
+	t.Parallel()
+
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	stringsByKey := map[string]string{
+		"litellm.provider.model":                    "openai/gpt-4o",
+		"litellm.team.id":                           "team-id",
+		"litellm.team.alias":                        "engineering",
+		"litellm.api_key.hash":                      "key-hash",
+		"litellm.end_user.id":                       "metadata-end-user",
+		"litellm.metadata.user_api_key_user_id":     "user-id",
+		"litellm.metadata.user_api_key_user_email":  "member@example.test",
+		"litellm.metadata.user_api_key_org_id":      "provider-org",
+		"litellm.metadata.user_api_key_alias":       "key-alias",
+		"litellm.metadata.user_api_key_end_user_id": "metadata-end-user",
+	}
+	values := make([]otlpKeyValue, 0, len(stringsByKey)+6)
+	for key, value := range stringsByKey {
+		current := value
+		values = append(values, otlpKeyValue{Key: key, Value: otlpAnyValue{StringValue: &current}})
+	}
+	streaming := true
+	totalCost := jsonFloat64(0.12)
+	inputCost := jsonFloat64(0.07)
+	outputCost := jsonFloat64(0.05)
+	cacheReadCost := jsonFloat64(0.01)
+	cacheWriteCost := jsonFloat64(0.02)
+	values = append(values,
+		otlpKeyValue{Key: "litellm.request.streaming", Value: otlpAnyValue{BoolValue: &streaming}},
+		otlpKeyValue{Key: "litellm.cost.total", Value: otlpAnyValue{DoubleValue: &totalCost}},
+		otlpKeyValue{Key: "litellm.cost.input", Value: otlpAnyValue{DoubleValue: &inputCost}},
+		otlpKeyValue{Key: "litellm.cost.output", Value: otlpAnyValue{DoubleValue: &outputCost}},
+		otlpKeyValue{Key: "litellm.cost.cache_read", Value: otlpAnyValue{DoubleValue: &cacheReadCost}},
+		otlpKeyValue{Key: "litellm.cost.cache_creation", Value: otlpAnyValue{DoubleValue: &cacheWriteCost}},
+	)
+
+	result := service.sanitizeOTLPAttributes(t.Context(), values, spanAttributeAllowlist)
+	require.Equal(t, "openai/gpt-4o", result[attr.GenAIResponseModelKey])
+	require.Equal(t, true, result[attr.GenAIRequestIsStreamingKey])
+	require.InDelta(t, 0.12, result[attr.GenAIUsageCostKey], 1e-12)
+	require.InDelta(t, 0.07, result[attr.LiteLLMInputCostKey], 1e-12)
+	require.InDelta(t, 0.05, result[attr.LiteLLMOutputCostKey], 1e-12)
+	require.InDelta(t, 0.01, result[attr.LiteLLMCacheReadCostKey], 1e-12)
+	require.InDelta(t, 0.02, result[attr.LiteLLMCacheWriteCostKey], 1e-12)
+	require.Equal(t, "team-id", result[attr.LiteLLMTeamIDKey])
+	require.Equal(t, "engineering", result[attr.LiteLLMTeamAliasKey])
+	require.Equal(t, "key-hash", result[attr.LiteLLMAPIKeyHashKey])
+	require.Equal(t, "metadata-end-user", result[attr.LiteLLMEndUserIDKey])
+	require.Equal(t, "user-id", result[attr.LiteLLMUserIDKey])
+	require.Equal(t, "member@example.test", result[attr.LiteLLMUserEmailKey])
+	require.Equal(t, "provider-org", result[attr.LiteLLMOrganizationIDKey])
+	require.Equal(t, "key-alias", result[attr.LiteLLMAPIKeyAliasKey])
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestLiteLLMModelOperationExcludesNonModelSpans(t *testing.T) {
+	t.Parallel()
+
+	attributes := map[attr.Key]any{
+		attr.GenAIOperationNameKey: "chat",
+		attr.GenAIRequestModelKey:  "model",
+	}
+	require.Equal(t, "chat", liteLLMModelOperation(attributes, int32(tracev1.Span_SPAN_KIND_CLIENT)))
+	require.Equal(t, "unknown", liteLLMModelOperation(attributes, int32(tracev1.Span_SPAN_KIND_INTERNAL)))
+	require.Equal(t, "unknown", liteLLMModelOperation(map[attr.Key]any{attr.GenAIOperationNameKey: "chat"}, int32(tracev1.Span_SPAN_KIND_CLIENT)))
+	require.Equal(t, "unknown", liteLLMModelOperation(map[attr.Key]any{attr.GenAIOperationNameKey: "execute_guardrail"}, int32(tracev1.Span_SPAN_KIND_INTERNAL)))
+}
+
+func TestTraceLogParamsKeepsGuardrailSpanOperationalOnly(t *testing.T) {
+	t.Parallel()
+
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	operation := "execute_guardrail"
+	model := "must-not-be-usage"
+	cost := jsonFloat64(1.25)
+	callID := "guardrail-call"
+	request := &otlpExportRequest{ResourceSpans: []otlpResourceSpans{{
+		Resource: nil,
+		ScopeSpans: []otlpScopeSpans{{
+			Scope: nil,
+			Spans: []otlpSpan{{
+				TraceID: "", SpanID: "", ParentSpanID: "", Name: "execute_guardrail policy", Kind: jsonInt32(tracev1.Span_SPAN_KIND_INTERNAL),
+				StartTimeUnixNano: 1000000, EndTimeUnixNano: 2000000,
+				Attributes: []otlpKeyValue{
+					{Key: "gen_ai.operation.name", Value: otlpAnyValue{StringValue: &operation}},
+					{Key: "gen_ai.request.model", Value: otlpAnyValue{StringValue: &model}},
+					{Key: "litellm.cost.total", Value: otlpAnyValue{DoubleValue: &cost}},
+					{Key: "litellm.call_id", Value: otlpAnyValue{StringValue: &callID}},
+				},
+				DroppedAttributesCount: 0, Status: nil,
+			}},
+		}},
+	}}}
+	params := service.traceLogParams(t.Context(), request, "org-id", uuid.NewString())
+	require.Len(t, params, 1)
+	require.Equal(t, "urn:telemetry:provider_otel:span:unknown", params[0].Attributes[attr.EventURNKey])
+	require.Equal(t, "execute_guardrail", params[0].Attributes[attr.GenAIOperationNameKey])
+	require.Equal(t, "execute_guardrail policy", params[0].Attributes[attr.OTelSpanNameKey])
+	require.Equal(t, "internal", params[0].Attributes[attr.OTelSpanKindKey])
+	require.InDelta(t, 1, params[0].Attributes[attr.OTelSpanDurationMSKey], 0.000001)
+	require.Equal(t, "guardrail-call", params[0].Attributes[attr.LiteLLMCallIDKey])
+	require.NotContains(t, params[0].Attributes, attr.GenAIRequestModelKey)
+	require.NotContains(t, params[0].Attributes, attr.GenAIUsageCostKey)
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestTraceLogParamsUsesOTLPFallbackWithoutCachedCall(t *testing.T) {
+	t.Parallel()
+
+	service, processor := newTraceTestService(t, fixedAuthorizer{authCtx: testAuthContext()}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
+	operation := "embeddings"
+	model := "embedding-model"
+	callID := "fallback-call"
+	traceID := "fallback-trace"
+	email := "fallback@example.test"
+	inputTokens := jsonInt64(11)
+	outputTokens := jsonInt64(7)
+	request := &otlpExportRequest{ResourceSpans: []otlpResourceSpans{{
+		Resource: nil,
+		ScopeSpans: []otlpScopeSpans{{
+			Scope: nil,
+			Spans: []otlpSpan{{
+				TraceID: "", SpanID: "", ParentSpanID: "", Name: "embeddings model", Kind: jsonInt32(tracev1.Span_SPAN_KIND_CLIENT),
+				StartTimeUnixNano: 0, EndTimeUnixNano: 0,
+				Attributes: []otlpKeyValue{
+					{Key: "gen_ai.operation.name", Value: otlpAnyValue{StringValue: &operation}},
+					{Key: "gen_ai.request.model", Value: otlpAnyValue{StringValue: &model}},
+					{Key: "litellm.call_id", Value: otlpAnyValue{StringValue: &callID}},
+					{Key: "litellm.trace_id", Value: otlpAnyValue{StringValue: &traceID}},
+					{Key: "litellm.metadata.user_api_key_user_email", Value: otlpAnyValue{StringValue: &email}},
+					{Key: "gen_ai.usage.input_tokens", Value: otlpAnyValue{IntValue: &inputTokens}},
+					{Key: "gen_ai.usage.output_tokens", Value: otlpAnyValue{IntValue: &outputTokens}},
+				},
+				DroppedAttributesCount: 0, Status: nil,
+			}},
+		}},
+	}}}
+	projectID := uuid.NewString()
+	params := service.traceLogParams(t.Context(), request, "org-id", projectID)
+	require.Len(t, params, 1)
+	require.Equal(t, projectID, params[0].ToolInfo.ProjectID)
+	require.Equal(t, "org-id", params[0].ToolInfo.OrganizationID)
+	require.Equal(t, "fallback@example.test", params[0].UserInfo.Email())
+	require.Empty(t, params[0].UserInfo.UserID())
+	require.Equal(t, "fallback-trace", params[0].Attributes[attr.GenAIConversationIDKey])
+	require.EqualValues(t, 18, params[0].Attributes[attr.GenAIUsageTotalTokensKey])
+	require.Equal(t, "urn:telemetry:provider_otel:span:embeddings", params[0].Attributes[attr.EventURNKey])
+	require.NoError(t, processor.Shutdown(t.Context()))
+}
+
+func TestEnrichTraceAttributionUsesPreCallCache(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	calls := callcache.New(newMemoryCache())
+	require.NoError(t, calls.Store(t.Context(), callcache.Record{
+		ProjectID: projectID,
+		CallID:    "call-id",
+		TraceID:   "cached-trace",
+		SessionID: "cached-session",
+		UserID:    "cached-user",
+		Email:     "cached@example.test",
+	}))
+	spans := []telemetry.LogParams{{
+		Timestamp: time.Time{},
+		ToolInfo: telemetry.ToolInfo{
+			ID: "", URN: litellmOTLPResourceURN, Name: "litellm", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: "org-id",
+		},
+		UserInfo: telemetry.UserInfoByEmail("otel@example.test"),
+		Attributes: map[attr.Key]any{
+			attr.LiteLLMCallIDKey:       "call-id",
+			attr.LiteLLMTraceIDKey:      "otel-trace",
+			attr.GenAIConversationIDKey: "otel-session",
+			attr.EventURNKey:            liteLLMEventURN("chat"),
+		},
+	}, {
+		Timestamp: time.Time{},
+		ToolInfo: telemetry.ToolInfo{
+			ID: "", URN: litellmOTLPResourceURN, Name: "litellm", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: "org-id",
+		},
+		UserInfo: telemetry.UserInfoByID(""),
+		Attributes: map[attr.Key]any{
+			attr.LiteLLMCallIDKey: "call-id",
+			attr.EventURNKey:      liteLLMEventURN("unknown"),
+		},
+	}}
+
+	enrichTraceAttribution(t.Context(), testenv.NewLogger(t), calls, spans)
+	require.Equal(t, "cached-user", spans[0].UserInfo.UserID())
+	require.Equal(t, "cached@example.test", spans[0].UserInfo.Email())
+	require.Equal(t, "cached-session", spans[0].Attributes[attr.GenAIConversationIDKey])
+	require.Equal(t, "cached-trace", spans[0].Attributes[attr.LiteLLMTraceIDKey])
+	require.Empty(t, spans[1].UserInfo.UserID())
+	require.NotContains(t, spans[1].Attributes, attr.GenAIConversationIDKey)
+	require.NotContains(t, spans[1].Attributes, attr.LiteLLMTraceIDKey)
 }
 
 func TestOTLPResourceAttributeBudgetDropsOverflow(t *testing.T) {
