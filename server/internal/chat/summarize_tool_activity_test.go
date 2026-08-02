@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	chat "github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -31,16 +31,16 @@ func TestService_SummarizeToolActivity_Running(t *testing.T) {
 	ti := newTestChatServiceWithCompletion(t, client)
 	ctx := initSessionCtx(t, ti)
 
-	res, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+	summary, err := ti.service.SummarizeToolActivityForTest(ctx, &chat.SummarizeToolActivityRequest{
 		UserMessage: strptr("Why are my tool calls failing?"),
 		InProgress:  true,
-		ToolCalls: []*gen.ToolActivityCall{
+		ToolCalls: []chat.ToolActivityCallInput{
 			{Name: "list_deployments", Arguments: nil},
 			{Name: "get_deployment_logs", Arguments: strptr(`{"id":"abc"}`)},
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "Investigating failing tool calls", res.Summary)
+	require.Equal(t, "Investigating failing tool calls", summary)
 
 	// The prompt (system + user) must actually carry the user's request and the
 	// tool names — the feature hinges on buildToolActivityPrompt rendering them.
@@ -72,9 +72,9 @@ func TestService_SummarizeToolActivity_CompletedUsesPastTense(t *testing.T) {
 	ti := newTestChatServiceWithCompletion(t, client)
 	ctx := initSessionCtx(t, ti)
 
-	_, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+	_, err := ti.service.SummarizeToolActivityForTest(ctx, &chat.SummarizeToolActivityRequest{
 		InProgress: false,
-		ToolCalls:  []*gen.ToolActivityCall{{Name: "search_web"}},
+		ToolCalls:  []chat.ToolActivityCallInput{{Name: "search_web"}},
 	})
 	require.NoError(t, err)
 
@@ -98,14 +98,14 @@ func TestService_SummarizeToolActivity_BoundsLongOutput(t *testing.T) {
 	ti := newTestChatServiceWithCompletion(t, client)
 	ctx := initSessionCtx(t, ti)
 
-	res, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+	summary, err := ti.service.SummarizeToolActivityForTest(ctx, &chat.SummarizeToolActivityRequest{
 		InProgress: true,
-		ToolCalls:  []*gen.ToolActivityCall{{Name: "search_web"}},
+		ToolCalls:  []chat.ToolActivityCallInput{{Name: "search_web"}},
 	})
 	require.NoError(t, err)
 	// A non-conforming, paragraph-length response is capped, not passed through.
-	require.LessOrEqual(t, utf8.RuneCountInString(res.Summary), 120)
-	require.NotEmpty(t, res.Summary)
+	require.LessOrEqual(t, utf8.RuneCountInString(summary), 120)
+	require.NotEmpty(t, summary)
 	client.AssertExpectations(t)
 }
 
@@ -120,15 +120,15 @@ func TestService_SummarizeToolActivity_SanitizesOutput(t *testing.T) {
 	ti := newTestChatServiceWithCompletion(t, client)
 	ctx := initSessionCtx(t, ti)
 
-	res, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+	summary, err := ti.service.SummarizeToolActivityForTest(ctx, &chat.SummarizeToolActivityRequest{
 		InProgress: false,
-		ToolCalls: []*gen.ToolActivityCall{
+		ToolCalls: []chat.ToolActivityCallInput{
 			{Name: "search_web", Arguments: strptr(`{"q":"pricing"}`)},
 		},
 	})
 	require.NoError(t, err)
 	// Surrounding quotes, trailing period, and trailing lines are stripped.
-	require.Equal(t, "Searched the web for pricing", res.Summary)
+	require.Equal(t, "Searched the web for pricing", summary)
 	client.AssertExpectations(t)
 }
 
@@ -139,7 +139,7 @@ func TestService_SummarizeToolActivity_NoToolCalls(t *testing.T) {
 	ti := newTestChatServiceWithCompletion(t, client)
 	ctx := initSessionCtx(t, ti)
 
-	_, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+	_, err := ti.service.SummarizeToolActivityForTest(ctx, &chat.SummarizeToolActivityRequest{
 		ToolCalls: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -153,8 +153,8 @@ func TestService_SummarizeToolActivity_Unauthorized(t *testing.T) {
 	ti := newTestChatServiceWithCompletion(t, client)
 
 	// No auth context on the bare test context → unauthorized.
-	_, err := ti.service.SummarizeToolActivity(t.Context(), &gen.SummarizeToolActivityPayload{
-		ToolCalls: []*gen.ToolActivityCall{{Name: "search_web"}},
+	_, err := ti.service.SummarizeToolActivityForTest(t.Context(), &chat.SummarizeToolActivityRequest{
+		ToolCalls: []chat.ToolActivityCallInput{{Name: "search_web"}},
 	})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 	client.AssertNotCalled(t, "GetCompletion", mock.Anything, mock.Anything)

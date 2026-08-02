@@ -130,6 +130,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/rpc/chat.summarizeToolActivity", oops.ErrHandle(service.logger, service.handleSummarizeToolActivity).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -2013,32 +2014,33 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 	}, nil
 }
 
-// SummarizeToolActivity produces a short, human-readable label describing what
+// summarizeToolActivity produces a short, human-readable label describing what
 // the agent is doing in the current turn (e.g. "Searching the web for pricing"),
 // shown in the chat UI in place of a raw "Calling N tools" header. It is
 // stateless — the summary is derived from the supplied tool calls and optional
-// user prompt and is never persisted.
-func (s *Service) SummarizeToolActivity(ctx context.Context, payload *gen.SummarizeToolActivityPayload) (*gen.SummarizeToolActivityResult, error) {
+// user prompt and is never persisted. Exposed via the handleSummarizeToolActivity
+// raw handler rather than a Goa method, so it stays off the public SDK surface.
+func (s *Service) summarizeToolActivity(ctx context.Context, req *summarizeToolActivityRequest) (string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	if len(payload.ToolCalls) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "no tool calls to summarize").LogError(ctx, s.logger)
+	if len(req.ToolCalls) == 0 {
+		return "", oops.E(oops.CodeBadRequest, nil, "no tool calls to summarize").LogError(ctx, s.logger)
 	}
 
 	if s.completionClient == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
 	}
 
-	prompt := buildToolActivityPrompt(payload)
+	prompt := buildToolActivityPrompt(req)
 	if strings.TrimSpace(prompt) == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "no tool activity to summarize").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeBadRequest, nil, "no tool activity to summarize").LogError(ctx, s.logger)
 	}
 
 	tense := "the present tense (e.g. \"Searching the web for pricing\")"
-	if !payload.InProgress {
+	if !req.InProgress {
 		tense = "the past tense (e.g. \"Searched the web for pricing\")"
 	}
 	systemPrompt := "You label what an AI agent is doing in a single short phrase for a chat UI, " +
@@ -2081,27 +2083,27 @@ func (s *Service) SummarizeToolActivity(ctx context.Context, payload *gen.Summar
 		NormalizeOutboundMessages: false,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to summarize tool activity").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "failed to summarize tool activity").LogError(ctx, s.logger)
 	}
 	if response == nil || response.Message == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "empty tool activity summary response").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, nil, "empty tool activity summary response").LogError(ctx, s.logger)
 	}
 
 	summary := sanitizeToolActivitySummary(openrouter.GetText(*response.Message))
 	if summary == "" {
-		return nil, oops.E(oops.CodeUnexpected, nil, "empty tool activity summary response").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, nil, "empty tool activity summary response").LogError(ctx, s.logger)
 	}
 
-	return &gen.SummarizeToolActivityResult{Summary: summary}, nil
+	return summary, nil
 }
 
 // buildToolActivityPrompt renders the user prompt plus the turn's tool calls
 // into a bounded prompt for the tool-activity summarizer.
-func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
+func buildToolActivityPrompt(req *summarizeToolActivityRequest) string {
 	var b strings.Builder
 
-	if payload.UserMessage != nil {
-		msg := strings.TrimSpace(StripLeadingEnvelopes(*payload.UserMessage))
+	if req.UserMessage != nil {
+		msg := strings.TrimSpace(StripLeadingEnvelopes(*req.UserMessage))
 		msg = truncateRunes(msg, maxToolActivityUserMessageRunes)
 		if msg != "" {
 			b.WriteString("User request:\n")
@@ -2111,7 +2113,7 @@ func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
 	}
 
 	b.WriteString("Tools the agent is calling, in order:\n")
-	calls := payload.ToolCalls
+	calls := req.ToolCalls
 	// Keep the most recent calls, not the oldest — the label should reflect what
 	// the agent is doing now.
 	if len(calls) > maxToolActivityCalls {
@@ -2119,7 +2121,7 @@ func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
 	}
 	n := 0
 	for _, call := range calls {
-		if call == nil || strings.TrimSpace(call.Name) == "" {
+		if strings.TrimSpace(call.Name) == "" {
 			continue
 		}
 		n++

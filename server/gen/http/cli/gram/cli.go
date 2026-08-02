@@ -101,7 +101,7 @@ func UsageCommands() []string {
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-activity|submit-feedback|list-sources)",
+		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
@@ -655,11 +655,6 @@ func ParseEndpoint(
 		chatSummarizeBodyFlag             = chatSummarizeFlags.String("body", "REQUIRED", "")
 		chatSummarizeSessionTokenFlag     = chatSummarizeFlags.String("session-token", "", "")
 		chatSummarizeProjectSlugInputFlag = chatSummarizeFlags.String("project-slug-input", "", "")
-
-		chatSummarizeToolActivityFlags                = flag.NewFlagSet("summarize-tool-activity", flag.ExitOnError)
-		chatSummarizeToolActivityBodyFlag             = chatSummarizeToolActivityFlags.String("body", "REQUIRED", "")
-		chatSummarizeToolActivitySessionTokenFlag     = chatSummarizeToolActivityFlags.String("session-token", "", "")
-		chatSummarizeToolActivityProjectSlugInputFlag = chatSummarizeToolActivityFlags.String("project-slug-input", "", "")
 
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
@@ -3179,7 +3174,6 @@ func ParseEndpoint(
 	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 	chatSetPinnedFlags.Usage = chatSetPinnedUsage
 	chatSummarizeFlags.Usage = chatSummarizeUsage
-	chatSummarizeToolActivityFlags.Usage = chatSummarizeToolActivityUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
 
@@ -4171,9 +4165,6 @@ func ParseEndpoint(
 
 			case "summarize":
 				epf = chatSummarizeFlags
-
-			case "summarize-tool-activity":
-				epf = chatSummarizeToolActivityFlags
 
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
@@ -5987,9 +5978,6 @@ func ParseEndpoint(
 			case "summarize":
 				endpoint = c.Summarize()
 				data, err = chatc.BuildSummarizePayload(*chatSummarizeBodyFlag, *chatSummarizeSessionTokenFlag, *chatSummarizeProjectSlugInputFlag)
-			case "summarize-tool-activity":
-				endpoint = c.SummarizeToolActivity()
-				data, err = chatc.BuildSummarizeToolActivityPayload(*chatSummarizeToolActivityBodyFlag, *chatSummarizeToolActivitySessionTokenFlag, *chatSummarizeToolActivityProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -9348,7 +9336,6 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
 	fmt.Fprintln(os.Stderr, `    summarize: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
-	fmt.Fprintln(os.Stderr, `    summarize-tool-activity: Generate a short, human-readable summary of the tool activity in the current agent turn — a present- or past-tense 'task' label (e.g. "Searching the web for pricing") shown in place of a raw "Calling N tools" header. Stateless: the summary is derived from the supplied tool calls and optional user prompt and is not persisted.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
 	fmt.Fprintln(os.Stderr)
@@ -9579,28 +9566,6 @@ func chatSummarizeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regenerate\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func chatSummarizeToolActivityUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] chat summarize-tool-activity", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Generate a short, human-readable summary of the tool activity in the current agent turn — a present- or past-tense 'task' label (e.g. "Searching the web for pricing") shown in place of a raw "Calling N tools" header. Stateless: the summary is derived from the supplied tool calls and optional user prompt and is not persisted.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize-tool-activity --body '{\n      \"in_progress\": false,\n      \"tool_calls\": [\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aa\"\n         },\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aa\"\n         }\n      ],\n      \"user_message\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {
