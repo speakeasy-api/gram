@@ -199,7 +199,7 @@ func (p *TraceProcessor) Shutdown(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("drain LiteLLM trace processor: %w", ctx.Err())
+		return fmt.Errorf("drain LiteLLM OTLP %s processor: %w", p.signal.name(), ctx.Err())
 	}
 }
 

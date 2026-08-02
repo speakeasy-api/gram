@@ -85,6 +85,12 @@ func TestMetricLogParamsUsesAllowlistAndMetricOnlyFields(t *testing.T) {
 	require.EqualValues(t, 2, row.Attributes[attr.Key("metric.count")])
 	require.Equal(t, []uint64{1, 1}, row.Attributes[attr.Key("metric.bucket_counts")])
 	require.Equal(t, []float64{0.5}, row.Attributes[attr.Key("metric.explicit_bounds")])
+	resourceAttrs := service.sanitizeOTLPMetricResourceAttributes(t.Context(), []otlpKeyValue{
+		{Key: "service.name", Value: otlpAnyValue{StringValue: new("litellm")}},
+		{Key: "service.instance.id", Value: otlpAnyValue{StringValue: new("high-cardinality-instance")}},
+	})
+	require.Equal(t, "litellm", resourceAttrs[attr.ServiceNameKey])
+	require.NotContains(t, resourceAttrs, attr.ServiceInstanceIDKey)
 }
 
 func TestMetricExportIgnoresUnknownAndNonHistogramInstruments(t *testing.T) {
@@ -136,8 +142,11 @@ func TestMetricProcessorCannotConsumeTraceQueueCapacity(t *testing.T) {
 	metricEntered := make(chan struct{}, traceProcessorWorkers)
 	releaseMetrics := make(chan struct{})
 	metricProcessor := newMetricProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
-		metricEntered <- struct{}{}
-		<-releaseMetrics
+		select {
+		case metricEntered <- struct{}{}:
+			<-releaseMetrics
+		case <-releaseMetrics:
+		}
 		return nil
 	}, traceProcessorWorkers, traceProcessorQueueSize)
 	metricProcessor.Start(t.Context())
