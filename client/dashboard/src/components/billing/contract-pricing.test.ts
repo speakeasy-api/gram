@@ -187,6 +187,40 @@ describe("volumeBasisOptions", () => {
     expect(byBasis(options, "peak")?.tokens).toBe(90 * B);
   });
 
+  it("withholds the average until there are two cycles to average", () => {
+    // One closed cycle is not a mean — it is exactly "last full cycle", and
+    // labelling it as an average would imply smoothing that isn't happening.
+    const options = volumeBasisOptions(
+      [cycle({ tokens: 5 * B, current: true }), cycle({ tokens: 10 * B })],
+      now,
+    );
+    expect(byBasis(options, "avg3")?.tokens).toBeNull();
+    expect(byBasis(options, "last")?.tokens).toBe(10 * B);
+  });
+
+  it("labels the average with the number of cycles actually in it", () => {
+    const twoCycles = volumeBasisOptions(
+      [
+        cycle({ tokens: 5 * B, current: true }),
+        cycle({ tokens: 10 * B }),
+        cycle({ tokens: 20 * B }),
+      ],
+      now,
+    );
+    expect(byBasis(twoCycles, "avg3")?.label).toBe("Avg. last 2 cycles");
+    expect(byBasis(twoCycles, "avg3")?.tokens).toBe(15 * B);
+
+    const threeCycles = volumeBasisOptions(
+      [
+        cycle({ tokens: 10 * B }),
+        cycle({ tokens: 20 * B }),
+        cycle({ tokens: 30 * B }),
+      ],
+      now,
+    );
+    expect(byBasis(threeCycles, "avg3")?.label).toBe("Avg. last 3 cycles");
+  });
+
   it("reports history-derived bases as unavailable on a brand-new account", () => {
     const options = volumeBasisOptions(
       [cycle({ tokens: 0, current: true })],

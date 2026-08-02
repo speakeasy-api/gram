@@ -182,6 +182,9 @@ function projectedCurrent(cycles: BillingCycle[], now: number): number | null {
   return Math.round((current.tokens * fullMs) / elapsedMs);
 }
 
+// Fewest closed cycles that make the trailing mean a mean at all.
+const MIN_AVERAGE_CYCLES = 2;
+
 // Cycles, most recent first, that have closed — the only ones whose totals
 // are final enough to average or take a peak from.
 function completedCycles(cycles: BillingCycle[]): BillingCycle[] {
@@ -194,10 +197,16 @@ export function volumeBasisOptions(
 ): VolumeBasisOption[] {
   const completed = completedCycles(cycles);
   const recent = completed.slice(0, 3);
-  const avg3 =
-    recent.length > 0
+  // A single closed cycle is not an average — that reading is exactly "last
+  // full cycle", and offering it under an "Avg." label would imply a
+  // smoothing that isn't happening. Two is the smallest honest mean.
+  const avgTokens =
+    recent.length >= MIN_AVERAGE_CYCLES
       ? Math.round(recent.reduce((s, c) => s + c.tokens, 0) / recent.length)
       : null;
+  // The label states how many cycles actually went into the mean, so a
+  // two-cycle average never reads as a three-cycle one.
+  const avgCount = recent.length >= MIN_AVERAGE_CYCLES ? recent.length : 3;
   const peak =
     completed.length > 0 ? Math.max(...completed.map((c) => c.tokens)) : null;
 
@@ -216,9 +225,12 @@ export function volumeBasisOptions(
     },
     {
       value: "avg3",
-      label: "Avg. last 3 cycles",
-      tokens: avg3,
-      hint: `Mean of the ${recent.length} most recent closed cycles.`,
+      label: `Avg. last ${avgCount} cycles`,
+      tokens: avgTokens,
+      hint:
+        avgTokens != null
+          ? `Mean of the ${recent.length} most recent closed cycles.`
+          : `Needs at least ${MIN_AVERAGE_CYCLES} closed cycles to average — with one, use "Last full cycle".`,
     },
     {
       value: "peak",

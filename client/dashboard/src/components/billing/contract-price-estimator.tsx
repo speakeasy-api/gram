@@ -31,20 +31,48 @@ import {
 // at what rate, for how much. Showing the bands rather than one lump sum is
 // the point — it's what an account team reads off when a customer asks why
 // the number is what it is.
-function TierTable({ lines }: { lines: TierLine[] }): JSX.Element {
+function TierTable({
+  caption,
+  lines,
+}: {
+  // Names what the bands are measuring. A real <caption> rather than a
+  // heading above the table, so it reaches assistive tech as the table's
+  // label instead of as unrelated preceding text.
+  caption: string;
+  lines: TierLine[];
+}): JSX.Element {
   if (lines.length === 0) {
     return (
-      <Text muted small>
-        No volume in any tier.
-      </Text>
+      <>
+        <div className="text-muted-foreground mb-1 text-xs">{caption}</div>
+        <Text muted small>
+          No volume in any tier.
+        </Text>
+      </>
     );
   }
   return (
     <table className="w-full text-sm tabular-nums">
+      <caption className="text-muted-foreground mb-1 text-left text-xs">
+        {caption}
+      </caption>
+      {/* The columns are only distinguishable by position and formatting,
+          which a screen reader can't convey — so the headers exist for it
+          and are hidden from the compact visual layout. */}
+      <thead className="sr-only">
+        <tr>
+          <th scope="col">Tier</th>
+          <th scope="col">Volume</th>
+          <th scope="col">Rate</th>
+          <th scope="col">Cost</th>
+        </tr>
+      </thead>
       <tbody>
         {lines.map((line) => (
           <tr key={line.label} className="text-muted-foreground">
-            <td className="py-0.5 pr-2">{line.label}</td>
+            <th scope="row" className="py-0.5 pr-2 text-left font-normal">
+              {line.label}
+            </th>
             <td className="py-0.5 pr-2 text-right">
               {formatTokensCompact(line.tokens)}
             </td>
@@ -161,26 +189,25 @@ export function ContractPriceEstimator({
   const [customVolume, setCustomVolume] = useState("");
   const [feeOverride, setFeeOverride] = useState("");
 
-  // Recomputed per render against a single `now`, so every basis in the
-  // picker is measured from the same instant.
-  const options = useMemo(
-    () => volumeBasisOptions(cycles, Date.now()),
-    [cycles],
-  );
+  // Deliberately not memoized on `cycles`. Whether the projection is even
+  // offered depends on how much of the cycle has elapsed, so a `now` captured
+  // once and cached behind a `cycles` dependency would freeze that answer for
+  // as long as the tab stays open. This is a handful of array passes over at
+  // most a year of cycles — cheaper than the staleness it would buy.
+  const options = volumeBasisOptions(cycles, Date.now());
 
   // Land on the steadiest reading the account can actually support, rather
-  // than pinning a basis that may have no data: a three-cycle mean smooths
+  // than pinning a basis that may have no data: a multi-cycle mean smooths
   // the spikes that make a single month misleading, and the projection is a
   // last resort because it's the noisiest of the three. Derived, not stored,
   // so an account that gains history stops defaulting to a weaker basis.
-  const defaultBasis = useMemo<VolumeBasis>(() => {
-    for (const candidate of ["avg3", "last", "projected"] as const) {
-      if (options.find((o) => o.value === candidate)?.tokens != null) {
-        return candidate;
-      }
+  let defaultBasis: VolumeBasis = "custom";
+  for (const candidate of ["avg3", "last", "projected"] as const) {
+    if (options.find((o) => o.value === candidate)?.tokens != null) {
+      defaultBasis = candidate;
+      break;
     }
-    return "custom";
-  }, [options]);
+  }
   const basis = basisOverride ?? defaultBasis;
 
   const parsedCustom = Number(customVolume);
@@ -368,10 +395,10 @@ export function ContractPriceEstimator({
                       {formatUSD(platformFeeAnnual)}
                     </span>
                   </div>
-                  <div className="text-muted-foreground mb-1 text-xs">
-                    Monthly overage
-                  </div>
-                  <TierTable lines={committed.lines} />
+                  <TierTable
+                    caption="Monthly overage"
+                    lines={committed.lines}
+                  />
                   <ModelTotals
                     monthly={committed.monthly}
                     annual={committed.annual}
@@ -393,10 +420,10 @@ export function ContractPriceEstimator({
             >
               {payg && (
                 <>
-                  <div className="text-muted-foreground mb-1 text-xs">
-                    Monthly volume tiers
-                  </div>
-                  <TierTable lines={payg.lines} />
+                  <TierTable
+                    caption="Monthly volume tiers"
+                    lines={payg.lines}
+                  />
                   <ModelTotals
                     monthly={payg.monthly}
                     annual={payg.annual}
