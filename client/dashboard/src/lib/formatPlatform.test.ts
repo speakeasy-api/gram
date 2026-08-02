@@ -21,6 +21,7 @@ describe("formatPlatform", () => {
     expect(formatPlatform("cursor")).toBe("Cursor");
     expect(formatPlatform("codex")).toBe("Codex");
     expect(formatPlatform("opencode")).toBe("opencode");
+    expect(formatPlatform("litellm")).toBe("LiteLLM");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 

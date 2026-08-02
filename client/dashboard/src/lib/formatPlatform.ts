@@ -19,6 +19,7 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   cursor: "Cursor",
   codex: "Codex",
   opencode: "opencode",
+  litellm: "LiteLLM",
   copilot: "Copilot",
   "github-copilot": "Copilot",
   gemini: "Gemini",
