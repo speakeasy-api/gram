@@ -43,8 +43,17 @@ docker compose -f compose.shared.yml -p gram-shared up -d \
 # singleton, this returns instantly on every run after the first. Override the
 # bound with PRESIDIO_READINESS_TIMEOUT; <=0 or a non-integer skips the wait.
 PRESIDIO_READINESS_TIMEOUT="${PRESIDIO_READINESS_TIMEOUT:-90}"
+# Normalize to a plain decimal int before any arithmetic: a leading-zero
+# override (e.g. "08") would otherwise be misread as octal — "08"/"09" error and
+# "010" means 8 — so validate the digits, then re-base with 10# (matching
+# INFRA_READINESS_TIMEOUT below). A non-integer becomes 0, which skips the wait.
+if [[ "$PRESIDIO_READINESS_TIMEOUT" =~ ^[0-9]+$ ]]; then
+  PRESIDIO_READINESS_TIMEOUT=$((10#$PRESIDIO_READINESS_TIMEOUT))
+else
+  PRESIDIO_READINESS_TIMEOUT=0
+fi
 presidio_cid="$(docker compose -f compose.shared.yml -p gram-shared ps -q gram-presidio 2>/dev/null)"
-if [[ -n "$presidio_cid" && "$PRESIDIO_READINESS_TIMEOUT" =~ ^[0-9]+$ && "$PRESIDIO_READINESS_TIMEOUT" -gt 0 ]]; then
+if [[ -n "$presidio_cid" && "$PRESIDIO_READINESS_TIMEOUT" -gt 0 ]]; then
   presidio_deadline=$((SECONDS + PRESIDIO_READINESS_TIMEOUT))
   until [ "$(docker inspect -f '{{.State.Health.Status}}' "$presidio_cid" 2>/dev/null)" = "healthy" ]; do
     if ((SECONDS >= presidio_deadline)); then
