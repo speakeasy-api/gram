@@ -21,14 +21,30 @@ const (
 	tracePersistenceTimeout = 5 * time.Second
 )
 
-type traceJob struct {
-	spans []telemetry.LogParams
+type otlpJob struct {
+	rows []telemetry.LogParams
+}
+
+type otlpSignal uint8
+
+const (
+	otlpSignalSpans otlpSignal = iota
+	otlpSignalMetrics
+)
+
+func (s otlpSignal) name() string {
+	if s == otlpSignalMetrics {
+		return "metrics"
+	}
+	return "spans"
 }
 
 type TraceProcessor struct {
 	logger  *slog.Logger
 	logBulk func(context.Context, []telemetry.LogParams) error
-	jobs    chan traceJob
+	calls   *callcache.Cache
+	signal  otlpSignal
+	jobs    chan otlpJob
 	stop    chan struct{}
 	done    chan struct{}
 	workers int
@@ -46,13 +62,21 @@ type TraceProcessor struct {
 }
 
 func NewTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, telemetryLogger *telemetry.Logger, calls *callcache.Cache) *TraceProcessor {
-	logBulk := func(ctx context.Context, spans []telemetry.LogParams) error {
-		cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
-		enrichTraceAttribution(cacheCtx, logger, calls, spans)
-		cancel()
-		return telemetryLogger.LogBulkBounded(ctx, spans)
-	}
-	return newTraceProcessor(logger, meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize)
+	processor := newOTLPProcessor(logger, meterProvider, telemetryLogger.LogBulkBounded, traceProcessorWorkers, traceProcessorQueueSize, otlpSignalSpans)
+	processor.calls = calls
+	return processor
+}
+
+type MetricProcessor struct {
+	*TraceProcessor
+}
+
+func NewMetricProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, telemetryLogger *telemetry.Logger) *MetricProcessor {
+	return newMetricProcessor(logger, meterProvider, telemetryLogger.LogBulkBounded, traceProcessorWorkers, traceProcessorQueueSize)
+}
+
+func newMetricProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int) *MetricProcessor {
+	return &MetricProcessor{TraceProcessor: newOTLPProcessor(logger, meterProvider, logBulk, workers, queueSize, otlpSignalMetrics)}
 }
 
 type traceAttribution struct {
@@ -107,17 +131,24 @@ func enrichTraceAttribution(ctx context.Context, logger *slog.Logger, calls *cal
 }
 
 func newTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int) *TraceProcessor {
+	return newOTLPProcessor(logger, meterProvider, logBulk, workers, queueSize, otlpSignalSpans)
+}
+
+func newOTLPProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int, signal otlpSignal) *TraceProcessor {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/litellm")
-	accepted, _ := meter.Int64Counter("litellm.otel.spans.accepted", metric.WithDescription("LiteLLM OTLP spans accepted into the processing queue"))
-	dropped, _ := meter.Int64Counter("litellm.otel.spans.dropped", metric.WithDescription("LiteLLM OTLP spans dropped because the processing queue was full"))
-	persistenceFailed, _ := meter.Int64Counter("litellm.otel.spans.persistence_failed", metric.WithDescription("LiteLLM OTLP spans permanently lost because telemetry persistence failed"))
+	signalName := signal.name()
+	accepted, _ := meter.Int64Counter("litellm.otel."+signalName+".accepted", metric.WithDescription("LiteLLM OTLP "+signalName+" accepted into the processing queue"))
+	dropped, _ := meter.Int64Counter("litellm.otel."+signalName+".dropped", metric.WithDescription("LiteLLM OTLP "+signalName+" dropped because the processing queue was full"))
+	persistenceFailed, _ := meter.Int64Counter("litellm.otel."+signalName+".persistence_failed", metric.WithDescription("LiteLLM OTLP "+signalName+" permanently lost because telemetry persistence failed"))
 	truncatedAttrs, _ := meter.Int64Counter("litellm.otel.attributes.truncated", metric.WithDescription("LiteLLM OTLP attributes truncated or dropped by ingest limits"))
 	invalidIdentifiers, _ := meter.Int64Counter("litellm.otel.identifiers.invalid", metric.WithDescription("Invalid LiteLLM OTLP trace and span identifiers omitted during ingest"))
 
 	return &TraceProcessor{
 		logger:             logger.With(attr.SlogComponent("litellm.otel.processor")),
 		logBulk:            logBulk,
-		jobs:               make(chan traceJob, queueSize),
+		calls:              nil,
+		signal:             signal,
+		jobs:               make(chan otlpJob, queueSize),
 		stop:               make(chan struct{}),
 		done:               make(chan struct{}),
 		workers:            workers,
@@ -173,23 +204,31 @@ func (p *TraceProcessor) Shutdown(ctx context.Context) error {
 }
 
 func (p *TraceProcessor) Enqueue(ctx context.Context, spans []telemetry.LogParams) bool {
+	return p.enqueue(ctx, otlpJob{rows: spans})
+}
+
+func (p *MetricProcessor) Enqueue(ctx context.Context, points []telemetry.LogParams) bool {
+	return p.enqueue(ctx, otlpJob{rows: points})
+}
+
+func (p *TraceProcessor) enqueue(ctx context.Context, job otlpJob) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.started || p.stopping {
-		p.dropped.Add(ctx, int64(len(spans)))
-		p.logger.WarnContext(ctx, "LiteLLM OTLP trace processor unavailable, dropping export",
+		p.dropped.Add(ctx, int64(len(job.rows)))
+		p.logger.WarnContext(ctx, "LiteLLM OTLP processor unavailable, dropping export",
 			attr.SlogEvent("litellm_otel_processor_unavailable"),
 		)
 		return false
 	}
 
 	select {
-	case p.jobs <- traceJob{spans: spans}:
-		p.accepted.Add(ctx, int64(len(spans)))
+	case p.jobs <- job:
+		p.accepted.Add(ctx, int64(len(job.rows)))
 		return true
 	default:
-		p.dropped.Add(ctx, int64(len(spans)))
-		p.logger.WarnContext(ctx, "LiteLLM OTLP trace queue full, dropping export",
+		p.dropped.Add(ctx, int64(len(job.rows)))
+		p.logger.WarnContext(ctx, "LiteLLM OTLP queue full, dropping export",
 			attr.SlogEvent("litellm_otel_queue_full"),
 		)
 		return false
@@ -215,21 +254,26 @@ func (p *TraceProcessor) run(ctx context.Context) {
 	}
 }
 
-func (p *TraceProcessor) process(ctx context.Context, job traceJob) {
+func (p *TraceProcessor) process(ctx context.Context, job otlpJob) {
 	persistenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tracePersistenceTimeout)
 	defer cancel()
+	if p.signal == otlpSignalSpans && p.calls != nil {
+		cacheCtx, cacheCancel := context.WithTimeout(persistenceCtx, callCacheTimeout)
+		enrichTraceAttribution(cacheCtx, p.logger, p.calls, job.rows)
+		cacheCancel()
+	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			p.persistenceFailed.Add(ctx, int64(len(job.spans)), metric.WithAttributes(attr.Reason("log_bulk_panic")))
-			p.logger.ErrorContext(ctx, "persist LiteLLM OTLP trace export callback panicked",
+			p.persistenceFailed.Add(ctx, int64(len(job.rows)), metric.WithAttributes(attr.Reason("log_bulk_panic")))
+			p.logger.ErrorContext(ctx, "persist LiteLLM OTLP export callback panicked",
 				attr.SlogEvent("litellm_otel_log_bulk_panic"),
 				attr.SlogError(fmt.Errorf("telemetry persistence callback panic: %v", recovered)),
 			)
 		}
 	}()
-	if err := p.logBulk(persistenceCtx, job.spans); err != nil {
-		p.persistenceFailed.Add(ctx, int64(len(job.spans)), metric.WithAttributes(attr.Reason("log_bulk_error")))
-		p.logger.WarnContext(ctx, "persist LiteLLM OTLP trace export", attr.SlogError(err))
+	if err := p.logBulk(persistenceCtx, job.rows); err != nil {
+		p.persistenceFailed.Add(ctx, int64(len(job.rows)), metric.WithAttributes(attr.Reason("log_bulk_error")))
+		p.logger.WarnContext(ctx, "persist LiteLLM OTLP export", attr.SlogError(err))
 	}
 }
 
