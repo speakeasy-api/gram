@@ -1087,6 +1087,34 @@ func TestOTLPAttributeLimitsAndRecursiveValues(t *testing.T) {
 	require.NoError(t, processor.Shutdown(t.Context()))
 }
 
+func TestOTLPJSONScalarDecodersAcceptEscapedStringsAndRawNumbers(t *testing.T) {
+	t.Parallel()
+
+	var signed jsonInt64
+	require.NoError(t, json.Unmarshal([]byte(`"1\u0032"`), &signed))
+	require.Equal(t, jsonInt64(12), signed)
+	require.NoError(t, json.Unmarshal([]byte(`13`), &signed))
+	require.Equal(t, jsonInt64(13), signed)
+
+	var unsigned jsonUint64
+	require.NoError(t, json.Unmarshal([]byte(`"1\u0034"`), &unsigned))
+	require.Equal(t, jsonUint64(14), unsigned)
+	require.NoError(t, json.Unmarshal([]byte(`15`), &unsigned))
+	require.Equal(t, jsonUint64(15), unsigned)
+
+	var decimal jsonFloat64
+	require.NoError(t, json.Unmarshal([]byte(`"1.\u0036"`), &decimal))
+	require.InDelta(t, 1.6, float64(decimal), 0.000001)
+	require.NoError(t, json.Unmarshal([]byte(`1.7`), &decimal))
+	require.InDelta(t, 1.7, float64(decimal), 0.000001)
+
+	var kind jsonInt32
+	require.NoError(t, json.Unmarshal([]byte(`"\u0031"`), &kind))
+	require.Equal(t, jsonInt32(1), kind)
+	require.NoError(t, json.Unmarshal([]byte(`2`), &kind))
+	require.Equal(t, jsonInt32(2), kind)
+}
+
 func TestOTLPAttributeTypeAllowlistRejectsNestedValues(t *testing.T) {
 	t.Parallel()
 
