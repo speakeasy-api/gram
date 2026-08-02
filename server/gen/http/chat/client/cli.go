@@ -609,7 +609,7 @@ func BuildSummarizeToolActivityPayload(chatSummarizeToolActivityBody string, cha
 	{
 		err = json.Unmarshal([]byte(chatSummarizeToolActivityBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"in_progress\": false,\n      \"tool_calls\": [\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aaa\"\n         },\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aaa\"\n         }\n      ],\n      \"user_message\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"in_progress\": false,\n      \"tool_calls\": [\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aa\"\n         },\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aa\"\n         }\n      ],\n      \"user_message\": \"aaa\"\n   }'")
 		}
 		if body.ToolCalls == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
@@ -628,8 +628,8 @@ func BuildSummarizeToolActivityPayload(chatSummarizeToolActivityBody string, cha
 			}
 		}
 		if body.UserMessage != nil {
-			if utf8.RuneCountInString(*body.UserMessage) > 10000 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_message", *body.UserMessage, utf8.RuneCountInString(*body.UserMessage), 10000, false))
+			if utf8.RuneCountInString(*body.UserMessage) > 2000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_message", *body.UserMessage, utf8.RuneCountInString(*body.UserMessage), 2000, false))
 			}
 		}
 		if err != nil {

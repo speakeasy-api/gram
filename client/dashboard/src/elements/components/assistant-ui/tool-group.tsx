@@ -8,15 +8,17 @@ import type { ToolActivityCall } from "@/elements/types";
 /**
  * latestUserText returns the text of the most recent user message in the
  * thread — the prompt that initiated the current turn — used to ground the
- * tool-activity summary in the user's intent.
+ * tool-activity summary in the user's intent. On the assistant-ui runtime
+ * message the text lives under `parts` (matching every other consumer, e.g.
+ * useFollowOnSuggestions), not `content`.
  */
 function latestUserText(messages: readonly unknown[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i] as
-      | { role?: string; content?: Array<{ type?: string; text?: string }> }
+      | { role?: string; parts?: Array<{ type?: string; text?: string }> }
       | undefined;
     if (message?.role !== "user") continue;
-    const text = (message.content ?? [])
+    const text = (message.parts ?? [])
       .filter((part) => part?.type === "text" && typeof part.text === "string")
       .map((part) => part.text)
       .join("")

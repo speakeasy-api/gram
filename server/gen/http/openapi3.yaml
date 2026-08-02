@@ -67501,8 +67501,8 @@ components:
                     maxItems: 20
                 user_message:
                     type: string
-                    description: The user prompt that initiated the turn, used to ground the summary in the user's intent.
-                    maxLength: 10000
+                    description: The user prompt that initiated the turn, used to ground the summary in the user's intent. Only the first 2000 characters inform the summary.
+                    maxLength: 2000
             required:
                 - tool_calls
         SummarizeToolActivityResult:
@@ -67949,11 +67949,12 @@ components:
             properties:
                 arguments:
                     type: string
-                    description: The tool arguments as a JSON string, if available. Only the first 600 characters are used.
+                    description: The tool arguments as a JSON string, if available. Values longer than 600 characters are rejected; callers should truncate first.
                     maxLength: 600
                 name:
                     type: string
                     description: The tool name.
+                    minLength: 1
                     maxLength: 256
             required:
                 - name

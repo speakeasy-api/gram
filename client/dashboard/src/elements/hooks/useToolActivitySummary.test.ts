@@ -159,6 +159,35 @@ describe("useToolActivitySummary", () => {
     expect(result.current.label).toBe("Used Search Web");
   });
 
+  it("resolves to the heuristic when the summarizer hangs", async () => {
+    // A summarizer that never resolves on its own but honors the abort signal,
+    // like fetch does.
+    summarizeMock.mockImplementation(
+      ({ signal }) =>
+        new Promise((_, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    );
+
+    const { result } = renderHook(() =>
+      useToolActivitySummary({
+        toolCalls: [{ name: "search_web" }],
+        inProgress: true,
+      }),
+    );
+
+    expect(result.current.pending).toBe(true);
+
+    // Past the debounce + request timeout: the hung request is aborted and the
+    // header settles on the heuristic rather than shimmering forever.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400 + 15000 + 10);
+    });
+
+    expect(result.current.pending).toBe(false);
+    expect(result.current.label).toBe("Calling Search Web…");
+  });
+
   it("never summarizes when disabled (custom-rendered tool)", async () => {
     summarizeMock.mockResolvedValue("should not appear");
 

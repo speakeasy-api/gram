@@ -847,7 +847,7 @@ export function InsightsProvider({
   // their chat:read grant, so hide the composer for those rather than let a
   // send 404. Chats started from the dashboard stash the caller's email in
   // externalUserId instead of userId (see resolveCreator above).
-  const { user } = useSession();
+  const { user, session } = useSession();
   const isOwnChat = useCallback(
     ({
       userId,
@@ -943,8 +943,8 @@ export function InsightsProvider({
   // header. Authenticated via the dashboard session + project, so it only runs
   // in this (dashboard) context; embedded Elements fall back to the heuristic.
   const summarizeToolActivity = useMemo(
-    () => createToolActivitySummarizer(mcpConfig.projectSlug),
-    [mcpConfig.projectSlug],
+    () => createToolActivitySummarizer(mcpConfig.projectSlug, session),
+    [mcpConfig.projectSlug, session],
   );
 
   const elementsConfig = useMemo<ElementsConfig>(

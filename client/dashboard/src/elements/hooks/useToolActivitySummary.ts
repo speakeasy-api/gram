@@ -10,8 +10,12 @@ import type { ToolActivityCall } from "@/elements/types";
 const SUMMARIZE_DEBOUNCE_MS = 400;
 /** Cap per-call arguments sent over the wire; the server bounds them again. */
 const MAX_ARGUMENT_CHARS = 600;
+/** Cap the user prompt sent over the wire; the endpoint rejects longer. */
+const MAX_USER_MESSAGE_CHARS = 2000;
 /** Cap how many calls are sent; the server summarizes at most this many. */
 const MAX_TOOL_CALLS = 20;
+/** Abort a summarization request that hasn't resolved, so `pending` clears. */
+const REQUEST_TIMEOUT_MS = 15000;
 
 export interface ToolActivitySummary {
   /** The label to show as the tool-group header. */
@@ -115,6 +119,9 @@ export function useToolActivitySummary({
   const enrichedRef = useRef(enrichedByKey);
   enrichedRef.current = enrichedByKey;
 
+  const settledRef = useRef(settledByKey);
+  settledRef.current = settledByKey;
+
   // Only summarize turns we've actually watched run — i.e. live turns. A turn
   // that mounts already-complete (an old conversation loaded from history)
   // keeps its heuristic label so browsing history costs no model calls.
@@ -126,14 +133,25 @@ export function useToolActivitySummary({
   useEffect(() => {
     if (!summarizer) return;
     if (!wasRunningRef.current) return;
+    // Skip keys we've already enriched or already tried and failed — a failed
+    // attempt is terminal, so a summarizer identity change must not retry it.
     if (enrichedRef.current[key]) return;
+    if (settledRef.current[key]) return;
 
     const { toolCalls, userMessage, inProgress, materialSignature } =
       inputRef.current;
     if (toolCalls.length === 0) return;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => {
+    const debounceTimer = setTimeout(() => {
+      // Bound the request itself: a hung summarizer must still resolve to the
+      // heuristic instead of shimmering forever.
+      let timedOut = false;
+      const requestTimer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, REQUEST_TIMEOUT_MS);
+
       void (async () => {
         let summary: string | null = null;
         try {
@@ -145,22 +163,28 @@ export function useToolActivitySummary({
               name: call.name,
               arguments: call.arguments?.slice(0, MAX_ARGUMENT_CHARS),
             })),
-            userMessage,
+            userMessage: userMessage?.slice(0, MAX_USER_MESSAGE_CHARS),
             inProgress,
             signal: controller.signal,
           });
         } catch {
           // Swallow — the heuristic label is a fine fallback.
           summary = null;
+        } finally {
+          clearTimeout(requestTimer);
         }
-        if (controller.signal.aborted) return;
+        // Aborted by effect cleanup (superseded key) — drop silently. A
+        // timeout-abort is different: let it fall through and settle so the
+        // shimmer resolves to the heuristic.
+        if (controller.signal.aborted && !timedOut) return;
         const trimmed = summary?.trim();
         if (trimmed) {
           setEnrichedByKey((prev) => ({ ...prev, [key]: trimmed }));
           setLastEnriched({ summary: trimmed, signature: materialSignature });
         }
         // Mark the attempt as finished either way so `pending` (and the header
-        // shimmer) resolves even when the summary failed or came back empty.
+        // shimmer) resolves even when the summary failed, timed out, or was
+        // empty.
         setSettledByKey((prev) =>
           prev[key] ? prev : { ...prev, [key]: true },
         );
@@ -168,7 +192,7 @@ export function useToolActivitySummary({
     }, SUMMARIZE_DEBOUNCE_MS);
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(debounceTimer);
       controller.abort();
     };
   }, [key, summarizer]);

@@ -346,8 +346,8 @@ var _ = Service("chat", func() {
 				MinLength(1)
 				MaxLength(20)
 			})
-			Attribute("user_message", String, "The user prompt that initiated the turn, used to ground the summary in the user's intent.", func() {
-				MaxLength(10000)
+			Attribute("user_message", String, "The user prompt that initiated the turn, used to ground the summary in the user's intent. Only the first 2000 characters inform the summary.", func() {
+				MaxLength(2000)
 			})
 			Attribute("in_progress", Boolean, "True while the tools are still running (produces a present-tense label); false once they have completed (past tense).", func() {
 				Default(false)
@@ -470,9 +470,10 @@ var SummarizeChatResult = Type("SummarizeChatResult", func() {
 
 var ToolActivityCall = Type("ToolActivityCall", func() {
 	Attribute("name", String, "The tool name.", func() {
+		MinLength(1)
 		MaxLength(256)
 	})
-	Attribute("arguments", String, "The tool arguments as a JSON string, if available. Only the first 600 characters are used.", func() {
+	Attribute("arguments", String, "The tool arguments as a JSON string, if available. Values longer than 600 characters are rejected; callers should truncate first.", func() {
 		MaxLength(600)
 	})
 	Required("name")

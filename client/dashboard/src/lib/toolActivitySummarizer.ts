@@ -6,16 +6,27 @@ import { getServerURL } from "@/lib/utils";
  * calls the `chat.summarizeToolActivity` management endpoint to turn a turn's
  * tool calls into a short, human-readable "task" label for the chat UI.
  *
- * It mirrors the dashboard SDK's request auth — session cookie
- * (`credentials: "include"`) plus the `gram-project` header — so it works
- * wherever the dashboard is authenticated. On any failure it returns `null`,
- * letting Elements fall back to its instant heuristic label.
+ * It mirrors the dashboard SDK's request auth — the session cookie
+ * (`credentials: "include"`) plus the `gram-project` header — and additionally
+ * forwards the session token as the `Gram-Session` header when one is provided,
+ * so enrichment still works in cross-origin dev/preview setups where the
+ * SameSite=Lax cookie isn't sent. On any failure it returns `null`, letting
+ * Elements fall back to its instant heuristic label.
  */
 export function createToolActivitySummarizer(
   projectSlug: string,
+  sessionToken?: string,
 ): ToolActivitySummarizer {
   return async ({ toolCalls, userMessage, inProgress, signal }) => {
     if (toolCalls.length === 0) return null;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "gram-project": projectSlug,
+    };
+    if (sessionToken) {
+      headers["Gram-Session"] = sessionToken;
+    }
 
     try {
       const response = await fetch(
@@ -24,10 +35,7 @@ export function createToolActivitySummarizer(
           method: "POST",
           credentials: "include",
           signal,
-          headers: {
-            "Content-Type": "application/json",
-            "gram-project": projectSlug,
-          },
+          headers,
           body: JSON.stringify({
             tool_calls: toolCalls.map((call) => ({
               name: call.name,

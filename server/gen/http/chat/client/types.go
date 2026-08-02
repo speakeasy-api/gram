@@ -50,7 +50,7 @@ type SummarizeToolActivityRequestBody struct {
 	// summarizes at most 20).
 	ToolCalls []*ToolActivityCallRequestBody `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// The user prompt that initiated the turn, used to ground the summary in the
-	// user's intent.
+	// user's intent. Only the first 2000 characters inform the summary.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// True while the tools are still running (produces a present-tense label);
 	// false once they have completed (past tense).
@@ -2453,8 +2453,8 @@ type ChatTotalsResponseBody struct {
 type ToolActivityCallRequestBody struct {
 	// The tool name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The tool arguments as a JSON string, if available. Only the first 600
-	// characters are used.
+	// The tool arguments as a JSON string, if available. Values longer than 600
+	// characters are rejected; callers should truncate first.
 	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 }
 
@@ -7454,6 +7454,9 @@ func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
 // ValidateToolActivityCallRequestBody runs the validations defined on
 // ToolActivityCallRequestBody
 func ValidateToolActivityCallRequestBody(body *ToolActivityCallRequestBody) (err error) {
+	if utf8.RuneCountInString(body.Name) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+	}
 	if utf8.RuneCountInString(body.Name) > 256 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 256, false))
 	}

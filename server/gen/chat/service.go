@@ -614,7 +614,7 @@ type SummarizeToolActivityPayload struct {
 	// summarizes at most 20).
 	ToolCalls []*ToolActivityCall
 	// The user prompt that initiated the turn, used to ground the summary in the
-	// user's intent.
+	// user's intent. Only the first 2000 characters inform the summary.
 	UserMessage *string
 	// True while the tools are still running (produces a present-tense label);
 	// false once they have completed (past tense).
@@ -632,8 +632,8 @@ type SummarizeToolActivityResult struct {
 type ToolActivityCall struct {
 	// The tool name.
 	Name string
-	// The tool arguments as a JSON string, if available. Only the first 600
-	// characters are used.
+	// The tool arguments as a JSON string, if available. Values longer than 600
+	// characters are rejected; callers should truncate first.
 	Arguments *string
 }
 
