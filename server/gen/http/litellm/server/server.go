@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts []*MountPoint
 	Ingest http.Handler
+	Traces http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -50,8 +51,10 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Ingest", "POST", "/rpc/litellm.ingest/beta/litellm_basic_guardrail_api"},
+			{"Traces", "POST", "/rpc/hooks.otel/v1/traces"},
 		},
 		Ingest: NewIngestHandler(e.Ingest, mux, decoder, encoder, errhandler, formatter),
+		Traces: NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -61,6 +64,7 @@ func (s *Server) Service() string { return "litellm" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Ingest = m(s.Ingest)
+	s.Traces = m(s.Traces)
 }
 
 // MethodNames returns the methods served.
@@ -69,6 +73,7 @@ func (s *Server) MethodNames() []string { return litellm.MethodNames[:] }
 // Mount configures the mux to serve the litellm endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountIngestHandler(mux, h.Ingest)
+	MountTracesHandler(mux, h.Traces)
 }
 
 // Mount configures the mux to serve the litellm endpoints.
@@ -106,6 +111,59 @@ func NewIngestHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "ingest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTracesHandler configures the mux to serve the "litellm" service
+// "traces" endpoint.
+func MountTracesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/hooks.otel/v1/traces", f)
+}
+
+// NewTracesHandler creates a HTTP handler which loads the HTTP request and
+// calls the "litellm" service "traces" endpoint.
+func NewTracesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTracesRequest(mux, decoder)
+		encodeResponse = EncodeTracesResponse(encoder)
+		encodeError    = EncodeTracesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "traces")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
 		payload, err := decodeRequest(r)
 		if err != nil {

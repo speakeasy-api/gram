@@ -42,7 +42,8 @@ type contractFixtureCase struct {
 }
 
 type contractFixtureManifest struct {
-	Files map[string]string `json:"files"`
+	Files     map[string]string `json:"files"`
+	OTELFiles map[string]string `json:"otel_files"`
 }
 
 func readJSONLines(t *testing.T, file string) [][]byte {
@@ -108,13 +109,21 @@ func TestContractFixtureManifest(t *testing.T) {
 	var manifest contractFixtureManifest
 	require.NoError(t, json.Unmarshal(testenv.ReadFixture(t, contractFixtureDir+"manifest.json"), &manifest))
 	require.NotEmpty(t, manifest.Files)
+	require.NotEmpty(t, manifest.OTELFiles)
 
 	entries, err := os.ReadDir(contractFixtureDir)
 	require.NoError(t, err)
 	fixtureFiles := make([]string, 0, len(manifest.Files))
+	otelFixtureFiles := make([]string, 0, len(manifest.OTELFiles))
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".jsonl") {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(entry.Name(), ".jsonl") {
 			fixtureFiles = append(fixtureFiles, entry.Name())
+		}
+		if strings.HasPrefix(entry.Name(), "otlp-") && (strings.HasSuffix(entry.Name(), ".json") || strings.HasSuffix(entry.Name(), ".pb")) {
+			otelFixtureFiles = append(otelFixtureFiles, entry.Name())
 		}
 	}
 	manifestFiles := make([]string, 0, len(manifest.Files))
@@ -124,6 +133,13 @@ func TestContractFixtureManifest(t *testing.T) {
 		require.Equal(t, expected, fmt.Sprintf("%x", sum), filename)
 	}
 	require.ElementsMatch(t, manifestFiles, fixtureFiles)
+	manifestOTELFiles := make([]string, 0, len(manifest.OTELFiles))
+	for filename, expected := range manifest.OTELFiles {
+		manifestOTELFiles = append(manifestOTELFiles, filename)
+		sum := sha256.Sum256(testenv.ReadFixture(t, contractFixtureDir+filename))
+		require.Equal(t, expected, fmt.Sprintf("%x", sum), filename)
+	}
+	require.ElementsMatch(t, manifestOTELFiles, otelFixtureFiles)
 }
 
 func TestContractFixtures(t *testing.T) {

@@ -20,6 +20,9 @@ type Client struct {
 	// Ingest Doer is the HTTP client used to make requests to the ingest endpoint.
 	IngestDoer goahttp.Doer
 
+	// Traces Doer is the HTTP client used to make requests to the traces endpoint.
+	TracesDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -41,6 +44,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		IngestDoer:          doer,
+		TracesDoer:          doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -68,6 +72,30 @@ func (c *Client) Ingest() goa.Endpoint {
 		resp, err := c.IngestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("litellm", "ingest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Traces returns an endpoint that makes HTTP requests to the litellm service
+// traces server.
+func (c *Client) Traces() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTracesRequest(c.encoder)
+		decodeResponse = DecodeTracesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTracesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TracesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("litellm", "traces", err)
 		}
 		return decodeResponse(resp)
 	}

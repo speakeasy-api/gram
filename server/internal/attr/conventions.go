@@ -47,8 +47,14 @@ const (
 	ObservedTimeUnixNanoKey              = attribute.Key("observed_time_unix_nano")
 	ServerAddressKey                     = semconv.ServerAddressKey
 	ServiceEnvKey                        = semconv.DeploymentEnvironmentNameKey
+	ServiceInstanceIDKey                 = semconv.ServiceInstanceIDKey
 	ServiceNameKey                       = semconv.ServiceNameKey
+	ServiceNamespaceKey                  = semconv.ServiceNamespaceKey
 	ServiceVersionKey                    = semconv.ServiceVersionKey
+	DeploymentEnvironmentKey             = attribute.Key("deployment.environment")
+	TelemetrySDKLanguageKey              = semconv.TelemetrySDKLanguageKey
+	TelemetrySDKNameKey                  = semconv.TelemetrySDKNameKey
+	TelemetrySDKVersionKey               = semconv.TelemetrySDKVersionKey
 	TimeUnixNanoKey                      = attribute.Key("time_unix_nano")
 	URLDomainKey                         = semconv.URLDomainKey
 	URLFullKey                           = semconv.URLFullKey
@@ -69,14 +75,23 @@ const (
 	ReasonKey   = attribute.Key("reason")
 	ValueKey    = attribute.Key("value")
 
-	SpanIDKey              = attribute.Key("span.id")
-	TraceIDKey             = attribute.Key("trace.id")
-	LogSeverityKey         = attribute.Key("gram.log.severity_text")
-	LogBodyKey             = attribute.Key("gram.log.body")
-	DataDogGitCommitSHAKey = attribute.Key("git.commit.sha")
-	DataDogGitRepoURLKey   = attribute.Key("git.repository_url")
-	DataDogTraceIDKey      = attribute.Key("dd.trace_id")
-	DataDogSpanIDKey       = attribute.Key("dd.span_id")
+	SpanIDKey                    = attribute.Key("span.id")
+	SpanParentIDKey              = attribute.Key("span.parent_id")
+	TraceIDKey                   = attribute.Key("trace.id")
+	OTelSpanNameKey              = attribute.Key("otel.span.name")
+	OTelSpanKindKey              = attribute.Key("otel.span.kind")
+	OTelSpanStatusCodeKey        = attribute.Key("otel.span.status_code")
+	OTelSpanStartTimeUnixNanoKey = attribute.Key("otel.span.start_time_unix_nano")
+	OTelSpanEndTimeUnixNanoKey   = attribute.Key("otel.span.end_time_unix_nano")
+	OTelSpanDurationMSKey        = attribute.Key("otel.span.duration_ms")
+	OTelScopeNameKey             = attribute.Key("otel.scope.name")
+	OTelScopeVersionKey          = attribute.Key("otel.scope.version")
+	LogSeverityKey               = attribute.Key("gram.log.severity_text")
+	LogBodyKey                   = attribute.Key("gram.log.body")
+	DataDogGitCommitSHAKey       = attribute.Key("git.commit.sha")
+	DataDogGitRepoURLKey         = attribute.Key("git.repository_url")
+	DataDogTraceIDKey            = attribute.Key("dd.trace_id")
+	DataDogSpanIDKey             = attribute.Key("dd.span_id")
 
 	FlyAppNameKey    = attribute.Key("fly.app.name")
 	FlyOrgIDKey      = attribute.Key("fly.org.id")
@@ -407,10 +422,13 @@ const (
 	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
 	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
 	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey      = attribute.Key("gram.litellm.user_email")
 	LiteLLMTeamIDKey         = attribute.Key("gram.litellm.team_id")
 	LiteLLMTeamAliasKey      = attribute.Key("gram.litellm.team_alias")
 	LiteLLMEndUserIDKey      = attribute.Key("gram.litellm.end_user_id")
 	LiteLLMOrganizationIDKey = attribute.Key("gram.litellm.org_id")
+	LiteLLMIsStreamingKey    = attribute.Key("litellm.is_streaming")
+	LiteLLMResponseCostKey   = attribute.Key("litellm.response.cost")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -477,6 +495,11 @@ const (
 	GenAIUsageCacheCreationInputTokensKey = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
 	GenAIUsageReasoningTokensKey          = attribute.Key("gen_ai.usage.reasoning_tokens")
 	GenAIUsageCostKey                     = attribute.Key("gen_ai.usage.cost")
+	GenAISystemKey                        = attribute.Key("gen_ai.system")
+	GenAIUsagePromptTokensKey             = attribute.Key("gen_ai.usage.prompt_tokens")
+	GenAIUsageCompletionTokensKey         = attribute.Key("gen_ai.usage.completion_tokens")
+	GenAIRequestIsStreamingKey            = attribute.Key("gen_ai.request.is_streaming")
+	GenAIRequestStreamingKey              = attribute.Key("gen_ai.request.streaming")
 
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")

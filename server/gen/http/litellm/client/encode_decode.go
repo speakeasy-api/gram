@@ -259,6 +259,246 @@ func DecodeIngestResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildTracesRequest instantiates a HTTP request object with method and path
+// set to call the "litellm" service "traces" endpoint
+func (c *Client) BuildTracesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TracesLitellmPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("litellm", "traces", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTracesRequest returns an encoder for requests sent to the litellm
+// traces server.
+func EncodeTracesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*litellm.TracesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("litellm", "traces", "*litellm.TracesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewTracesRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("litellm", "traces", err)
+		}
+		return nil
+	}
+}
+
+// DecodeTracesResponse returns a decoder for responses returned by the litellm
+// traces endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeTracesResponse may return the following errors:
+//   - "request_too_large" (type *goa.ServiceError): http.StatusRequestEntityTooLarge
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTracesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusAccepted:
+			return nil, nil
+		case http.StatusRequestEntityTooLarge:
+			var (
+				body TracesRequestTooLargeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesRequestTooLargeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesRequestTooLarge(&body)
+		case http.StatusUnauthorized:
+			var (
+				body TracesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TracesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TracesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TracesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TracesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TracesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TracesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TracesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+				}
+				err = ValidateTracesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "traces", err)
+				}
+				return nil, NewTracesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TracesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+				}
+				err = ValidateTracesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "traces", err)
+				}
+				return nil, NewTracesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("litellm", "traces", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TracesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "traces", err)
+			}
+			err = ValidateTracesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "traces", err)
+			}
+			return nil, NewTracesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("litellm", "traces", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalLitellmLiteLLMRequestDataToLiteLLMRequestDataRequestBody builds a
 // value of type *LiteLLMRequestDataRequestBody from a value of type
 // *litellm.LiteLLMRequestData.

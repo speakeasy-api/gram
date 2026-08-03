@@ -3,6 +3,7 @@ package litellm
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -42,7 +43,7 @@ var IngestResult = ResultType("application/vnd.litellm.ingest-result", func() {
 })
 
 var _ = Service("litellm", func() {
-	Description("Receives LiteLLM Generic Guardrail callbacks.")
+	Description("Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.")
 	shared.DeclareErrorResponses()
 
 	Method("ingest", func() {
@@ -83,6 +84,41 @@ var _ = Service("litellm", func() {
 
 		Meta("openapi:operationId", "ingestLiteLLMGuardrail")
 		Meta("openapi:extension:x-speakeasy-name-override", "ingestGuardrail")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
+
+	Method("traces", func() {
+		Meta("openapi:generate", "false")
+		Description("Accepts LiteLLM OTLP trace exports. Send the standard OTLP JSON ExportTraceServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.")
+		Error(string(oops.CodeRequestTooLarge), func() { Description(oops.CodeRequestTooLarge.UserMessage()) })
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("resourceSpans", ArrayOf(Any), "Standard OTLP ResourceSpans objects. OTLP integer fields use their canonical decimal-string JSON representation and trace/span IDs use case-insensitive hexadecimal strings.")
+			Required("resourceSpans")
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			// Served on the canonical hooks.otel base so every OTLP signal shares
+			// one customer-facing endpoint; provider semantics resolve from the
+			// API key, not the route.
+			POST("/rpc/hooks.otel/v1/traces") //nolint:glint // OTLP ingestion path must match OpenTelemetry conventions
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusAccepted)
+			Response(string(oops.CodeRequestTooLarge), StatusRequestEntityTooLarge, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "ingestLiteLLMOTLPTraces")
+		Meta("openapi:extension:x-speakeasy-name-override", "ingestOTLPTraces")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 })

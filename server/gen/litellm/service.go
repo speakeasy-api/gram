@@ -15,11 +15,16 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Receives LiteLLM Generic Guardrail callbacks.
+// Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
 type Service interface {
 	// Evaluates and captures a LiteLLM model request before it reaches the
 	// provider.
 	Ingest(context.Context, *IngestPayload) (res *LitellmIngestResult, err error)
+	// Accepts LiteLLM OTLP trace exports. Send the standard OTLP JSON
+	// ExportTraceServiceRequest shape shown here with application/json, or the
+	// binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with
+	// application/x-protobuf or application/protobuf. Content-Encoding may be gzip.
+	Traces(context.Context, *TracesPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -42,7 +47,7 @@ const ServiceName = "litellm"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"ingest"}
+var MethodNames = [2]string{"ingest", "traces"}
 
 // IngestPayload is the payload type of the litellm service ingest method.
 type IngestPayload struct {
@@ -93,6 +98,16 @@ type LitellmIngestResult struct {
 	StreamHoldbackChars []int
 }
 
+// TracesPayload is the payload type of the litellm service traces method.
+type TracesPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Standard OTLP ResourceSpans objects. OTLP integer fields use their canonical
+	// decimal-string JSON representation and trace/span IDs use case-insensitive
+	// hexadecimal strings.
+	ResourceSpans []any
+}
+
 // MakeUnauthorized builds a goa.ServiceError from an error.
 func MakeUnauthorized(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unauthorized", false, false, false)
@@ -141,6 +156,11 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeRequestTooLarge builds a goa.ServiceError from an error.
+func MakeRequestTooLarge(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "request_too_large", false, false, false)
 }
 
 // NewLitellmIngestResult initializes result type LitellmIngestResult from
