@@ -379,6 +379,13 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 	}
 
 	config := normalizeDeviceAgentConfiguration(payload.Config)
+	if !authCtx.IsAdmin {
+		for _, key := range platformAdminOnlyDeviceAgentConfigurationKeys {
+			if _, present := config[key]; present {
+				return nil, oops.E(oops.CodeForbidden, nil, "%s can only be set by a platform administrator", key)
+			}
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -416,7 +423,7 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 		}
 		beforeSnapshot = &snapshot
 
-		config, err = mergeStoredDeviceAgentConfiguration(config, before.Config)
+		config, err = mergeStoredDeviceAgentConfiguration(config, before.Config, replaceableDeviceAgentConfigurationKeys(authCtx.IsAdmin))
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "merge device agent configuration").LogError(ctx, s.logger)
 		}

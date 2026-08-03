@@ -18,13 +18,14 @@ The configuration document supports these keys:
   `managed` uses the elevated managed writer. Tool names must be 1 through 64
   characters.
 - `update_channel`: optional non-empty string of at most 128 characters naming
-  the release channel agents should follow.
+  the release channel agents should follow. Platform-admin-only (see below).
 - `auto_update`: optional non-empty string of at most 128 characters carrying
   the update mode understood by deployed agent versions.
 - `pinned_target`: optional non-empty string of at most 128 characters pinning
   the fleet to a specific agent release.
 - `blocked_versions`: optional array of at most 100 non-empty strings, each at
   most 128 characters, naming agent releases that must not be installed.
+  Platform-admin-only (see below).
 - `sync_interval_seconds`: optional whole number of seconds between
   reconciliations, 60 through 86,400.
 
@@ -36,6 +37,12 @@ one removes it — while Gram preserves stored keys the serving version does not
 recognize, so an older server cannot delete settings understood only by newer
 agents. Gram also rejects updates when the stored document carries a newer
 `schema_version` than the serving version understands.
+
+`update_channel` and `blocked_versions` are Speakeasy-internal release
+controls: updates that include them are rejected unless the caller is a
+Speakeasy platform administrator, and updates from org admins preserve any
+stored values instead of removing them by omission. The dashboard only shows
+these fields to platform administrators.
 
 Gram rejects the device-local keys `email`, `org_token`, `org_slug`, `org_name`,
 and `v`. Identity, credentials, and the local configuration schema always stay

@@ -43,6 +43,7 @@ func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+	ctx = withPlatformAdmin(t, ctx)
 
 	beforePoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "developer@example.com"})
 	require.NoError(t, err)
@@ -137,6 +138,7 @@ func TestUpdateConfigurationPreservesStoredUnknownKeys(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+	ctx = withPlatformAdmin(t, ctx)
 
 	_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{Config: map[string]any{
 		"pinned_target":  "1.2.3",
@@ -153,6 +155,41 @@ func TestUpdateConfigurationPreservesStoredUnknownKeys(t *testing.T) {
 	require.NotContains(t, updated.Config, "pinned_target", "omitting a known key must remove it")
 }
 
+func TestUpdateConfigurationRejectsPlatformAdminOnlyKeysForOrgAdmins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	for _, key := range []string{"update_channel", "blocked_versions"} {
+		_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+			Config: map[string]any{key: "stable"},
+		})
+		var shareableErr *oops.ShareableError
+		require.ErrorAs(t, err, &shareableErr, "org admins must not set %s", key)
+		require.Equal(t, oops.CodeForbidden, shareableErr.Code)
+	}
+}
+
+func TestUpdateConfigurationPreservesPlatformAdminOnlyKeysForOrgAdmins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	_, err := ti.service.UpdateConfiguration(withPlatformAdmin(t, ctx), &gen.UpdateConfigurationPayload{Config: map[string]any{
+		"update_channel":   "beta",
+		"blocked_versions": []string{"1.2.3"},
+	}})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{Config: map[string]any{
+		"auto_update": "notify",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, "beta", updated.Config["update_channel"], "org admin updates must not remove platform-admin-only keys by omission")
+	require.Equal(t, []any{"1.2.3"}, updated.Config["blocked_versions"])
+	require.Equal(t, "notify", updated.Config["auto_update"])
+}
+
 func TestUpdateConfigurationRejectsNewerStoredSchemaVersion(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
@@ -166,7 +203,7 @@ func TestUpdateConfigurationRejectsNewerStoredSchemaVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
-		Config: map[string]any{"update_channel": "stable"},
+		Config: map[string]any{"auto_update": "notify"},
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)

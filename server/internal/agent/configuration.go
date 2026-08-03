@@ -45,10 +45,36 @@ var knownDeviceAgentConfigurationKeys = map[string]struct{}{
 	"sync_interval_seconds": {},
 }
 
+// platformAdminOnlyDeviceAgentConfigurationKeys are Speakeasy-internal
+// release controls: org admins cannot set them, and updates from org admins
+// leave any stored values untouched.
+var platformAdminOnlyDeviceAgentConfigurationKeys = []string{
+	"update_channel",
+	"blocked_versions",
+}
+
+// replaceableDeviceAgentConfigurationKeys returns the known keys an update
+// from this caller replaces wholesale. Platform-admin-only keys are excluded
+// for org admins so their updates preserve stored values instead of removing
+// them by omission.
+func replaceableDeviceAgentConfigurationKeys(platformAdmin bool) map[string]struct{} {
+	if platformAdmin {
+		return knownDeviceAgentConfigurationKeys
+	}
+	keys := make(map[string]struct{}, len(knownDeviceAgentConfigurationKeys))
+	for key := range knownDeviceAgentConfigurationKeys {
+		keys[key] = struct{}{}
+	}
+	for _, key := range platformAdminOnlyDeviceAgentConfigurationKeys {
+		delete(keys, key)
+	}
+	return keys
+}
+
 // mergeStoredDeviceAgentConfiguration overlays an update on the stored
-// document: known keys come only from the request (absence removes them),
-// unknown stored keys survive unless the request overwrites them.
-func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte) (map[string]any, error) {
+// document: replaceable keys come only from the request (absence removes
+// them), every other stored key survives unless the request overwrites it.
+func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte, replaceable map[string]struct{}) (map[string]any, error) {
 	var storedConfig map[string]any
 	if err := json.Unmarshal(stored, &storedConfig); err != nil {
 		return nil, fmt.Errorf("decode stored device agent configuration: %w", err)
@@ -56,7 +82,7 @@ func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte)
 
 	merged := make(map[string]any, len(storedConfig)+len(incoming))
 	for key, value := range storedConfig {
-		if _, known := knownDeviceAgentConfigurationKeys[key]; known {
+		if _, replaced := replaceable[key]; replaced {
 			continue
 		}
 		merged[key] = value
