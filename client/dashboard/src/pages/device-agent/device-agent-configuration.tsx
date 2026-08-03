@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { DeviceAgentConfiguration } from "@gram/client/models/components/deviceagentconfiguration.js";
 import {
@@ -171,6 +172,7 @@ function DeviceAgentConfigurationForm({
   const queryClient = useQueryClient();
   const { hasScope } = useRBAC();
   const canEdit = hasScope("org:admin");
+  const isPlatformAdmin = useIsPlatformAdmin();
   const [platformLayers, setPlatformLayers] = useState<
     Record<string, EnforcementLayer>
   >(() =>
@@ -241,7 +243,6 @@ function DeviceAgentConfigurationForm({
         ]),
       ),
     };
-    config.update_channel = updateChannel.trim();
     config.auto_update = autoUpdate.trim();
     config.sync_interval_seconds = Number(syncInterval);
 
@@ -250,14 +251,22 @@ function DeviceAgentConfigurationForm({
     } else {
       delete config.pinned_target;
     }
-    const versions = blockedVersions
-      .split(",")
-      .map((version) => version.trim())
-      .filter(Boolean);
-    if (versions.length > 0) {
-      config.blocked_versions = versions;
-    } else {
-      delete config.blocked_versions;
+
+    // Update channel and blocked versions are Speakeasy-internal release
+    // controls. Non-admins never see the fields, so leave whatever is stored
+    // untouched rather than writing the (unchanged) local state back.
+    if (isPlatformAdmin) {
+      config.update_channel = updateChannel.trim();
+
+      const versions = blockedVersions
+        .split(",")
+        .map((version) => version.trim())
+        .filter(Boolean);
+      if (versions.length > 0) {
+        config.blocked_versions = versions;
+      } else {
+        delete config.blocked_versions;
+      }
     }
 
     setSaveError(undefined);
@@ -333,21 +342,23 @@ function DeviceAgentConfigurationForm({
         <div className="border-border border-t" />
 
         <div className="grid gap-6 sm:grid-cols-2">
-          <Field>
-            <FieldLabel htmlFor="device-agent-update-channel">
-              Update channel
-            </FieldLabel>
-            <Input
-              id="device-agent-update-channel"
-              value={updateChannel}
-              onChange={setUpdateChannel}
-              disabled={disabled}
-              placeholder="stable"
-            />
-            <FieldDescription>
-              Release channel agents should follow.
-            </FieldDescription>
-          </Field>
+          {isPlatformAdmin && (
+            <Field>
+              <FieldLabel htmlFor="device-agent-update-channel">
+                Update channel
+              </FieldLabel>
+              <Input
+                id="device-agent-update-channel"
+                value={updateChannel}
+                onChange={setUpdateChannel}
+                disabled={disabled}
+                placeholder="stable"
+              />
+              <FieldDescription>
+                Release channel agents should follow.
+              </FieldDescription>
+            </Field>
+          )}
 
           <Field>
             <FieldLabel htmlFor="device-agent-auto-update">
@@ -403,21 +414,23 @@ function DeviceAgentConfigurationForm({
           </Field>
         </div>
 
-        <Field>
-          <FieldLabel htmlFor="device-agent-blocked-versions">
-            Blocked versions
-          </FieldLabel>
-          <Input
-            id="device-agent-blocked-versions"
-            value={blockedVersions}
-            onChange={setBlockedVersions}
-            disabled={disabled}
-            placeholder="1.2.3, 1.2.4"
-          />
-          <FieldDescription>
-            Comma-separated agent releases that must not be installed.
-          </FieldDescription>
-        </Field>
+        {isPlatformAdmin && (
+          <Field>
+            <FieldLabel htmlFor="device-agent-blocked-versions">
+              Blocked versions
+            </FieldLabel>
+            <Input
+              id="device-agent-blocked-versions"
+              value={blockedVersions}
+              onChange={setBlockedVersions}
+              disabled={disabled}
+              placeholder="1.2.3, 1.2.4"
+            />
+            <FieldDescription>
+              Comma-separated agent releases that must not be installed.
+            </FieldDescription>
+          </Field>
+        )}
 
         <div className="bg-muted/40 rounded-md border p-4">
           <Text muted small>
