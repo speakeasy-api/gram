@@ -3,6 +3,6 @@
 "dashboard": minor
 ---
 
-Present the project assistant's tool activity as a short, human-readable "task" line (Claude-mobile style) — e.g. "Investigating failing tool calls" — instead of a mechanical "Calling N tools" header, with the individual tool calls collapsed behind it.
+Present the project assistant's tool activity as a short, human-readable "task" line — e.g. "Pulling the last 30 days of usage" — instead of a mechanical "Calling N tools" header, with the individual tool calls collapsed behind it.
 
-Adds a stateless `chat.summarizeToolActivity` endpoint that turns a turn's tool calls (and the user's prompt) into a concise present-/past-tense label. The chat UI shows an instant heuristic label immediately and swaps in the LLM-generated summary once it resolves, falling back to the heuristic whenever the endpoint is unavailable.
+The label is the assistant's own words: models narrate a turn before acting, and that sentence already arrives in the same message immediately before the tool calls. The chat renders it as the group's heading rather than as separate prose above it, so the description appears the instant the calls are dispatched and costs no extra model call. The managed assistant's instructions ask for that line in heading form. A group with no such line falls back to naming the activity from its tool names.

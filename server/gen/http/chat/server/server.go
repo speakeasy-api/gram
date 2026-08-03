@@ -18,18 +18,17 @@ import (
 
 // Server lists the chat service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ListChats             http.Handler
-	GetWorkUnitsTrend     http.Handler
-	LoadChat              http.Handler
-	GenerateTitle         http.Handler
-	CreditUsage           http.Handler
-	DeleteChat            http.Handler
-	SetPinned             http.Handler
-	Summarize             http.Handler
-	SummarizeToolActivity http.Handler
-	SubmitFeedback        http.Handler
-	ListSources           http.Handler
+	Mounts            []*MountPoint
+	ListChats         http.Handler
+	GetWorkUnitsTrend http.Handler
+	LoadChat          http.Handler
+	GenerateTitle     http.Handler
+	CreditUsage       http.Handler
+	DeleteChat        http.Handler
+	SetPinned         http.Handler
+	Summarize         http.Handler
+	SubmitFeedback    http.Handler
+	ListSources       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -67,21 +66,19 @@ func New(
 			{"DeleteChat", "DELETE", "/rpc/chat.delete"},
 			{"SetPinned", "POST", "/rpc/chat.setPinned"},
 			{"Summarize", "POST", "/rpc/chat.summarize"},
-			{"SummarizeToolActivity", "POST", "/rpc/chat.summarizeToolActivity"},
 			{"SubmitFeedback", "POST", "/rpc/chat.submitFeedback"},
 			{"ListSources", "GET", "/rpc/chat.listSources"},
 		},
-		ListChats:             NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
-		GetWorkUnitsTrend:     NewGetWorkUnitsTrendHandler(e.GetWorkUnitsTrend, mux, decoder, encoder, errhandler, formatter),
-		LoadChat:              NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
-		GenerateTitle:         NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
-		CreditUsage:           NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
-		DeleteChat:            NewDeleteChatHandler(e.DeleteChat, mux, decoder, encoder, errhandler, formatter),
-		SetPinned:             NewSetPinnedHandler(e.SetPinned, mux, decoder, encoder, errhandler, formatter),
-		Summarize:             NewSummarizeHandler(e.Summarize, mux, decoder, encoder, errhandler, formatter),
-		SummarizeToolActivity: NewSummarizeToolActivityHandler(e.SummarizeToolActivity, mux, decoder, encoder, errhandler, formatter),
-		SubmitFeedback:        NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
-		ListSources:           NewListSourcesHandler(e.ListSources, mux, decoder, encoder, errhandler, formatter),
+		ListChats:         NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
+		GetWorkUnitsTrend: NewGetWorkUnitsTrendHandler(e.GetWorkUnitsTrend, mux, decoder, encoder, errhandler, formatter),
+		LoadChat:          NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
+		GenerateTitle:     NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
+		CreditUsage:       NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
+		DeleteChat:        NewDeleteChatHandler(e.DeleteChat, mux, decoder, encoder, errhandler, formatter),
+		SetPinned:         NewSetPinnedHandler(e.SetPinned, mux, decoder, encoder, errhandler, formatter),
+		Summarize:         NewSummarizeHandler(e.Summarize, mux, decoder, encoder, errhandler, formatter),
+		SubmitFeedback:    NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
+		ListSources:       NewListSourcesHandler(e.ListSources, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -98,7 +95,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteChat = m(s.DeleteChat)
 	s.SetPinned = m(s.SetPinned)
 	s.Summarize = m(s.Summarize)
-	s.SummarizeToolActivity = m(s.SummarizeToolActivity)
 	s.SubmitFeedback = m(s.SubmitFeedback)
 	s.ListSources = m(s.ListSources)
 }
@@ -116,7 +112,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteChatHandler(mux, h.DeleteChat)
 	MountSetPinnedHandler(mux, h.SetPinned)
 	MountSummarizeHandler(mux, h.Summarize)
-	MountSummarizeToolActivityHandler(mux, h.SummarizeToolActivity)
 	MountSubmitFeedbackHandler(mux, h.SubmitFeedback)
 	MountListSourcesHandler(mux, h.ListSources)
 }
@@ -527,59 +522,6 @@ func NewSummarizeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "summarize")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountSummarizeToolActivityHandler configures the mux to serve the "chat"
-// service "summarizeToolActivity" endpoint.
-func MountSummarizeToolActivityHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/chat.summarizeToolActivity", f)
-}
-
-// NewSummarizeToolActivityHandler creates a HTTP handler which loads the HTTP
-// request and calls the "chat" service "summarizeToolActivity" endpoint.
-func NewSummarizeToolActivityHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeSummarizeToolActivityRequest(mux, decoder)
-		encodeResponse = EncodeSummarizeToolActivityResponse(encoder)
-		encodeError    = EncodeSummarizeToolActivityError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "summarizeToolActivity")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

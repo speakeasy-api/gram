@@ -12,7 +12,6 @@ import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { chatSummarize } from "../funcs/chatSummarize.js";
-import { chatSummarizeToolActivity } from "../funcs/chatSummarizeToolActivity.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { Chat as Chat$Model } from "../models/components/chat.js";
@@ -21,7 +20,6 @@ import { GenerateTitleResponseBody } from "../models/components/generatetitleres
 import { ListChatsResult } from "../models/components/listchatsresult.js";
 import { ListSourcesResult } from "../models/components/listsourcesresult.js";
 import { SummarizeChatResult } from "../models/components/summarizechatresult.js";
-import { SummarizeToolActivityResult } from "../models/components/summarizetoolactivityresult.js";
 import { WorkUnitsTrendResult } from "../models/components/workunitstrendresult.js";
 import {
   CreditUsageRequest,
@@ -63,10 +61,6 @@ import {
   SummarizeChatRequest,
   SummarizeChatSecurity,
 } from "../models/operations/summarizechat.js";
-import {
-  SummarizeToolActivityRequest,
-  SummarizeToolActivitySecurity,
-} from "../models/operations/summarizetoolactivity.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Chat extends ClientSDK {
@@ -253,25 +247,6 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SummarizeChatResult> {
     return unwrapAsync(chatSummarize(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * summarizeToolActivity chat
-   *
-   * @remarks
-   * Generate a short, human-readable summary of the tool activity in the current agent turn — a present- or past-tense 'task' label (e.g. "Searching the web for pricing") shown in place of a raw "Calling N tools" header. Stateless: the summary is derived from the supplied tool calls and optional user prompt and is not persisted.
-   */
-  async summarizeToolActivity(
-    request: SummarizeToolActivityRequest,
-    security?: SummarizeToolActivitySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<SummarizeToolActivityResult> {
-    return unwrapAsync(chatSummarizeToolActivity(
       this,
       request,
       security,

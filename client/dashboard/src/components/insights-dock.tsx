@@ -17,7 +17,6 @@ import {
   useThreadId,
 } from "@/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
-import { createToolActivitySummarizer } from "@/lib/toolActivitySummarizer";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import { useSession } from "@/contexts/Auth";
@@ -847,7 +846,7 @@ export function InsightsProvider({
   // their chat:read grant, so hide the composer for those rather than let a
   // send 404. Chats started from the dashboard stash the caller's email in
   // externalUserId instead of userId (see resolveCreator above).
-  const { user, session } = useSession();
+  const { user } = useSession();
   const isOwnChat = useCallback(
     ({
       userId,
@@ -938,21 +937,11 @@ export function InsightsProvider({
     };
   }, [serverTransport]);
 
-  // Summarize each turn's tool activity into a short, human-readable "task"
-  // line (Claude-mobile style) shown in place of a mechanical "Calling N tools"
-  // header. Authenticated via the dashboard session + project, so it only runs
-  // in this (dashboard) context; embedded Elements fall back to the heuristic.
-  const summarizeToolActivity = useMemo(
-    () => createToolActivitySummarizer(mcpConfig.projectSlug, session),
-    [mcpConfig.projectSlug, session],
-  );
-
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
       tools: {
         ...mcpConfig.tools,
-        summarizeToolActivity,
       },
       variant: "standalone",
       // Route the conversation through the persistent server-side Project
@@ -1029,7 +1018,6 @@ export function InsightsProvider({
     }),
     [
       mcpConfig,
-      summarizeToolActivity,
       title,
       subtitle,
       suggestions,

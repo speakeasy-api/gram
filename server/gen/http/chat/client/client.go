@@ -49,10 +49,6 @@ type Client struct {
 	// endpoint.
 	SummarizeDoer goahttp.Doer
 
-	// SummarizeToolActivity Doer is the HTTP client used to make requests to the
-	// summarizeToolActivity endpoint.
-	SummarizeToolActivityDoer goahttp.Doer
-
 	// SubmitFeedback Doer is the HTTP client used to make requests to the
 	// submitFeedback endpoint.
 	SubmitFeedbackDoer goahttp.Doer
@@ -81,22 +77,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListChatsDoer:             doer,
-		GetWorkUnitsTrendDoer:     doer,
-		LoadChatDoer:              doer,
-		GenerateTitleDoer:         doer,
-		CreditUsageDoer:           doer,
-		DeleteChatDoer:            doer,
-		SetPinnedDoer:             doer,
-		SummarizeDoer:             doer,
-		SummarizeToolActivityDoer: doer,
-		SubmitFeedbackDoer:        doer,
-		ListSourcesDoer:           doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListChatsDoer:         doer,
+		GetWorkUnitsTrendDoer: doer,
+		LoadChatDoer:          doer,
+		GenerateTitleDoer:     doer,
+		CreditUsageDoer:       doer,
+		DeleteChatDoer:        doer,
+		SetPinnedDoer:         doer,
+		SummarizeDoer:         doer,
+		SubmitFeedbackDoer:    doer,
+		ListSourcesDoer:       doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -287,30 +282,6 @@ func (c *Client) Summarize() goa.Endpoint {
 		resp, err := c.SummarizeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "summarize", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// SummarizeToolActivity returns an endpoint that makes HTTP requests to the
-// chat service summarizeToolActivity server.
-func (c *Client) SummarizeToolActivity() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeSummarizeToolActivityRequest(c.encoder)
-		decodeResponse = DecodeSummarizeToolActivityResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSummarizeToolActivityRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.SummarizeToolActivityDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("chat", "summarizeToolActivity", err)
 		}
 		return decodeResponse(resp)
 	}

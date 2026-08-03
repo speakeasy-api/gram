@@ -21,6 +21,7 @@ import {
   ComposerPrimitive,
   ErrorPrimitive,
   ImageMessagePartProps,
+  TextMessagePartProps,
   MessagePrimitive,
   ThreadPrimitive,
   useAui,
@@ -43,6 +44,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type FC,
 } from "react";
 
@@ -61,6 +63,7 @@ import {
 } from "@/elements/components/assistant-ui/reasoning";
 import { ThinkingIndicator } from "@/elements/components/assistant-ui/thinking-indicator";
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
+import { isToolGroupAnnotation } from "@/elements/lib/toolGroupAnnotation";
 import { UserMessageText } from "@/elements/components/assistant-ui/user-message-text";
 import { ToolMentionAutocomplete } from "@/elements/components/assistant-ui/tool-mention-autocomplete";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
@@ -1335,6 +1338,35 @@ const MessageError: FC = () => {
   );
 };
 
+/**
+ * Hides a text part that a tool group is already showing as its label. The
+ * assistant narrates before it calls tools ("I'll pull the risk findings"), and
+ * that sentence is the group's title — rendering it here as well would print it
+ * twice.
+ */
+const withoutToolGroupAnnotations = (
+  Text: ComponentType<TextMessagePartProps>,
+): FC<TextMessagePartProps> => {
+  const TextOrAnnotation: FC<TextMessagePartProps> = (props) => {
+    const isAnnotation = useAuiState((state) => {
+      const parts = state.message.parts;
+      // Identity first (same state snapshot), text as a fallback for a part
+      // that was cloned on its way here.
+      let index = parts.indexOf(state.part);
+      if (index === -1) {
+        index = parts.findIndex(
+          (part) => part.type === "text" && part.text === props.text,
+        );
+      }
+      return index !== -1 && isToolGroupAnnotation(parts, index);
+    });
+
+    if (isAnnotation) return null;
+    return <Text {...props} />;
+  };
+  return TextOrAnnotation;
+};
+
 const AssistantMessage: FC = () => {
   const { config } = useElements();
   const toolsConfig = config.tools ?? {};
@@ -1343,7 +1375,7 @@ const AssistantMessage: FC = () => {
 
   const partsComponents = useMemo(
     () => ({
-      Text: components?.Text ?? MarkdownText,
+      Text: withoutToolGroupAnnotations(components?.Text ?? MarkdownText),
       Image: components?.Image ?? Image,
       tools: {
         by_name: toolsComponents,

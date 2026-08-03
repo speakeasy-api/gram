@@ -883,78 +883,7 @@ export interface ToolsConfig {
    * }
    */
   maxOutputBytes?: number;
-
-  /**
-   * Optional summarizer that turns a turn's tool calls into a short,
-   * human-readable "task" label (e.g. "Searching the web for pricing") shown as
-   * the tool-group header in place of a mechanical "Calling N tools" summary,
-   * mirroring the activity line in the Claude mobile app.
-   *
-   * When provided, Elements shows an instant heuristic label immediately and
-   * then swaps in the summarizer's result once it resolves. When omitted (or
-   * when it rejects / returns null), Elements falls back to the heuristic label,
-   * so this is safe to leave unset in contexts that can't reach the endpoint.
-   *
-   * @example
-   * tools: {
-   *   summarizeToolActivity: async ({ toolCalls, userMessage, inProgress, signal }) => {
-   *     const res = await fetch("/rpc/chat.summarizeToolActivity", {
-   *       method: "POST",
-   *       credentials: "include",
-   *       signal,
-   *       headers: { "Content-Type": "application/json" },
-   *       body: JSON.stringify({
-   *         tool_calls: toolCalls,
-   *         user_message: userMessage,
-   *         in_progress: inProgress,
-   *       }),
-   *     });
-   *     if (!res.ok) return null;
-   *     return (await res.json()).summary ?? null;
-   *   },
-   * }
-   */
-  summarizeToolActivity?: ToolActivitySummarizer;
 }
-
-/**
- * A single tool call passed to a {@link ToolActivitySummarizer}.
- */
-export interface ToolActivityCall {
-  /** The tool name. */
-  name: string;
-  /**
-   * The tool arguments serialized as a JSON string, when available. For tools
-   * whose name says nothing about the task (`compose`), these carry the only
-   * signal. A summarizer that forwards them to a model is responsible for
-   * redacting secrets first — Gram's does so server-side.
-   */
-  arguments?: string;
-}
-
-/**
- * Input to a {@link ToolActivitySummarizer}: the tool calls in the current turn,
- * the user prompt that initiated it, and whether the tools are still running.
- */
-export interface ToolActivitySummaryInput {
-  /** The tool calls made so far in the current turn, in order. */
-  toolCalls: ToolActivityCall[];
-  /** The user prompt that initiated the turn, if available. */
-  userMessage?: string;
-  /** True while the tools are still running; false once they have completed. */
-  inProgress: boolean;
-  /** Abort signal; the summary is discarded when the turn moves on. */
-  signal?: AbortSignal;
-}
-
-/**
- * Produces a short, human-readable label describing a turn's tool activity.
- * Return `null` to signal "no summary available" and fall back to the heuristic
- * label.
- */
-export type ToolActivitySummarizer = (
-  input: ToolActivitySummaryInput,
-) => Promise<string | null>;
 
 /**
  * Configuration for automatic compaction of older conversation turns when the

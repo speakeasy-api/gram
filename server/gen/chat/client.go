@@ -15,33 +15,31 @@ import (
 
 // Client is the "chat" service client.
 type Client struct {
-	ListChatsEndpoint             goa.Endpoint
-	GetWorkUnitsTrendEndpoint     goa.Endpoint
-	LoadChatEndpoint              goa.Endpoint
-	GenerateTitleEndpoint         goa.Endpoint
-	CreditUsageEndpoint           goa.Endpoint
-	DeleteChatEndpoint            goa.Endpoint
-	SetPinnedEndpoint             goa.Endpoint
-	SummarizeEndpoint             goa.Endpoint
-	SummarizeToolActivityEndpoint goa.Endpoint
-	SubmitFeedbackEndpoint        goa.Endpoint
-	ListSourcesEndpoint           goa.Endpoint
+	ListChatsEndpoint         goa.Endpoint
+	GetWorkUnitsTrendEndpoint goa.Endpoint
+	LoadChatEndpoint          goa.Endpoint
+	GenerateTitleEndpoint     goa.Endpoint
+	CreditUsageEndpoint       goa.Endpoint
+	DeleteChatEndpoint        goa.Endpoint
+	SetPinnedEndpoint         goa.Endpoint
+	SummarizeEndpoint         goa.Endpoint
+	SubmitFeedbackEndpoint    goa.Endpoint
+	ListSourcesEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, summarizeToolActivity, submitFeedback, listSources goa.Endpoint) *Client {
+func NewClient(listChats, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, submitFeedback, listSources goa.Endpoint) *Client {
 	return &Client{
-		ListChatsEndpoint:             listChats,
-		GetWorkUnitsTrendEndpoint:     getWorkUnitsTrend,
-		LoadChatEndpoint:              loadChat,
-		GenerateTitleEndpoint:         generateTitle,
-		CreditUsageEndpoint:           creditUsage,
-		DeleteChatEndpoint:            deleteChat,
-		SetPinnedEndpoint:             setPinned,
-		SummarizeEndpoint:             summarize,
-		SummarizeToolActivityEndpoint: summarizeToolActivity,
-		SubmitFeedbackEndpoint:        submitFeedback,
-		ListSourcesEndpoint:           listSources,
+		ListChatsEndpoint:         listChats,
+		GetWorkUnitsTrendEndpoint: getWorkUnitsTrend,
+		LoadChatEndpoint:          loadChat,
+		GenerateTitleEndpoint:     generateTitle,
+		CreditUsageEndpoint:       creditUsage,
+		DeleteChatEndpoint:        deleteChat,
+		SetPinnedEndpoint:         setPinned,
+		SummarizeEndpoint:         summarize,
+		SubmitFeedbackEndpoint:    submitFeedback,
+		ListSourcesEndpoint:       listSources,
 	}
 }
 
@@ -212,29 +210,6 @@ func (c *Client) Summarize(ctx context.Context, p *SummarizePayload) (res *Summa
 		return
 	}
 	return ires.(*SummarizeChatResult), nil
-}
-
-// SummarizeToolActivity calls the "summarizeToolActivity" endpoint of the
-// "chat" service.
-// SummarizeToolActivity may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) SummarizeToolActivity(ctx context.Context, p *SummarizeToolActivityPayload) (res *SummarizeToolActivityResult, err error) {
-	var ires any
-	ires, err = c.SummarizeToolActivityEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*SummarizeToolActivityResult), nil
 }
 
 // SubmitFeedback calls the "submitFeedback" endpoint of the "chat" service.

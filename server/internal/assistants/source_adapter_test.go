@@ -106,6 +106,29 @@ func TestComposeInstructions_DashboardIncludesElementsPrompts(t *testing.T) {
 	require.Contains(t, instructions, "```ui code blocks")
 }
 
+func TestComposeInstructions_DashboardAsksForToolCallHeadings(t *testing.T) {
+	t.Parallel()
+
+	thread := assistantThreadRecord{
+		ID:            uuid.New(),
+		AssistantID:   uuid.New(),
+		ProjectID:     uuid.New(),
+		CorrelationID: "dashboard:test",
+		ChatID:        uuid.New(),
+		SourceKind:    sourceKindDashboard,
+		SourceRefJSON: []byte(`{}`),
+		LastEventAt:   time.Now(),
+	}
+
+	// The dashboard renders the line before a batch of tool calls as that
+	// batch's heading, so the guidance belongs to this surface — not to the
+	// assistant's own (user-editable) instructions.
+	instructions, err := composeInstructions("Base instructions.", thread, nil)
+	require.NoError(t, err)
+	require.Contains(t, instructions, "## Headings for tool calls")
+	require.Contains(t, instructions, "verb ending in -ing")
+}
+
 func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {
 	t.Parallel()
 
