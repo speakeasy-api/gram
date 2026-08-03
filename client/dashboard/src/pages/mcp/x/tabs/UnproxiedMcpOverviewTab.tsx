@@ -3,7 +3,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
-import { useGetUnproxiedMcpServerUsage } from "@gram/client/react-query/getUnproxiedMcpServerUsage.js";
+import { buildGetUnproxiedMcpServerUsageQuery } from "@gram/client/react-query/getUnproxiedMcpServerUsage.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { UnproxiedMcpUsageBreakdown } from "./UnproxiedMcpUsageBreakdown";
@@ -43,21 +45,33 @@ export function UnproxiedMcpOverviewTab({
     id: unproxiedMcpServerId,
   });
 
+  const client = useGramContext();
+  // The generated hook's query key only covers auth params, not the request
+  // body, so navigating between two servers' Overview tabs without a full
+  // remount would otherwise keep showing the first server's cached chart.
+  // Build the query manually to override it -- the convenience hook's typed
+  // options deliberately exclude queryKey.
   const {
     data,
     isLoading,
     isError: isUsageError,
-  } = useGetUnproxiedMcpServerUsage(
-    {
+  } = useQuery({
+    ...buildGetUnproxiedMcpServerUsageQuery(client, {
       getUnproxiedMcpServerUsageRequestBody: {
         url: server?.url ?? "",
         from,
         to,
       },
-    },
-    undefined,
-    { enabled: !!server?.url, throwOnError: false },
-  );
+    }),
+    queryKey: [
+      "unproxied-mcp-usage-chart",
+      server?.url,
+      from.toISOString(),
+      to.toISOString(),
+    ],
+    enabled: !!server?.url,
+    throwOnError: false,
+  });
 
   // Zero-fill days the backend omitted so a sparse activity pattern renders
   // with real gaps instead of bars that look visually adjacent in time.

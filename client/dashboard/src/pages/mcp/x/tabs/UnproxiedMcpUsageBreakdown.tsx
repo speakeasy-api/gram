@@ -2,12 +2,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { type Column, Table } from "@/components/ui/Table";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useGetUnproxiedMcpServerToolUsage } from "@gram/client/react-query/getUnproxiedMcpServerToolUsage.js";
-import { useGetUnproxiedMcpServerUserUsage } from "@gram/client/react-query/getUnproxiedMcpServerUserUsage.js";
-import { useGetUnproxiedMcpServerClientUsage } from "@gram/client/react-query/getUnproxiedMcpServerClientUsage.js";
+import { buildGetUnproxiedMcpServerToolUsageQuery } from "@gram/client/react-query/getUnproxiedMcpServerToolUsage.js";
+import { buildGetUnproxiedMcpServerUserUsageQuery } from "@gram/client/react-query/getUnproxiedMcpServerUserUsage.js";
+import { buildGetUnproxiedMcpServerClientUsageQuery } from "@gram/client/react-query/getUnproxiedMcpServerClientUsage.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import type { UnproxiedMcpServerToolUsageRow } from "@gram/client/models/components/unproxiedmcpservertoolusagerow.js";
 import type { UnproxiedMcpServerUserUsageRow } from "@gram/client/models/components/unproxiedmcpserveruserusagerow.js";
 import type { UnproxiedMcpServerClientUsageRow } from "@gram/client/models/components/unproxiedmcpserverclientusagerow.js";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 const PAGE_LIMIT = 25;
@@ -147,8 +149,14 @@ function ToolsUsageTable({
     setNextCursor(undefined);
   }
 
-  const query = useGetUnproxiedMcpServerToolUsage(
-    {
+  const client = useGramContext();
+  // The generated hook's query key only covers auth params, not the request
+  // body, so changing cursor (Load more) or url (switching servers) would
+  // otherwise reuse the first cached page instead of fetching a new one.
+  // Build the query manually to override it -- the convenience hook's typed
+  // options deliberately exclude queryKey.
+  const query = useQuery({
+    ...buildGetUnproxiedMcpServerToolUsageQuery(client, {
       unproxiedMcpServerUsageBreakdownPayload: {
         url,
         from,
@@ -156,10 +164,17 @@ function ToolsUsageTable({
         limit: PAGE_LIMIT,
         cursor,
       },
-    },
-    undefined,
-    { enabled: !!url, throwOnError: false },
-  );
+    }),
+    queryKey: [
+      "unproxied-mcp-tool-usage",
+      url,
+      from.toISOString(),
+      to.toISOString(),
+      cursor,
+    ],
+    enabled: !!url,
+    throwOnError: false,
+  });
 
   useEffect(() => {
     if (!query.data) return;
@@ -213,8 +228,10 @@ function UsersUsageTable({
     setNextCursor(undefined);
   }
 
-  const query = useGetUnproxiedMcpServerUserUsage(
-    {
+  const client = useGramContext();
+  // See ToolsUsageTable: the generated hook's key omits the request body.
+  const query = useQuery({
+    ...buildGetUnproxiedMcpServerUserUsageQuery(client, {
       unproxiedMcpServerUsageBreakdownPayload: {
         url,
         from,
@@ -222,10 +239,17 @@ function UsersUsageTable({
         limit: PAGE_LIMIT,
         cursor,
       },
-    },
-    undefined,
-    { enabled: !!url, throwOnError: false },
-  );
+    }),
+    queryKey: [
+      "unproxied-mcp-user-usage",
+      url,
+      from.toISOString(),
+      to.toISOString(),
+      cursor,
+    ],
+    enabled: !!url,
+    throwOnError: false,
+  });
 
   useEffect(() => {
     if (!query.data) return;
@@ -274,8 +298,10 @@ function ClientsUsageTable({
     setNextCursor(undefined);
   }
 
-  const query = useGetUnproxiedMcpServerClientUsage(
-    {
+  const client = useGramContext();
+  // See ToolsUsageTable: the generated hook's key omits the request body.
+  const query = useQuery({
+    ...buildGetUnproxiedMcpServerClientUsageQuery(client, {
       unproxiedMcpServerUsageBreakdownPayload: {
         url,
         from,
@@ -283,10 +309,17 @@ function ClientsUsageTable({
         limit: PAGE_LIMIT,
         cursor,
       },
-    },
-    undefined,
-    { enabled: !!url, throwOnError: false },
-  );
+    }),
+    queryKey: [
+      "unproxied-mcp-client-usage",
+      url,
+      from.toISOString(),
+      to.toISOString(),
+      cursor,
+    ],
+    enabled: !!url,
+    throwOnError: false,
+  });
 
   useEffect(() => {
     if (!query.data) return;

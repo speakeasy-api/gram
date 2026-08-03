@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-
-	"golang.org/x/net/publicsuffix"
 	"slices"
 	"strings"
+	"time"
+
+	"golang.org/x/net/publicsuffix"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -232,10 +232,14 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	// blank. Backgrounded on a detached context so a slow or unreachable
 	// favicon (up to the fetch's own timeout) doesn't add latency to the
 	// create response; the request's ctx would otherwise cancel this the
-	// moment the handler returns.
+	// moment the handler returns. Bounded independently of the request so a
+	// stuck DB call can't leave the goroutine running forever.
 	if ids.UnproxiedMcpServerID.Valid {
-		bgCtx := context.WithoutCancel(ctx)
-		go s.setDefaultUnproxiedIcon(bgCtx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)
+		bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		go func() {
+			defer cancel()
+			s.setDefaultUnproxiedIcon(bgCtx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)
+		}()
 	}
 
 	return mv.BuildMcpServerView(server), nil
@@ -285,17 +289,18 @@ func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logg
 	// Writes mcp_metadata directly rather than through the mcpMetadata
 	// service (which already imports this package, so importing it back here
 	// would cycle) and skips its audit trail accordingly: this is a system
-	// default, not a user-initiated edit.
-	if _, err := mcpmetadatarepo.New(s.db).UpsertMetadataByMcpServerID(ctx, mcpmetadatarepo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:               uuid.NullUUID{UUID: mcpServerID, Valid: true},
-		ProjectID:                 projectID,
-		LogoID:                    uuid.NullUUID{UUID: assetID, Valid: true},
-		ExternalDocumentationUrl:  pgtype.Text{String: "", Valid: false},
-		ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
-		Instructions:              pgtype.Text{String: "", Valid: false},
-		DefaultEnvironmentID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		InstallationOverrideUrl:   pgtype.Text{String: "", Valid: false},
-	}); err != nil {
+	// default, not a user-initiated edit. Uses the logo-only conditional
+	// query rather than the general upsert: this runs on a detached
+	// goroutine racing the create response, so a user could already be
+	// saving Branding edits (or their own icon) by the time this lands, and
+	// a full-record upsert would clobber them. pgx.ErrNoRows here just means
+	// the row already had a logo (or a user edit raced ahead) -- not a
+	// failure.
+	if _, err := mcpmetadatarepo.New(s.db).SetDefaultLogoIfUnset(ctx, mcpmetadatarepo.SetDefaultLogoIfUnsetParams{
+		McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		ProjectID:   projectID,
+		LogoID:      uuid.NullUUID{UUID: assetID, Valid: true},
+	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger.ErrorContext(ctx, "save default favicon for unproxied mcp server", attr.SlogError(err))
 	}
 }
