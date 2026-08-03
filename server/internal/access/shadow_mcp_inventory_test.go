@@ -1417,3 +1417,56 @@ func TestService_BlockShadowMCPInventoryServer_RejectsBlockAllPolicy(t *testing.
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
+
+func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	blockedURL := "https://mcp.example.com/mcp"
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Allow All Shadow MCP",
+		Action:         "block",
+		Disposition:    "allow_all",
+		BlockedURLs:    []string{blockedURL, "https://other.example.com/mcp"},
+	})
+	requestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policy.ID.String(),
+		ServerURL:      blockedURL,
+		RequesterID:    "user_one",
+		RequesterEmail: "one@example.com",
+		RequestedAt:    time.Now(),
+	})
+
+	// No policy ids in the payload: approval under allow_all is a
+	// project-wide unblock, not a policy selection.
+	result, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: projectID,
+		ServerURL: blockedURL,
+		Decision:  "allow",
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, result.Access)
+	require.Equal(t, 0, result.RequestCount)
+	require.Empty(t, result.AllowedPolicyIds)
+
+	require.Equal(t, "approved", shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, requestID))
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), blockedURL))
+
+	// Only the approved URL's block grant is revoked; the other stays.
+	blockGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBlock,
+		ResourceID:     policy.ID.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, blockGrants, 1)
+	require.Equal(t, "https://other.example.com/mcp", blockGrants[0].Selector[authz.SelectorKeyServerURL])
+}
