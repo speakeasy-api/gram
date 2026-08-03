@@ -28,6 +28,7 @@ import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/
 import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
@@ -71,7 +72,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     undefined,
     { enabled: remoteMcpServerId !== "" },
   );
-  const upstreamUrl = remoteMcpServer?.url;
+  const unproxiedMcpServerId = mcpServer?.unproxiedMcpServerId ?? "";
+  const { data: unproxiedMcpServer } = useGetUnproxiedMcpServer(
+    { id: unproxiedMcpServerId },
+    undefined,
+    { enabled: unproxiedMcpServerId !== "" },
+  );
+  const upstreamUrl = remoteMcpServer?.url ?? unproxiedMcpServer?.url;
 
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
