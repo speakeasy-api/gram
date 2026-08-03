@@ -30,7 +30,6 @@ import {
   SkillPickerDialog,
   type SkillPickerResult,
 } from "../skills/SkillPickerDialog";
-import { PLUGIN_SKILLS_SECTION_ID } from "./plugin-detail-sections";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
@@ -187,7 +186,7 @@ export function PluginSkillsSection({
   }
 
   return (
-    <SettingsSection id={PLUGIN_SKILLS_SECTION_ID}>
+    <SettingsSection>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <SettingsSection.Header>
           <div className="flex items-center gap-2">

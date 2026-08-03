@@ -68,7 +68,10 @@ const multiSelectVariants = cva("m-1 transition-all duration-300 ease-in-out", {
   },
   defaultVariants: {
     variant: "default",
-    badgeAnimation: "lift",
+    // A selected-value chip sits inside a fixed-height field: lifting and
+    // scaling it on hover pushes it outside the trigger's bounds. Opt in per
+    // instance via animationConfig.badgeAnimation instead.
+    badgeAnimation: "none",
   },
 });
 
@@ -208,6 +211,14 @@ interface MultiSelectProps
   popoverClassName?: string;
 
   /**
+   * Custom CSS class for the selected-value badges in the trigger. Useful when
+   * the selections are prose (names, emails) rather than tokens, and the
+   * badge's default mono/uppercase treatment reads wrong.
+   * Optional.
+   */
+  badgeClassName?: string;
+
+  /**
    * If true, disables the component completely.
    * Optional, defaults to false.
    */
@@ -332,6 +343,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       autoSize = false,
       singleLine = false,
       popoverClassName,
+      badgeClassName,
       disabled = false,
       responsive,
       minWidth,
@@ -866,6 +878,10 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
           <PopoverTrigger asChild>
             <Button
               ref={buttonRef}
+              // The trigger is a field, not a filled button: without an explicit
+              // variant it falls back to `primary`, whose active state flashes
+              // the solid dark fill through the bg-inherit override on click.
+              variant="secondary"
               {...props}
               onClick={handleTogglePopover}
               disabled={disabled}
@@ -941,6 +957,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                               screenSize === "mobile" &&
                                 "max-w-[120px] truncate",
                               "[&>svg]:pointer-events-auto",
+                              badgeClassName,
                             )}
                             style={{
                               ...badgeStyle,
@@ -1008,6 +1025,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                             "px-1.5 py-0.5 text-xs",
                           singleLine && "shrink-0 whitespace-nowrap",
                           "[&>svg]:pointer-events-auto",
+                          badgeClassName,
                         )}
                         style={{
                           animationDuration: `${

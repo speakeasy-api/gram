@@ -3,6 +3,7 @@ import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import type { Role } from "@gram/client/models/components/role.js";
+import { Users } from "lucide-react";
 import { PluginAssignmentRow } from "./PluginAssignmentRow";
 import {
   individualMemberFacepile,
@@ -39,9 +40,14 @@ export function PluginAssignmentsList({
         />
       ))}
       {facepileMembers.length > 0 && (
+        // Same icon-tile + text structure as the principal rows, so the labels
+        // line up; the face-stack sits at the row's trailing edge where its
+        // variable width can't shift the text column.
         <div className="flex items-center gap-3 py-3">
-          <MemberFacepile members={facepileMembers} />
-          <div className="min-w-0">
+          <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+            <Users className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
             <Text as="div" className="truncate font-medium">
               {facepileMembers.length}{" "}
               {facepileMembers.length === 1 ? "member" : "members"}
@@ -50,6 +56,7 @@ export function PluginAssignmentsList({
               Assigned individually
             </Text>
           </div>
+          <MemberFacepile members={facepileMembers} />
         </div>
       )}
     </div>

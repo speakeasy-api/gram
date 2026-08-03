@@ -7,21 +7,34 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
+import {
+  activePluginSection,
+  pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
   PLUGIN_SERVERS_SECTION_ID,
   PLUGIN_SETTINGS_SECTION_ID,
   PLUGIN_SKILLS_SECTION_ID,
+  type PluginSection,
 } from "@/pages/plugins/plugin-detail-sections";
 import {
+  describePrincipal,
   individualMemberFacepile,
+  isIndividualMemberPrincipal,
   memberMapByUrn,
+  principalIcon,
+  roleMapByUrn,
 } from "@/pages/plugins/principals";
 import { usePluginAssignmentsVisible } from "@/pages/plugins/use-plugin-assignments-visible";
 import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members";
 import { usePlugin } from "@gram/client/react-query/plugin";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { useRoles } from "@gram/client/react-query/roles";
 import {
   LayoutDashboard,
   Network,
@@ -43,33 +56,35 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
   });
   const { data: publishStatus } = usePublishStatus();
   const { data: membersData } = useMembers();
+  const { data: rolesData } = useRoles();
   const showAssignments = usePluginAssignmentsVisible();
 
   const memberByUrn = React.useMemo(
     () => memberMapByUrn(membersData?.members ?? []),
     [membersData?.members],
   );
+  const roleByUrn = React.useMemo(
+    () => roleMapByUrn(rolesData?.roles ?? []),
+    [rolesData?.roles],
+  );
 
   if (!pluginId) return null;
 
-  const detailHref = routes.plugins.detail.href(pluginId);
-  const activeSectionId = location.hash.replace("#", "");
+  const activeSectionId = activePluginSection(location.pathname, pluginId);
   const sectionItem = (
-    sectionId: string,
+    sectionId: PluginSection,
     title: string,
     Icon: React.ComponentType<{ className?: string }>,
-    isDefault = false,
   ): McpSidebarNavItem => ({
     key: sectionId,
     title,
     Icon,
-    href: `${detailHref}#${sectionId}`,
-    active:
-      activeSectionId === sectionId || (isDefault && activeSectionId === ""),
+    href: pluginSectionHref(routes, pluginId, sectionId),
+    active: activeSectionId === sectionId,
   });
 
   const items: McpSidebarNavItem[] = [
-    sectionItem(PLUGIN_OVERVIEW_SECTION_ID, "Overview", LayoutDashboard, true),
+    sectionItem(PLUGIN_OVERVIEW_SECTION_ID, "Overview", LayoutDashboard),
     sectionItem(PLUGIN_SERVERS_SECTION_ID, "MCP Servers", Network),
     sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Sparkles),
     ...(showAssignments
@@ -80,6 +95,11 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
 
   const assignments = plugin?.assignments ?? [];
   const facepileMembers = individualMemberFacepile(assignments, memberByUrn);
+  // Everyone/role/email principals have no avatar, so they sit beside the
+  // face-stack as icon chips rather than being dropped from the glance.
+  const nonMemberAssignments = assignments.filter(
+    (a) => !isIndividualMemberPrincipal(a.principalUrn),
+  );
   const cleanVersion = publishStatus?.connected
     ? publishStatus.liveVersion?.replace(/[^\w.\-+]/g, "").trim()
     : undefined;
@@ -145,20 +165,37 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
       {showAssignments && (
         <div className="flex flex-col gap-1.5">
           <McpSidebarInfoLabel>Distributed to</McpSidebarInfoLabel>
-          {facepileMembers.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <MemberFacepile members={facepileMembers} />
-              <Text variant="small" muted className="text-xs">
-                {facepileMembers.length}{" "}
-                {facepileMembers.length === 1 ? "member" : "members"}
-              </Text>
-            </div>
-          ) : (
+          {assignments.length === 0 ? (
             <Text variant="small" muted className="text-xs">
-              {assignments.length > 0
-                ? `${assignments.length} ${assignments.length === 1 ? "assignment" : "assignments"}`
-                : "No one yet"}
+              No one yet
             </Text>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {facepileMembers.length > 0 && (
+                <MemberFacepile members={facepileMembers} />
+              )}
+              {nonMemberAssignments.map((assignment) => {
+                const { kind, label } = describePrincipal(
+                  assignment.principalUrn,
+                  roleByUrn,
+                  memberByUrn,
+                );
+                const PrincipalIcon = principalIcon(kind);
+                return (
+                  <Tooltip key={assignment.id}>
+                    <TooltipTrigger asChild>
+                      <div
+                        aria-label={label}
+                        className="bg-muted text-muted-foreground ring-background flex size-7 shrink-0 items-center justify-center rounded-full ring-2"
+                      >
+                        <PrincipalIcon className="size-3.5" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">{label}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -171,7 +208,6 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
       backLabel="Back to all plugins"
       cardContent={cardContent}
       items={items}
-      itemsTitle="Sections"
     />
   );
 }

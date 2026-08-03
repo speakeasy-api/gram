@@ -32,7 +32,6 @@ import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
-import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useMembers } from "@gram/client/react-query/members";
@@ -73,18 +72,14 @@ import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
-import {
-  MarketplaceCard,
-  UninitializedMarketplaceCard,
-} from "./MarketplaceCard";
 import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
 import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
 import {
+  activePluginSection,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
-  PLUGIN_SECTION_IDS,
   PLUGIN_SERVERS_SECTION_ID,
   PLUGIN_SETTINGS_SECTION_ID,
   PLUGIN_SKILLS_SECTION_ID,
@@ -109,32 +104,16 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
   return `${kind}:${id}`;
 }
 
-// Scrolls the section named in the URL hash into view, so the sidebar nav's
-// `#<section>` links land on the right block. Mirrors SkillDetail.
-function useScrollToSectionHash(): void {
-  const location = useLocation();
-
-  useEffect(() => {
-    const targetId = location.hash.replace("#", "");
-    if (!PLUGIN_SECTION_IDS.includes(targetId)) return;
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(targetId)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [location.hash]);
-}
-
 export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
+  const location = useLocation();
   const project = useProject();
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const navigate = useNavigate();
-  useScrollToSectionHash();
+  // Each nav entry is its own subpage, so only the section named by the path
+  // renders.
+  const section = activePluginSection(location.pathname, pluginId);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
@@ -159,7 +138,6 @@ export default function PluginDetail(): JSX.Element | null {
   const { data: publishStatus } = usePublishStatus(undefined, undefined, {
     refetchInterval: 5_000,
   });
-  const { data: marketplaceSettings } = useMarketplaceSettings();
 
   const client = useSdkClient();
 
@@ -460,9 +438,6 @@ export default function PluginDetail(): JSX.Element | null {
       : !addedMcpServerIds.has(o.id),
   );
 
-  const marketplaceDefaultName =
-    marketplaceSettings?.marketplaceName ?? marketplaceSettings?.defaultName;
-
   // Client-side search over the server section, matching on the displayed name.
   const normalizedServerSearch = serverSearch.trim().toLowerCase();
   const filteredServers = normalizedServerSearch
@@ -550,187 +525,178 @@ export default function PluginDetail(): JSX.Element | null {
       </Page.Header>
       <Page.Body fullWidth className="gap-0">
         <div className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8">
-          {/* Overview — marketplace banner + usage stats */}
-          <section
-            id={PLUGIN_OVERVIEW_SECTION_ID}
-            className="scroll-mt-4 space-y-8"
-          >
-            <MarketplaceBanner
-              publishStatus={publishStatus}
-              defaultName={marketplaceDefaultName}
-              isSyncing={publishMutation.isPending}
-              onSync={() => handlePublish([])}
-              onManageCollaborators={() => setIsManageCollaboratorsOpen(true)}
-              onSetup={() => setIsPublishDialogOpen(true)}
-            />
-
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <SettingsSection.Header>
-                <SettingsSection.Title>Overview</SettingsSection.Title>
-                <SettingsSection.Description>
-                  {description}
-                </SettingsSection.Description>
-              </SettingsSection.Header>
-              <Stack
-                direction="horizontal"
-                gap={2}
-                align="center"
-                className="shrink-0"
-              >
-                <MarketplaceSyncButton
-                  publishStatus={publishStatus}
-                  isPending={publishMutation.isPending}
-                  onSync={() => handlePublish([])}
-                />
-                <PluginInstallControl
-                  plugin={{
-                    name: plugin.name,
-                    slug: plugin.slug,
-                    description: plugin.description,
-                  }}
-                  publishStatus={publishStatus}
-                  isDownloadMenuOpen={isDownloadMenuOpen}
-                  onDownloadMenuOpenChange={setIsDownloadMenuOpen}
-                  onDownload={(platform) => void handleDownload(platform)}
-                  isInstallSheetOpen={isInstallSheetOpen}
-                  onInstallSheetOpenChange={setIsInstallSheetOpen}
-                />
-              </Stack>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-              <MetricCard
-                title="MCP servers"
-                value={plugin.serverCount ?? servers.length}
-                format="number"
-                icon="network"
-              />
-              <MetricCard
-                title="Skills"
-                value={plugin.skillCount ?? 0}
-                format="number"
-                icon="sparkles"
-              />
-              {showAssignments && (
-                <>
-                  <MetricCard
-                    title="Assignments"
-                    value={plugin.assignmentCount ?? assignments.length}
-                    format="number"
-                    icon="users"
-                    subtext="Roles, users, and emails"
-                  />
-                  <MetricCard
-                    title="Installs"
-                    value={installs}
-                    displayValue={installsUnavailable ? "—" : undefined}
-                    format="number"
-                    icon="download"
-                    isRefreshing={isLoadingSynced}
-                    subtext={
-                      installsUnavailable
-                        ? "Requires admin access"
-                        : "Running the device agent"
-                    }
-                    tooltip={
-                      installsUnavailable
-                        ? "Install counts require organization admin access."
-                        : undefined
-                    }
-                  />
-                </>
-              )}
-            </div>
-
-            <PublishFreshnessIndicator publishStatus={publishStatus} />
-          </section>
-
-          {/* MCP Servers */}
-          <SettingsSection id={PLUGIN_SERVERS_SECTION_ID}>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <SettingsSection.Header>
-                <div className="flex items-center gap-2">
-                  <SettingsSection.Title>MCP Servers</SettingsSection.Title>
-                  {servers.length > 0 && (
-                    <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-                      {servers.length}
-                    </span>
-                  )}
-                </div>
-                <SettingsSection.Description>
-                  MCP servers bundled in this plugin. Everyone who installs the
-                  plugin gets these servers.
-                </SettingsSection.Description>
-              </SettingsSection.Header>
-              <div className="flex items-center gap-2">
-                {servers.length > 0 && (
-                  <SearchBar
-                    value={serverSearch}
-                    onChange={setServerSearch}
-                    placeholder="Search servers"
-                    className="h-9 w-56"
-                  />
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsAddServerOpen(true)}
+          {section === PLUGIN_OVERVIEW_SECTION_ID && (
+            <section className="space-y-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <SettingsSection.Header>
+                  <SettingsSection.Title>Overview</SettingsSection.Title>
+                  <SettingsSection.Description>
+                    {description}
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <Stack
+                  direction="horizontal"
+                  gap={2}
+                  align="center"
+                  className="shrink-0"
                 >
-                  <Button.LeftIcon>
-                    <Icon name="plus" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add Server</Button.Text>
-                </Button>
+                  <MarketplaceSyncButton
+                    publishStatus={publishStatus}
+                    isPending={publishMutation.isPending}
+                    onSync={() => handlePublish([])}
+                  />
+                  <PluginInstallControl
+                    plugin={{
+                      name: plugin.name,
+                      slug: plugin.slug,
+                      description: plugin.description,
+                    }}
+                    publishStatus={publishStatus}
+                    isDownloadMenuOpen={isDownloadMenuOpen}
+                    onDownloadMenuOpenChange={setIsDownloadMenuOpen}
+                    onDownload={(platform) => void handleDownload(platform)}
+                    isInstallSheetOpen={isInstallSheetOpen}
+                    onInstallSheetOpenChange={setIsInstallSheetOpen}
+                  />
+                </Stack>
               </div>
-            </div>
-            {serversContent}
-          </SettingsSection>
 
-          {/* Skills ride the same publish flow as servers, so changes offer a
-              republish. Orgs without the skills feature keep the teaser. */}
-          {productFeatures?.skillsEnabled ? (
-            <RequireScope
-              scope="skill:read"
-              resourceId={project.id}
-              level="section"
-            >
-              <PluginSkillsSection
-                key={pluginId!}
-                pluginId={pluginId!}
-                viewMode="grid"
-                onMutated={(message) => offerPublish(message)}
-              />
-            </RequireScope>
-          ) : (
-            <SettingsSection id={PLUGIN_SKILLS_SECTION_ID}>
-              <SettingsSection.Header>
-                <div className="flex items-center gap-2">
-                  <SettingsSection.Title>Skills</SettingsSection.Title>
-                  <Badge variant="neutral">
-                    <Badge.Text>Coming soon</Badge.Text>
-                  </Badge>
-                </div>
-                <SettingsSection.Description>
-                  Bundle reusable skills alongside your MCP servers in this
-                  plugin.
-                </SettingsSection.Description>
-              </SettingsSection.Header>
-              <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
-                <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
-                  <Sparkles className="text-muted-foreground h-7 w-7" />
-                </div>
-                <Text small muted>
-                  Skills distributed to this plugin will ship inside the plugin
-                  package and reach everyone who installs it.
-                </Text>
+              <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+                <MetricCard
+                  title="MCP servers"
+                  value={plugin.serverCount ?? servers.length}
+                  format="number"
+                  icon="network"
+                />
+                <MetricCard
+                  title="Skills"
+                  value={plugin.skillCount ?? 0}
+                  format="number"
+                  icon="sparkles"
+                />
+                {showAssignments && (
+                  <>
+                    <MetricCard
+                      title="Assignments"
+                      value={plugin.assignmentCount ?? assignments.length}
+                      format="number"
+                      icon="users"
+                      subtext="Roles, users, and emails"
+                    />
+                    <MetricCard
+                      title="Installs"
+                      value={installs}
+                      displayValue={installsUnavailable ? "—" : undefined}
+                      format="number"
+                      icon="download"
+                      isRefreshing={isLoadingSynced}
+                      subtext={
+                        installsUnavailable
+                          ? "Requires admin access"
+                          : "Running the device agent"
+                      }
+                      tooltip={
+                        installsUnavailable
+                          ? "Install counts require organization admin access."
+                          : undefined
+                      }
+                    />
+                  </>
+                )}
               </div>
+
+              <PublishFreshnessIndicator publishStatus={publishStatus} />
+            </section>
+          )}
+
+          {section === PLUGIN_SERVERS_SECTION_ID && (
+            <SettingsSection>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <SettingsSection.Header>
+                  <div className="flex items-center gap-2">
+                    <SettingsSection.Title>MCP Servers</SettingsSection.Title>
+                    {servers.length > 0 && (
+                      <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                        {servers.length}
+                      </span>
+                    )}
+                  </div>
+                  <SettingsSection.Description>
+                    MCP servers bundled in this plugin. Everyone who installs
+                    the plugin gets these servers.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <div className="flex items-center gap-2">
+                  {servers.length > 0 && (
+                    <SearchBar
+                      value={serverSearch}
+                      onChange={setServerSearch}
+                      placeholder="Search servers"
+                      className="h-9 w-56"
+                    />
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddServerOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="plus" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add Server</Button.Text>
+                  </Button>
+                </div>
+              </div>
+              {serversContent}
             </SettingsSection>
           )}
 
+          {/* Skills ride the same publish flow as servers, so changes offer a
+              republish. Orgs without the skills feature keep the teaser. */}
+          {section === PLUGIN_SKILLS_SECTION_ID &&
+            (productFeatures?.skillsEnabled ? (
+              <RequireScope
+                scope="skill:read"
+                resourceId={project.id}
+                level="section"
+              >
+                <PluginSkillsSection
+                  key={pluginId!}
+                  pluginId={pluginId!}
+                  viewMode="grid"
+                  onMutated={(message) => offerPublish(message)}
+                />
+              </RequireScope>
+            ) : (
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <div className="flex items-center gap-2">
+                    <SettingsSection.Title>Skills</SettingsSection.Title>
+                    <Badge variant="neutral">
+                      <Badge.Text>Coming soon</Badge.Text>
+                    </Badge>
+                  </div>
+                  <SettingsSection.Description>
+                    Bundle reusable skills alongside your MCP servers in this
+                    plugin.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
+                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
+                    <Sparkles className="text-muted-foreground h-7 w-7" />
+                  </div>
+                  <Text small muted>
+                    Skills distributed to this plugin will ship inside the
+                    plugin package and reach everyone who installs it.
+                  </Text>
+                </div>
+              </SettingsSection>
+            ))}
+
           {/* Assignments only affect device-agent delivery, so the section is
               hidden for marketplace-only orgs (see usePluginAssignmentsVisible). */}
-          {showAssignments && (
-            <SettingsSection id={PLUGIN_ASSIGNMENTS_SECTION_ID}>
+          {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
+            <SettingsSection>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <SettingsSection.Header>
                   <div className="flex items-center gap-2">
@@ -772,75 +738,80 @@ export default function PluginDetail(): JSX.Element | null {
             </SettingsSection>
           )}
 
-          {/* Settings */}
-          <SettingsSection id={PLUGIN_SETTINGS_SECTION_ID}>
-            <SettingsSection.Header>
-              <SettingsSection.Title>Plugin details</SettingsSection.Title>
-              <SettingsSection.Description>
-                Registry identity and presentation metadata.
-              </SettingsSection.Description>
-            </SettingsSection.Header>
-            <SettingsSection.Panel>
-              <SettingsSection.Body>
-                <dl className="grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <dt className="text-muted-foreground text-xs">Name</dt>
-                    <dd className="mt-1 text-sm">{plugin.name}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground text-xs">Slug</dt>
-                    <dd className="mt-1 font-mono text-sm">{plugin.slug}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground text-xs">
-                      Description
-                    </dt>
-                    <dd className="mt-1 text-sm">
-                      {plugin.description || "None"}
-                    </dd>
-                  </div>
-                </dl>
-              </SettingsSection.Body>
-              <SettingsSection.Footer>
-                <SettingsSection.FooterHint>
-                  Editing republishes the plugin on your next sync.
-                </SettingsSection.FooterHint>
-                <SettingsSection.FooterActions>
-                  <Button size="sm" onClick={() => setIsEditOpen(true)}>
-                    Edit details
-                  </Button>
-                </SettingsSection.FooterActions>
-              </SettingsSection.Footer>
-            </SettingsSection.Panel>
-          </SettingsSection>
+          {section === PLUGIN_SETTINGS_SECTION_ID && (
+            <>
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>Plugin details</SettingsSection.Title>
+                  <SettingsSection.Description>
+                    Registry identity and presentation metadata.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <SettingsSection.Panel>
+                  <SettingsSection.Body>
+                    <dl className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Name</dt>
+                        <dd className="mt-1 text-sm">{plugin.name}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Slug</dt>
+                        <dd className="mt-1 font-mono text-sm">
+                          {plugin.slug}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground text-xs">
+                          Description
+                        </dt>
+                        <dd className="mt-1 text-sm">
+                          {plugin.description || "None"}
+                        </dd>
+                      </div>
+                    </dl>
+                  </SettingsSection.Body>
+                  <SettingsSection.Footer>
+                    <SettingsSection.FooterHint>
+                      Editing republishes the plugin on your next sync.
+                    </SettingsSection.FooterHint>
+                    <SettingsSection.FooterActions>
+                      <Button size="sm" onClick={() => setIsEditOpen(true)}>
+                        Edit details
+                      </Button>
+                    </SettingsSection.FooterActions>
+                  </SettingsSection.Footer>
+                </SettingsSection.Panel>
+              </SettingsSection>
 
-          <DangerSettingsSection>
-            <DangerSettingsSection.Header>
-              <DangerSettingsSection.Title>
-                Danger zone
-              </DangerSettingsSection.Title>
-            </DangerSettingsSection.Header>
-            <DangerSettingsSection.Panel>
-              <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <Text className="text-sm font-semibold">
-                    Delete this plugin
-                  </Text>
-                  <Text small muted className="max-w-xl">
-                    {isDefaultPlugin
-                      ? "This is the default plugin new MCP servers publish to. Deleting it removes the plugin from all assigned users on the next publish."
-                      : "Deleting removes this plugin from all assigned users on the next publish."}
-                  </Text>
-                </div>
-                <Button
-                  variant="destructive-secondary"
-                  onClick={() => setIsDeleteOpen(true)}
-                >
-                  Delete plugin
-                </Button>
-              </DangerSettingsSection.Body>
-            </DangerSettingsSection.Panel>
-          </DangerSettingsSection>
+              <DangerSettingsSection>
+                <DangerSettingsSection.Header>
+                  <DangerSettingsSection.Title>
+                    Danger zone
+                  </DangerSettingsSection.Title>
+                </DangerSettingsSection.Header>
+                <DangerSettingsSection.Panel>
+                  <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Text className="text-sm font-semibold">
+                        Delete this plugin
+                      </Text>
+                      <Text small muted className="max-w-xl">
+                        {isDefaultPlugin
+                          ? "This is the default plugin new MCP servers publish to. Deleting it removes the plugin from all assigned users on the next publish."
+                          : "Deleting removes this plugin from all assigned users on the next publish."}
+                      </Text>
+                    </div>
+                    <Button
+                      variant="destructive-primary"
+                      onClick={() => setIsDeleteOpen(true)}
+                    >
+                      Delete plugin
+                    </Button>
+                  </DangerSettingsSection.Body>
+                </DangerSettingsSection.Panel>
+              </DangerSettingsSection>
+            </>
+          )}
         </div>
 
         {/* Edit Dialog */}
@@ -1002,51 +973,6 @@ export default function PluginDetail(): JSX.Element | null {
         />
       </Page.Body>
     </Page>
-  );
-}
-
-// Marketplace banner for the plugin overview. Renders the connected marketplace
-// card (with Sync / collaborators) or the not-yet-set-up card, matching the
-// plugins list page so the two surfaces never drift. Renders nothing when the
-// project has no GitHub publishing configured.
-function MarketplaceBanner({
-  publishStatus,
-  defaultName,
-  isSyncing,
-  onSync,
-  onManageCollaborators,
-  onSetup,
-}: {
-  publishStatus: PublishStatusResult | undefined;
-  defaultName: string | undefined;
-  isSyncing: boolean;
-  onSync: () => void;
-  onManageCollaborators: () => void;
-  onSetup: () => void;
-}): JSX.Element | null {
-  if (!publishStatus?.configured) return null;
-
-  const isConnected = publishStatus.connected && !!publishStatus.repoUrl;
-  const hasCollaborators = publishStatus.hasCollaborators !== false;
-
-  if (isConnected && hasCollaborators) {
-    return (
-      <MarketplaceCard
-        publishStatus={publishStatus}
-        onManageCollaborators={onManageCollaborators}
-        onSync={onSync}
-        isSyncing={isSyncing}
-      />
-    );
-  }
-
-  return (
-    <UninitializedMarketplaceCard
-      publishStatus={publishStatus}
-      defaultName={defaultName}
-      onSetup={onSetup}
-      onAddCollaborators={onManageCollaborators}
-    />
   );
 }
 
