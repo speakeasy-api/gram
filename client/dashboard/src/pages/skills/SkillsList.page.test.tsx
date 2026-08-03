@@ -307,6 +307,11 @@ vi.mock("@/components/ui/Table", () => ({
 
     return (
       <div>
+        <div data-testid="table-column-keys">
+          {columns.map((column) => (
+            <span data-column-key={column.key} key={column.key} />
+          ))}
+        </div>
         {sortableColumns.map((column) => {
           const label =
             column.sortLabel ??
@@ -415,6 +420,27 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  it("shows only the compact skills table columns", () => {
+    render(<SkillsList />);
+
+    expect(
+      Array.from(
+        screen
+          .getByTestId("table-column-keys")
+          .querySelectorAll("[data-column-key]"),
+      ).map((element) => element.getAttribute("data-column-key")),
+    ).toEqual([
+      "name",
+      "source",
+      "activations",
+      "efficacy",
+      "estimatedSavings",
+      "updated",
+      "share",
+      "actions",
+    ]);
+  });
+
   it("sorts the approved columns through header controls without a toolbar sort", () => {
     render(<SkillsList />);
 

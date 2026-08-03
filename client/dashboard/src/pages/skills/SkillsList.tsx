@@ -36,7 +36,7 @@ import {
   SKILL_CLASSIFICATION_OPTIONS,
   SKILL_SOURCE_OPTIONS,
 } from "./skill-badge-options";
-import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
+import { SkillSourceBadge } from "./skill-badges";
 import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 import { useOpenSkillSuggestions } from "./use-open-skill-suggestions";
@@ -214,16 +214,6 @@ export default function SkillsList(): JSX.Element {
       ),
     },
     {
-      key: "summary",
-      header: "Summary",
-      width: "2fr",
-      render: (skill) => (
-        <Text small muted className="line-clamp-2">
-          {skill.summary || "No summary"}
-        </Text>
-      ),
-    },
-    {
       key: "source",
       header: (
         <ColumnHeaderTooltip
@@ -238,25 +228,6 @@ export default function SkillsList(): JSX.Element {
         SKILL_SOURCE_OPTIONS.find((option) => option.value === skill.sourceKind)
           ?.label ?? skill.sourceKind,
       render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
-    },
-    {
-      key: "classification",
-      header: (
-        <ColumnHeaderTooltip
-          label="Classification"
-          tooltip="Custom skills belong to your organization; built-in skills come from plugins or platform defaults."
-        />
-      ),
-      width: "130px",
-      render: (skill) => (
-        <SkillClassificationBadge value={skill.classification} />
-      ),
-    },
-    {
-      key: "versions",
-      header: "Versions",
-      width: "90px",
-      render: (skill) => <Text small>{skill.versionCount}</Text>,
     },
     {
       key: "activations",
@@ -358,7 +329,7 @@ export default function SkillsList(): JSX.Element {
         ) : null,
     },
     {
-      key: "open",
+      key: "actions",
       header: "",
       width: "48px",
       render: () => (
