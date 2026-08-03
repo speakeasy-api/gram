@@ -20,9 +20,14 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-const chatgptConversationFixture = `{"event_id":"evt_1","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T10:00:00Z","previous_message_id":"","message":{"id":"msg_1","created_at":"2026-07-27T10:00:00Z","author":{"type":"user","client_type":"desktop_web"},"content":{"type":"text","value":"What is our refund policy?"}},"conversation":{"id":"conv_1","title":"Refund policy","created_at":"2026-07-27T09:59:58Z","is_pinned":false,"is_temporary_chat":false}}
+// The fixture exercises the importer's edge handling: the first event
+// predates title generation (empty title — the newest non-empty title must
+// still win), the third event has a non-message role (skipped from message
+// rows), and the fourth carries a foreign event type (dropped at parse).
+const chatgptConversationFixture = `{"event_id":"evt_1","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T10:00:00Z","previous_message_id":"","message":{"id":"msg_1","created_at":"2026-07-27T10:00:00Z","author":{"type":"user","client_type":"desktop_web"},"content":{"type":"text","value":"What is our refund policy?"}},"conversation":{"id":"conv_1","title":"","created_at":"2026-07-27T09:59:58Z","is_pinned":false,"is_temporary_chat":false}}
 {"event_id":"evt_2","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T10:00:05Z","previous_message_id":"msg_1","message":{"id":"msg_2","created_at":"2026-07-27T10:00:05Z","author":{"type":"assistant","client_type":"desktop_web"},"content":{"type":"text","value":"Our refund policy allows returns within 30 days."}},"conversation":{"id":"conv_1","title":"Refund policy","created_at":"2026-07-27T09:59:58Z","is_pinned":false,"is_temporary_chat":false}}
 {"event_id":"evt_3","type":"CONVERSATION_MESSAGE","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T10:00:06Z","previous_message_id":"msg_2","message":{"id":"msg_3","created_at":"2026-07-27T10:00:06Z","author":{"type":"tool","client_type":"desktop_web"},"content":{"type":"text","value":"tool output"}},"conversation":{"id":"conv_1","title":"Refund policy","created_at":"2026-07-27T09:59:58Z","is_pinned":false,"is_temporary_chat":false}}
+{"event_id":"evt_4","type":"CONVERSATION_DELETED","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"ada@example.com"},"timestamp":"2026-07-27T10:00:07Z","previous_message_id":"","message":{"id":"","created_at":"","author":{"type":"","client_type":""},"content":{"type":"","value":""}},"conversation":{"id":"conv_1","title":"","created_at":"","is_pinned":false,"is_temporary_chat":false}}
 `
 
 func chatgptFixtureFile(body string) codexapi.LogFile {
@@ -43,7 +48,11 @@ func TestParseChatGPTConversationEventsVerifiesSHAAndSkipsForeignTypes(t *testin
 	file := chatgptFixtureFile(chatgptConversationFixture)
 	events, err := parseChatGPTConversationEvents(file, []byte(chatgptConversationFixture))
 	require.NoError(t, err)
+	// The CONVERSATION_DELETED fixture line is dropped at parse.
 	require.Len(t, events, 3)
+	for _, event := range events {
+		require.Equal(t, chatgptConversationEventType, event.Type)
+	}
 	require.Equal(t, "conv_1", events[0].Conversation.ID)
 	require.Equal(t, "What is our refund policy?", renderChatGPTContent(events[0].Message.Content.Value))
 	require.Equal(t, "user", events[0].Message.Author.Type)
@@ -96,7 +105,8 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
-	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	heartbeats := 0
+	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) { heartbeats++ })
 	file := chatgptFixtureFile(chatgptConversationFixture)
 	src := &chatgptConversationSource{
 		client: &stubCodexComplianceClient{
@@ -104,20 +114,27 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 			listParams: nil,
 			downloads:  map[string][]byte{file.ID: []byte(chatgptConversationFixture)},
 		},
-		svc:       svc,
-		cfg:       cfg,
-		pageLimit: chatgptCompliancePageLimit,
-		users:     newConnectedUserResolver(conn, orgID),
-		chatIDs:   map[string]uuid.UUID{},
-		progress:  &ChatGPTConversationSyncProgress{},
+		svc:        svc,
+		cfg:        cfg,
+		pageLimit:  chatgptCompliancePageLimit,
+		users:      newConnectedUserResolver(conn, orgID),
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progress:   &ChatGPTConversationSyncProgress{},
 	}
 
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
+	// ProcessPage must heartbeat per file: dense pages otherwise exceed the
+	// activity's 1-minute heartbeat timeout.
+	require.Positive(t, heartbeats)
+	require.Equal(t, int64(2), src.progress.MessagesWritten)
 
 	chatID, ok := src.chatIDs["conv_1"]
 	require.True(t, ok, "conversation must be upserted")
 	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
 	require.NoError(t, err)
+	// The first event predates title generation (empty title); the newest
+	// non-empty title in the file must win.
 	require.Equal(t, "Refund policy", chatRow.Title.String)
 	require.Equal(t, "conv_1", chatRow.ExternalChatID.String)
 	require.Equal(t, userRow.ID, chatRow.UserID.String)
@@ -137,8 +154,13 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	// Replaying the same file must not duplicate messages: the insert
 	// dedupes on (chat_id, external_message_id).
 	src.chatIDs = map[string]uuid.UUID{}
+	src.chatTitles = map[string]string{}
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
+	// The replay re-upserts with the same newest title, never a stale one.
+	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, "Refund policy", chatRow.Title.String)
 }

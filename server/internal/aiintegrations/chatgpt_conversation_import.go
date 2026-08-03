@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,13 +78,17 @@ type chatgptConversationEvent struct {
 
 // ChatGPTConversationSyncProgress reports how far one sync run got.
 type ChatGPTConversationSyncProgress struct {
-	WindowStart      time.Time
-	LogPages         int
-	LogFiles         int
-	Events           int
-	MessagesWritten  int64
-	ChatsUpserted    int
-	WatermarkReached time.Time
+	WindowStart     time.Time `json:"window_start"`
+	LogPages        int       `json:"log_pages"`
+	LogFiles        int       `json:"log_files"`
+	Events          int       `json:"events"`
+	MessagesWritten int64     `json:"messages_written"`
+	ChatsUpserted   int       `json:"chats_upserted"`
+	// TimestampFallbacks counts events whose timestamps failed RFC3339
+	// parsing and fell back to import time — a canary for upstream format
+	// changes that would otherwise silently rewrite history chronology.
+	TimestampFallbacks int       `json:"timestamp_fallbacks"`
+	WatermarkReached   time.Time `json:"watermark_reached"`
 }
 
 type ChatGPTConversationImportService struct {
@@ -123,23 +128,26 @@ func (s *ChatGPTConversationImportService) SyncChatGPTConversations(ctx context.
 	}
 
 	progress := &ChatGPTConversationSyncProgress{
-		WindowStart:      cfg.PollWatermarkAt,
-		LogPages:         0,
-		LogFiles:         0,
-		Events:           0,
-		MessagesWritten:  0,
-		ChatsUpserted:    0,
-		WatermarkReached: cfg.PollWatermarkAt,
+		WindowStart:        cfg.PollWatermarkAt,
+		LogPages:           0,
+		LogFiles:           0,
+		Events:             0,
+		MessagesWritten:    0,
+		ChatsUpserted:      0,
+		TimestampFallbacks: 0,
+		WatermarkReached:   cfg.PollWatermarkAt,
 	}
 
 	source := &chatgptConversationSource{
-		client:    codexapi.NewWorkspaceClient(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
-		svc:       s,
-		cfg:       cfg,
-		pageLimit: chatgptCompliancePageLimit,
-		users:     newConnectedUserResolver(s.db, cfg.OrganizationID),
-		chatIDs:   map[string]uuid.UUID{},
-		progress:  progress,
+		client:     codexapi.NewWorkspaceClient(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
+		svc:        s,
+		cfg:        cfg,
+		pageLimit:  chatgptCompliancePageLimit,
+		users:      newConnectedUserResolver(s.db, cfg.OrganizationID),
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progressMu: sync.Mutex{},
+		progress:   progress,
 	}
 
 	runner := &timewindowpoller.Poller[[]codexapi.LogFile]{
@@ -174,16 +182,28 @@ type chatgptConversationSource struct {
 	cfg       Config
 	pageLimit int
 	users     *connectedUserResolver
-	// chatIDs caches conversation id -> chat row id for the run so each
-	// conversation is upserted once, not once per message event.
-	chatIDs  map[string]uuid.UUID
-	progress *ChatGPTConversationSyncProgress
+	// chatIDs caches conversation id -> chat row id for the run so link rows
+	// and id lookups happen once per conversation, not once per event.
+	// chatTitles remembers the last title written per conversation so an
+	// unchanged title does not re-upsert on every file.
+	chatIDs    map[string]uuid.UUID
+	chatTitles map[string]string
+	// progressMu guards progress: the poller pipelines FetchPage (producer
+	// goroutine) with ProcessPage (consumer goroutine), and both record
+	// progress. The unsynchronized read in String() is safe because it only
+	// runs after the poller's goroutines have joined.
+	progressMu sync.Mutex
+	progress   *ChatGPTConversationSyncProgress
 }
 
 func (src *chatgptConversationSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
 	after := chatgptUpperBoundStart(src.cfg, endTime)
 	watermark := time.Time{}
-	for {
+	for pageNum := 0; ; pageNum++ {
+		// The poller only heartbeats before UpperBound; a 30-day first sync
+		// over this per-message feed can page for longer than the activity's
+		// 1-minute heartbeat timeout, so heartbeat per listing page.
+		src.svc.heartbeat(ctx, pageNum)
 		page, err := src.client.ListLogs(ctx, codexapi.ListLogsParams{
 			EventType: chatgptConversationEventType,
 			After:     after,
@@ -229,10 +249,12 @@ func (src *chatgptConversationSource) FetchPage(ctx context.Context, start, end 
 	if err != nil {
 		return timewindowpoller.Page[[]codexapi.LogFile]{Payload: nil, NextPage: "", HasMore: false}, err //nolint:wrapcheck // Preserve HTTPError classification upstream.
 	}
+	src.progressMu.Lock()
 	src.progress.LogPages++
 	if page.LastEndTime.After(src.progress.WatermarkReached) {
 		src.progress.WatermarkReached = page.LastEndTime
 	}
+	src.progressMu.Unlock()
 
 	files := make([]codexapi.LogFile, 0, len(page.Data))
 	for _, file := range page.Data {
@@ -263,27 +285,32 @@ func (src *chatgptConversationSource) FetchPage(ctx context.Context, start, end 
 }
 
 func (src *chatgptConversationSource) ProcessPage(ctx context.Context, files []codexapi.LogFile) error {
-	for _, file := range files {
+	for i, file := range files {
+		// The poller only heartbeats around FetchPage; a page holds up to
+		// pageLimit dense per-message files, so heartbeat per file to stay
+		// inside the activity's 1-minute heartbeat timeout.
+		src.svc.heartbeat(ctx, i)
+
 		body, err := src.client.DownloadLog(ctx, file.ID)
 		if err != nil {
 			return err //nolint:wrapcheck // Preserve HTTPError classification upstream.
 		}
-		src.progress.LogFiles++
 
 		events, err := parseChatGPTConversationEvents(file, body)
 		if err != nil {
 			return err
 		}
-		src.progress.Events += len(events)
-
-		for _, event := range events {
-			if err := src.writeEvent(ctx, event); err != nil {
-				return err
-			}
+		if err := src.writeFile(ctx, file, events); err != nil {
+			return err
 		}
+
+		src.progressMu.Lock()
+		src.progress.LogFiles++
+		src.progress.Events += len(events)
 		if file.EndTime.After(src.progress.WatermarkReached) {
 			src.progress.WatermarkReached = file.EndTime
 		}
+		src.progressMu.Unlock()
 	}
 	return nil
 }
@@ -296,85 +323,141 @@ func (src *chatgptConversationSource) RetryAfter(err error) (time.Duration, bool
 	return 0, true
 }
 
-// writeEvent upserts the event's conversation and persists its message.
-// Events with no message or conversation identity are skipped: without an
-// external message id the insert cannot deduplicate across replayed windows.
-func (src *chatgptConversationSource) writeEvent(ctx context.Context, event chatgptConversationEvent) error {
-	if event.Conversation.ID == "" || event.Message.ID == "" {
+// conversationState carries per-conversation metadata accumulated across one
+// file's events: the newest event (actor identity, creation time) and the
+// newest non-empty title.
+type conversationState struct {
+	latest chatgptConversationEvent
+	title  string
+}
+
+// writeFile persists one log file's events: each conversation is upserted
+// with the file's newest metadata, then every user/assistant message lands
+// in one batched write. Newest-event-wins metadata means an early untitled
+// event cannot pin a conversation untitled, and full replays converge on the
+// current title because files process in end_time order so the last upsert
+// carries the newest state. Events with no message or conversation identity
+// are skipped: without an external message id the insert cannot deduplicate
+// across replayed windows.
+func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexapi.LogFile, events []chatgptConversationEvent) error {
+	conversations := map[string]*conversationState{}
+	order := make([]string, 0, len(events))
+	for _, event := range events {
+		if event.Conversation.ID == "" || event.Message.ID == "" {
+			continue
+		}
+		state, ok := conversations[event.Conversation.ID]
+		if !ok {
+			state = &conversationState{latest: event, title: ""}
+			conversations[event.Conversation.ID] = state
+			order = append(order, event.Conversation.ID)
+		}
+		// Events within a file are chronological, so the last one seen is
+		// the newest.
+		state.latest = event
+		if title := strings.TrimSpace(event.Conversation.Title); title != "" {
+			state.title = title
+		}
+	}
+	for _, conversationID := range order {
+		if err := src.upsertConversationChat(ctx, conversations[conversationID]); err != nil {
+			return err
+		}
+	}
+
+	fallbacksBefore := src.timestampFallbacks()
+	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(events))
+	for _, event := range events {
+		if event.Conversation.ID == "" || event.Message.ID == "" {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(event.Message.Author.Type))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+
+		userID, err := src.users.resolve(ctx, event.Actor.UserEmail)
+		if err != nil {
+			return err
+		}
+
+		createdAt := src.parseEventTime(event.Message.CreatedAt, time.Time{})
+		if createdAt.IsZero() {
+			createdAt = src.parseEventTime(event.Timestamp, time.Now())
+		}
+
+		content := renderChatGPTContent(event.Message.Content.Value)
+		var contentRaw []byte
+		if len(event.Message.Content.Value) > 0 && len(event.Message.Content.Value) <= maxInlineExternalContentSize {
+			contentRaw = event.Message.Content.Value
+		}
+
+		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
+			ChatID:            src.chatIDs[event.Conversation.ID],
+			Role:              role,
+			ProjectID:         src.cfg.ProjectID,
+			Content:           content,
+			ContentRaw:        contentRaw,
+			ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
+			StorageError:      pgtype.Text{String: "", Valid: false},
+			Model:             pgtype.Text{String: "", Valid: false},
+			MessageID:         pgtype.Text{String: "", Valid: false},
+			ToolCallID:        pgtype.Text{String: "", Valid: false},
+			UserID:            conv.ToPGText(userID),
+			ExternalUserID:    conv.ToPGText(event.Actor.UserID),
+			ExternalMessageID: conv.ToPGText(event.Message.ID),
+			FinishReason:      pgtype.Text{String: "", Valid: false},
+			ToolCalls:         nil,
+			PromptTokens:      0,
+			CompletionTokens:  0,
+			TotalTokens:       0,
+			Origin:            pgtype.Text{String: "", Valid: false},
+			// The feed has no browser user agent; the author's client type
+			// (e.g. desktop_web) is the closest surface signal, so it rides
+			// this column for later per-client analysis.
+			UserAgent:   conv.ToPGTextEmpty(event.Message.Author.ClientType),
+			IpAddress:   pgtype.Text{String: "", Valid: false},
+			Source:      conv.ToPGText(chatgptConversationSourceSlug),
+			ContentHash: nil,
+			Generation:  0,
+			CreatedAt:   conv.ToPGTimestamptz(createdAt),
+		})
+	}
+	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {
+		src.svc.logger.WarnContext(ctx, "chatgpt compliance event timestamps failed to parse; messages stamped with import time",
+			attr.SlogFilePath(file.FileName),
+			attr.SlogChatGPTComplianceTimestampFallbacks(fallbacks),
+		)
+	}
+	if len(rows) == 0 {
 		return nil
 	}
-	role := strings.ToLower(strings.TrimSpace(event.Message.Author.Type))
-	if role != "user" && role != "assistant" {
-		return nil
-	}
 
-	chatID, err := src.upsertConversationChat(ctx, event)
+	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
 	if err != nil {
-		return err
+		return oops.E(oops.CodeUnexpected, err, "write chatgpt conversation messages")
 	}
-
-	userID, err := src.users.resolve(ctx, event.Actor.UserEmail)
-	if err != nil {
-		return err
-	}
-
-	createdAt := parseTimeOrDefault(event.Message.CreatedAt, time.Time{})
-	if createdAt.IsZero() {
-		createdAt = parseTimeOrDefault(event.Timestamp, time.Now())
-	}
-
-	content := renderChatGPTContent(event.Message.Content.Value)
-	var contentRaw []byte
-	if len(event.Message.Content.Value) > 0 && len(event.Message.Content.Value) <= maxInlineExternalContentSize {
-		contentRaw = event.Message.Content.Value
-	}
-
-	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, []chatrepo.CreateExternalChatMessageParams{{
-		ChatID:            chatID,
-		Role:              role,
-		ProjectID:         src.cfg.ProjectID,
-		Content:           content,
-		ContentRaw:        contentRaw,
-		ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
-		StorageError:      pgtype.Text{String: "", Valid: false},
-		Model:             pgtype.Text{String: "", Valid: false},
-		MessageID:         pgtype.Text{String: "", Valid: false},
-		ToolCallID:        pgtype.Text{String: "", Valid: false},
-		UserID:            conv.ToPGText(userID),
-		ExternalUserID:    conv.ToPGText(event.Actor.UserID),
-		ExternalMessageID: conv.ToPGText(event.Message.ID),
-		FinishReason:      pgtype.Text{String: "", Valid: false},
-		ToolCalls:         nil,
-		PromptTokens:      0,
-		CompletionTokens:  0,
-		TotalTokens:       0,
-		Origin:            pgtype.Text{String: "", Valid: false},
-		// The feed has no browser user agent; the author's client type
-		// (e.g. desktop_web) is the closest surface signal, so it rides
-		// this column for later per-client analysis.
-		UserAgent:   conv.ToPGTextEmpty(event.Message.Author.ClientType),
-		IpAddress:   pgtype.Text{String: "", Valid: false},
-		Source:      conv.ToPGText(chatgptConversationSourceSlug),
-		ContentHash: nil,
-		Generation:  0,
-		CreatedAt:   conv.ToPGTimestamptz(createdAt),
-	}})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write chatgpt conversation message")
-	}
+	src.progressMu.Lock()
 	src.progress.MessagesWritten += written
+	src.progressMu.Unlock()
 	return nil
 }
 
-func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context, event chatgptConversationEvent) (uuid.UUID, error) {
-	if chatID, ok := src.chatIDs[event.Conversation.ID]; ok {
-		return chatID, nil
+// upsertConversationChat writes the conversation's chat row with the newest
+// metadata seen for it. Re-upserts on later files refresh the title (any
+// non-NULL incoming title overwrites via the query's COALESCE), while an
+// empty title becomes NULL and preserves whatever is already stored.
+func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context, state *conversationState) error {
+	conversationID := state.latest.Conversation.ID
+	_, known := src.chatIDs[conversationID]
+	if known && (state.title == "" || state.title == src.chatTitles[conversationID]) {
+		return nil
 	}
 
-	createdAt := parseTimeOrDefault(event.Conversation.CreatedAt, time.Now())
-	userID, err := src.users.resolve(ctx, event.Actor.UserEmail)
+	createdAt := src.parseEventTime(state.latest.Conversation.CreatedAt, time.Now())
+	userID, err := src.users.resolve(ctx, state.latest.Actor.UserEmail)
 	if err != nil {
-		return uuid.Nil, err
+		return err
 	}
 
 	chatID, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
@@ -384,25 +467,55 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		// NULL when unresolved so the upsert's COALESCE preserves a user
 		// resolved by an earlier event.
 		UserID:         conv.ToPGTextEmpty(userID),
-		ExternalUserID: conv.ToPGTextEmpty(event.Actor.UserID),
-		ExternalChatID: conv.ToPGText(event.Conversation.ID),
-		Title:          conv.ToPGTextEmpty(event.Conversation.Title),
+		ExternalUserID: conv.ToPGTextEmpty(state.latest.Actor.UserID),
+		ExternalChatID: conv.ToPGText(conversationID),
+		Title:          conv.ToPGTextEmpty(state.title),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(createdAt),
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "upsert chatgpt compliance chat")
+		return oops.E(oops.CodeUnexpected, err, "upsert chatgpt compliance chat")
 	}
-	if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
-		AiIntegrationConfigID: src.cfg.ID,
-		ChatID:                chatID,
-	}); err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "link chatgpt compliance chat")
+	if !known {
+		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
+			AiIntegrationConfigID: src.cfg.ID,
+			ChatID:                chatID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "link chatgpt compliance chat")
+		}
+		src.progressMu.Lock()
+		src.progress.ChatsUpserted++
+		src.progressMu.Unlock()
 	}
 
-	src.chatIDs[event.Conversation.ID] = chatID
-	src.progress.ChatsUpserted++
-	return chatID, nil
+	src.chatIDs[conversationID] = chatID
+	if state.title != "" {
+		src.chatTitles[conversationID] = state.title
+	}
+	return nil
+}
+
+// parseEventTime is parseTimeOrDefault with fallback accounting: a feed
+// format change away from RFC3339 would otherwise silently stamp imported
+// history with import time.
+func (src *chatgptConversationSource) parseEventTime(value string, fallback time.Time) time.Time {
+	if value == "" {
+		return fallback.UTC()
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		src.progressMu.Lock()
+		src.progress.TimestampFallbacks++
+		src.progressMu.Unlock()
+		return fallback.UTC()
+	}
+	return t.UTC()
+}
+
+func (src *chatgptConversationSource) timestampFallbacks() int {
+	src.progressMu.Lock()
+	defer src.progressMu.Unlock()
+	return src.progress.TimestampFallbacks
 }
 
 func parseChatGPTConversationEvents(file codexapi.LogFile, body []byte) ([]chatgptConversationEvent, error) {

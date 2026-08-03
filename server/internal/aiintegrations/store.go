@@ -197,7 +197,6 @@ const (
 const (
 	InitialUsagePollLookback          = initialUsagePollLookback
 	CodexComplianceInitialLookback    = codexComplianceInitialLookback
-	ChatGPTComplianceInitialLookback  = chatgptComplianceInitialLookback
 	AnthropicAnalyticsInitialLookback = anthropicAnalyticsInitialLookback
 )
 
