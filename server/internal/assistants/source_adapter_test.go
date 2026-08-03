@@ -138,7 +138,26 @@ func TestComposeInstructions_DashboardAsksForToolCallHeadings(t *testing.T) {
 		instructions,
 		`"Odd — the loop broke. Let me redo it properly" → "Gathering the remaining error data"`,
 	)
-	require.Contains(t, instructions, "is WRONG")
+	require.Contains(t, instructions, "wrong → right")
+
+	// Ordering is the fix, not decoration. The rule previously sat above the
+	// Elements chart/UI schemas — ~12k characters ending in their own "You are a
+	// helpful assistant" framing — and the model reverted to narrating to the
+	// user. It must stay the last instruction before the conversation context.
+	ruleAt := strings.Index(instructions, "## HARD RULE — text sent with tool calls")
+	require.NotEqual(t, -1, ruleAt)
+	require.Greater(
+		t,
+		ruleAt,
+		strings.Index(instructions, "## Elements visualizations"),
+		"the heading rule must come after the Elements prompts, not before",
+	)
+	require.Greater(
+		t,
+		ruleAt,
+		strings.Index(instructions, elementsSystemPrompt),
+		"the heading rule must come after the generic Elements system prompt",
+	)
 }
 
 func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {

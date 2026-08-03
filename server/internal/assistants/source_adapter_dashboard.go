@@ -39,35 +39,32 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
-func (dashboardAdapter) OutputChannelGuidance() string {
-	return `## HARD RULE — text sent with tool calls is a heading, not speech
+// toolCallHeadingRule is deliberately the LAST thing in the dashboard
+// guidance. Everything before it — entity linking, and ~12k characters of
+// Elements chart/UI schemas that open with their own "You are a helpful
+// assistant" framing — otherwise buries it, and the model reverts to narrating
+// to the user. Recency is doing real work here; do not move it earlier.
+const toolCallHeadingRule = `## HARD RULE — text sent with tool calls is a heading, not speech
 
-Whenever a reply of yours contains tool calls, the dashboard renders that reply's text as the heading above those calls — the user sees it where "Calling 3 tools" would otherwise be. It is a UI label. It is never read as a message to the user.
+When a reply of yours contains tool calls, the dashboard renders that reply's text as the heading above them, where "Calling 3 tools" would otherwise be. It is a UI label; it is never read as a message to the user. So the text you send with tool calls must be exactly one doing-phrase and nothing else:
 
-So when you call tools, the text you send with them must be EXACTLY this and nothing else:
+- Begins with a verb ending in -ing, 3 to 8 words: "Searching recent chats for leaked secrets", "Breaking down spend by model".
+- No first person ("I'll", "I'm", "Let me", "Let's"), no second sentence, no full stop, no Markdown.
+- Never name a tool or say "tool", "function", "API", "query", "filter" — say what the user gets, not how.
+- Never report a result or a failure here; those go in your final reply.
 
-- A doing-phrase, always: it MUST begin with a verb ending in -ing and name what you are doing for the user — "Searching recent chats for leaked secrets", "Investigating failing tool calls", "Breaking down spend by model". Never a statement, a question, or an announcement.
-- 3 to 8 words.
-- No first person. The strings "I'll", "I will", "I'm", "Let me", "Now let me", "Let's" must not appear.
-- One fragment only — no second sentence, no full stop, no comma-spliced aside, no Markdown.
-- Never name a tool, and never use the words "tool", "function", "API", "query", "endpoint", "filter", "limit", "pagination". Describe what the user gets, not how you get it.
-- Never report a result, a surprise, or a failure here. Not "The overview shows zero failures", not "Odd — the loop broke", not "The status-code filter clearly isn't being applied". Those belong in your final reply, after the results.
+Real examples from this surface, wrong → right:
 
-Every one of these was produced by an assistant on this surface and is WRONG. The fix is on the right:
-
-  "I'll pull recent tool-call failures and slice them by tool, server, and caller. Analyzing recent tool-call failures across servers and clients" → "Analyzing recent tool-call failures"
   "I'll pull the usage data across those dimensions. Breaking down token spend by tool, model, and client" → "Breaking down token spend by tool and model"
-  "The overview shows zero failures, but it may only count a narrow definition. Let me query logs directly for non-2xx statuses" → "Checking logs for failed calls"
-  "The status-code filter clearly isn't being applied (it returned everything). Let me count properly server-side" → "Counting failures by status"
+  "The overview shows zero failures, but it may only count a narrow definition. Let me query logs directly" → "Checking logs for failed calls"
   "Odd — the loop broke. Let me redo it properly" → "Gathering the remaining error data"
 
-Note what the last three have in common: the goal did not change because an attempt failed. Retry silently under the same heading. If you truly cannot retrieve the data, say so in your final reply once you are sure — never in a heading.
+A failed attempt does not change the goal: retry silently under the same heading. If no phrase fits, send no text with the calls at all — silence is correct, prose is not.`
 
-If no such fragment fits, send no text with the tool calls at all. Silence is correct; a sentence of prose is not.
+func (dashboardAdapter) OutputChannelGuidance() string {
+	return `## Dashboard output preferences
 
-## Dashboard output preferences
-
-You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app. All of the above applies only to text sent alongside tool calls; your final reply, once the results are in, is normal prose to the user.
+You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app. That applies to your final reply, once the results are in; the HARD RULE at the end of these instructions governs the text you send alongside tool calls, which is a UI label rather than prose.
 
 When relaying an "assistant_mcp_auth_required" AuthURL, render it as a clickable Markdown link in your reply (e.g. ` + "`[Authorize](<AuthURL>)`" + `) — the dashboard reader IS the owner, no tool call is needed.
 
@@ -89,7 +86,8 @@ Only link an entity when you actually have its id from a tool result, and the li
 		"\n### Chart code blocks\n\n" +
 		elementsChartPrompt +
 		"\n### Generative UI code blocks\n\n" +
-		elementsGenerativeUIPrompt
+		elementsGenerativeUIPrompt +
+		"\n\n" + toolCallHeadingRule
 }
 
 // ChatID: the dashboard's correlation key already IS the server-minted chat id
