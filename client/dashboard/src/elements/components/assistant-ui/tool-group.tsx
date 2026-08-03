@@ -1,5 +1,6 @@
 import { useAuiState } from "@assistant-ui/react";
 import { useMemo, type FC, type PropsWithChildren } from "react";
+import { useReportToolActivityPending } from "@/elements/hooks/useToolActivityPending";
 import { useElements } from "@/elements/hooks/useElements";
 import { useToolActivitySummary } from "@/elements/hooks/useToolActivitySummary";
 import { ToolUIGroup } from "@/elements/components/ui/tool-ui";
@@ -109,6 +110,31 @@ export const ToolGroup: FC<
     return children;
   }
 
+  return (
+    <ToolGroupBody
+      label={label}
+      running={anyMessagePartsAreRunning || pending}
+      defaultExpanded={defaultExpanded}
+    >
+      {children}
+    </ToolGroupBody>
+  );
+};
+
+/**
+ * Split from ToolGroup so the pending registration sits below the early return
+ * for custom-component groups — those render their own UI and never wait on a
+ * summary, so they must not hold the thread's indicator down.
+ */
+const ToolGroupBody: FC<
+  PropsWithChildren<{
+    label: string;
+    running: boolean;
+    defaultExpanded: boolean;
+  }>
+> = ({ label, running, defaultExpanded, children }) => {
+  useReportToolActivityPending(running);
+
   // Present tool activity as a single human-readable "task" line with the
   // individual calls collapsed behind it — users rarely need the raw
   // inputs/outputs, so lead with what the agent is doing, not how.
@@ -116,13 +142,13 @@ export const ToolGroup: FC<
     <div className="my-4 w-full max-w-xl">
       <ToolUIGroup
         title={label}
-        // A completion check next to a shimmering, present-tense, still-changing
-        // label contradicts itself, so the group stays "running" until its label
-        // is final — the tools finishing is not the whole of the group settling.
-        status={anyMessagePartsAreRunning || pending ? "running" : "complete"}
+        // The group owns the working state — tools running, or the label still
+        // settling — and the thread's own indicator stands down while it does
+        // (see useToolActivityPending), so there is only ever one spinner.
+        status={running ? "running" : "complete"}
         // Shimmer while the tools run and while the label is still settling (an
         // enriched summary in flight after completion / on a material change).
-        titleShimmer={anyMessagePartsAreRunning || pending}
+        titleShimmer={running}
         defaultExpanded={defaultExpanded}
       >
         {children}

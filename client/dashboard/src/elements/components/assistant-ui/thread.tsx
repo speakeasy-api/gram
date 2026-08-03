@@ -60,6 +60,7 @@ import {
   ReasoningGroup,
 } from "@/elements/components/assistant-ui/reasoning";
 import { ThinkingIndicator } from "@/elements/components/assistant-ui/thinking-indicator";
+import { ToolActivityPendingProvider } from "@/elements/hooks/useToolActivityPending";
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
 import { UserMessageText } from "@/elements/components/assistant-ui/user-message-text";
 import { ToolMentionAutocomplete } from "@/elements/components/assistant-ui/tool-mention-autocomplete";
@@ -207,63 +208,65 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
     >
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
-          <ThreadPrimitive.Root
-            className={cn(
-              "aui-root aui-thread-root @container relative flex h-full flex-col bg-background",
-              themeProps.className,
-              className,
-            )}
-          >
-            <ConnectionStatusIndicatorSafe />
-            <ThreadPrimitive.Viewport
+          <ToolActivityPendingProvider>
+            <ThreadPrimitive.Root
               className={cn(
-                "aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!",
-                d("p-lg"),
+                "aui-root aui-thread-root @container relative flex h-full flex-col bg-background",
+                themeProps.className,
+                className,
               )}
             >
-              <ThreadPrimitive.If empty>
-                {components.ThreadWelcome ? (
-                  <components.ThreadWelcome />
-                ) : (
-                  <ThreadWelcome />
+              <ConnectionStatusIndicatorSafe />
+              <ThreadPrimitive.Viewport
+                className={cn(
+                  "aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!",
+                  d("p-lg"),
                 )}
-              </ThreadPrimitive.If>
+              >
+                <ThreadPrimitive.If empty>
+                  {components.ThreadWelcome ? (
+                    <components.ThreadWelcome />
+                  ) : (
+                    <ThreadWelcome />
+                  )}
+                </ThreadPrimitive.If>
 
-              {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
+                {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
 
-              <ThreadPrimitive.Messages
-                components={{
-                  UserMessage: components.UserMessage ?? UserMessage,
-                  EditComposer: components.EditComposer ?? EditComposer,
-                  AssistantMessage:
-                    components.AssistantMessage ?? AssistantMessage,
-                }}
-              />
-
-              <ThreadPrimitive.If empty={false} running={false}>
-                <FollowOnSuggestions />
-              </ThreadPrimitive.If>
-
-              <ThreadPrimitive.If empty={false}>
-                <div className="aui-thread-viewport-spacer min-h-8 grow" />
-              </ThreadPrimitive.If>
-
-              {!composerHidden && <Composer showFeedback={showFeedback} />}
-            </ThreadPrimitive.Viewport>
-
-            {/* Resolution overlay - subtle readonly effect */}
-            <AnimatePresence>
-              {showFeedback && isResolved && (
-                <m.div
-                  className="pointer-events-none absolute inset-0 z-50 bg-background/40"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                <ThreadPrimitive.Messages
+                  components={{
+                    UserMessage: components.UserMessage ?? UserMessage,
+                    EditComposer: components.EditComposer ?? EditComposer,
+                    AssistantMessage:
+                      components.AssistantMessage ?? AssistantMessage,
+                  }}
                 />
-              )}
-            </AnimatePresence>
-          </ThreadPrimitive.Root>
+
+                <ThreadPrimitive.If empty={false} running={false}>
+                  <FollowOnSuggestions />
+                </ThreadPrimitive.If>
+
+                <ThreadPrimitive.If empty={false}>
+                  <div className="aui-thread-viewport-spacer min-h-8 grow" />
+                </ThreadPrimitive.If>
+
+                {!composerHidden && <Composer showFeedback={showFeedback} />}
+              </ThreadPrimitive.Viewport>
+
+              {/* Resolution overlay - subtle readonly effect */}
+              <AnimatePresence>
+                {showFeedback && isResolved && (
+                  <m.div
+                    className="pointer-events-none absolute inset-0 z-50 bg-background/40"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                  />
+                )}
+              </AnimatePresence>
+            </ThreadPrimitive.Root>
+          </ToolActivityPendingProvider>
         </MotionConfig>
       </LazyMotion>
     </ChatResolutionContext.Provider>
