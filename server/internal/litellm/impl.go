@@ -100,7 +100,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
-	if strings.TrimSpace(key) == "" {
+	if strings.TrimSpace(key) == "" && scheme.Name != constants.SessionSecurityScheme {
 		var err error
 		if scheme.Name == constants.ProjectSlugSecuritySchema {
 			err = oops.E(oops.CodeUnauthorized, nil, "project header is required")
