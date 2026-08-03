@@ -38,6 +38,7 @@ const (
 	StatusCancelled     = "cancelled"
 
 	DefinitionSlugSlack     = "slack"
+	DefinitionSlugMSTeams   = "msteams"
 	DefinitionSlugLinear    = "linear"
 	DefinitionSlugGithub    = "github"
 	DefinitionSlugCron      = "cron"
@@ -720,7 +721,7 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		}
 	}
 
-	if err := definition.AuthenticateWebhook(body, headers, envMap, config); err != nil {
+	if err := definition.AuthenticateWebhook(ctx, body, headers, envMap, config); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
 
