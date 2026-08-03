@@ -690,9 +690,16 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 // belonged to the caller's project, which let an embedded chat-session token
 // watch any other user's chat in that project.
 //
-// The caller has already established that the chat belongs to authCtx's
-// project; this covers who within the project may read it.
+// Project scoping lives here rather than at the call sites so it cannot be
+// dropped by one of them: GetChat looks up by id alone, so without this a chat
+// in another org is readable by anyone who knows its id.
 func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
+	// older chat_messages may not have project_id in the model, but it will
+	// always exist on the chat
+	if chat.ProjectID != *authCtx.ProjectID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
 	// External-user and chat-session-token callers must match the chat owner.
 	// First-party project credentials read any session in their project: the
 	// dashboard session, the managed-assistant runtime, and a direct API key,

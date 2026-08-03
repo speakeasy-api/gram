@@ -139,6 +139,22 @@ func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFr
 // Replay returns frames already published after the given cursor. An empty
 // cursor replays the chat's whole retained history, which is what a client
 // joining a turn late (or reconnecting without a cursor) wants.
+// lastID returns the id of the most recent frame retained for a chat, or the
+// zero id when nothing is retained yet. Reading from it is exclusive, so it
+// means "everything published from now on" without the race "$" carries.
+func (t *TurnStream) lastID(ctx context.Context, chatID uuid.UUID) (string, error) {
+	entries, err := t.client.XRevRangeN(ctx, turnStreamKey(chatID), "+", "-", 1).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return "", fmt.Errorf("read last turn frame id: %w", err)
+	}
+	if len(entries) == 0 {
+		// An empty stream has no last id; "0-0" is exclusive of nothing, so
+		// every frame the turn publishes still arrives.
+		return "0-0", nil
+	}
+	return entries[0].ID, nil
+}
+
 func (t *TurnStream) Replay(ctx context.Context, chatID uuid.UUID, after string) ([]TurnFrame, error) {
 	if t == nil {
 		return nil, errors.New("turn stream is not configured")
@@ -170,7 +186,20 @@ func (t *TurnStream) Subscribe(ctx context.Context, chatID uuid.UUID, after stri
 	// before it began. Replay exists for reconnects, and a reconnecting client
 	// always carries the cursor it got to.
 	var backlog []TurnFrame
-	if after != "" {
+	start := after
+	if after == "" {
+		// Resolve the starting position HERE, not in the goroutine below.
+		// Redis resolves "$" when XREAD runs, so a frame published between
+		// this call returning and that first read falls in the gap and is lost
+		// — the caller believes it is subscribed while the turn streams past
+		// it. Pinning a concrete id makes "from now" mean "from the moment
+		// Subscribe returned".
+		last, err := t.lastID(ctx, chatID)
+		if err != nil {
+			return nil, err
+		}
+		start = last
+	} else {
 		replayed, err := t.Replay(ctx, chatID, after)
 		if err != nil {
 			return nil, err
@@ -182,7 +211,7 @@ func (t *TurnStream) Subscribe(ctx context.Context, chatID uuid.UUID, after stri
 	go func() {
 		defer close(out)
 
-		cursor := after
+		cursor := start
 		emit := func(frame TurnFrame) bool {
 			cursor = frame.Cursor
 			select {
@@ -198,12 +227,6 @@ func (t *TurnStream) Subscribe(ctx context.Context, chatID uuid.UUID, after stri
 				return
 			}
 		}
-		if cursor == "" {
-			// Nothing retained yet: start from now rather than replaying a
-			// history that does not exist.
-			cursor = "$"
-		}
-
 		for {
 			if ctx.Err() != nil {
 				return
