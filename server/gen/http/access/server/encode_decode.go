@@ -5023,6 +5023,14 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	} else {
 		res.AllowedPolicyIds = []string{}
 	}
+	if v.BlockedPolicyIds != nil {
+		res.BlockedPolicyIds = make([]string, len(v.BlockedPolicyIds))
+		for i, val := range v.BlockedPolicyIds {
+			res.BlockedPolicyIds[i] = val
+		}
+	} else {
+		res.BlockedPolicyIds = []string{}
+	}
 
 	return res
 }

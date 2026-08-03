@@ -3780,7 +3780,7 @@ examples:
           server_url: "https://buzzing-marketplace.org"
       responses:
         "200":
-          application/json: {"access": "<value>", "allowed_policy_ids": [], "request_count": 626288}
+          application/json: {"access": "<value>", "allowed_policy_ids": [], "blocked_policy_ids": ["<value 1>", "<value 2>"], "request_count": 626288}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4799,7 +4799,7 @@ examples:
           server_slug: "<value>"
       responses:
         "200":
-          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>", "<value 3>"], "url_host": "<value>", "user_count": 500085}
+          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>", "<value 2>", "<value 3>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>", "<value 3>"], "url_host": "<value>", "user_count": 500085}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6640,7 +6640,7 @@ examples:
         application/json: {"decision": "allow", "project_id": "5f38bdf2-2935-4580-835b-fdb3d2efbe12", "server_url": "https://cautious-mentor.info/"}
       responses:
         "200":
-          application/json: {"access": "<value>", "allowed_policy_ids": [], "request_count": 542291}
+          application/json: {"access": "<value>", "allowed_policy_ids": [], "blocked_policy_ids": [], "request_count": 542291}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7981,7 +7981,7 @@ examples:
         application/json: {"policy_ids": ["92586e60-6d33-4c76-a5e5-af013a5ee61d", "677121fa-8354-4d19-a93c-f878f9f95e7e", "7d29c701-114f-413b-a76c-88ba5148d8a3"], "project_id": "bd69a861-a0ae-4610-9749-3a5ff32e8aa1", "server_url": "https://electric-community.com"}
       responses:
         "200":
-          application/json: {"access": "<value>", "allowed_policy_ids": ["<value 1>", "<value 2>"], "request_count": 626109}
+          application/json: {"access": "<value>", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>", "<value 2>", "<value 3>"], "request_count": 626109}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

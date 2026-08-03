@@ -508,7 +508,7 @@ func (s *Service) replaceShadowMCPInventoryURLBypassGrants(
 	}
 	for _, policy := range shadowMCPPolicies {
 		policyID := policy.ID.String()
-		if err := policybypass.RevokePolicyURL(ctx, db, organizationID, policyID, canonicalURL); err != nil {
+		if err := policybypass.RevokePolicyURL(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL); err != nil {
 			return nil, fmt.Errorf("revoke shadow mcp inventory policy bypass grant: %w", err)
 		}
 	}
@@ -524,7 +524,7 @@ func (s *Service) replaceShadowMCPInventoryURLBypassGrants(
 			return nil, err
 		}
 		audiences[policyID] = principals
-		if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, policyID, canonicalURL, principals); err != nil {
+		if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL, principals); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "grant shadow mcp inventory policy bypass").LogError(ctx, s.logger)
 		}
 	}
@@ -779,6 +779,7 @@ func buildShadowMCPInventoryURLState(rowState shadowMCPInventoryRowState) *gen.S
 		RequestCount:     rowState.RequestCount,
 		LatestRequest:    rowState.LatestRequest,
 		AllowedPolicyIds: rowState.AllowedPolicyIDs,
+		BlockedPolicyIds: rowState.BlockedPolicyIDs,
 	}
 }
 
@@ -793,6 +794,7 @@ func shadowMCPInventoryUsageByURL(rows []telemetryrepo.ShadowMCPInventoryUsageRo
 type shadowMCPInventoryPolicyState struct {
 	hasBlockingPolicy bool
 	allowedPolicyIDs  map[string][]string
+	blockedPolicyIDs  map[string][]string
 	requestsByURL     map[string]shadowMCPInventoryRequestState
 }
 
@@ -801,6 +803,7 @@ type shadowMCPInventoryRowState struct {
 	RequestCount     int
 	LatestRequest    *gen.ShadowMCPInventoryRequestSummary
 	AllowedPolicyIDs []string
+	BlockedPolicyIDs []string
 }
 
 type shadowMCPInventoryRequestState struct {
@@ -813,6 +816,7 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	state := shadowMCPInventoryPolicyState{
 		hasBlockingPolicy: false,
 		allowedPolicyIDs:  map[string][]string{},
+		blockedPolicyIDs:  map[string][]string{},
 		requestsByURL:     map[string]shadowMCPInventoryRequestState{},
 	}
 	if len(canonicalURLs) == 0 {
@@ -861,6 +865,25 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 				continue
 			}
 			state.allowedPolicyIDs[serverURL] = append(state.allowedPolicyIDs[serverURL], policyID)
+		}
+
+		blockGrants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyBlock,
+			ResourceID:     policyID,
+		})
+		if err != nil {
+			return state, fmt.Errorf("listing block grants for shadow mcp policy: %w", err)
+		}
+		for _, grant := range blockGrants {
+			if grant.Effect != authz.PolicyEffectAllow {
+				continue
+			}
+			serverURL := grant.Selector[authz.SelectorKeyServerURL]
+			if _, ok := canonicalURLSet[serverURL]; !ok {
+				continue
+			}
+			state.blockedPolicyIDs[serverURL] = append(state.blockedPolicyIDs[serverURL], policyID)
 		}
 	}
 	if len(blockingPolicyIDs) == 0 {
@@ -911,6 +934,10 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		slices.Sort(policyIDs)
 		state.allowedPolicyIDs[serverURL] = slices.Compact(policyIDs)
 	}
+	for serverURL, policyIDs := range state.blockedPolicyIDs {
+		slices.Sort(policyIDs)
+		state.blockedPolicyIDs[serverURL] = slices.Compact(policyIDs)
+	}
 
 	return state, nil
 }
@@ -931,6 +958,7 @@ func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInve
 		RequestCount:     requestState.Count,
 		LatestRequest:    requestState.Latest,
 		AllowedPolicyIDs: allowedPolicyIDs,
+		BlockedPolicyIDs: s.blockedPolicyIDs[canonicalURL],
 	}
 }
 
@@ -977,6 +1005,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		RequestCount:       rowState.RequestCount,
 		LatestRequest:      rowState.LatestRequest,
 		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
+		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
 	}
 }
 
