@@ -111,10 +111,26 @@ func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 		"platform_get_skill",
 		"platform_list_skill_versions",
 		"platform_list_skill_distributions",
+		"platform_distribute_skill",
+		"platform_undistribute_skill",
 		"platform_skill_insights",
 	}, toolNames(tools))
 	for _, tool := range tools {
 		require.Equal(t, "skills", tool.RequiredFeature)
+	}
+}
+
+func TestManagedAssistantPluginsToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	tools := ManagedAssistantPluginsTools(nil)
+	require.ElementsMatch(t, []string{
+		"platform_list_plugins",
+	}, toolNames(tools))
+	// The plugin catalog is not part of the skills feature; it stays visible so
+	// distribution targets can be resolved regardless of feature state.
+	for _, tool := range tools {
+		require.Empty(t, tool.RequiredFeature)
 	}
 }
 
