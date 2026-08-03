@@ -20,7 +20,7 @@ import {
   type ShadowMCPInventoryStatus,
 } from "./shadowMCPInventoryStatus";
 
-export type ShadowMCPPolicyServerSelectorMode = "allow" | "block";
+type ShadowMCPPolicyServerSelectorMode = "allow" | "block";
 
 export type ShadowMCPPolicyServerSelectorProps = {
   servers: ShadowMCPInventoryServer[];
