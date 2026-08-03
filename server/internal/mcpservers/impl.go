@@ -229,9 +229,13 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	// Best-effort: an unproxied server has no logo of its own to inherit, so
 	// give it the vendor's favicon as a starting icon rather than leaving it
-	// blank. Never fails server creation over this.
+	// blank. Backgrounded on a detached context so a slow or unreachable
+	// favicon (up to the fetch's own timeout) doesn't add latency to the
+	// create response; the request's ctx would otherwise cancel this the
+	// moment the handler returns.
 	if ids.UnproxiedMcpServerID.Valid {
-		s.setDefaultUnproxiedIcon(ctx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)
+		bgCtx := context.WithoutCancel(ctx)
+		go s.setDefaultUnproxiedIcon(bgCtx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)
 	}
 
 	return mv.BuildMcpServerView(server), nil

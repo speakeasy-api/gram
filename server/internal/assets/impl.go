@@ -584,6 +584,16 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("flush writer: %w", err), "error downloading file")
 	}
 
+	// A response with no (or an unreliable) declared length is capped at
+	// maxLength above via the LimitReader, which silently truncates rather
+	// than erroring if the body is actually longer. Detect that by reading
+	// one more byte: a real EOF here means the body was fully consumed
+	// within the limit; any byte means it was cut off.
+	var overflow [1]byte
+	if n, peekErr := reader.Read(overflow[:]); n > 0 || (peekErr != nil && !errors.Is(peekErr, io.EOF)) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "content exceeds size limit")
+	}
+
 	off, err := f.Seek(0, io.SeekStart)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seek to start: %w", err), "error reading file")
@@ -1068,7 +1078,11 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 	if err != nil {
 		return nil, err
 	}
-	if existing != nil {
+	// findExistingAsset dedups on content hash alone, so a hash match against
+	// a same-bytes asset stored under a different kind (e.g. a document) would
+	// otherwise get reused here and fail to render as an image. Only accept
+	// the match when it's actually an image.
+	if existing != nil && existing.Kind == "image" {
 		return existing, nil
 	}
 

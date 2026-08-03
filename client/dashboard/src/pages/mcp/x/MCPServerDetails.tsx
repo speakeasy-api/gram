@@ -330,12 +330,16 @@ export function MCPServerStatusDropdown({
 
   // Unproxied servers have no Gram-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
-  // so there's only one honest state to show, and no dropdown to open.
+  // so there's nothing to toggle. Still show the record's actual stored
+  // value (not a hardcoded "Public") so this can't drift from what Settings
+  // and the readiness checklist report for the same server.
   if (server.unproxiedMcpServerId) {
     return (
       <span className="text-foreground border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium">
-        <span className="h-2 w-2 shrink-0 rounded-full bg-green-400" />
-        Public
+        <span
+          className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
+        />
+        {currentLabel}
       </span>
     );
   }

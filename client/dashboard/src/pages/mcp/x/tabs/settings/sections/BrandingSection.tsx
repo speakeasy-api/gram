@@ -50,15 +50,27 @@ export function BrandingSection({
     { mcpServerId: mcpServer.id },
     undefined,
     {
-      retry: (_, err) => {
+      retry: (failureCount, err) => {
         if (err instanceof GramError && err.statusCode === 404) {
           return false;
         }
-        return true;
+        return failureCount < 3;
       },
       throwOnError: false,
     },
   );
+  const metadataIs404 =
+    metadataResult.error instanceof GramError &&
+    metadataResult.error.statusCode === 404;
+  // Anything other than a confirmed "no metadata yet" 404 means the form's
+  // local draft (seeded from this) can't be trusted as a complete picture of
+  // the current record. Saving before this resolves would spread undefined
+  // branding/install-page fields into a full-record upsert and wipe out real
+  // values that just hadn't loaded yet.
+  const metadataUnresolved =
+    metadataResult.isLoading ||
+    (metadataResult.isError && !metadataIs404) ||
+    metadataResult.isRefetchError;
   const metadataForm = useMcpMetadataMetadataForm(
     { kind: "mcp_server", mcpServerId: mcpServer.id },
     metadataResult.data?.metadata,
@@ -72,7 +84,8 @@ export function BrandingSection({
     !dirty ||
     trimmedDraft === "" ||
     trimmedDraft.length > NAME_MAX_LENGTH ||
-    saving;
+    saving ||
+    metadataUnresolved;
   const characterCount = `${nameDraft.length} of ${NAME_MAX_LENGTH} characters used`;
 
   const handleSave = async () => {
@@ -148,18 +161,33 @@ export function BrandingSection({
                   const file = e.target.files?.[0];
                   e.target.value = "";
                   if (file) {
-                    void metadataForm.logoUploadHandlers.onUpload(file);
+                    metadataForm.logoUploadHandlers
+                      .onUpload(file)
+                      .catch((error: unknown) => {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to upload icon",
+                        );
+                      });
                   }
                 }}
               />
               <Button
                 type="button"
                 variant="secondary"
+                disabled={metadataUnresolved}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Button.Text>Upload icon</Button.Text>
               </Button>
             </Stack>
+            {metadataUnresolved && !metadataResult.isLoading && (
+              <FieldDescription className="text-destructive pl-1 text-xs">
+                Couldn't load current branding settings. Refresh the page before
+                making changes.
+              </FieldDescription>
+            )}
           </Field>
           <Field
             data-invalid={update.isError ? true : undefined}
