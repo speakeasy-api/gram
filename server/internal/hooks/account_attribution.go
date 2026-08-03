@@ -57,10 +57,12 @@ func classifyAccountType(emailResolvedUserID string) string {
 // bridge (keyed on the per-device id) is taught/consulted whenever a DeviceID
 // is present — both including sessions that carry no provider account UUID (a
 // company-credential session — see classifyAccount). The user_accounts entity
-// and billing mode, however, key on that UUID, so they are skipped when it is
-// absent: there is no account entity to persist. All failures are returned to
-// the caller, which logs and continues: account attribution must never block
-// session capture or enforcement.
+// keys on that UUID, so it is skipped when the UUID is absent: there is no
+// account entity to persist. Billing mode normally rides on the entity, with
+// one exception: openai sessions never carry a UUID, so their org-level
+// billing mode resolves without one (team-gated — see providerOrgBillingMode).
+// All failures are returned to the caller, which logs and continues: account
+// attribution must never block session capture or enforcement.
 func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) error {
 	// Classify before consulting the device bridge: meta.UserID at this point
 	// reflects email resolution only.
@@ -94,12 +96,13 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 		}
 	}
 
-	// The user_accounts entity and its billing mode key on the provider account
-	// UUID (user_accounts.external_account_uuid is NOT NULL and is the entity
+	// The user_accounts entity keys on the provider account UUID
+	// (user_accounts.external_account_uuid is NOT NULL and is the entity
 	// key). A session authenticated by company credentials (an API key, a
 	// gateway/proxy, Bedrock, or Vertex) carries no such UUID, so there is no
 	// account entity to persist — the account_type stamped above is the signal
-	// the cost surfaces consume. Stop here for these sessions.
+	// the cost surfaces consume. Stop here for these sessions, after the one
+	// piece of the cascade that does not need an entity: openai billing mode.
 	if meta.ExternalAccountUUID == "" {
 		// Codex sessions NEVER carry an account UUID, so their billing mode
 		// must resolve here rather than after the entity upsert. The
