@@ -42,8 +42,8 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 )
 
-// Mode is the discriminator persisted on auth_codes / tokens /
-// current_users rows owned by this handler.
+// Mode is the current_users slot this handler resolves its subject from.
+// The local identity slot; the workos surface owns the other one.
 const Mode = "oauth2-1"
 
 // Prefix is the URL prefix the dev-idp listener mounts the handler under.
@@ -244,7 +244,6 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := repo.New(h.db).CreateOAuthClient(r.Context(), repo.CreateOAuthClientParams{
 		ClientID:            clientID,
-		Mode:                Mode,
 		ClientSecret:        clientSecret,
 		RedirectUris:        string(rawRedirectURIs),
 		RotateRefreshTokens: rotateRefreshTokens,
@@ -345,10 +344,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 		allowedRedirectURIs = doc.RedirectURIs
 	default:
-		client, cerr := repo.New(h.db).GetOAuthClient(ctx, repo.GetOAuthClientParams{
-			ClientID: clientID,
-			Mode:     Mode,
-		})
+		client, cerr := repo.New(h.db).GetOAuthClient(ctx, clientID)
 		if cerr != nil {
 			if errors.Is(cerr, sql.ErrNoRows) {
 				oauthError(w, http.StatusBadRequest, "invalid_client", "client_id is not registered")
@@ -381,7 +377,6 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	code := randomHex(16)
 	if _, err := repo.New(h.db).CreateAuthCode(ctx, repo.CreateAuthCodeParams{
 		Code:                code,
-		Mode:                Mode,
 		UserID:              userID,
 		ClientID:            clientID,
 		RedirectUri:         redirectURI,
@@ -488,7 +483,7 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code, Mode: Mode})
+	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code})
 	if err != nil {
 		// Includes ErrNoRows (unknown / consumed / expired). Don't leak which.
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "auth code is unknown, consumed, or expired")
@@ -535,7 +530,7 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken, Mode: Mode})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken})
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is unknown, revoked, or expired")
 		return
@@ -550,10 +545,7 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 	// keeps its refresh token across calls, emulating upstreams that don't
 	// rotate. Unregistered clients (CIMD, the login client) rotate.
 	rotate := true
-	if client, cerr := queries.GetOAuthClient(ctx, repo.GetOAuthClientParams{
-		ClientID: stored.ClientID,
-		Mode:     Mode,
-	}); cerr == nil {
+	if client, cerr := queries.GetOAuthClient(ctx, stored.ClientID); cerr == nil {
 		rotate = client.RotateRefreshTokens
 	} else if !errors.Is(cerr, sql.ErrNoRows) {
 		h.logger.ErrorContext(ctx, "load oauth client for refresh", slog.Any("error", cerr))
@@ -567,7 +559,6 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 		if err := queries.RevokeToken(ctx, repo.RevokeTokenParams{
 			Ts:    sql.NullTime{Time: time.Now(), Valid: true},
 			Token: refreshToken,
-			Mode:  Mode,
 		}); err != nil {
 			h.logger.ErrorContext(ctx, "revoke rotated refresh token", slog.Any("error", err))
 			oauthError(w, http.StatusInternalServerError, "server_error", "failed to rotate refresh token")
@@ -597,7 +588,6 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 
 	if _, err := queries.CreateToken(ctx, repo.CreateTokenParams{
 		Token:     access,
-		Mode:      Mode,
 		UserID:    userID,
 		ClientID:  clientID,
 		Kind:      "access_token",
@@ -610,7 +600,6 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 		refresh = randomHex(32)
 		if _, err := queries.CreateToken(ctx, repo.CreateTokenParams{
 			Token:     refresh,
-			Mode:      Mode,
 			UserID:    userID,
 			ClientID:  clientID,
 			Kind:      "refresh_token",
@@ -637,7 +626,6 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 		}
 		if _, err := queries.CreateToken(ctx, repo.CreateTokenParams{
 			Token:     idToken,
-			Mode:      Mode,
 			UserID:    userID,
 			ClientID:  clientID,
 			Kind:      "id_token",
@@ -715,7 +703,7 @@ func (h *Handler) handleUserinfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer, Mode: Mode})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer})
 	if err != nil || stored.Kind != "access_token" {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="oauth2-1", error="invalid_token"`)
 		oauthError(w, http.StatusUnauthorized, "invalid_token", "bearer is unknown, revoked, expired, or not an access token")
@@ -756,7 +744,6 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{
 			Ts:    sql.NullTime{Time: time.Now(), Valid: true},
 			Token: token,
-			Mode:  Mode,
 		}); err != nil {
 			h.logger.WarnContext(ctx, "revoke token", slog.Any("error", err))
 		}

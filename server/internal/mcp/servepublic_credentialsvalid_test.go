@@ -327,7 +327,6 @@ func TestServePublic_CustomProxy_UpstreamRefreshSucceeds(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	devidptest.CreateRefreshToken(t, ctx, idp.Repo, devidptest.RefreshTokenOpts{
 		Token:  "upstream-refresh",
-		Mode:   devidptest.OAuth21Mode,
 		UserID: idp.DefaultUser.ID,
 	})
 
