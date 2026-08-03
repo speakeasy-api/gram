@@ -694,9 +694,9 @@ function SectionDisclosureHeader({
   return (
     <button
       onClick={onToggle}
-      className="flex w-full cursor-pointer items-center justify-between px-5 py-2.5 text-left transition-colors hover:bg-accent/50"
+      className="hover:bg-accent/50 flex w-full cursor-pointer items-center justify-between px-3 py-1.5 text-left transition-colors"
     >
-      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+      <span className="text-muted-foreground flex items-center gap-2 text-sm">
         {title}
         {indicator}
       </span>
@@ -950,7 +950,9 @@ function ToolUI({
         }}
         disabled={!hasContent}
         className={cn(
-          "flex w-full items-center gap-2 px-4 py-3 text-left",
+          // Compact: a call is one line of metadata, not a panel — the space
+          // belongs to its expanded arguments and output, not to its header.
+          "flex w-full items-center gap-2 px-3 py-1.5 text-left",
           hasContent && "cursor-pointer transition-colors hover:bg-accent/50",
         )}
       >
