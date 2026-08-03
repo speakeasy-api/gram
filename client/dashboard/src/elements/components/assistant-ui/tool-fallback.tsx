@@ -77,9 +77,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   };
 
   return (
-    // A collapsed call is a short label, so the card is as wide as its content
-    // rather than the message column, which keeps the chevron beside the name.
-    <div className="aui-tool-fallback-root flex w-fit max-w-full flex-col">
+    <div className="aui-tool-fallback-root flex w-full flex-col">
       <ToolUI
         name={toolName}
         status={getToolStatus()}

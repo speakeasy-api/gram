@@ -960,12 +960,9 @@ function ToolUI({
         )}
       >
         <StatusIndicator status={status} />
-        {/* `mr-auto`, not `flex-1`: a flexible child contributes no intrinsic
-            width, so it would collapse a content-sized card to nothing. The
-            auto margin still pushes the chevron right when the row stretches. */}
         <span
           className={cn(
-            "mr-auto min-w-0 text-sm",
+            "min-w-0 flex-1 text-sm",
             !provider && isApprovalPending && "shimmer",
           )}
         >
@@ -1206,13 +1203,19 @@ function ToolUIGroup({
   // paragraphs reads as heavier than the activity it describes, so the header
   // sits in the flow as a line of text and the chevron is the only affordance.
   return (
-    <div data-slot="tool-ui-group" className={cn(className)}>
+    // Sized by the header line: the calls below fill exactly that width, so a
+    // group is never wider than the summary it belongs to. A floor keeps a very
+    // short summary ("Used Bun Run") from squeezing the calls into a sliver.
+    <div
+      data-slot="tool-ui-group"
+      className={cn("w-fit max-w-full min-w-56", className)}
+    >
       {/* Group header */}
       {!headerless && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           aria-expanded={isExpanded}
-          className="group flex items-center gap-1.5 text-left"
+          className="group flex cursor-pointer items-center gap-1.5 text-left"
         >
           {icon || (
             <StatusIndicator
@@ -1246,10 +1249,11 @@ function ToolUIGroup({
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          // Cards size to their own content (see ToolUI), so the rail only
-          // bounds how far they may grow when expanded.
+          // `w-0 min-w-full`: fills the group's width without contributing to
+          // it, so a wide argument blob scrolls inside the card instead of
+          // stretching the whole group past its summary line.
           !headerless &&
-            "border-border mt-2 ml-2 max-w-md space-y-2 border-l pl-4",
+            "border-border mt-2 w-0 min-w-full space-y-2 border-l pl-4",
           !showChildren && "hidden",
         )}
       >
