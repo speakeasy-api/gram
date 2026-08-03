@@ -23,7 +23,7 @@ import (
 func TestLogin_AuthorizeCodeIsRedeemableAtAuthenticate(t *testing.T) {
 	t.Parallel()
 
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: true, Key: nil})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: true, Key: nil})
 
 	authorizeURL := inst.OAuth21URL + "/authorize?" + url.Values{
 		"response_type": {"code"},
@@ -55,7 +55,7 @@ func TestLogin_AuthorizeCodeIsRedeemableAtAuthenticate(t *testing.T) {
 	require.NoError(t, err)
 
 	authReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		inst.MockWorkosURL+"/user_management/authenticate", strings.NewReader(string(body)))
+		inst.WorkOSURL+"/user_management/authenticate", strings.NewReader(string(body)))
 	require.NoError(t, err)
 	authReq.Header.Set("Content-Type", "application/json")
 
@@ -82,7 +82,7 @@ func TestLogin_AuthorizeCodeIsRedeemableAtAuthenticate(t *testing.T) {
 
 	// Codes are single-use.
 	replayReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		inst.MockWorkosURL+"/user_management/authenticate", strings.NewReader(string(body)))
+		inst.WorkOSURL+"/user_management/authenticate", strings.NewReader(string(body)))
 	require.NoError(t, err)
 	replayReq.Header.Set("Content-Type", "application/json")
 

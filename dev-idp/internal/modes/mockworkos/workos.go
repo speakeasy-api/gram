@@ -48,6 +48,7 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	workosmode "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
 )
 
 // invitationLifetime is how long an emulated invitation stays in the
@@ -258,7 +259,7 @@ func (h *Handler) handlePasswordlessCreateSession(w http.ResponseWriter, r *http
 		scheme = "https"
 	}
 	link := fmt.Sprintf("%s://%s%s/passwordless/sessions/%s/authorize",
-		scheme, r.Host, Prefix, sessionID)
+		scheme, r.Host, workosmode.Prefix, sessionID)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":         sessionID,
@@ -1281,7 +1282,12 @@ func (h *Handler) handleWorkosGeneratePortalLink(w http.ResponseWriter, r *http.
 	// Return a mock portal URL. In production WorkOS returns a short-lived
 	// link to their hosted admin portal; locally we just point back at the
 	// dev-idp so the dashboard has something to open.
-	link := fmt.Sprintf("http://localhost:35291/mock-workos/portal?intent=%s&organization=%s", body.Intent, body.Organization)
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	link := fmt.Sprintf("%s://%s%s/portal?intent=%s&organization=%s",
+		scheme, r.Host, workosmode.Prefix, body.Intent, body.Organization)
 	if body.SuccessURL != "" {
 		link += "&success_url=" + url.QueryEscape(body.SuccessURL)
 	}
