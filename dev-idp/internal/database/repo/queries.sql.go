@@ -83,26 +83,23 @@ func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, arg ClearOrgani
 const consumeAuthCode = `-- name: ConsumeAuthCode :one
 DELETE FROM auth_codes
 WHERE code = ?1
-  AND mode = ?2
-  AND expires_at > ?3
-RETURNING code, mode, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
+  AND expires_at > ?2
+RETURNING code, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
 `
 
 type ConsumeAuthCodeParams struct {
 	Code string
-	Mode string
 	Ts   time.Time
 }
 
 // ConsumeAuthCode atomically reads-and-deletes an auth code, enforcing
-// single-use. Returns ErrNoRows when the code is unknown for that mode,
+// single-use. Returns ErrNoRows when the code is unknown,
 // already consumed, or expired.
 func (q *Queries) ConsumeAuthCode(ctx context.Context, arg ConsumeAuthCodeParams) (AuthCode, error) {
-	row := q.db.QueryRowContext(ctx, consumeAuthCode, arg.Code, arg.Mode, arg.Ts)
+	row := q.db.QueryRowContext(ctx, consumeAuthCode, arg.Code, arg.Ts)
 	var i AuthCode
 	err := row.Scan(
 		&i.Code,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.RedirectUri,
@@ -118,20 +115,19 @@ func (q *Queries) ConsumeAuthCode(ctx context.Context, arg ConsumeAuthCodeParams
 const createAuthCode = `-- name: CreateAuthCode :one
 
 INSERT INTO auth_codes (
-  code, mode, user_id, client_id, redirect_uri,
+  code, user_id, client_id, redirect_uri,
   code_challenge, code_challenge_method, scope, expires_at
 )
 VALUES (
-  ?1, ?2, ?3, ?4, ?5,
-  ?6, ?7,
-  ?8, ?9
+  ?1, ?2, ?3, ?4,
+  ?5, ?6,
+  ?7, ?8
 )
-RETURNING code, mode, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
+RETURNING code, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
 `
 
 type CreateAuthCodeParams struct {
 	Code                string
-	Mode                string
 	UserID              uuid.UUID
 	ClientID            string
 	RedirectUri         string
@@ -142,12 +138,11 @@ type CreateAuthCodeParams struct {
 }
 
 // =============================================================================
-// auth_codes / tokens (shared by every OAuth-shaped mode)
+// auth_codes / tokens
 // =============================================================================
 func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) (AuthCode, error) {
 	row := q.db.QueryRowContext(ctx, createAuthCode,
 		arg.Code,
-		arg.Mode,
 		arg.UserID,
 		arg.ClientID,
 		arg.RedirectUri,
@@ -159,7 +154,6 @@ func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) 
 	var i AuthCode
 	err := row.Scan(
 		&i.Code,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.RedirectUri,
@@ -263,17 +257,16 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 const createOAuthClient = `-- name: CreateOAuthClient :one
 
 INSERT INTO oauth_clients (
-  client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens
+  client_id, client_secret, redirect_uris, rotate_refresh_tokens
 )
 VALUES (
-  ?1, ?2, ?3, ?4, ?5
+  ?1, ?2, ?3, ?4
 )
-RETURNING client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens, created_at
+RETURNING client_id, client_secret, redirect_uris, rotate_refresh_tokens, created_at
 `
 
 type CreateOAuthClientParams struct {
 	ClientID            string
-	Mode                string
 	ClientSecret        string
 	RedirectUris        string
 	RotateRefreshTokens bool
@@ -285,7 +278,6 @@ type CreateOAuthClientParams struct {
 func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OauthClient, error) {
 	row := q.db.QueryRowContext(ctx, createOAuthClient,
 		arg.ClientID,
-		arg.Mode,
 		arg.ClientSecret,
 		arg.RedirectUris,
 		arg.RotateRefreshTokens,
@@ -293,7 +285,6 @@ func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientPa
 	var i OauthClient
 	err := row.Scan(
 		&i.ClientID,
-		&i.Mode,
 		&i.ClientSecret,
 		&i.RedirectUris,
 		&i.RotateRefreshTokens,
@@ -399,17 +390,16 @@ func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganiza
 
 const createToken = `-- name: CreateToken :one
 INSERT INTO tokens (
-  token, mode, user_id, client_id, kind, scope, expires_at
+  token, user_id, client_id, kind, scope, expires_at
 )
 VALUES (
-  ?1, ?2, ?3, ?4, ?5, ?6, ?7
+  ?1, ?2, ?3, ?4, ?5, ?6
 )
-RETURNING token, mode, user_id, client_id, kind, scope, expires_at, revoked_at, created_at
+RETURNING token, user_id, client_id, kind, scope, expires_at, revoked_at, created_at
 `
 
 type CreateTokenParams struct {
 	Token     string
-	Mode      string
 	UserID    uuid.UUID
 	ClientID  string
 	Kind      string
@@ -420,7 +410,6 @@ type CreateTokenParams struct {
 func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (Token, error) {
 	row := q.db.QueryRowContext(ctx, createToken,
 		arg.Token,
-		arg.Mode,
 		arg.UserID,
 		arg.ClientID,
 		arg.Kind,
@@ -430,7 +419,6 @@ func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (Token
 	var i Token
 	err := row.Scan(
 		&i.Token,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.Kind,
@@ -567,25 +555,22 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getActiveToken = `-- name: GetActiveToken :one
-SELECT token, mode, user_id, client_id, kind, scope, expires_at, revoked_at, created_at FROM tokens
+SELECT token, user_id, client_id, kind, scope, expires_at, revoked_at, created_at FROM tokens
 WHERE token = ?1
-  AND mode = ?2
   AND revoked_at IS NULL
-  AND expires_at > ?3
+  AND expires_at > ?2
 `
 
 type GetActiveTokenParams struct {
 	Token string
-	Mode  string
 	Ts    time.Time
 }
 
 func (q *Queries) GetActiveToken(ctx context.Context, arg GetActiveTokenParams) (Token, error) {
-	row := q.db.QueryRowContext(ctx, getActiveToken, arg.Token, arg.Mode, arg.Ts)
+	row := q.db.QueryRowContext(ctx, getActiveToken, arg.Token, arg.Ts)
 	var i Token
 	err := row.Scan(
 		&i.Token,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.Kind,
@@ -721,20 +706,14 @@ func (q *Queries) GetMembershipWithOrgName(ctx context.Context, id uuid.UUID) (G
 }
 
 const getOAuthClient = `-- name: GetOAuthClient :one
-SELECT client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens, created_at FROM oauth_clients WHERE client_id = ?1 AND mode = ?2
+SELECT client_id, client_secret, redirect_uris, rotate_refresh_tokens, created_at FROM oauth_clients WHERE client_id = ?1
 `
 
-type GetOAuthClientParams struct {
-	ClientID string
-	Mode     string
-}
-
-func (q *Queries) GetOAuthClient(ctx context.Context, arg GetOAuthClientParams) (OauthClient, error) {
-	row := q.db.QueryRowContext(ctx, getOAuthClient, arg.ClientID, arg.Mode)
+func (q *Queries) GetOAuthClient(ctx context.Context, clientID string) (OauthClient, error) {
+	row := q.db.QueryRowContext(ctx, getOAuthClient, clientID)
 	var i OauthClient
 	err := row.Scan(
 		&i.ClientID,
-		&i.Mode,
 		&i.ClientSecret,
 		&i.RedirectUris,
 		&i.RotateRefreshTokens,
@@ -1291,17 +1270,16 @@ func (q *Queries) RevokeInvitation(ctx context.Context, arg RevokeInvitationPara
 const revokeToken = `-- name: RevokeToken :exec
 UPDATE tokens
 SET revoked_at = ?1
-WHERE token = ?2 AND mode = ?3 AND revoked_at IS NULL
+WHERE token = ?2 AND revoked_at IS NULL
 `
 
 type RevokeTokenParams struct {
 	Ts    sql.NullTime
 	Token string
-	Mode  string
 }
 
 func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
-	_, err := q.db.ExecContext(ctx, revokeToken, arg.Ts, arg.Token, arg.Mode)
+	_, err := q.db.ExecContext(ctx, revokeToken, arg.Ts, arg.Token)
 	return err
 }
 

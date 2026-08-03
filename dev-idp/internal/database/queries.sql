@@ -375,62 +375,60 @@ DELETE FROM current_users WHERE mode = @mode;
 
 -- name: CreateOAuthClient :one
 INSERT INTO oauth_clients (
-  client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens
+  client_id, client_secret, redirect_uris, rotate_refresh_tokens
 )
 VALUES (
-  @client_id, @mode, @client_secret, @redirect_uris, @rotate_refresh_tokens
+  @client_id, @client_secret, @redirect_uris, @rotate_refresh_tokens
 )
 RETURNING *;
 
 -- name: GetOAuthClient :one
-SELECT * FROM oauth_clients WHERE client_id = @client_id AND mode = @mode;
+SELECT * FROM oauth_clients WHERE client_id = @client_id;
 
 -- =============================================================================
--- auth_codes / tokens (shared by every OAuth-shaped mode)
+-- auth_codes / tokens
 -- =============================================================================
 
 -- name: CreateAuthCode :one
 INSERT INTO auth_codes (
-  code, mode, user_id, client_id, redirect_uri,
+  code, user_id, client_id, redirect_uri,
   code_challenge, code_challenge_method, scope, expires_at
 )
 VALUES (
-  @code, @mode, @user_id, @client_id, @redirect_uri,
+  @code, @user_id, @client_id, @redirect_uri,
   sqlc.narg('code_challenge'), sqlc.narg('code_challenge_method'),
   sqlc.narg('scope'), @expires_at
 )
 RETURNING *;
 
 -- ConsumeAuthCode atomically reads-and-deletes an auth code, enforcing
--- single-use. Returns ErrNoRows when the code is unknown for that mode,
+-- single-use. Returns ErrNoRows when the code is unknown,
 -- already consumed, or expired.
 -- name: ConsumeAuthCode :one
 DELETE FROM auth_codes
 WHERE code = @code
-  AND mode = @mode
   AND expires_at > @ts
 RETURNING *;
 
 -- name: CreateToken :one
 INSERT INTO tokens (
-  token, mode, user_id, client_id, kind, scope, expires_at
+  token, user_id, client_id, kind, scope, expires_at
 )
 VALUES (
-  @token, @mode, @user_id, @client_id, @kind, sqlc.narg('scope'), @expires_at
+  @token, @user_id, @client_id, @kind, sqlc.narg('scope'), @expires_at
 )
 RETURNING *;
 
 -- name: GetActiveToken :one
 SELECT * FROM tokens
 WHERE token = @token
-  AND mode = @mode
   AND revoked_at IS NULL
   AND expires_at > @ts;
 
 -- name: RevokeToken :exec
 UPDATE tokens
 SET revoked_at = @ts
-WHERE token = @token AND mode = @mode AND revoked_at IS NULL;
+WHERE token = @token AND revoked_at IS NULL;
 
 -- name: ListOrganizationsForUser :many
 SELECT o.* FROM organizations o

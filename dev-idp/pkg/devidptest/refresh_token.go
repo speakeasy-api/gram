@@ -25,16 +25,11 @@ const defaultRefreshTTL = 30 * 24 * time.Hour
 // are required.
 type RefreshTokenOpts struct {
 	// Token is the opaque refresh-token string to insert. Whoever later
-	// presents this to /<mode>/token with grant_type=refresh_token will
+	// presents this to /oauth2-1/token with grant_type=refresh_token will
 	// receive a fresh access+refresh token pair, or a fresh access token
 	// reusing the same refresh when the client registered with
 	// rotate_refresh_tokens=false. Required.
 	Token string
-
-	// Mode picks which mode owns the row. Use OAuth21Mode; the mode
-	// handler scopes its lookups to its own mode, so a token stamped with
-	// the wrong mode is invisible. Required.
-	Mode string
 
 	// UserID is the user the token is bound to. Required — the tokens
 	// row has a NOT NULL FOREIGN KEY into users(id), so a real user must
@@ -66,14 +61,13 @@ type RefreshTokenResult struct {
 // test needs to wrap a known upstream refresh-token string in a Gram-issued
 // token without driving the full authorization dance.
 //
-// The dev-idp's /token refresh handler (oauth2-1 and oauth2) validates the
-// presented refresh token against the tokens table by (token, mode); it
-// does NOT validate client_id, so any value works there.
+// The dev-idp's /token refresh handler looks the presented refresh token up
+// in the tokens table by value; it does NOT validate client_id, so any value
+// works there.
 func CreateRefreshToken(t *testing.T, ctx context.Context, q *repo.Queries, opts RefreshTokenOpts) RefreshTokenResult {
 	t.Helper()
 
 	require.NotEmpty(t, opts.Token, "RefreshTokenOpts.Token is required")
-	require.NotEmpty(t, opts.Mode, "RefreshTokenOpts.Mode is required")
 	require.NotEqual(t, uuid.Nil, opts.UserID, "RefreshTokenOpts.UserID is required")
 
 	clientID := opts.ClientID
@@ -93,7 +87,6 @@ func CreateRefreshToken(t *testing.T, ctx context.Context, q *repo.Queries, opts
 
 	tok, err := q.CreateToken(ctx, repo.CreateTokenParams{
 		Token:     opts.Token,
-		Mode:      opts.Mode,
 		UserID:    opts.UserID,
 		ClientID:  clientID,
 		Kind:      "refresh_token",
