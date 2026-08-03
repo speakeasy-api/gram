@@ -13,6 +13,8 @@ import {
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { Suspense, useMemo, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+import { handleError, toError } from "@/lib/errors";
 import { cyclesFromTum } from "./billing-cycles";
 
 // Split out of the initial bundle. The contract terms are what an admin comes
@@ -183,23 +185,47 @@ function ContractForm({
       </Stack>
 
       <div className="border-border border-t pt-6">
-        <Suspense
-          fallback={
-            <div className="space-y-4">
-              <Skeleton className="h-5 w-48" />
-              <Skeleton className="h-9 w-full max-w-lg" />
-              <div className="grid gap-4 md:grid-cols-2">
-                <Skeleton className="h-44 w-full" />
-                <Skeleton className="h-44 w-full" />
-              </div>
-            </div>
-          }
+        {/* Suspense covers the chunk being in flight; it does NOT catch a
+            rejected dynamic import. Without this boundary a failed chunk
+            fetch — most often a stale tab requesting a hash that a deploy
+            has since replaced — would propagate to the Page.Body boundary
+            and take the contract form down with it. The estimate is an
+            optional aside, so its failure has to stay inside this box. */}
+        <ErrorBoundary
+          onError={(error) => handleError(toError(error), { silent: true })}
+          fallbackRender={() => (
+            <Text muted small>
+              The contract estimate couldn't load. Your contract terms above are
+              unaffected —{" "}
+              <button
+                type="button"
+                className="underline underline-offset-2"
+                onClick={() => window.location.reload()}
+              >
+                reload the page
+              </button>{" "}
+              to try again.
+            </Text>
+          )}
         >
-          <ContractPriceEstimator
-            baselineTokens={estimatorBaseline}
-            cycles={cycles}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <div className="space-y-4">
+                <Skeleton className="h-5 w-48" />
+                <Skeleton className="h-9 w-full max-w-lg" />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Skeleton className="h-44 w-full" />
+                  <Skeleton className="h-44 w-full" />
+                </div>
+              </div>
+            }
+          >
+            <ContractPriceEstimator
+              baselineTokens={estimatorBaseline}
+              cycles={cycles}
+            />
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </Stack>
   );
