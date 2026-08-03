@@ -79,6 +79,7 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 		occurrences[baseID]++
 		startPos := conv.SafeInt32(finding.StartPos)
 		endPos := conv.SafeInt32(finding.EndPos)
+		surface := FindingSurface(finding.Source, finding.Field, finding.Path)
 		msg := riskv1.Finding_builder{
 			Id:                new(id.String()),
 			RequestId:         &meta.RequestID,
@@ -97,6 +98,10 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 			Tags:              finding.Tags,
 			Source:            &finding.Source,
 			Confidence:        &finding.Confidence,
+			Surface:           &surface,
+			Field:             &finding.Field,
+			Path:              &finding.Path,
+			ToolCallId:        &finding.McpLookupToolCallID,
 		}.Build()
 
 		results = append(results, pub.Publish(ctx, msg))

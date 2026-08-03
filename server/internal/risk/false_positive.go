@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -181,6 +182,8 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 				falsePositiveAt = row.FalsePositiveAt.Time.UTC().Format(time.RFC3339)
 			}
 
+			surface := fpMirrorSurface(row.Source)
+
 			msg := riskv1.Finding_builder{
 				Id:                &id,
 				RequestId:         conv.PtrEmpty(""),
@@ -199,6 +202,7 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 				Source:            &row.Source,
 				Confidence:        &row.Confidence.Float64,
 				FalsePositiveAt:   &falsePositiveAt,
+				Surface:           &surface,
 			}.Build()
 
 			results = append(results, s.findingsPub.Publish(detached, msg))
@@ -213,6 +217,32 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 			}
 		}
 	}()
+}
+
+// fpMirrorSurface maps a republished Postgres row's source to the text its
+// offsets index. Every risk_results row is batch-scanned, so this mirrors the
+// offline backfill's per-source mapping (riskfindings transform sourceSurface)
+// rather than the live stream defaults in scanners.FindingSurface: the mirror
+// row supersedes the backfilled row for the same id at read time and must not
+// change its reveal semantics. Batch gitleaks offsets index the composed scan
+// surface (content plus tool-call arguments) and batch presidio offsets index
+// a YAML transform of the message — neither is the anchored content the live
+// defaults describe. Custom rows fall to "" (no span context here), so reveal
+// uses its verified candidate cascade — the accepted precision loss on
+// FP-mirrored custom rows until the FP flow moves onto ClickHouse.
+func fpMirrorSurface(source string) string {
+	switch source {
+	case "gitleaks":
+		return "scan_surface"
+	case "presidio":
+		return "legacy_presidio"
+	case "prompt_injection", "llm_judge":
+		return scanners.SurfaceNone
+	case "shadow_mcp", "account_identity", "destructive_tool", "cli_destructive":
+		return scanners.SurfaceDerived
+	default:
+		return ""
+	}
 }
 
 func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.ListDismissedRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
