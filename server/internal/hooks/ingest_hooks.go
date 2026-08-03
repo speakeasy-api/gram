@@ -514,12 +514,26 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	// Spend gate runs before any risk-policy evaluation. v1 enforcement
-	// surface is Claude only; other adapters pass through untouched.
-	if strings.TrimSpace(payload.Source.Adapter) == "claude" && (eventType == "prompt.submitted" || eventType == "tool.requested") {
+	// Spend gate runs before any risk-policy evaluation, for every adapter
+	// with a per-provider enforcement surface (claude, codex, cursor) — the
+	// risk scans below already run adapter-agnostically, and an over-budget
+	// actor is over budget regardless of which agent carries the event.
+	// Adapters are self-reported slugs, so this remains a cooperative-client
+	// boundary like the rest of the ingest surface; matching is on the
+	// lowercased value so a case variant cannot dodge the gate. opencode
+	// still passes through untouched pending a product decision on its
+	// enforcement surface.
+	if spendGatedAdapter(payload.Source.Adapter) && (eventType == "prompt.submitted" || eventType == "tool.requested") {
 		if block := s.checkSpendGate(ctx, event); block != nil {
 			if eventType == "tool.requested" {
-				auditReason := spendBlockReason("tool call", block)
+				kind := "tool call"
+				if canonicalPermissionType(payload) != "" {
+					// Permission-shaped tool.requested events keep the
+					// permission framing, matching this path's risk wording
+					// and the legacy codex endpoint's spend deny.
+					kind = "permission request"
+				}
+				auditReason := spendBlockReason(kind, block)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, canonicalToolName(payload), "", auditReason)
 			}
 			auditReason := spendBlockReason("prompt", block)
