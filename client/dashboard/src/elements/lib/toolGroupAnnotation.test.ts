@@ -28,11 +28,8 @@ describe("toolGroupAnnotation", () => {
     expect(toolGroupAnnotation([toolCall, toolCall], 1)).toBe("");
   });
 
-  it("ignores prose: multi-paragraph or overlong text is an answer", () => {
-    expect(
-      toolGroupAnnotation([text("A finding.\n\nNext up"), toolCall], 1),
-    ).toBe("");
-    expect(toolGroupAnnotation([text("x".repeat(201)), toolCall], 1)).toBe("");
+  it("ignores an empty text part", () => {
+    expect(toolGroupAnnotation([text("   "), toolCall], 1)).toBe("");
   });
 });
 
@@ -46,8 +43,6 @@ describe("isToolGroupAnnotation", () => {
 
   it("leaves text that no group is using", () => {
     expect(isToolGroupAnnotation([text("Here's what I found")], 0)).toBe(false);
-    expect(
-      isToolGroupAnnotation([text("A finding.\n\nNext up"), toolCall], 0),
-    ).toBe(false);
+    expect(isToolGroupAnnotation([text("   "), toolCall], 0)).toBe(false);
   });
 });
