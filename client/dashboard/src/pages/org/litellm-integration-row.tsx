@@ -82,11 +82,14 @@ export function LiteLLMIntegrationRow(): JSX.Element {
   const diagnosticsInstance =
     instances.find((instance) => instance.id === diagnosticsInstanceID) ?? null;
   const activeCount = instances.filter((instance) => instance.active).length;
+  let instanceSummary = `${activeCount} active ${activeCount === 1 ? "instance" : "instances"}`;
+  if (instancesQuery.isPending) instanceSummary = "Loading instances";
+  if (instancesQuery.error) instanceSummary = "Unable to load instances";
 
   const rotateMutation = useRotateLiteLLMInstanceKeyMutation({
     gcTime: 0,
-    onSuccess: async () => {
-      await invalidateAllLiteLLMInstances(queryClient);
+    onSuccess: () => {
+      void invalidateAllLiteLLMInstances(queryClient);
     },
   });
   const revokeMutation = useRevokeLiteLLMInstanceMutation({
@@ -244,9 +247,7 @@ export function LiteLLMIntegrationRow(): JSX.Element {
             </Stack>
             <Stack direction="horizontal" align="center" gap={3}>
               <Text muted small className="hidden whitespace-nowrap @3xl:block">
-                {instancesQuery.isPending
-                  ? "Loading instances"
-                  : `${activeCount} active ${activeCount === 1 ? "instance" : "instances"}`}
+                {instanceSummary}
               </Text>
               <ChevronDown
                 aria-hidden
@@ -397,19 +398,26 @@ function CreateInstanceDialog({
     useState<FailurePosture>("fail_closed");
   const mutation = useCreateLiteLLMInstanceMutation({
     gcTime: 0,
-    onSuccess: async (data) => {
-      await invalidateAllLiteLLMInstances(queryClient);
+    onSuccess: (data) => {
+      void invalidateAllLiteLLMInstances(queryClient);
       onProjectCreated(data.instance.project.slug);
     },
   });
 
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && mutation.isPending) return;
-    onOpenChange(nextOpen);
-    if (nextOpen) return;
+  const closeDialog = () => {
+    onOpenChange(false);
     setName("");
     setFailurePosture("fail_closed");
     mutation.reset();
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      onOpenChange(true);
+      return;
+    }
+    if (mutation.isPending || mutation.data) return;
+    closeDialog();
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -428,7 +436,7 @@ function CreateInstanceDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content
-        closeable={!mutation.isPending}
+        closeable={!mutation.isPending && !mutation.data}
         className={
           mutation.data ? "max-h-[90vh] max-w-3xl overflow-y-auto" : undefined
         }
@@ -444,7 +452,7 @@ function CreateInstanceDialog({
             </Dialog.Header>
             <SetupContent result={mutation.data} />
             <Dialog.Footer>
-              <Button onClick={() => handleOpenChange(false)}>Close</Button>
+              <Button onClick={closeDialog}>I have saved the key</Button>
             </Dialog.Footer>
           </>
         ) : (
@@ -614,11 +622,11 @@ function RotateKeyDialog({
     <Dialog
       open={target !== null}
       onOpenChange={(open) => {
-        if (!open && !isPending) onClose();
+        if (!open && !isPending && !result) onClose();
       }}
     >
       <Dialog.Content
-        closeable={!isPending}
+        closeable={!isPending && !result}
         className={
           result ? "max-h-[90vh] max-w-3xl overflow-y-auto" : undefined
         }
@@ -633,7 +641,7 @@ function RotateKeyDialog({
             </Dialog.Header>
             <SetupContent result={result} />
             <Dialog.Footer>
-              <Button onClick={onClose}>Close</Button>
+              <Button onClick={onClose}>I have saved the key</Button>
             </Dialog.Footer>
           </>
         ) : (
@@ -693,14 +701,14 @@ function SetupContent({
           title="Integration key"
           description="Store this dedicated project-bound key securely. Gram cannot show it again."
         >
-          <CodeBlock>{result.key}</CodeBlock>
+          <CodeBlock copyLabel="integration key">{result.key}</CodeBlock>
         </SetupSection>
       ) : null}
       <SetupSection
         title="Environment variables"
         description="Paste the key into the first variable, then set these on the LiteLLM proxy."
       >
-        <CodeBlock language="shell">
+        <CodeBlock language="shell" copyLabel="environment variables">
           {buildLiteLLMEnvironment(serverURL, instance.project.slug)}
         </CodeBlock>
       </SetupSection>
@@ -708,7 +716,7 @@ function SetupContent({
         title="LiteLLM configuration"
         description="Merge this guardrail fragment into your LiteLLM configuration."
       >
-        <CodeBlock language="yaml">
+        <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
           {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
         </CodeBlock>
       </SetupSection>
@@ -716,7 +724,7 @@ function SetupContent({
         title="Verify safe traffic"
         description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL in your shell, then run this against the proxy."
       >
-        <CodeBlock language="shell">
+        <CodeBlock language="shell" copyLabel="safe traffic command">
           {liteLLMVerificationCommands.safe}
         </CodeBlock>
       </SetupSection>
@@ -724,7 +732,7 @@ function SetupContent({
         title="Verify blocking"
         description="This synthetic credential should be blocked when the project secret policy is enabled."
       >
-        <CodeBlock language="shell">
+        <CodeBlock language="shell" copyLabel="blocking test command">
           {liteLLMVerificationCommands.blocked}
         </CodeBlock>
       </SetupSection>
@@ -743,7 +751,9 @@ function SetupSection({
 }): JSX.Element {
   return (
     <Stack gap={2}>
-      <Text className="font-medium">{title}</Text>
+      <Text as="h3" className="font-medium">
+        {title}
+      </Text>
       <Text muted small>
         {description}
       </Text>
