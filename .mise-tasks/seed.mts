@@ -4693,7 +4693,7 @@ function chatSessionBackfillSQL(
             is_claude_otel_row
             AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
         ) AS is_claude_tool_result,
-        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
         (
             hook_source = 'opencode'
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'

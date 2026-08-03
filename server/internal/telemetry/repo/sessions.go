@@ -36,8 +36,8 @@ const (
 	// stream URN stamped at ingest, mirroring is_codex_otel_row in the MV.
 	sessionCodexOTELRowPredicate = "(gram_urn = 'codex:otel:logs')"
 	// sessionCodexAPIRequestPredicate matches Codex response.completed rows that
-	// carry token counts — the sole Codex usage source (the derived
-	// codex:usage:metrics rows are deprecated). Mirrors is_codex_api_request.
+	// carry token counts — the sole Codex TOKEN source (codex:usage:metrics
+	// compliance rows carry cost only). Mirrors is_codex_api_request.
 	sessionCodexAPIRequestPredicate = "(" +
 		sessionCodexOTELRowPredicate + " AND " +
 		"toString(attributes.event.name) = 'codex.sse_event' AND " +
@@ -51,15 +51,17 @@ const (
 	sessionCodexCacheReadTokensExpr = "least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), " +
 		"greatest(toInt64OrZero(toString(attributes.input_token_count)), 0))"
 	sessionCodexInputTokensExpr = "(greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - " + sessionCodexCacheReadTokensExpr + ")"
-	// sessionAgentUsageRowPredicate matches Cursor/Claude-Chat usage rows —
-	// their only token/cost source. claude_chat:usage rows carry Claude
+	// sessionAgentUsageRowPredicate matches Cursor/Claude-Chat/ChatGPT usage
+	// rows — their only token/cost source. claude_chat:usage rows carry Claude
 	// Chat (web/desktop) token usage and claude_chat:cost rows the matching
-	// spend, both polled from the Admin Analytics API. The codex:usage prefix
-	// is kept only for in-flight rows from pods that predate the Codex
-	// raw-stream cutover. Gram-hosted chat completions and claude-code:usage
-	// rows are deliberately excluded: the summaries cover agent surfaces only,
-	// and claude-code:usage duplicates the OTEL api_request stream.
-	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))"
+	// spend, both polled from the Admin Analytics API. chatgpt:usage rows are
+	// ChatGPT/Work per-user usage+spend from the OpenAI compliance COSTS
+	// import. codex:usage rows are that import's Codex spend, cost-only since
+	// DNO-733 — their tokens would duplicate the Codex OTEL stream. Gram-hosted
+	// chat completions and claude-code:usage rows are deliberately excluded:
+	// the summaries cover agent surfaces only, and claude-code:usage
+	// duplicates the OTEL api_request stream.
+	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))"
 	// sessionOpencodeUsageRowPredicate matches opencode's per-turn usage rows.
 	// opencode reports tokens and cost on its unified-ingest assistant.responded
 	// rows, under the canonical gen_ai.usage.* keys the generic fallback branches
