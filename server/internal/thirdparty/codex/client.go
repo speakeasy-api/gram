@@ -22,13 +22,30 @@ const (
 	maxHTTPErrorMessage = 1000
 )
 
-var externalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
+var (
+	externalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
+	workspaceIDPattern            = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+)
+
+// Compliance resources are served under two path scopes: API organizations
+// (organizations/org-…, e.g. Codex COSTS files) and ChatGPT workspaces
+// (workspaces/<uuid>, e.g. CONVERSATION_MESSAGE files). A client is bound to
+// one scope at construction.
+type scope struct {
+	prefix  string
+	id      string
+	pattern *regexp.Regexp
+	// name and label compose the invalid-id error:
+	// "codex compliance <name> must be <label>".
+	name  string
+	label string
+}
 
 type Client struct {
-	httpClient             *guardian.HTTPClient
-	baseURL                string
-	apiKey                 string
-	externalOrganizationID string
+	httpClient *guardian.HTTPClient
+	baseURL    string
+	apiKey     string
+	scope      scope
 }
 
 type Option func(*Client)
@@ -55,15 +72,39 @@ func WithAPIKey(apiKey string) Option {
 	}
 }
 
+// New returns a client scoped to an OpenAI API organization (org-… id),
+// the scope Codex COSTS files are served under.
 func New(guardianPolicy *guardian.Policy, externalOrganizationID string, opts ...Option) *Client {
+	return newScoped(guardianPolicy, scope{
+		prefix:  "organizations",
+		id:      strings.TrimSpace(externalOrganizationID),
+		pattern: externalOrganizationIDPattern,
+		name:    "external organization id",
+		label:   "an OpenAI organization ID starting with org-",
+	}, opts...)
+}
+
+// NewWorkspaceClient returns a client scoped to a ChatGPT workspace (UUID),
+// the scope conversation/audit/auth log files are served under.
+func NewWorkspaceClient(guardianPolicy *guardian.Policy, workspaceID string, opts ...Option) *Client {
+	return newScoped(guardianPolicy, scope{
+		prefix:  "workspaces",
+		id:      strings.TrimSpace(workspaceID),
+		pattern: workspaceIDPattern,
+		name:    "workspace id",
+		label:   "a ChatGPT workspace UUID",
+	}, opts...)
+}
+
+func newScoped(guardianPolicy *guardian.Policy, s scope, opts ...Option) *Client {
 	if guardianPolicy == nil {
 		panic("codex compliance client requires guardian policy")
 	}
 	c := &Client{
-		httpClient:             guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
-		baseURL:                defaultBaseURL,
-		apiKey:                 "",
-		externalOrganizationID: strings.TrimSpace(externalOrganizationID),
+		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
+		baseURL:    defaultBaseURL,
+		apiKey:     "",
+		scope:      s,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -172,14 +213,14 @@ func (c *Client) doJSON(ctx context.Context, endpoint *url.URL, out any) error {
 }
 
 func (c *Client) endpoint(parts ...string) (*url.URL, error) {
-	if !externalOrganizationIDPattern.MatchString(c.externalOrganizationID) {
-		return nil, fmt.Errorf("codex compliance external organization id must be an OpenAI organization ID starting with org-")
+	if !c.scope.pattern.MatchString(c.scope.id) {
+		return nil, fmt.Errorf("codex compliance %s must be %s", c.scope.name, c.scope.label)
 	}
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse codex compliance base url: %w", err)
 	}
-	path := []string{"organizations", c.externalOrganizationID}
+	path := []string{c.scope.prefix, c.scope.id}
 	for _, part := range parts {
 		part, err := validateCodexPathID("codex compliance path id", part)
 		if err != nil {
