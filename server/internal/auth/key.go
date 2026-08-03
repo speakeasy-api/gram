@@ -77,6 +77,20 @@ func IsLiteLLMAPIKeyName(name string) bool {
 	return true
 }
 
+func GenerateAPIKeyMaterial(keyPrefix string) (plaintext, keyHash, displayPrefix string, err error) {
+	var randomBytes [32]byte
+	if _, err := rand.Read(randomBytes[:]); err != nil {
+		return "", "", "", fmt.Errorf("generate random token bytes: %w", err)
+	}
+	token := hex.EncodeToString(randomBytes[:])
+	plaintext = keyPrefix + token
+	keyHash, err = GetAPIKeyHash(plaintext)
+	if err != nil {
+		return "", "", "", fmt.Errorf("hash api key: %w", err)
+	}
+	return plaintext, keyHash, keyPrefix + token[:5], nil
+}
+
 // IsOrgWidePluginHooksAPIKey recognizes keys minted by plugin publish and
 // observability-download flows. The generated name embeds the first six token
 // characters while keyPrefix stores the first five, so authentication can
@@ -249,7 +263,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 	}
 
 	// LiteLLM keys are touched only after project-header authorization succeeds.
-	// Ordinary keys retain the existing early best-effort update behavior.
+	// This keeps rejected project mismatches out of customer-visible last use.
 	if !IsLiteLLMAPIKeyName(apiKey.Name) {
 		if err := k.keyDB.UpdateAPIKeyLastAccessedAt(ctx, apiKey.ID); err != nil {
 			logger.WarnContext(ctx, "failed to update api key last accessed at",

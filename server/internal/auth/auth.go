@@ -111,6 +111,21 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	if !hasProjectAccess {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
+	if IsLiteLLMAPIKeyName(authCtx.APIKeyName) && authCtx.APIKeyID != "" {
+		keyID, parseErr := uuid.Parse(authCtx.APIKeyID)
+		if parseErr != nil {
+			logger.WarnContext(ctx, "failed to parse LiteLLM API key ID",
+				attr.SlogError(parseErr),
+				attr.SlogAPIKeyID(authCtx.APIKeyID),
+			)
+		} else if touchErr := s.keys.keyDB.UpdateAPIKeyLastAccessedAt(ctx, keyID); touchErr != nil {
+			logger.WarnContext(ctx, "failed to update LiteLLM API key last accessed at",
+				attr.SlogError(touchErr),
+				attr.SlogAPIKeyID(authCtx.APIKeyID),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			)
+		}
+	}
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	return ctx, nil

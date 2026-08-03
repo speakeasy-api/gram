@@ -38,7 +38,7 @@ export class Litellm extends ClientSDK {
    * createInstance litellm
    *
    * @remarks
-   * Provision a LiteLLM integration for a project and return its plaintext ingestion key once.
+   * Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
    */
   async createInstance(
     request: CreateLiteLLMInstanceRequest,
@@ -76,7 +76,7 @@ export class Litellm extends ClientSDK {
    * listInstances litellm
    *
    * @remarks
-   * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.
+   * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.
    */
   async listInstances(
     request?: ListLiteLLMInstancesRequest | undefined,
@@ -95,7 +95,7 @@ export class Litellm extends ClientSDK {
    * revokeInstance litellm
    *
    * @remarks
-   * Revoke a LiteLLM integration and immediately invalidate its active key.
+   * Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.
    */
   async revokeInstance(
     request: RevokeLiteLLMInstanceRequest,
@@ -114,7 +114,7 @@ export class Litellm extends ClientSDK {
    * rotateInstanceKey litellm
    *
    * @remarks
-   * Atomically replace a LiteLLM integration key and return the new plaintext value once.
+   * Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.
    */
   async rotateInstanceKey(
     request: RotateLiteLLMInstanceKeyRequest,

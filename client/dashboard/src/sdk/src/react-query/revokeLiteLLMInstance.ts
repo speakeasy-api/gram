@@ -53,7 +53,7 @@ export type RevokeLiteLLMInstanceMutationError =
  * revokeInstance litellm
  *
  * @remarks
- * Revoke a LiteLLM integration and immediately invalidate its active key.
+ * Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.
  */
 export function useRevokeLiteLLMInstanceMutation(
   options?: MutationHookOptions<

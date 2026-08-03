@@ -12078,10 +12078,10 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, `Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] litellm COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-instance: Provision a LiteLLM integration for a project and return its plaintext ingestion key once.`)
-	fmt.Fprintln(os.Stderr, `    list-instances: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.`)
-	fmt.Fprintln(os.Stderr, `    rotate-instance-key: Atomically replace a LiteLLM integration key and return the new plaintext value once.`)
-	fmt.Fprintln(os.Stderr, `    revoke-instance: Revoke a LiteLLM integration and immediately invalidate its active key.`)
+	fmt.Fprintln(os.Stderr, `    create-instance: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-instances: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    rotate-instance-key: Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke-instance: Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    ingest: Evaluates and captures a LiteLLM model request before it reaches the provider.`)
 	fmt.Fprintln(os.Stderr, `    traces: Accepts LiteLLM OTLP trace exports. Send the standard OTLP JSON ExportTraceServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip. The canonical endpoint is /rpc/hooks.otel/v1/metrics, shared with harness telemetry and dispatched by key provenance; the litellm.otel route below is the internally registered fallback.`)
@@ -12099,7 +12099,7 @@ func litellmCreateInstanceUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Provision a LiteLLM integration for a project and return its plaintext ingestion key once.`)
+	fmt.Fprintln(os.Stderr, `Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -12120,7 +12120,7 @@ func litellmListInstancesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.`)
+	fmt.Fprintln(os.Stderr, `List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -12141,7 +12141,7 @@ func litellmRotateInstanceKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Atomically replace a LiteLLM integration key and return the new plaintext value once.`)
+	fmt.Fprintln(os.Stderr, `Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -12163,7 +12163,7 @@ func litellmRevokeInstanceUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke a LiteLLM integration and immediately invalidate its active key.`)
+	fmt.Fprintln(os.Stderr, `Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)

@@ -18128,7 +18128,7 @@ paths:
         name: ValidateAPIKey
   /rpc/litellm.createInstance:
     post:
-      description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once.
+      description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
       operationId: createLiteLLMInstance
       parameters:
         - allowEmptyValue: true
@@ -18320,7 +18320,7 @@ paths:
         disabled: true
   /rpc/litellm.listInstances:
     get:
-      description: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.
+      description: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.
       operationId: listLiteLLMInstances
       parameters:
         - allowEmptyValue: true
@@ -18410,7 +18410,7 @@ paths:
         name: LiteLLMInstances
   /rpc/litellm.revokeInstance:
     delete:
-      description: Revoke a LiteLLM integration and immediately invalidate its active key.
+      description: Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.
       operationId: revokeLiteLLMInstance
       parameters:
         - allowEmptyValue: true
@@ -18503,7 +18503,7 @@ paths:
         name: RevokeLiteLLMInstance
   /rpc/litellm.rotateInstanceKey:
     post:
-      description: Atomically replace a LiteLLM integration key and return the new plaintext value once.
+      description: Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.
       operationId: rotateLiteLLMInstanceKey
       parameters:
         - allowEmptyValue: true

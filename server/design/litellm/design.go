@@ -75,7 +75,7 @@ var _ = Service("litellm", func() {
 	shared.DeclareErrorResponses()
 
 	Method("createInstance", func() {
-		Description("Provision a LiteLLM integration for a project and return its plaintext ingestion key once.")
+		Description("Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.")
 		Security(security.Session, security.ProjectSlug)
 		Payload(func() {
 			security.SessionPayload()
@@ -97,7 +97,7 @@ var _ = Service("litellm", func() {
 	})
 
 	Method("listInstances", func() {
-		Description("List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.")
+		Description("List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.")
 		Security(security.Session, security.ProjectSlug)
 		Payload(func() {
 			security.SessionPayload()
@@ -119,7 +119,7 @@ var _ = Service("litellm", func() {
 	})
 
 	Method("rotateInstanceKey", func() {
-		Description("Atomically replace a LiteLLM integration key and return the new plaintext value once.")
+		Description("Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.")
 		Security(security.Session, security.ProjectSlug)
 		Payload(func() {
 			security.SessionPayload()
@@ -140,7 +140,7 @@ var _ = Service("litellm", func() {
 	})
 
 	Method("revokeInstance", func() {
-		Description("Revoke a LiteLLM integration and immediately invalidate its active key.")
+		Description("Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.")
 		Security(security.Session, security.ProjectSlug)
 		Payload(func() {
 			security.SessionPayload()

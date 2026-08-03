@@ -19,15 +19,16 @@ import (
 // Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
 type Service interface {
 	// Provision a LiteLLM integration for a project and return its plaintext
-	// ingestion key once.
+	// ingestion key once. Requires org:admin.
 	CreateInstance(context.Context, *CreateInstancePayload) (res *LitellmInstanceKeyResult, err error)
 	// List active and revoked LiteLLM integrations for a project. Plaintext keys
-	// are never returned.
+	// are never returned. Requires org:admin.
 	ListInstances(context.Context, *ListInstancesPayload) (res *ListInstancesResult, err error)
 	// Atomically replace a LiteLLM integration key and return the new plaintext
-	// value once.
+	// value once. Requires org:admin.
 	RotateInstanceKey(context.Context, *RotateInstanceKeyPayload) (res *LitellmInstanceKeyResult, err error)
 	// Revoke a LiteLLM integration and immediately invalidate its active key.
+	// Requires org:admin.
 	RevokeInstance(context.Context, *RevokeInstancePayload) (err error)
 	// Evaluates and captures a LiteLLM model request before it reaches the
 	// provider.

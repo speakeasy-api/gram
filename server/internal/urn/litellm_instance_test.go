@@ -47,6 +47,17 @@ func TestLiteLLMInstanceZeroValue(t *testing.T) {
 	require.Nil(t, value)
 	require.NoError(t, zero.Scan(nil))
 	require.True(t, zero.IsZero())
+
+	mutated := urn.NewLiteLLMInstance(uuid.MustParse("33333333-3333-3333-3333-333333333333"))
+	_, err = mutated.MarshalJSON()
+	require.NoError(t, err)
+	mutated.ID = uuid.Nil
+	_, err = mutated.MarshalJSON()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = mutated.MarshalText()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = mutated.Value()
+	require.ErrorIs(t, err, urn.ErrInvalid)
 }
 
 func TestLiteLLMInstanceDatabaseRoundTrip(t *testing.T) {
