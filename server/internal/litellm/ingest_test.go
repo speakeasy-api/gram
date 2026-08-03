@@ -154,6 +154,7 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 		calls:     callcache.New(newMemoryCache()),
 		traces:    newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
 		metrics:   nil,
+		health:    newDisabledHealthProcessor(t),
 		db:        nil,
 		authz:     nil,
 		features:  nil,
