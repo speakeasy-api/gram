@@ -917,8 +917,11 @@ function ToolUI({
   return (
     <div
       data-slot="tool-ui"
+      // No `@container` here: nothing inside uses container queries, and
+      // inline-size containment made the card size as if it were empty, so it
+      // could never be sized from its own content.
       className={cn(
-        "@container overflow-hidden rounded-lg border border-border bg-card",
+        "border-border bg-card overflow-hidden rounded-lg border",
         className,
       )}
     >
@@ -957,9 +960,12 @@ function ToolUI({
         )}
       >
         <StatusIndicator status={status} />
+        {/* `mr-auto`, not `flex-1`: a flexible child contributes no intrinsic
+            width, so it would collapse a content-sized card to nothing. The
+            auto margin still pushes the chevron right when the row stretches. */}
         <span
           className={cn(
-            "min-w-0 flex-1 text-sm",
+            "mr-auto min-w-0 text-sm",
             !provider && isApprovalPending && "shimmer",
           )}
         >
@@ -1240,12 +1246,10 @@ function ToolUIGroup({
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          // Capped by the container, not by the cards' own content: ToolUI's
-          // root is a size container (`@container`), and inline-size
-          // containment makes it size as if empty — any shrink-to-fit box
-          // around it collapses to nothing.
+          // Cards size to their own content (see ToolUI), so the rail only
+          // bounds how far they may grow when expanded.
           !headerless &&
-            "border-border mt-2 ml-2 max-w-xs space-y-2 border-l pl-4",
+            "border-border mt-2 ml-2 max-w-md space-y-2 border-l pl-4",
           !showChildren && "hidden",
         )}
       >
