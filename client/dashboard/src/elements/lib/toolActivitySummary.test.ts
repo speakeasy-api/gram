@@ -32,8 +32,12 @@ describe("describeToolActivity", () => {
 
   it("stays neutral when the turn is only scaffolding tools", () => {
     // "Calling Compose…" tells the user nothing about their own task.
-    expect(describeToolActivity([{ name: "compose" }], true)).toBe("Working…");
-    expect(describeToolActivity([{ name: "compose" }], false)).toBe("Done");
+    expect(describeToolActivity([{ name: "compose" }], true)).toBe(
+      "Working on it…",
+    );
+    expect(describeToolActivity([{ name: "compose" }], false)).toBe(
+      "Worked on your request",
+    );
     // A real tool alongside it still wins.
     expect(
       describeToolActivity([{ name: "compose" }, { name: "search_web" }], true),

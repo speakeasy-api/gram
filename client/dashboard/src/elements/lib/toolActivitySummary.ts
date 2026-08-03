@@ -35,10 +35,15 @@ export function describeToolActivity(
 ): string {
   const names = toolCalls.map((call) => call.name).filter(Boolean);
 
-  // No names, or only scaffolding tools — naming them would tell the user
-  // nothing about their task.
-  if (names.length === 0 || isGenericToolActivity(names)) {
+  if (names.length === 0) {
     return inProgress ? "Working…" : "Done";
+  }
+
+  // Only scaffolding tools — naming them ("Calling Compose…") says nothing, and
+  // a bare "Done" says less. The enriched summary describes the user's actual
+  // request; until it lands, say that much without inventing detail.
+  if (isGenericToolActivity(names)) {
+    return inProgress ? "Working on it…" : "Worked on your request";
   }
 
   if (names.length === 1) {

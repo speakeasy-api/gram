@@ -2045,13 +2045,14 @@ func (s *Service) SummarizeToolActivity(ctx context.Context, payload *gen.Summar
 		"The tools are listed in the order the agent called them; if the nature of the work has " +
 		"shifted over the turn, describe what the agent is doing NOW, weighting the most recent tools, " +
 		"rather than what it started with. " +
-		"Some tools are generic scaffolding (for example \"compose\", \"think\", \"plan\", \"respond\") and " +
-		"say nothing about the task; when the turn consists only of such tools, describe the user's " +
-		"underlying request instead (e.g. \"Investigating the failing deploy\"), and if there is no user " +
-		"request to draw on, reply with \"Working on it\". " +
+		"When no tools are listed, base the phrase entirely on the user's request — describe the task " +
+		"the agent is working on for them (e.g. \"Investigating the failing deploy\"). " +
 		"Rules: 3 to 8 words; no trailing punctuation; no surrounding quotes; " +
 		"do not mention \"tool\", \"function\", \"API\", or the raw tool names; " +
-		"describe the intent, not the mechanics. Reply with the phrase only."
+		"describe the intent, not the mechanics. " +
+		"Good phrases for a request about failing tool calls: \"Investigating failing tool calls and servers\", " +
+		"\"Aggregating failures and finding patterns\", \"Identifying high-traffic users\". " +
+		"Reply with the phrase only."
 
 	summaryCtx, cancel := context.WithTimeout(ctx, toolActivitySummaryTimeout)
 	defer cancel()
@@ -2096,40 +2097,72 @@ func (s *Service) SummarizeToolActivity(ctx context.Context, payload *gen.Summar
 	return &gen.SummarizeToolActivityResult{Summary: summary}, nil
 }
 
-// buildToolActivityPrompt renders the user prompt plus the turn's tool calls
-// into a bounded prompt for the tool-activity summarizer.
+// genericToolActivityNames are tools that describe the agent's own scaffolding
+// rather than the user's task. Naming them produces labels about the mechanics
+// ("Drafted the message" for a `compose` call), so they are withheld from the
+// prompt entirely — guidance alone isn't enough, the model latches onto any
+// name it is shown.
+var genericToolActivityNames = map[string]bool{
+	"compose": true,
+	"think":   true,
+	"plan":    true,
+	"respond": true,
+}
+
+// buildToolActivityPrompt renders the user prompt plus the turn's informative
+// tool calls into a bounded prompt for the tool-activity summarizer. It returns
+// "" when there is nothing to summarize — no user request and no informative
+// tool names — so the caller can fall back to the client-side heuristic.
 func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
 	var b strings.Builder
 
+	userMessage := ""
 	if payload.UserMessage != nil {
-		msg := strings.TrimSpace(StripLeadingEnvelopes(*payload.UserMessage))
-		msg = truncateRunes(msg, maxToolActivityUserMessageRunes)
-		if msg != "" {
-			b.WriteString("User request:\n")
-			b.WriteString(msg)
-			b.WriteString("\n\n")
-		}
+		userMessage = truncateRunes(
+			strings.TrimSpace(StripLeadingEnvelopes(*payload.UserMessage)),
+			maxToolActivityUserMessageRunes,
+		)
+	}
+	if userMessage != "" {
+		b.WriteString("User request:\n")
+		b.WriteString(userMessage)
+		b.WriteString("\n\n")
 	}
 
-	b.WriteString("Tools the agent is calling, in order:\n")
 	calls := payload.ToolCalls
 	// Keep the most recent calls, not the oldest — the label should reflect what
 	// the agent is doing now.
 	if len(calls) > maxToolActivityCalls {
 		calls = calls[len(calls)-maxToolActivityCalls:]
 	}
-	n := 0
+	// Tool names only — arguments may carry secrets and are never forwarded to
+	// the model.
+	names := make([]string, 0, len(calls))
 	for _, call := range calls {
-		if call == nil || strings.TrimSpace(call.Name) == "" {
+		name := ""
+		if call != nil {
+			name = strings.TrimSpace(call.Name)
+		}
+		if name == "" || genericToolActivityNames[strings.ToLower(name)] {
 			continue
 		}
-		n++
-		// Tool names only — arguments may carry secrets and are never forwarded
-		// to the model.
-		fmt.Fprintf(&b, "%d. %s\n", n, truncateRunes(call.Name, maxToolActivityNameRunes))
+		names = append(names, truncateRunes(name, maxToolActivityNameRunes))
 	}
-	if n == 0 {
-		return ""
+
+	if len(names) == 0 {
+		if userMessage == "" {
+			return ""
+		}
+		// Only scaffolding tools ran, so the turn's mechanics say nothing about
+		// the task. Describe the request itself instead.
+		b.WriteString("The agent has not called any tool that reveals what it is doing. " +
+			"Describe the user's request as the task the agent is working on.\n")
+		return b.String()
+	}
+
+	b.WriteString("Tools the agent is calling, in order:\n")
+	for i, name := range names {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, name)
 	}
 	return b.String()
 }
