@@ -668,6 +668,12 @@ function RiskTrendChart({
         borderWidth: 1,
         padding: 12,
         boxPadding: 4,
+        // Index-mode hover activates every series at that x. Drop zeros so a
+        // sparse multi-series chart doesn't list every inactive category
+        // (which balloons the tooltip until it covers the chart). Returning
+        // `undefined` from `label` is not enough — Chart.js treats that as
+        // "use the default callback" and still renders the line.
+        filter: (item) => (item.parsed.y ?? 0) !== 0,
         callbacks: {
           title: (items) => {
             const x = items[0]?.parsed.x;
@@ -680,12 +686,10 @@ function RiskTrendChart({
               minute: "2-digit",
             });
           },
-          label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return undefined;
-            return item.formattedValue
+          label: (item) =>
+            item.formattedValue
               ? `${item.dataset.label}: ${item.formattedValue}`
-              : "";
-          },
+              : "",
         },
       },
       zoom: zoomPluginOptions,
