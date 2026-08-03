@@ -18,7 +18,7 @@ func (s *Service) enforceShadowMCPToolAccess(
 	organizationID string,
 	projectID string,
 	userID string,
-	policyID string,
+	policy *risk.ShadowMCPPolicy,
 	toolName string,
 	evidence shadowmcp.AccessEvidence,
 ) (string, bool) {
@@ -33,12 +33,36 @@ func (s *Service) enforceShadowMCPToolAccess(
 		detail = "MCP server is not Gram-hosted"
 	}
 
-	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policyID, evidence, toolName); allowed {
+	// Allow-all policies invert the default: every non-Gram-hosted server is
+	// permitted unless its URL is on the policy's blocked list. Bypass grants
+	// are a block_all concept and are never consulted here — the blocked-list
+	// membership is the whole check. Evidence without a resolvable URL (e.g. a
+	// local stdio server) cannot match a URL blocklist and falls through to an
+	// allow.
+	if policy.IsAllowAll() {
+		blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, evidence.FullURL)
+		if !blocked {
+			return "", false
+		}
+		s.logger.InfoContext(ctx, "shadow-mcp call blocked by allow-all policy blocked list",
+			attr.SlogEvent("shadow_mcp_policy_blocklist_deny"),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogValueAny(map[string]any{
+				"blocked_url": blockedURL,
+				"tool_name":   toolName,
+			}),
+		)
+		return fmt.Sprintf("MCP server is blocked by policy (URL: %s)", blockedURL), true
+	}
+
+	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policy.ID, evidence, toolName); allowed {
 		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
 			attr.SlogEvent("shadow_mcp_policy_bypass_allow"),
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProjectID(projectID),
-			attr.SlogRiskPolicyID(policyID),
+			attr.SlogRiskPolicyID(policy.ID),
 			attr.SlogValueAny(map[string]any{
 				"target_kind": target.Kind,
 				"target_key":  target.Key,

@@ -147,6 +147,9 @@ func (s *Scanner) evaluate(rules []customrules.Rule, msg celenv.Message) ([]scan
 				Field:        s.Target,
 				Path:         s.Path,
 
+				// The span's ToolCallID is the tool NAME (per-name grouping
+				// key), not a recorded call id, so it must never be published
+				// as McpLookupToolCallID / tool_call_id.
 				DeadLetterReason:    "",
 				McpLookupToolCallID: "",
 			})
