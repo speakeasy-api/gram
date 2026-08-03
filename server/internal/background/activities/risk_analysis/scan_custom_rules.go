@@ -26,7 +26,7 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 		view := batchMessageView(msg)
 		toolCalls := make([]customruleanalyzer.ScanToolCall, 0, len(view.Tools))
 		for _, t := range view.Tools {
-			toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{ID: t.CallID, Name: t.Name, Arguments: t.Arguments})
+			toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{Name: t.Name, Arguments: t.Arguments})
 		}
 
 		scanMessages = append(scanMessages, customruleanalyzer.ScanMessage{
@@ -64,7 +64,6 @@ func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args 
 			toolCalls = append(toolCalls, riskv1.CustomRulesAnalysis_ToolCall_builder{
 				Name:      new(t.Name),
 				Arguments: new(t.Arguments),
-				Id:        new(t.CallID),
 			}.Build())
 		}
 

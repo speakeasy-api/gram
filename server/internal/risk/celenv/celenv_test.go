@@ -60,7 +60,7 @@ func TestScope_ToolServer(t *testing.T) {
 	require.NoError(t, err)
 
 	in, err := eng.EvalScope(prg, toolReq(
-		celenv.Tool{CallID: "", Name: "shell:run", Server: "shell", Function: "run", Args: "{}"},
+		celenv.Tool{Name: "shell:run", Server: "shell", Function: "run", Args: "{}"},
 	))
 	require.NoError(t, err)
 	require.True(t, in)
@@ -100,7 +100,7 @@ func TestDetection_Glob(t *testing.T) {
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "", Name: "win:ps", Server: "win", Function: "powershell_exec", Args: "{}"},
+		celenv.Tool{Name: "win:ps", Server: "win", Function: "powershell_exec", Args: "{}"},
 	))
 	require.NoError(t, err)
 	require.True(t, matched)
@@ -121,7 +121,7 @@ func TestDetection_CorrelatedTwoSpans(t *testing.T) {
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "call_7", Name: "shell:run", Server: "shell", Function: "run_bash_command", Args: `{"command":"DROP TABLE users"}`},
+		celenv.Tool{Name: "shell:run", Server: "shell", Function: "run_bash_command", Args: `{"command":"DROP TABLE users"}`},
 	))
 	require.NoError(t, err)
 	require.True(t, matched)
@@ -131,54 +131,9 @@ func TestDetection_CorrelatedTwoSpans(t *testing.T) {
 	require.Equal(t, "tool.args", spans[0].Target)
 	require.Equal(t, "command", spans[0].Path)
 	require.Equal(t, "DROP TABLE", spans[0].Value)
-	require.Equal(t, "call_7", spans[0].ToolCallID)
-	require.Equal(t, "shell:run", spans[0].ToolName)
-	require.Equal(t, "call_7", spans[0].GroupKey())
+	require.Equal(t, "shell:run", spans[0].ToolCallID)
 	require.Equal(t, "tool.function", spans[1].Target)
 	require.Equal(t, "bash", spans[1].Value)
-}
-
-// Two calls to the SAME tool carry distinct recorded call ids, so their spans
-// stay distinguishable — the id, not the shared name, anchors and groups them.
-func TestDetection_SameToolTwiceDistinctCallIDs(t *testing.T) {
-	t.Parallel()
-	eng, err := celenv.New()
-	require.NoError(t, err)
-
-	prg, err := eng.Compile(`tool_calls.filter(t, t.args.get("command").matchRegex("rm -rf")).size() > 0`)
-	require.NoError(t, err)
-
-	spans, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "call_1", Name: "shell:run", Server: "shell", Function: "run", Args: `{"command":"rm -rf /tmp"}`},
-		celenv.Tool{CallID: "call_2", Name: "shell:run", Server: "shell", Function: "run", Args: `{"command":"rm -rf /var"}`},
-	))
-	require.NoError(t, err)
-	require.True(t, matched)
-	require.Len(t, spans, 2)
-	require.ElementsMatch(t, []string{"call_1", "call_2"}, []string{spans[0].ToolCallID, spans[1].ToolCallID})
-	require.ElementsMatch(t, []string{"call_1", "call_2"}, []string{spans[0].GroupKey(), spans[1].GroupKey()})
-	require.Equal(t, "shell:run", spans[0].ToolName)
-	require.Equal(t, "shell:run", spans[1].ToolName)
-}
-
-// A call recorded without an id keeps grouping by tool name so its spans do
-// not all collapse into one anonymous group.
-func TestSpan_GroupKeyFallsBackToToolName(t *testing.T) {
-	t.Parallel()
-	eng, err := celenv.New()
-	require.NoError(t, err)
-
-	prg, err := eng.Compile(`tool_calls.exists(t, t.args.get("command").matchRegex("rm -rf"))`)
-	require.NoError(t, err)
-
-	spans, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "", Name: "shell:run", Server: "shell", Function: "run", Args: `{"command":"rm -rf /tmp"}`},
-	))
-	require.NoError(t, err)
-	require.True(t, matched)
-	require.Len(t, spans, 1)
-	require.Empty(t, spans[0].ToolCallID)
-	require.Equal(t, "shell:run", spans[0].GroupKey())
 }
 
 // Correlation: conditions split across DIFFERENT tools must NOT fire (this is the
@@ -193,9 +148,9 @@ func TestDetection_CorrelationDoesNotCrossTools(t *testing.T) {
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
 		// bash tool, but harmless command
-		celenv.Tool{CallID: "", Name: "shell:run", Server: "shell", Function: "run_bash_command", Args: `{"command":"ls"}`},
+		celenv.Tool{Name: "shell:run", Server: "shell", Function: "run_bash_command", Args: `{"command":"ls"}`},
 		// dangerous command, but not a bash tool
-		celenv.Tool{CallID: "", Name: "db:query", Server: "db", Function: "query", Args: `{"command":"DROP TABLE users"}`},
+		celenv.Tool{Name: "db:query", Server: "db", Function: "query", Args: `{"command":"DROP TABLE users"}`},
 	))
 	require.NoError(t, err)
 	require.False(t, matched)
@@ -211,7 +166,7 @@ func TestDetection_JSONPathNested(t *testing.T) {
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "", Name: "db:exec", Server: "db", Function: "exec", Args: `{"payload":{"sql":"DELETE FROM users"}}`},
+		celenv.Tool{Name: "db:exec", Server: "db", Function: "exec", Args: `{"payload":{"sql":"DELETE FROM users"}}`},
 	))
 	require.NoError(t, err)
 	require.True(t, matched)
@@ -229,7 +184,7 @@ func TestDetection_JSONPathBracketSyntaxNormalized(t *testing.T) {
 	require.NoError(t, err)
 
 	_, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "", Name: "x:y", Server: "x", Function: "y", Args: `{"items":[{"name":"danger"}]}`},
+		celenv.Tool{Name: "x:y", Server: "x", Function: "y", Args: `{"items":[{"name":"danger"}]}`},
 	))
 	require.NoError(t, err)
 	require.True(t, matched)
@@ -244,7 +199,7 @@ func TestDetection_MissingPathNoMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "", Name: "x:y", Server: "x", Function: "y", Args: `{"command":"ls"}`},
+		celenv.Tool{Name: "x:y", Server: "x", Function: "y", Args: `{"command":"ls"}`},
 	))
 	require.NoError(t, err)
 	require.False(t, matched)
@@ -311,14 +266,14 @@ func TestDetection_AcrossAllTools(t *testing.T) {
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
-		celenv.Tool{CallID: "", Name: "shell:a", Server: "shell", Function: "a", Args: `{"command":"rm -rf /tmp"}`},
-		celenv.Tool{CallID: "", Name: "shell:b", Server: "shell", Function: "b", Args: `{"command":"ls"}`},
-		celenv.Tool{CallID: "", Name: "shell:c", Server: "shell", Function: "c", Args: `{"command":"rm -rf /var"}`},
+		celenv.Tool{Name: "shell:a", Server: "shell", Function: "a", Args: `{"command":"rm -rf /tmp"}`},
+		celenv.Tool{Name: "shell:b", Server: "shell", Function: "b", Args: `{"command":"ls"}`},
+		celenv.Tool{Name: "shell:c", Server: "shell", Function: "c", Args: `{"command":"rm -rf /var"}`},
 	))
 	require.NoError(t, err)
 	require.True(t, matched)
 	require.Len(t, spans, 2)
-	require.ElementsMatch(t, []string{"shell:a", "shell:c"}, []string{spans[0].ToolName, spans[1].ToolName})
+	require.ElementsMatch(t, []string{"shell:a", "shell:c"}, []string{spans[0].ToolCallID, spans[1].ToolCallID})
 }
 
 // --- Concurrency -------------------------------------------------------------

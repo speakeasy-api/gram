@@ -41,7 +41,6 @@ pubsub:
           message ToolCall {
             string name = 1;
             string arguments = 2;
-            string id = 3;
           }
         }
       type: PROTOCOL_BUFFER

@@ -15,7 +15,7 @@ import (
 func celMessage(view MessageView) celenv.Message {
 	tools := make([]celenv.Tool, len(view.Tools))
 	for i, t := range view.Tools {
-		tools[i] = celenv.Tool{CallID: t.CallID, Name: t.Name, Server: t.Server, Function: t.Function, Args: t.Arguments}
+		tools[i] = celenv.Tool{Name: t.Name, Server: t.Server, Function: t.Function, Args: t.Arguments}
 	}
 	return celenv.Message{Content: view.Content, Type: view.Type, Tools: tools}
 }
@@ -61,17 +61,20 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 		}
 		for _, s := range spans {
 			findings = append(findings, scanners.Finding{
-				RuleID:              r.rule.RuleID,
-				Description:         r.rule.DisplayDescription(),
-				Match:               s.Value,
-				StartPos:            s.Start,
-				EndPos:              s.End,
-				Tags:                []string{},
-				Source:              SourceCustom,
-				Confidence:          1.0,
+				RuleID:      r.rule.RuleID,
+				Description: r.rule.DisplayDescription(),
+				Match:       s.Value,
+				StartPos:    s.Start,
+				EndPos:      s.End,
+				Tags:        []string{},
+				Source:      SourceCustom,
+				Confidence:  1.0,
+				// The span's ToolCallID is the tool NAME (per-name grouping
+				// key), not a recorded call id, so it must never be published
+				// as McpLookupToolCallID / tool_call_id.
 				DeadLetterReason:    "",
-				McpLookupToolCallID: s.ToolCallID,
-				SpanGroupKey:        s.GroupKey(),
+				McpLookupToolCallID: "",
+				SpanGroupKey:        s.ToolCallID,
 				Field:               s.Target,
 				Path:                s.Path,
 			})

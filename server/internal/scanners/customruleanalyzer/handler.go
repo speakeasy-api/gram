@@ -57,7 +57,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 
 	toolCalls := make([]ScanToolCall, 0, len(m.GetToolCalls()))
 	for _, tc := range m.GetToolCalls() {
-		toolCalls = append(toolCalls, ScanToolCall{ID: tc.GetId(), Name: tc.GetName(), Arguments: tc.GetArguments()})
+		toolCalls = append(toolCalls, ScanToolCall{Name: tc.GetName(), Arguments: tc.GetArguments()})
 	}
 
 	findings, err := h.scanner.Scan(ctx, ScanRequest{

@@ -163,9 +163,11 @@ func TestPublishFindingsPublishesContentPartAnchor(t *testing.T) {
 	require.Equal(t, "part-1", pub.messages[0].GetContentPartId())
 }
 
-// The published Finding carries the reveal metadata: field/path/tool_call_id
-// pass through from the domain finding and surface derives from
-// (source, field, path) via FindingSurface.
+// The published Finding carries the reveal metadata: field/path pass through
+// from the domain finding, surface derives from (source, field, path) via
+// FindingSurface, and tool_call_id is stamped only from McpLookupToolCallID —
+// the real recorded call id shadow_mcp sets. Custom-rule span findings leave
+// it unset (their spans only know the tool NAME, which is not an id).
 func TestStartPublishFindingsStampsRevealMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -173,7 +175,6 @@ func TestStartPublishFindingsStampsRevealMetadata(t *testing.T) {
 	spanFinding.Source = "custom"
 	spanFinding.Field = "tool.args"
 	spanFinding.Path = "command.0"
-	spanFinding.McpLookupToolCallID = "call_1"
 
 	contentFinding := testFinding()
 	contentFinding.Source = "prompt_injection"
@@ -194,7 +195,7 @@ func TestStartPublishFindingsStampsRevealMetadata(t *testing.T) {
 	require.Equal(t, scanners.SurfaceJSONPath, span.GetSurface())
 	require.Equal(t, "tool.args", span.GetField())
 	require.Equal(t, "command.0", span.GetPath())
-	require.Equal(t, "call_1", span.GetToolCallId())
+	require.Empty(t, span.GetToolCallId())
 
 	require.Equal(t, scanners.SurfaceContent, pub.messages[1].GetSurface())
 	require.Empty(t, pub.messages[1].GetField())

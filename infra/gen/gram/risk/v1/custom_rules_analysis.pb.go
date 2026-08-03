@@ -432,7 +432,6 @@ type CustomRulesAnalysis_ToolCall struct {
 	state                  protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Name        *string                `protobuf:"bytes,1,opt,name=name"`
 	xxx_hidden_Arguments   *string                `protobuf:"bytes,2,opt,name=arguments"`
-	xxx_hidden_Id          *string                `protobuf:"bytes,3,opt,name=id"`
 	XXX_raceDetectHookData protoimpl.RaceDetectHookData
 	XXX_presence           [1]uint32
 	unknownFields          protoimpl.UnknownFields
@@ -484,29 +483,14 @@ func (x *CustomRulesAnalysis_ToolCall) GetArguments() string {
 	return ""
 }
 
-func (x *CustomRulesAnalysis_ToolCall) GetId() string {
-	if x != nil {
-		if x.xxx_hidden_Id != nil {
-			return *x.xxx_hidden_Id
-		}
-		return ""
-	}
-	return ""
-}
-
 func (x *CustomRulesAnalysis_ToolCall) SetName(v string) {
 	x.xxx_hidden_Name = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
 }
 
 func (x *CustomRulesAnalysis_ToolCall) SetArguments(v string) {
 	x.xxx_hidden_Arguments = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
-}
-
-func (x *CustomRulesAnalysis_ToolCall) SetId(v string) {
-	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
 }
 
 func (x *CustomRulesAnalysis_ToolCall) HasName() bool {
@@ -523,13 +507,6 @@ func (x *CustomRulesAnalysis_ToolCall) HasArguments() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
 }
 
-func (x *CustomRulesAnalysis_ToolCall) HasId() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
-}
-
 func (x *CustomRulesAnalysis_ToolCall) ClearName() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Name = nil
@@ -540,19 +517,11 @@ func (x *CustomRulesAnalysis_ToolCall) ClearArguments() {
 	x.xxx_hidden_Arguments = nil
 }
 
-func (x *CustomRulesAnalysis_ToolCall) ClearId() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
-	x.xxx_hidden_Id = nil
-}
-
 type CustomRulesAnalysis_ToolCall_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	Name      *string
 	Arguments *string
-	// The call id recorded on the message's tool_calls entry (e.g. an
-	// OpenAI-style "call_..." id). Empty when the recording agent sent none.
-	Id *string
 }
 
 func (b0 CustomRulesAnalysis_ToolCall_builder) Build() *CustomRulesAnalysis_ToolCall {
@@ -560,16 +529,12 @@ func (b0 CustomRulesAnalysis_ToolCall_builder) Build() *CustomRulesAnalysis_Tool
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Name != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
 		x.xxx_hidden_Name = b.Name
 	}
 	if b.Arguments != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
 		x.xxx_hidden_Arguments = b.Arguments
-	}
-	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
-		x.xxx_hidden_Id = b.Id
 	}
 	return m0
 }
@@ -578,7 +543,7 @@ var File_gram_risk_v1_custom_rules_analysis_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_custom_rules_analysis_proto_rawDesc = "" +
 	"\n" +
-	"(gram/risk/v1/custom_rules_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xbc\x04\n" +
+	"(gram/risk/v1/custom_rules_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xac\x04\n" +
 	"\x13CustomRulesAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -596,11 +561,10 @@ const file_gram_risk_v1_custom_rules_analysis_proto_rawDesc = "" +
 	"tool_calls\x18\n" +
 	" \x03(\v2*.gram.risk.v1.CustomRulesAnalysis.ToolCallR\ttoolCalls\x12&\n" +
 	"\x0fcustom_rule_ids\x18\v \x03(\tR\rcustomRuleIds\x12&\n" +
-	"\x0fcontent_part_id\x18\f \x01(\tR\rcontentPartId\x1aL\n" +
+	"\x0fcontent_part_id\x18\f \x01(\tR\rcontentPartId\x1a<\n" +
 	"\bToolCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\targuments\x18\x02 \x01(\tR\targuments\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id:\n" +
+	"\targuments\x18\x02 \x01(\tR\targuments:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_custom_rules_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 2)

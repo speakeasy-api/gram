@@ -76,10 +76,10 @@ func TestHandle_StampsContentSpanMetadata(t *testing.T) {
 	require.Empty(t, f.GetToolCallId())
 }
 
-// A tool-args rule over two calls to the SAME tool publishes one finding per
-// call, each anchored to its own recorded call id — the id, not the shared
-// name, distinguishes them — with the gjson path and json_path surface stamped.
-func TestHandle_StampsToolCallSpanMetadataPerCall(t *testing.T) {
+// A tool-args rule stamps the span's field, gjson path, and json_path surface
+// onto every published finding — and never a tool_call_id: the span only
+// carries the tool NAME, which must not masquerade as a recorded call id.
+func TestHandle_StampsToolCallSpanMetadata(t *testing.T) {
 	t.Parallel()
 
 	conn := cloneDB(t)
@@ -94,12 +94,10 @@ func TestHandle_StampsToolCallSpanMetadataPerCall(t *testing.T) {
 	req.SetKind("tool_request")
 	req.SetToolCalls([]*riskv1.CustomRulesAnalysis_ToolCall{
 		riskv1.CustomRulesAnalysis_ToolCall_builder{
-			Id:        new("call_1"),
 			Name:      new("db:exec"),
 			Arguments: new(`{"command":"DROP TABLE users"}`),
 		}.Build(),
 		riskv1.CustomRulesAnalysis_ToolCall_builder{
-			Id:        new("call_2"),
 			Name:      new("db:exec"),
 			Arguments: new(`{"command":"DROP TABLE sessions"}`),
 		}.Build(),
@@ -107,14 +105,12 @@ func TestHandle_StampsToolCallSpanMetadataPerCall(t *testing.T) {
 	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
 
 	require.Len(t, *published, 2)
-	callIDs := make([]string, 0, 2)
 	for _, f := range *published {
 		require.Equal(t, "tool.args", f.GetField())
 		require.Equal(t, "command", f.GetPath())
 		require.Equal(t, "json_path", f.GetSurface())
-		callIDs = append(callIDs, f.GetToolCallId())
+		require.Empty(t, f.GetToolCallId(), "custom findings must never claim a call id")
 	}
-	require.ElementsMatch(t, []string{"call_1", "call_2"}, callIDs)
 }
 
 // Redelivering the same scan request republishes every finding under the same
