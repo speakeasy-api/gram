@@ -515,6 +515,11 @@ const (
 	CodexComplianceOutputTokensKey      = attribute.Key("codex.compliance.output_tokens")
 	CodexComplianceTotalTokensKey       = attribute.Key("codex.compliance.total_tokens")
 
+	// ChatGPTComplianceTimestampFallbacksKey counts conversation-import
+	// events whose timestamps failed RFC3339 parsing in one log file and
+	// fell back to import time — a canary for upstream format changes.
+	ChatGPTComplianceTimestampFallbacksKey = attribute.Key("chatgpt.compliance.timestamp_fallbacks")
+
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
@@ -688,6 +693,10 @@ func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool
 
 func SlogTelemetryPublishFailedCount(v int) slog.Attr {
 	return slog.Int(string(TelemetryPublishFailedCountKey), v)
+}
+
+func SlogChatGPTComplianceTimestampFallbacks(v int) slog.Attr {
+	return slog.Int(string(ChatGPTComplianceTimestampFallbacksKey), v)
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
