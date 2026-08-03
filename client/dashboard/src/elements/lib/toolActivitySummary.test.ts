@@ -30,34 +30,9 @@ describe("describeToolActivity", () => {
     expect(describeToolActivity(calls, false)).toBe("Used 3 tools");
   });
 
-  it("describes the request when the turn is only scaffolding tools", () => {
-    // "Calling Compose…" tells the user nothing about their own task, so the
-    // request becomes the object of the phrase.
-    expect(
-      describeToolActivity(
-        [{ name: "compose" }],
-        true,
-        "Show me token spend over the last 30 days. Break it down by model.",
-      ),
-    ).toBe("Investigating token spend over the last 30 days…");
-    // The whole sentence survives — no mid-phrase cut.
-    expect(
-      describeToolActivity(
-        [{ name: "compose" }],
-        true,
-        "Who are the heaviest end users this week?",
-      ),
-    ).toBe("Investigating who are the heaviest end users this week…");
-    expect(
-      describeToolActivity(
-        [{ name: "compose" }],
-        false,
-        "Scan recent agent conversations for leaked secrets",
-      ),
-    ).toBe("Investigated recent agent conversations for leaked secrets");
-  });
-
-  it("falls back to a neutral phrase when there is no request to describe", () => {
+  it("stays neutral when the turn is only scaffolding tools", () => {
+    // "Calling Compose…" says nothing about the task; the describing phrase is
+    // the summarizer's job, so this only holds the line until it arrives.
     expect(describeToolActivity([{ name: "compose" }], true)).toBe(
       "Working on it…",
     );

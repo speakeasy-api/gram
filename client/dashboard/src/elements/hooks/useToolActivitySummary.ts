@@ -236,7 +236,6 @@ export function useToolActivitySummary({
     const heuristic = describeToolActivity(
       toolCalls as HeuristicToolCall[],
       inProgress || pending,
-      userMessage,
     );
     return { label: heuristic, enriched: false, pending };
   }
