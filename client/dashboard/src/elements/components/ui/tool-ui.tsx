@@ -1211,11 +1211,13 @@ function ToolUIGroup({
               status={status === "running" ? "running" : "complete"}
             />
           )}
-          {/* Smaller and muted against the message prose: with no border to
-              set it apart, type is what says "this is activity, not speech". */}
+          {/* Muted against the message prose: with no border to set it apart,
+              color and weight are what say "this is activity, not speech".
+              Same size as the prose it sits between — shrinking it too made the
+              line read as a caption rather than a step. */}
           <span
             className={cn(
-              "text-muted-foreground group-hover:text-foreground text-xs font-medium tracking-wide transition-colors",
+              "text-muted-foreground group-hover:text-foreground text-sm transition-colors",
               (titleShimmer ?? status === "running") && "shimmer",
             )}
           >
@@ -1223,7 +1225,7 @@ function ToolUIGroup({
           </span>
           <ChevronRightIcon
             className={cn(
-              "text-muted-foreground/70 group-hover:text-foreground size-3.5 transition-all duration-200",
+              "text-muted-foreground/60 group-hover:text-foreground size-3.5 transition-transform duration-200",
               isExpanded && "rotate-90",
             )}
           />

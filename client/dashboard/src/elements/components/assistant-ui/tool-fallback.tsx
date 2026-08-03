@@ -1,8 +1,4 @@
-import { cn } from "@/lib/utils";
-import {
-  useAuiState,
-  type ToolCallMessagePartComponent,
-} from "@assistant-ui/react";
+import { type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useToolApproval } from "@/elements/hooks/useToolApproval";
 import {
   ToolUI,
@@ -26,13 +22,6 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
 
   // Check if this specific tool call has a pending approval
   const pendingApproval = pendingApprovals.get(toolCallId);
-  // Selecting the whole message would re-render this card on every streamed
-  // chunk; select only the derived value.
-  const needsTrailingBorder = useAuiState(({ message }) => {
-    const toolParts = message.parts.filter((part) => part.type === "tool-call");
-    const index = toolParts.findIndex((part) => part.toolCallId === toolCallId);
-    return index !== -1 && index !== toolParts.length - 1;
-  });
 
   const handleApproveOnce = () => {
     confirmPendingApproval(toolCallId);
@@ -88,12 +77,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   };
 
   return (
-    <div
-      className={cn(
-        "aui-tool-fallback-root flex w-full flex-col",
-        needsTrailingBorder && "border-b",
-      )}
-    >
+    <div className="aui-tool-fallback-root flex w-full flex-col">
       <ToolUI
         name={toolName}
         status={getToolStatus()}
@@ -104,7 +88,6 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
           pendingApproval ? handleApproveForSession : undefined
         }
         onDeny={pendingApproval ? handleDeny : undefined}
-        className="rounded-none border-0"
       />
     </div>
   );
