@@ -56,6 +56,7 @@ export function FilterControl({
                   label: o.label,
                   value: o.value,
                   icon: o.icon,
+                  description: o.description,
                 }))
           }
           defaultValue={value as string[]}
@@ -91,7 +92,11 @@ export function FilterControl({
           <SelectContent>
             <SelectItem value={SELECT_ALL_VALUE}>{allLabelFor(dim)}</SelectItem>
             {flattenOptions(options).map((o) => (
-              <SelectItem key={o.value} value={o.value}>
+              <SelectItem
+                key={o.value}
+                value={o.value}
+                description={o.description}
+              >
                 {o.label}
               </SelectItem>
             ))}

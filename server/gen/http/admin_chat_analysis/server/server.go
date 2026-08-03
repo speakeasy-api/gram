@@ -18,10 +18,11 @@ import (
 
 // Server lists the adminChatAnalysis service endpoint HTTP handlers.
 type Server struct {
-	Mounts                  []*MountPoint
-	GetSettings             http.Handler
-	UpsertWorkUnitsSettings http.Handler
-	TriggerAnalysis         http.Handler
+	Mounts                       []*MountPoint
+	GetSettings                  http.Handler
+	UpsertWorkUnitsSettings      http.Handler
+	UpsertBusinessMemorySettings http.Handler
+	TriggerAnalysis              http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,11 +54,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetSettings", "GET", "/rpc/adminChatAnalysis.getSettings"},
 			{"UpsertWorkUnitsSettings", "POST", "/rpc/adminChatAnalysis.upsertWorkUnitsSettings"},
+			{"UpsertBusinessMemorySettings", "POST", "/rpc/adminChatAnalysis.upsertBusinessMemorySettings"},
 			{"TriggerAnalysis", "POST", "/rpc/adminChatAnalysis.triggerAnalysis"},
 		},
-		GetSettings:             NewGetSettingsHandler(e.GetSettings, mux, decoder, encoder, errhandler, formatter),
-		UpsertWorkUnitsSettings: NewUpsertWorkUnitsSettingsHandler(e.UpsertWorkUnitsSettings, mux, decoder, encoder, errhandler, formatter),
-		TriggerAnalysis:         NewTriggerAnalysisHandler(e.TriggerAnalysis, mux, decoder, encoder, errhandler, formatter),
+		GetSettings:                  NewGetSettingsHandler(e.GetSettings, mux, decoder, encoder, errhandler, formatter),
+		UpsertWorkUnitsSettings:      NewUpsertWorkUnitsSettingsHandler(e.UpsertWorkUnitsSettings, mux, decoder, encoder, errhandler, formatter),
+		UpsertBusinessMemorySettings: NewUpsertBusinessMemorySettingsHandler(e.UpsertBusinessMemorySettings, mux, decoder, encoder, errhandler, formatter),
+		TriggerAnalysis:              NewTriggerAnalysisHandler(e.TriggerAnalysis, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -68,6 +71,7 @@ func (s *Server) Service() string { return "adminChatAnalysis" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSettings = m(s.GetSettings)
 	s.UpsertWorkUnitsSettings = m(s.UpsertWorkUnitsSettings)
+	s.UpsertBusinessMemorySettings = m(s.UpsertBusinessMemorySettings)
 	s.TriggerAnalysis = m(s.TriggerAnalysis)
 }
 
@@ -78,6 +82,7 @@ func (s *Server) MethodNames() []string { return adminchatanalysis.MethodNames[:
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSettingsHandler(mux, h.GetSettings)
 	MountUpsertWorkUnitsSettingsHandler(mux, h.UpsertWorkUnitsSettings)
+	MountUpsertBusinessMemorySettingsHandler(mux, h.UpsertBusinessMemorySettings)
 	MountTriggerAnalysisHandler(mux, h.TriggerAnalysis)
 }
 
@@ -170,6 +175,60 @@ func NewUpsertWorkUnitsSettingsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "upsertWorkUnitsSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminChatAnalysis")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpsertBusinessMemorySettingsHandler configures the mux to serve the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint.
+func MountUpsertBusinessMemorySettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/adminChatAnalysis.upsertBusinessMemorySettings", f)
+}
+
+// NewUpsertBusinessMemorySettingsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "adminChatAnalysis" service
+// "upsertBusinessMemorySettings" endpoint.
+func NewUpsertBusinessMemorySettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpsertBusinessMemorySettingsRequest(mux, decoder)
+		encodeResponse = EncodeUpsertBusinessMemorySettingsResponse(encoder)
+		encodeError    = EncodeUpsertBusinessMemorySettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "upsertBusinessMemorySettings")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "adminChatAnalysis")
 		payload, err := decodeRequest(r)
 		if err != nil {

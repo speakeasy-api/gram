@@ -134,17 +134,30 @@ const (
 	// chat_analysis:work_units:score telemetry rows the chat analysis
 	// publisher emits once per scored session, and read back by
 	// attribute_metrics_summaries_mv's work-units measures.
-	ChatAnalysisWorkUnitsKey       = attribute.Key("gram.chat_analysis.work_units")
-	ChatAnalysisScoredCostKey      = attribute.Key("gram.chat_analysis.scored_cost")
-	ChatAnalysisScoredTokensKey    = attribute.Key("gram.chat_analysis.scored_tokens")
-	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
-	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
-	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
-	ExternalMCPSlugKey             = attribute.Key("gram.external_mcp.slug")
-	ExternalMCPNameKey             = attribute.Key("gram.external_mcp.name")
-	URLKey                         = attribute.Key("url")
-	CacheKeyKey                    = attribute.Key("gram.cache.key")
-	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
+	ChatAnalysisWorkUnitsKey    = attribute.Key("gram.chat_analysis.work_units")
+	ChatAnalysisScoredCostKey   = attribute.Key("gram.chat_analysis.scored_cost")
+	ChatAnalysisScoredTokensKey = attribute.Key("gram.chat_analysis.scored_tokens")
+	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
+	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
+	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
+	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
+	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
+	URLKey                      = attribute.Key("url")
+	CacheKeyKey                 = attribute.Key("gram.cache.key")
+	CacheNamespaceKey           = attribute.Key("gram.cache.namespace")
+
+	// CIMDOriginKey is the host of a Client ID Metadata Document URL — the
+	// per-metadata-host dimension on cimd.fetch.* metrics. Attacker-influenced
+	// on the unauthenticated OAuth surface until CIMD admission control
+	// (AIS-371) bounds accepted client_id URLs, so it is deliberately omitted
+	// for client_ids that fail URL-syntax validation before a fetch.
+	CIMDOriginKey = attribute.Key("gram.cimd.origin")
+
+	// CIMDValidationReasonKey is the machine-readable reason a Client ID
+	// Metadata Document (or its client_id URL) failed validation — the
+	// per-reason dimension on cimd.validation.failures.
+	CIMDValidationReasonKey = attribute.Key("gram.cimd.validation_reason")
+
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
@@ -265,6 +278,10 @@ const (
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey         = attribute.Key("gram.openrouter.response.body")
+	OpenRouterRateLimitLimitKey       = attribute.Key("gram.openrouter.ratelimit.limit")
+	OpenRouterRateLimitRemainingKey   = attribute.Key("gram.openrouter.ratelimit.remaining")
+	OpenRouterRateLimitResetKey       = attribute.Key("gram.openrouter.ratelimit.reset")
+	OpenRouterRetryAfterKey           = attribute.Key("gram.openrouter.retry_after")
 	OrganizationAccountTypeKey        = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey           = attribute.Key("gram.org.invite.id")
 	OrganizationInviteEmailKey        = attribute.Key("gram.org.invite.email")
@@ -845,6 +862,17 @@ func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyK
 func CacheNamespace(v string) attribute.KeyValue { return CacheNamespaceKey.String(v) }
 func SlogCacheNamespace(v string) slog.Attr      { return slog.String(string(CacheNamespaceKey), v) }
 
+func CIMDOrigin(v string) attribute.KeyValue { return CIMDOriginKey.String(v) }
+func SlogCIMDOrigin(v string) slog.Attr      { return slog.String(string(CIMDOriginKey), v) }
+
+func CIMDValidationReason[V ~string](v V) attribute.KeyValue {
+	return CIMDValidationReasonKey.String(string(v))
+}
+
+func SlogCIMDValidationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDValidationReasonKey), string(v))
+}
+
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
 func SlogComponent(v string) slog.Attr      { return slog.String(string(ComponentKey), v) }
 
@@ -1121,6 +1149,8 @@ func SlogOAuthPresentedAuthMethod(v string) slog.Attr {
 	return slog.String(string(OAuthPresentedAuthMethodKey), v)
 }
 
+func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
+
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
 
@@ -1217,6 +1247,20 @@ func OpenRouterResponseBody(v string) attribute.KeyValue { return OpenRouterResp
 func SlogOpenRouterResponseBody(v string) slog.Attr {
 	return slog.String(string(OpenRouterResponseBodyKey), v)
 }
+
+func OpenRouterRateLimitLimit(v string) attribute.KeyValue {
+	return OpenRouterRateLimitLimitKey.String(v)
+}
+
+func OpenRouterRateLimitRemaining(v string) attribute.KeyValue {
+	return OpenRouterRateLimitRemainingKey.String(v)
+}
+
+func OpenRouterRateLimitReset(v string) attribute.KeyValue {
+	return OpenRouterRateLimitResetKey.String(v)
+}
+
+func OpenRouterRetryAfter(v string) attribute.KeyValue { return OpenRouterRetryAfterKey.String(v) }
 
 func AccessMemberID(v string) attribute.KeyValue { return AccessMemberIDKey.String(v) }
 func SlogAccessMemberID(v string) slog.Attr      { return slog.String(string(AccessMemberIDKey), v) }

@@ -44,6 +44,29 @@ func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
 }
 
+// IngestAuthenticated bypasses transport authentication for trusted in-process
+// callers that have already authenticated the supplied organization and project.
+func (s *Service) IngestAuthenticated(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
+	if payload == nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "ingest payload is required")
+	}
+	if authCtx == nil || strings.TrimSpace(authCtx.ActiveOrganizationID) == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "authenticated organization is required")
+	}
+	if authCtx.ProjectID == nil || *authCtx.ProjectID == uuid.Nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "authenticated project is required")
+	}
+
+	authCopy := *authCtx
+	projectID := *authCtx.ProjectID
+	authCopy.ProjectID = &projectID
+	payloadCopy := *payload
+	payloadCopy.ApikeyToken = nil
+	payloadCopy.ProjectSlugInput = nil
+
+	return s.Ingest(contextvalues.SetAuthContext(ctx, &authCopy), &payloadCopy)
+}
+
 // Ingest is the feature-first hook endpoint; this path only accepts the
 // canonical Gram contract. Auth is optional so hook senders stay non-blocking
 // for machines that never signed in: a keyless request is acknowledged without

@@ -3,7 +3,10 @@ server:
   - "go.mod"
   - "go.sum"
   - "agents/**"
+  - "ci/**"
   - "server/**"
+  - ".mise-tasks/test/ci.sh"
+  - ".mise-tasks/test/server.sh"
 
 client:
   - ".github/**"

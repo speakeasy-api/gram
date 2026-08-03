@@ -66,4 +66,21 @@ describe("InsightsTools chart zoom wiring", () => {
     expect(callsite).toContain("isZoomed={isZoomed}");
     expect(callsite).toContain("onResetZoom={onResetZoom}");
   });
+
+  it("filters zero-value series out of the multi-line chart tooltip", () => {
+    const source = readFileSync(
+      "src/components/observe/InsightsTools.tsx",
+      "utf8",
+    );
+
+    // Guard against regressing to `return undefined` in the label callback —
+    // Chart.js treats that as "use default" and re-lists every series,
+    // ballooning the tooltip over the chart (DNO-717).
+    expect(source).toMatch(
+      /filter:\s*\(item\)\s*=>\s*\(item\.parsed\.y\s*\?\?\s*0\)\s*!==\s*0/,
+    );
+    expect(source).not.toMatch(
+      /if \(\(item\.parsed\.y \?\? 0\) === 0\) return undefined;/,
+    );
+  });
 });

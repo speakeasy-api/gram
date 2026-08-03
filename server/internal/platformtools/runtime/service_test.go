@@ -89,7 +89,32 @@ func TestManagedAssistantRiskToolsExposesCatalog(t *testing.T) {
 		"platform_list_risk_results_for_agent",
 		"platform_list_risk_results_by_chat",
 		"platform_get_risk_policy_status",
+		"platform_get_risk_rule_breakdown",
+		"platform_list_risk_exclusions",
+		"platform_create_risk_exclusion",
+		"platform_mark_risk_false_positive",
+		"platform_unmark_risk_false_positive",
 	}, got)
+}
+
+// Providers reject tool names longer than 64 characters, and the assistant
+// runtime prefixes every platform tool with `mcp__<server-slug>_` (25 chars
+// for the managed assistant). A name over this budget doesn't degrade — the
+// whole turn fails with a schema error before the model sees anything.
+func TestManagedAssistantToolNamesFitProviderLimit(t *testing.T) {
+	t.Parallel()
+
+	const maxNameLen = 40
+
+	tools := ManagedAssistantRiskTools(nil)
+	tools = append(tools, ManagedAssistantLogsTools(nil)...)
+	tools = append(tools, ManagedAssistantChatsTools(nil)...)
+	tools = append(tools, ManagedAssistantUsersTools(nil)...)
+	tools = append(tools, ManagedAssistantDeploymentsTools(nil)...)
+
+	for _, name := range toolNames(tools) {
+		require.LessOrEqual(t, len(name), maxNameLen, "tool name %q is too long once prefixed", name)
+	}
 }
 
 func TestManagedAssistantDeploymentsToolsExposesCatalog(t *testing.T) {
@@ -106,6 +131,7 @@ func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 
 	tools := ManagedAssistantSkillsTools(nil, nil)
 	require.ElementsMatch(t, []string{
+		"platform_create_skill",
 		"platform_list_skills",
 		"platform_get_skill",
 		"platform_list_skill_versions",

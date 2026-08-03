@@ -519,6 +519,59 @@ func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Conte
 	return items, nil
 }
 
+const listWeeklyUsageSummaryTargets = `-- name: ListWeeklyUsageSummaryTargets :many
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    bm.alert_email,
+    bm.billing_cycle_anchor_day
+FROM organization_metadata om
+JOIN billing_metadata bm ON bm.organization_id = om.id
+WHERE om.disabled_at IS NULL
+  AND bm.alert_email IS NOT NULL
+ORDER BY om.slug
+`
+
+type ListWeeklyUsageSummaryTargetsRow struct {
+	OrganizationID        string
+	OrganizationName      string
+	OrganizationSlug      string
+	AlertEmail            pgtype.Text
+	BillingCycleAnchorDay int32
+}
+
+// Organizations that receive the weekly tokens-under-management usage
+// summary email: not disabled, with a billing alert email configured (the
+// address set on the billing page). The anchor day determines the billing
+// cycle window the summary reports on; the slug builds the billing page
+// link.
+func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeeklyUsageSummaryTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listWeeklyUsageSummaryTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWeeklyUsageSummaryTargetsRow
+	for rows.Next() {
+		var i ListWeeklyUsageSummaryTargetsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.AlertEmail,
+			&i.BillingCycleAnchorDay,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markOutboxRelayDeadLettered = `-- name: MarkOutboxRelayDeadLettered :exec
 INSERT INTO outbox_relays (outbox_id, attempts, last_error, dead_lettered)
 VALUES ($1, 1, $2, TRUE)

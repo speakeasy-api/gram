@@ -3081,6 +3081,93 @@ paths:
             x-speakeasy-name-override: triggerAnalysis
             x-speakeasy-react-hook:
                 name: TriggerChatAnalysis
+    /rpc/adminChatAnalysis.upsertBusinessMemorySettings:
+        post:
+            description: Create or replace the active organization's business-memory extraction settings. Requires platform admin.
+            operationId: upsertBusinessMemoryAnalysisSettings
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertBusinessMemorySettingsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChatAnalysisSettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: upsertBusinessMemorySettings adminChatAnalysis
+            tags:
+                - adminChatAnalysis
+            x-speakeasy-name-override: upsertBusinessMemorySettings
+            x-speakeasy-react-hook:
+                name: UpsertBusinessMemoryAnalysisSettings
     /rpc/adminChatAnalysis.upsertWorkUnitsSettings:
         post:
             description: Create or replace the active organization's chat analysis settings. Requires platform admin.
@@ -8706,6 +8793,321 @@ paths:
             x-speakeasy-name-override: switchScopes
             x-speakeasy-react-hook:
                 name: SwitchScopes
+    /rpc/businessMemories.contentScopes:
+        get:
+            description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.
+            operationId: listBusinessMemoryContentScopes
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListBusinessMemoryContentScopesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listBusinessMemoryContentScopes businessMemories
+            tags:
+                - businessMemories
+            x-speakeasy-name-override: listContentScopes
+            x-speakeasy-react-hook:
+                name: ListBusinessMemoryContentScopes
+    /rpc/businessMemories.list:
+        get:
+            description: List memories extracted for the active project. Requires organization admin.
+            operationId: listBusinessMemories
+            parameters:
+                - allowEmptyValue: true
+                  description: Cursor for the next result page.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next result page.
+                    type: string
+                - allowEmptyValue: true
+                  description: Exact content-scope tag to match.
+                  in: query
+                  name: content_scope
+                  schema:
+                    description: Exact content-scope tag to match.
+                    pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Content-scope namespace to match.
+                  in: query
+                  name: content_scope_namespace
+                  schema:
+                    description: Content-scope namespace to match.
+                    pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Number of memories to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Number of memories to return.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListBusinessMemoriesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listBusinessMemories businessMemories
+            tags:
+                - businessMemories
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: ListBusinessMemories
+    /rpc/businessMemories.search:
+        post:
+            description: Run semantic search over active memories in the active project. Requires organization admin.
+            operationId: searchBusinessMemories
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SearchBusinessMemoriesRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SearchBusinessMemoriesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: searchBusinessMemories businessMemories
+            tags:
+                - businessMemories
+            x-speakeasy-name-override: search
+            x-speakeasy-react-hook:
+                name: SearchBusinessMemories
     /rpc/chat.creditUsage:
         get:
             description: Get the total number of chat credits and usage for the current billing period
@@ -19302,6 +19704,122 @@ paths:
             tags:
                 - mcpRegistries
             x-speakeasy-name-override: getServerDetails
+    /rpc/mcpRegistries.getSetupDocs:
+        get:
+            description: Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier
+            operationId: getMCPSetupDocs
+            parameters:
+                - allowEmptyValue: true
+                  description: URL of the upstream MCP server endpoint
+                  example: https://mcp.box.com
+                  in: query
+                  name: server_url
+                  schema:
+                    description: URL of the upstream MCP server endpoint
+                    example: https://mcp.box.com
+                    type: string
+                - allowEmptyValue: true
+                  description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
+                  example: com.pulsemcp.mirror/box
+                  in: query
+                  name: registry_specifier
+                  schema:
+                    description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
+                    example: com.pulsemcp.mirror/box
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetSetupDocsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getSetupDocs mcpRegistries
+            tags:
+                - mcpRegistries
+            x-speakeasy-name-override: getSetupDocs
+            x-speakeasy-react-hook:
+                name: GetMCPSetupDocs
     /rpc/mcpRegistries.listCatalog:
         get:
             description: List available MCP servers from configured registries
@@ -51312,6 +51830,87 @@ components:
                 - id
                 - reason
                 - description
+        BusinessMemory:
+            type: object
+            properties:
+                body:
+                    type: string
+                    description: Normalized knowledge body.
+                content_scope:
+                    type: array
+                    items:
+                        type: string
+                    description: Canonical entity and topic labels.
+                embedding_model:
+                    type: string
+                    description: Model used to create the semantic-search vector.
+                extracted_at:
+                    type: string
+                    description: Extraction timestamp.
+                    format: date-time
+                extraction_model:
+                    type: string
+                    description: Model used to extract the memory.
+                id:
+                    type: string
+                    description: Memory ID.
+                    format: uuid
+                lifecycle_state:
+                    type: string
+                    description: Current lifecycle state.
+                memory_type:
+                    type: string
+                    description: Knowledge type.
+                    enum:
+                        - glossary
+                        - procedure
+                        - result
+                similarity:
+                    type: number
+                    description: Cosine similarity for semantic-search results.
+                    format: double
+                source_author_id:
+                    type: string
+                    description: Author associated with the source session.
+                source_chat_id:
+                    type: string
+                    description: Chat the memory was extracted from, or unavailable if the source chat was deleted.
+                source_turn:
+                    type: integer
+                    description: One-based transcript turn cited by the extractor.
+                    format: int64
+                structural_scope:
+                    type: string
+                    description: Materialized structural scope path.
+            description: Knowledge extracted from a completed business session.
+            required:
+                - id
+                - body
+                - memory_type
+                - structural_scope
+                - content_scope
+                - embedding_model
+                - extraction_model
+                - source_chat_id
+                - extracted_at
+                - lifecycle_state
+        BusinessMemoryContentScopeNode:
+            type: object
+            properties:
+                memory_count:
+                    type: integer
+                    description: Number of distinct memories assigned to this scope.
+                    format: int64
+                parent_scope:
+                    type: string
+                    description: Parent namespace. Omitted for namespace nodes.
+                scope:
+                    type: string
+                    description: Namespace or exact content-scope tag.
+            description: A content-scope namespace or exact tag and its distinct-memory count.
+            required:
+                - scope
+                - memory_count
         CanonicalToolAttributes:
             type: object
             properties:
@@ -51676,6 +52275,15 @@ components:
         ChatAnalysisSettings:
             type: object
             properties:
+                business_memory_daily_cap:
+                    type: integer
+                    description: Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                business_memory_enabled:
+                    type: boolean
+                    description: Whether completed sessions are mined for business memories.
                 is_default:
                     type: boolean
                     description: Whether these values are platform defaults rather than stored organization settings.
@@ -51696,6 +52304,8 @@ components:
                 - organization_id
                 - work_units_enabled
                 - work_units_daily_cap
+                - business_memory_enabled
+                - business_memory_daily_cap
                 - is_default
         ChatContentPart:
             type: object
@@ -56389,6 +56999,16 @@ components:
             required:
                 - message
                 - acknowledged
+        GetSetupDocsResponseBody:
+            type: object
+            properties:
+                guides:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPSetupGuide'
+                    description: Matching setup guides, most specific match first. Empty when no guide has been published for the server.
+            required:
+                - guides
         GetSignedAssetURLForm:
             type: object
             properties:
@@ -57721,6 +58341,32 @@ components:
             required:
                 - version
                 - categories
+        ListBusinessMemoriesResponseBody:
+            type: object
+            properties:
+                memories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BusinessMemory'
+                next_cursor:
+                    type: string
+            required:
+                - memories
+        ListBusinessMemoryContentScopesResponseBody:
+            type: object
+            properties:
+                nodes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BusinessMemoryContentScopeNode'
+                    description: Namespace and exact-tag nodes in lexical order.
+                total_memories:
+                    type: integer
+                    description: Total number of active memories, including memories without a content scope.
+                    format: int64
+            required:
+                - nodes
+                - total_memories
         ListCatalogResponseBody:
             type: object
             properties:
@@ -59119,6 +59765,83 @@ components:
                 - id
                 - name
                 - url
+        MCPSetupGuide:
+            type: object
+            properties:
+                add_server_flow:
+                    type: string
+                    description: How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')
+                aliases:
+                    type: array
+                    items:
+                        type: string
+                    description: Registry identifiers the guide is also published under
+                external_markdown:
+                    type: string
+                    description: Markdown instructions for the setup work that happens in the upstream provider
+                match_kind:
+                    type: string
+                    description: How the lookup matched this guide. The most specific kind, when both lookup keys matched it.
+                    enum:
+                        - endpoint
+                        - alias
+                matched_remote_id:
+                    type: string
+                    description: ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
+                    example: hosted
+                remotes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPSetupGuideRemote'
+                    description: Endpoints documented by the guide
+                slug:
+                    type: string
+                    description: Stable identifier of the guide
+                    example: box
+                speakeasy_markdown:
+                    type: string
+                    description: Markdown instructions for the setup work that happens in Gram
+                summary:
+                    type: string
+                    description: One-line summary of what the guide covers
+                title:
+                    type: string
+                    description: Display title of the guide
+                    example: Box
+            description: Published setup documentation for an upstream MCP server
+            required:
+                - slug
+                - title
+                - summary
+                - aliases
+                - remotes
+                - match_kind
+                - external_markdown
+                - speakeasy_markdown
+        MCPSetupGuideRemote:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Stable identifier of the endpoint within the guide
+                    example: hosted
+                tenanted:
+                    type: boolean
+                    description: Whether the endpoint URL is customer-specific and has to be filled in per tenant
+                transport_type:
+                    type: string
+                    description: Transport type as published by the guide (e.g., 'streamable-http', 'sse')
+                    example: streamable-http
+                url:
+                    type: string
+                    description: URL of the endpoint
+                    format: uri
+            description: An MCP server endpoint documented by a setup guide
+            required:
+                - id
+                - url
+                - transport_type
+                - tenanted
         ManagedDevice:
             type: object
             properties:
@@ -63821,6 +64544,40 @@ components:
                 - description
                 - resource_type
                 - visibility
+        SearchBusinessMemoriesRequestBody:
+            type: object
+            properties:
+                content_scope:
+                    type: string
+                    description: Exact content-scope tag to match.
+                    pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
+                content_scope_namespace:
+                    type: string
+                    description: Content-scope namespace to match.
+                    pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
+                limit:
+                    type: integer
+                    description: Maximum search results.
+                    default: 20
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                query:
+                    type: string
+                    description: Natural-language semantic search query.
+                    minLength: 1
+                    maxLength: 2000
+            required:
+                - query
+        SearchBusinessMemoriesResponseBody:
+            type: object
+            properties:
+                memories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BusinessMemory'
+            required:
+                - memories
         SearchChatsFilter:
             type: object
             properties:
@@ -70112,6 +70869,21 @@ components:
                     $ref: '#/components/schemas/AllowedOrigin'
             required:
                 - allowed_origin
+        UpsertBusinessMemorySettingsRequestBody:
+            type: object
+            properties:
+                business_memory_daily_cap:
+                    type: integer
+                    description: Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                business_memory_enabled:
+                    type: boolean
+                    description: Whether completed sessions are mined for business memories.
+            required:
+                - business_memory_enabled
+                - business_memory_daily_cap
         UpsertConfigRequestBody:
             type: object
             properties:
@@ -70891,6 +71663,8 @@ tags:
       description: Manages audit logs in Gram.
     - name: auth
       description: Managed auth for gram producers and dashboard.
+    - name: businessMemories
+      description: Inspect and semantically search business memories.
     - name: chat
       description: Managed chats for gram AI consumers.
     - name: chatSessions
