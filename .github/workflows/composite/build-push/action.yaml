@@ -81,9 +81,10 @@ runs:
 
     - name: Validate and sanitize build arguments
       shell: bash
+      env:
+        ARGS: ${{ inputs.build-args }}
       run: |
         set -e
-        ARGS="${{ inputs.build-args }}"
 
         # Comprehensive validation
         echo "Validating build arguments..."
