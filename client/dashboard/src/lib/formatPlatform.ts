@@ -18,6 +18,9 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-cowork": "Claude Cowork",
   cursor: "Cursor",
   codex: "Codex",
+  // ChatGPT (web/desktop chat + Work mode), observed via the OpenAI
+  // compliance import — distinct surface from the Codex agent.
+  chatgpt: "ChatGPT",
   opencode: "opencode",
   copilot: "Copilot",
   "github-copilot": "Copilot",

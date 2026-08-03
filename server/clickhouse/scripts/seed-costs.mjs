@@ -598,6 +598,41 @@ for (const p of people) {
       `(${ct}, ${ct}, 'INFO', 'Chat completion', '${traceId}', '${attrJSON(ca)}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
   }
+
+  // 3) ChatGPT/Work compliance usage rows — shaped like the OpenAI compliance
+  // COSTS importer's output (urn chatgpt:usage:metrics, hook_source chatgpt,
+  // provider openai, gen_ai.usage.* + cost, no chat id) so the agent-usage
+  // summaries and their dashboards have local ChatGPT data to render.
+  if (rnd() < 0.3) {
+    const chatgptDays = randint(3, 12);
+    for (let d = 0; d < chatgptDays; d++) {
+      const projectId = weightedPick(projectIds, projectWeights);
+      const tsMs = Math.floor(NOW - rnd() * DAYS_BACK * MS_PER_DAY);
+      const t = BigInt(tsMs) * 1000000n;
+      const inputTokens = randint(400, 6000);
+      const outputTokens = randint(80, 2500);
+      const cost = ((inputTokens * 2 + outputTokens * 8) / 1_000_000).toFixed(
+        6,
+      );
+      const a = {
+        ...ua,
+        "gram.project.id": projectId,
+        "gram.event.source": "api",
+        "gram.hook.source": "chatgpt",
+        "gram.provider": "openai",
+        "gram.resource.urn": "chatgpt:usage:metrics",
+        "codex.compliance.product": rnd() < 0.75 ? "ChatGPT" : "Work",
+        "gen_ai.response.model": rnd() < 0.6 ? "gpt-5.6" : "gpt-5.4-mini",
+        "gen_ai.usage.input_tokens": inputTokens,
+        "gen_ai.usage.output_tokens": outputTokens,
+        "gen_ai.usage.total_tokens": inputTokens + outputTokens,
+        "gen_ai.usage.cost": Number(cost),
+      };
+      rows.push(
+        `(${t}, ${t}, 'INFO', 'Codex cost metrics', '', '${attrJSON(a)}', '{}', '${projectId}', 'chatgpt:usage:metrics', '', '')`,
+      );
+    }
+  }
 }
 
 // ---- flush to ClickHouse ---------------------------------------------------
