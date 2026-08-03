@@ -226,6 +226,20 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(verdict.IsAttack, err), outcome, time.Since(start))
 	if err != nil {
+		if gramopenrouter.IsInsufficientCredits(err) {
+			// Credits exhaustion fail-opens every PI check. That looks like a
+			// hooks latency improvement on dashboards while enforcement is
+			// actually offline — emit a dedicated counter + event so operators
+			// can page on it.
+			c.metrics.RecordInsufficientCredits(ctx, req.OrgID)
+			c.logger.ErrorContext(ctx, "pi judge insufficient credits; failing open",
+				attr.SlogError(err),
+				attr.SlogEvent("pi_judge_insufficient_credits"),
+				attr.SlogOutcome(string(outcome)),
+				attr.SlogOrganizationID(req.OrgID),
+			)
+			return safeResult
+		}
 		c.logger.WarnContext(ctx, "pi judge call failed; failing open",
 			attr.SlogError(err),
 			attr.SlogOutcome(string(outcome)),

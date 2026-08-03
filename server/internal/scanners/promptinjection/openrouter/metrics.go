@@ -13,17 +13,19 @@ import (
 )
 
 const (
-	meterClassifications = "risk.prompt_injection.classifications"
-	meterJudgeDuration   = "risk.prompt_injection.judge_duration"
-	meterJudgeConfidence = "risk.prompt_injection.judge_confidence"
-	meterRateLimited     = "risk.prompt_injection.rate_limited"
+	meterClassifications     = "risk.prompt_injection.classifications"
+	meterJudgeDuration       = "risk.prompt_injection.judge_duration"
+	meterJudgeConfidence     = "risk.prompt_injection.judge_confidence"
+	meterRateLimited         = "risk.prompt_injection.rate_limited"
+	meterInsufficientCredits = "risk.prompt_injection.insufficient_credits" //nolint:gosec // metric name, not a credential
 )
 
 type metrics struct {
-	classifications metric.Int64Counter
-	duration        metric.Float64Histogram
-	confidence      metric.Float64Histogram
-	rateLimited     metric.Int64Counter
+	classifications     metric.Int64Counter
+	duration            metric.Float64Histogram
+	confidence          metric.Float64Histogram
+	rateLimited         metric.Int64Counter
+	insufficientCredits metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -73,11 +75,21 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRateLimited), attr.SlogError(err))
 	}
 
+	insufficientCredits, err := meter.Int64Counter(
+		meterInsufficientCredits,
+		metric.WithDescription("Number of prompt-injection judge calls that fail open because the OpenRouter internal key is out of credits (HTTP 402). When this spikes, sync hook gating still allows traffic and measured hooks latency drops — enforcement is silently disabled."),
+		metric.WithUnit("{classification}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterInsufficientCredits), attr.SlogError(err))
+	}
+
 	return &metrics{
-		classifications: classifications,
-		duration:        duration,
-		confidence:      confidence,
-		rateLimited:     rateLimited,
+		classifications:     classifications,
+		duration:            duration,
+		confidence:          confidence,
+		rateLimited:         rateLimited,
+		insufficientCredits: insufficientCredits,
 	}
 }
 
@@ -115,4 +127,15 @@ func (m *metrics) RecordRateLimited(ctx context.Context, orgID string) {
 		return
 	}
 	m.rateLimited.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
+}
+
+// RecordInsufficientCredits records a judge call that fail-opened because the
+// OpenRouter internal key returned HTTP 402. This is a platform ops signal —
+// PI enforcement is off until credits are restored — distinct from ordinary
+// judge failures (timeouts, parse errors, upstream 5xx).
+func (m *metrics) RecordInsufficientCredits(ctx context.Context, orgID string) {
+	if m.insufficientCredits == nil {
+		return
+	}
+	m.insufficientCredits.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
 }
