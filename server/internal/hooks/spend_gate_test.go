@@ -483,9 +483,16 @@ func TestCodex_SpendGateAllowsUnblockedUser(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
+	// The caller is a resolvable connected user, and gate rules exist in the
+	// cache because a DIFFERENT actor is over budget — so an allow here
+	// proves the gate evaluated the caller and passed them, not that it
+	// fell through the fail-open path on an unresolved identity or an empty
+	// rule set. Mirrors TestClaude_SpendGateAllowsUnblockedUser.
 	userID := "user_spend_codex_ok"
 	userEmail := "spend-codex-ok@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "user_spend_codex_other", "spend-codex-other@example.com")
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, "spend-codex-other@example.com")
 
 	sessionID := "codex-spend-ok-" + uuid.NewString()
 	toolName := "shell"
