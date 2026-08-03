@@ -220,6 +220,7 @@ trackedFiles:
   src/funcs/keysList.ts: {}
   src/funcs/keysRevokeById.ts: {}
   src/funcs/keysValidate.ts: {}
+  src/funcs/litellmIngestGuardrail.ts: {}
   src/funcs/mcpEndpointsCheckSlugAvailability.ts: {}
   src/funcs/mcpEndpointsCreate.ts: {}
   src/funcs/mcpEndpointsDelete.ts: {}
@@ -777,6 +778,7 @@ trackedFiles:
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
   src/models/components/ingestrequestbody.ts: {}
+  src/models/components/ingestrequestbody2.ts: {}
   src/models/components/instancemcpserver.ts: {}
   src/models/components/integration.ts: {}
   src/models/components/integrationentry.ts: {}
@@ -881,6 +883,9 @@ trackedFiles:
   src/models/components/listusersresult.ts: {}
   src/models/components/listvariationsresult.ts: {}
   src/models/components/listversionsresult.ts: {}
+  src/models/components/litellmingestresult.ts: {}
+  src/models/components/litellmrequestdata.ts: {}
+  src/models/components/litellmstructuredmessage.ts: {}
   src/models/components/llmclientusage.ts: {}
   src/models/components/logfilter.ts: {}
   src/models/components/manageddevice.ts: {}
@@ -1508,6 +1513,7 @@ trackedFiles:
   src/models/operations/hooksnumberlogs.ts: {}
   src/models/operations/hooksnumbermetrics.ts: {}
   src/models/operations/ingesthookevent.ts: {}
+  src/models/operations/ingestlitellmguardrail.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2523,6 +2529,7 @@ trackedFiles:
   src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/keys.ts: {}
+  src/sdk/litellm.ts: {}
   src/sdk/mcpendpoints.ts: {}
   src/sdk/mcpmetadata.ts: {}
   src/sdk/mcpregistries.ts: {}
@@ -5178,6 +5185,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  ingestLiteLLMGuardrail:
+    speakeasy-default-ingest-lite-LLM-guardrail:
+      requestBody:
+        application/json: {"input_type": "response", "request_data": {}}
+      responses:
+        "200":
+          application/json: {"action": "GUARDRAIL_INTERVENED"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   integrations#get:
     speakeasy-default-integrations#get:
       responses:
