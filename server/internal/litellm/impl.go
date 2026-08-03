@@ -55,6 +55,7 @@ type Service struct {
 	calls     *callcache.Cache
 	traces    *TraceProcessor
 	metrics   *MetricProcessor
+	health    *HealthProcessor
 	db        *pgxpool.Pool
 	authz     *authz.Engine
 	features  featureChecker
@@ -65,7 +66,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
 		logger:    logger.With(attr.SlogComponent("litellm")),
@@ -74,6 +75,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		calls:     calls,
 		traces:    traces,
 		metrics:   metrics,
+		health:    health,
 		db:        db,
 		authz:     authzEngine,
 		features:  features,
@@ -94,19 +96,33 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
 	if strings.TrimSpace(key) == "" {
+		var err error
 		if scheme.Name == constants.ProjectSlugSecuritySchema {
-			return ctx, oops.E(oops.CodeUnauthorized, nil, "project header is required")
+			err = oops.E(oops.CodeUnauthorized, nil, "project header is required")
+		} else {
+			err = oops.E(oops.CodeUnauthorized, nil, "API key is required")
 		}
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "API key is required")
+		s.health.Record(ctx, healthSignalNone, "", err)
+		return ctx, err
 	}
 	ctx, err := s.auth.Authorize(ctx, key, scheme)
 	if err != nil {
-		return ctx, fmt.Errorf("authorize LiteLLM request: %w", err)
+		err = fmt.Errorf("authorize LiteLLM request: %w", err)
+		s.health.Record(ctx, healthSignalNone, "", err)
+		return ctx, err
 	}
 	return ctx, nil
 }
 
-func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.LitellmIngestResult, error) {
+func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (result *gen.LitellmIngestResult, retErr error) {
+	version := ""
+	if payload != nil {
+		version = conv.PtrValOr(payload.LitellmVersion, "")
+	}
+	defer func() {
+		s.health.Record(ctx, healthSignalGuardrail, version, retErr)
+	}()
+
 	if payload == nil || payload.RequestData == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "request_data is required")
 	}

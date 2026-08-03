@@ -703,6 +703,7 @@ func newStartCommand() *cli.Command {
 			var (
 				litellmTraceProcessor   *litellm.TraceProcessor
 				litellmMetricProcessor  *litellm.MetricProcessor
+				litellmHealthProcessor  *litellm.HealthProcessor
 				telemetryLoggerShutdown func(context.Context) error
 				publishersShutdown      func(context.Context) error
 				pubsubShutdown          func(context.Context) error
@@ -717,6 +718,11 @@ func newStartCommand() *cli.Command {
 				if litellmMetricProcessor != nil {
 					if err := litellmMetricProcessor.Shutdown(ctx); err != nil {
 						errs = append(errs, fmt.Errorf("shutdown LiteLLM metric processor: %w", err))
+					}
+				}
+				if litellmHealthProcessor != nil {
+					if err := litellmHealthProcessor.Shutdown(ctx); err != nil {
+						errs = append(errs, fmt.Errorf("shutdown LiteLLM health processor: %w", err))
 					}
 				}
 				if telemetryLoggerShutdown != nil {
@@ -964,8 +970,10 @@ func newStartCommand() *cli.Command {
 			litellmCalls := callcache.New(cache.NewRedisCacheAdapter(redisClient))
 			litellmTraceProcessor = litellm.NewTraceProcessor(logger, meterProvider, telemLogger, litellmCalls)
 			litellmMetricProcessor = litellm.NewMetricProcessor(logger, meterProvider, telemLogger)
+			litellmHealthProcessor = litellm.NewHealthProcessor(logger, db)
 			litellmTraceProcessor.Start(ctx)
 			litellmMetricProcessor.Start(ctx)
+			litellmHealthProcessor.Start(ctx)
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
 			if shutdown != nil {
@@ -1162,7 +1170,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, productFeatures, auditLogger, c.String("environment")))
+			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, productFeatures, auditLogger, c.String("environment")))
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))

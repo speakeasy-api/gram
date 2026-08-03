@@ -50,6 +50,10 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 	if err != nil {
 		return err
 	}
+	version := ""
+	defer func() {
+		s.health.Record(ctx, healthSignalOTEL, version, retErr)
+	}()
 
 	mediaType, body, err := readOTLPRequest(r)
 	if err != nil {
@@ -78,11 +82,42 @@ func (s *Service) serveTracesHTTP(w http.ResponseWriter, r *http.Request) (retEr
 		}
 		return oops.E(oops.CodeBadRequest, err, "invalid OTLP trace export")
 	}
+	version = traceReportedVersion(request)
 	if err := s.ingestTraceExport(ctx, request); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusAccepted)
 	return nil
+}
+
+func traceReportedVersion(request *otlpExportRequest) string {
+	if request == nil {
+		return ""
+	}
+	for _, resourceSpans := range request.ResourceSpans {
+		if resourceSpans.Resource != nil {
+			name := otlpStringAttribute(resourceSpans.Resource.Attributes, "service.name")
+			version := otlpStringAttribute(resourceSpans.Resource.Attributes, "service.version")
+			if version != "" && strings.EqualFold(name, "litellm") {
+				return version
+			}
+		}
+		for _, scopeSpans := range resourceSpans.ScopeSpans {
+			if scopeSpans.Scope != nil && strings.Contains(strings.ToLower(scopeSpans.Scope.Name), "litellm") && strings.TrimSpace(scopeSpans.Scope.Version) != "" {
+				return scopeSpans.Scope.Version
+			}
+		}
+	}
+	return ""
+}
+
+func otlpStringAttribute(values []otlpKeyValue, key string) string {
+	for _, value := range values {
+		if value.Key == key && value.Value.StringValue != nil {
+			return strings.TrimSpace(*value.Value.StringValue)
+		}
+	}
+	return ""
 }
 
 func readOTLPRequest(r *http.Request) (string, []byte, error) {

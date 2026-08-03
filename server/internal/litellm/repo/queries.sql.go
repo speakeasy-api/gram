@@ -28,7 +28,7 @@ INSERT INTO litellm_instances (
   , $5
   , $6
 )
-RETURNING id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, last_guardrail_event_at, last_otel_event_at, last_error_at, last_error_kind, reported_litellm_version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateLiteLLMInstanceParams struct {
@@ -58,6 +58,11 @@ func (q *Queries) CreateLiteLLMInstance(ctx context.Context, arg CreateLiteLLMIn
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.FailurePosture,
+		&i.LastGuardrailEventAt,
+		&i.LastOtelEventAt,
+		&i.LastErrorAt,
+		&i.LastErrorKind,
+		&i.ReportedLitellmVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -67,7 +72,7 @@ func (q *Queries) CreateLiteLLMInstance(ctx context.Context, arg CreateLiteLLMIn
 }
 
 const getLiteLLMInstanceForUpdate = `-- name: GetLiteLLMInstanceForUpdate :one
-SELECT id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, last_guardrail_event_at, last_otel_event_at, last_error_at, last_error_kind, reported_litellm_version, created_at, updated_at, deleted_at, deleted
 FROM litellm_instances
 WHERE id = $1
   AND project_id = $2
@@ -93,6 +98,11 @@ func (q *Queries) GetLiteLLMInstanceForUpdate(ctx context.Context, arg GetLiteLL
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.FailurePosture,
+		&i.LastGuardrailEventAt,
+		&i.LastOtelEventAt,
+		&i.LastErrorAt,
+		&i.LastErrorKind,
+		&i.ReportedLitellmVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -187,6 +197,91 @@ func (q *Queries) ListLiteLLMInstances(ctx context.Context, arg ListLiteLLMInsta
 	return items, nil
 }
 
+const recordLiteLLMInstanceHealth = `-- name: RecordLiteLLMInstanceHealth :exec
+UPDATE litellm_instances
+SET last_guardrail_event_at = CASE
+      WHEN $1::boolean
+        AND (last_guardrail_event_at IS NULL OR last_guardrail_event_at < clock_timestamp() - interval '1 minute')
+        THEN clock_timestamp()
+      ELSE last_guardrail_event_at
+    END
+  , last_otel_event_at = CASE
+      WHEN $2::boolean
+        AND (last_otel_event_at IS NULL OR last_otel_event_at < clock_timestamp() - interval '1 minute')
+        THEN clock_timestamp()
+      ELSE last_otel_event_at
+    END
+  , last_error_at = CASE
+      WHEN $3::text <> ''
+        AND (
+          last_error_kind IS DISTINCT FROM $3::text
+          OR last_error_at IS NULL
+          OR last_error_at < clock_timestamp() - interval '1 minute'
+        )
+        THEN clock_timestamp()
+      ELSE last_error_at
+    END
+  , last_error_kind = CASE
+      WHEN $3::text <> ''
+        AND (
+          last_error_kind IS DISTINCT FROM $3::text
+          OR last_error_at IS NULL
+          OR last_error_at < clock_timestamp() - interval '1 minute'
+        )
+        THEN $3::text
+      ELSE last_error_kind
+    END
+  , reported_litellm_version = CASE
+      WHEN $4::text <> ''
+        AND reported_litellm_version IS DISTINCT FROM $4::text
+        THEN $4::text
+      ELSE reported_litellm_version
+    END
+WHERE organization_id = $5
+  AND project_id = $6
+  AND api_key_id = $7
+  AND deleted IS FALSE
+  AND (
+    ($1::boolean AND (last_guardrail_event_at IS NULL OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'))
+    OR ($2::boolean AND (last_otel_event_at IS NULL OR last_otel_event_at < clock_timestamp() - interval '1 minute'))
+    OR (
+      $3::text <> ''
+      AND (
+        last_error_kind IS DISTINCT FROM $3::text
+        OR last_error_at IS NULL
+        OR last_error_at < clock_timestamp() - interval '1 minute'
+      )
+    )
+    OR (
+      $4::text <> ''
+      AND reported_litellm_version IS DISTINCT FROM $4::text
+    )
+  )
+`
+
+type RecordLiteLLMInstanceHealthParams struct {
+	GuardrailEvent         bool
+	OtelEvent              bool
+	ErrorKind              string
+	ReportedLitellmVersion string
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	ApiKeyID               uuid.UUID
+}
+
+func (q *Queries) RecordLiteLLMInstanceHealth(ctx context.Context, arg RecordLiteLLMInstanceHealthParams) error {
+	_, err := q.db.Exec(ctx, recordLiteLLMInstanceHealth,
+		arg.GuardrailEvent,
+		arg.OtelEvent,
+		arg.ErrorKind,
+		arg.ReportedLitellmVersion,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ApiKeyID,
+	)
+	return err
+}
+
 const revokeLiteLLMInstance = `-- name: RevokeLiteLLMInstance :one
 UPDATE litellm_instances
 SET deleted_at = clock_timestamp()
@@ -195,7 +290,7 @@ WHERE id = $1
   AND project_id = $2
   AND organization_id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, last_guardrail_event_at, last_otel_event_at, last_error_at, last_error_kind, reported_litellm_version, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeLiteLLMInstanceParams struct {
@@ -215,6 +310,11 @@ func (q *Queries) RevokeLiteLLMInstance(ctx context.Context, arg RevokeLiteLLMIn
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.FailurePosture,
+		&i.LastGuardrailEventAt,
+		&i.LastOtelEventAt,
+		&i.LastErrorAt,
+		&i.LastErrorKind,
+		&i.ReportedLitellmVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -232,7 +332,7 @@ WHERE id = $2
   AND organization_id = $4
   AND api_key_id = $5
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, last_guardrail_event_at, last_otel_event_at, last_error_at, last_error_kind, reported_litellm_version, created_at, updated_at, deleted_at, deleted
 `
 
 type RotateLiteLLMInstanceKeyParams struct {
@@ -260,6 +360,11 @@ func (q *Queries) RotateLiteLLMInstanceKey(ctx context.Context, arg RotateLiteLL
 		&i.CreatedByUserID,
 		&i.Name,
 		&i.FailurePosture,
+		&i.LastGuardrailEventAt,
+		&i.LastOtelEventAt,
+		&i.LastErrorAt,
+		&i.LastErrorKind,
+		&i.ReportedLitellmVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
