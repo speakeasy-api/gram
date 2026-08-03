@@ -47,6 +47,12 @@ export const ToolGroup: FC<
     }
     return false;
   });
+  // Whether this group belongs to the turn currently in flight. Part status is
+  // not a reliable liveness signal here: tools executed server-side (the Project
+  // Assistant) stream in already-complete, so a group can belong to a live turn
+  // without any part ever being observed `running`. The thread's own state is,
+  // and it is what decides whether summarizing is worth a model call.
+  const threadIsRunning = useAuiState(({ thread }) => thread.isRunning);
 
   // Serialize the group's tool calls to a stable string so useAuiState only
   // triggers a re-render when they actually change, then parse once.
@@ -93,6 +99,7 @@ export const ToolGroup: FC<
   const { label, pending } = useToolActivitySummary({
     toolCalls,
     inProgress: anyMessagePartsAreRunning,
+    isLiveTurn: threadIsRunning,
     userMessage,
     enabled: !hasCustomComponent,
   });

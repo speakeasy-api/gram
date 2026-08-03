@@ -33,6 +33,15 @@ export interface ToolActivitySummary {
 export interface UseToolActivitySummaryInput {
   toolCalls: ToolActivityCall[];
   inProgress: boolean;
+  /**
+   * True while the turn this group belongs to is still in flight. Distinct from
+   * `inProgress`, which tracks this group's own tool parts: a turn whose tools
+   * run server-side streams them in already-complete, so `inProgress` can be
+   * false for a group that is very much part of the live turn. Enrichment is
+   * gated on this, not on `inProgress`, so those turns still get a summary.
+   * @default false
+   */
+  isLiveTurn?: boolean;
   userMessage?: string;
   /**
    * When false, skip enrichment entirely (heuristic only). Used for tool groups
@@ -65,6 +74,7 @@ export interface UseToolActivitySummaryInput {
 export function useToolActivitySummary({
   toolCalls,
   inProgress,
+  isLiveTurn = false,
   userMessage,
   enabled = true,
 }: UseToolActivitySummaryInput): ToolActivitySummary {
@@ -88,8 +98,13 @@ export function useToolActivitySummary({
   );
 
   const heuristic = useMemo(
-    () => describeToolActivity(toolCalls as HeuristicToolCall[], inProgress),
-    [toolCalls, inProgress],
+    () =>
+      describeToolActivity(
+        toolCalls as HeuristicToolCall[],
+        inProgress,
+        userMessage,
+      ),
+    [toolCalls, inProgress, userMessage],
   );
 
   const [enrichedByKey, setEnrichedByKey] = useState<Record<string, string>>(
@@ -122,11 +137,12 @@ export function useToolActivitySummary({
   const settledRef = useRef(settledByKey);
   settledRef.current = settledByKey;
 
-  // Only summarize turns we've actually watched run — i.e. live turns. A turn
-  // that mounts already-complete (an old conversation loaded from history)
-  // keeps its heuristic label so browsing history costs no model calls.
+  // Only summarize live turns. A turn that mounts already-complete (an old
+  // conversation loaded from history) keeps its heuristic label so browsing
+  // history costs no model calls. Liveness is either this group's own parts
+  // running or the thread still running — see `isLiveTurn`.
   const wasRunningRef = useRef(false);
-  if (inProgress) {
+  if (inProgress || isLiveTurn) {
     wasRunningRef.current = true;
   }
 
