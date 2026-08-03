@@ -194,7 +194,10 @@ function ContractForm({
         <ErrorBoundary
           onError={(error) => handleError(toError(error), { silent: true })}
           fallbackRender={() => (
-            <Text muted small>
+            // Announced, because this replaces a skeleton long after the page
+            // has settled — with no live region a screen reader user is never
+            // told the estimate failed, or that a reload is the way back.
+            <Text muted small role="alert">
               The contract estimate couldn't load. Your contract terms above are
               unaffected —{" "}
               <button
