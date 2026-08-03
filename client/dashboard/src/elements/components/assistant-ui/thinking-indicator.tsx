@@ -184,10 +184,11 @@ export const ThinkingIndicator: FC = () => {
     if (parts.length === 0) return true;
     const last = parts[parts.length - 1];
     if (!last) return true;
-    // A trailing tool call renders a tool group, which carries its own spinner
-    // against its summary line while it works and settles. Showing this one too
-    // describes a single wait as two things happening.
-    if (last.type === "tool-call") return false;
+    // A tool call still running renders a tool group with its own spinner, and
+    // two spinners for one wait reads as two things happening. Once the calls
+    // are done the wait belongs to the assistant again — deciding what to do
+    // with the results — so this indicator takes it back.
+    if (last.type === "tool-call") return last.status?.type !== "running";
     if (last.type === "reasoning") return true;
     if (last.type === "text") return last.text.trim().length === 0;
     return false;

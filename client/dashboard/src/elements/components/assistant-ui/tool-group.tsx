@@ -125,10 +125,18 @@ export const ToolGroup: FC<
     <div className="my-4 w-full max-w-xl">
       <ToolUIGroup
         title={label}
-        // The group owns the working state — tools running, or the label still
-        // settling. The thread's thinking indicator hides itself whenever the
-        // message ends in a tool call, so only one spinner is ever on screen.
-        status={running ? "running" : "complete"}
+        // Spinner only while the tools themselves run; once they finish the
+        // thread's indicator takes the wait over, so a second spinner here would
+        // double it.
+        status={anyMessagePartsAreRunning ? "running" : "complete"}
+        // Tools done but the label still settling: no check yet — the line is
+        // about to change, and a completion mark on a phrase that then rewrites
+        // itself reads as a glitch. The shimmer carries "not final".
+        icon={
+          !anyMessagePartsAreRunning && pending ? (
+            <span className="size-4 shrink-0" aria-hidden />
+          ) : undefined
+        }
         // Shimmer while the tools run and while the label is still settling (an
         // enriched summary in flight after completion / on a material change).
         titleShimmer={running}
