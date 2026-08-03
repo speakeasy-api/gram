@@ -65,8 +65,27 @@ Only link an entity when you actually have its id from a tool result, and the li
 		"\n### Chart code blocks\n\n" +
 		elementsChartPrompt +
 		"\n### Generative UI code blocks\n\n" +
-		elementsGenerativeUIPrompt
+		elementsGenerativeUIPrompt +
+		"\n\n" + dashboardToolCallNarrationRule
 }
+
+// Appended last in OutputChannelGuidance so it lands closest to the model's
+// generation point — the Elements prompts above are long, and this rule must
+// not get lost in the middle of them.
+const dashboardToolCallNarrationRule = `## Narrating tool calls
+
+Every time you are about to call tools — even a single tool — the text you emit alongside must be EXACTLY ONE activity phrase and nothing else. The dashboard promotes the phrase to the tool-group heading ONLY when it matches this contract; anything else renders as stray prose and breaks the UX:
+
+- Starts with a present-participle verb phrase: "Investigating…", "Comparing…", "Deep diving…"
+- 3 to 8 words, one line, under 90 characters
+- No first person (never "I", "let me", "we"), no tool names, no Markdown or backticks, no periods
+
+Good: "Aggregating token spend server-side"
+Good: "Retrying via metrics surfaces"
+Bad: "That returned huge payloads. Let me aggregate compactly server-side." (narrated prose — never do this)
+Bad: "The log-search endpoint returned an empty page, so pulling metrics instead" (commentary, not a phrase)
+
+When a tool result changes your plan or fails, do NOT narrate the setback — just write a fresh activity phrase for the new approach and call the next tools. If a later batch continues the same goal, write nothing between the calls. Save ALL prose, explanations, tables, and widgets for your final answer after the tool results are in.`
 
 // ChatID: the dashboard's correlation key already IS the server-minted chat id
 // (round-tripped by the client). Use it directly; fall back to a deterministic

@@ -22,9 +22,11 @@ import {
   ErrorPrimitive,
   ImageMessagePartProps,
   MessagePrimitive,
+  TextMessagePartProvider,
   ThreadPrimitive,
   useAui,
   useAuiState,
+  type TextMessagePartComponent,
 } from "@assistant-ui/react";
 
 import {
@@ -44,6 +46,7 @@ import {
   useRef,
   useState,
   type FC,
+  type PropsWithChildren,
 } from "react";
 
 import {
@@ -83,6 +86,11 @@ import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
+import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
+import {
+  stripTrailingAnnotationLine,
+  trailingAnnotationLine,
+} from "@/elements/lib/toolCallAnnotation";
 import { MODELS } from "@/elements/lib/models";
 import type { ComposerSkill, SkillContextConfig } from "@/elements/types";
 import {
@@ -1335,26 +1343,85 @@ const MessageError: FC = () => {
   );
 };
 
+// The trailing terse line of a text part immediately followed by tool calls
+// is the group's annotation — ToolGroup renders it as the group heading, so
+// the prose render here drops it to avoid showing it twice. A pure annotation
+// part renders nothing; a mixed prose+annotation part renders the prose only.
+const withToolCallAnnotationSuppression = (
+  Inner: TextMessagePartComponent,
+): TextMessagePartComponent => {
+  const AssistantText: TextMessagePartComponent = (props) => {
+    const aui = useAui();
+    const partQuery = aui.part.query;
+    const partIndex = partQuery?.type === "index" ? partQuery.index : undefined;
+    const followedByToolCall = useAuiState(
+      ({ message }) =>
+        partIndex !== undefined &&
+        message.parts[partIndex + 1]?.type === "tool-call",
+    );
+    if (!followedByToolCall || !trailingAnnotationLine(props.text)) {
+      return <Inner {...props} />;
+    }
+    const remainder = stripTrailingAnnotationLine(props.text);
+    if (!remainder) return null;
+    // MarkdownText reads its text from part context, not props — override the
+    // context so the annotation line disappears from the prose render.
+    return (
+      <TextMessagePartProvider
+        text={remainder}
+        isRunning={props.status?.type === "running"}
+      >
+        <Inner {...props} text={remainder} />
+      </TextMessagePartProvider>
+    );
+  };
+  return AssistantText;
+};
+
 const AssistantMessage: FC = () => {
   const { config } = useElements();
   const toolsConfig = config.tools ?? {};
   const components = config.components;
   const toolsComponents = toolsConfig.components;
 
-  const partsComponents = useMemo(
-    () => ({
-      Text: components?.Text ?? MarkdownText,
+  const partsComponents = useMemo(() => {
+    const ToolGroupComponent = components?.ToolGroup ?? ToolGroup;
+    const ReasoningGroupComponent =
+      components?.ReasoningGroup ?? ReasoningGroup;
+    // Dispatches each cluster from groupAssistantMessageParts: tool runs get
+    // the ToolGroup treatment, reasoning runs the ReasoningGroup one, and
+    // ungrouped parts render bare.
+    const Group: FC<
+      PropsWithChildren<{ groupKey: string | undefined; indices: number[] }>
+    > = ({ groupKey, indices, children }) => {
+      if (groupKey?.startsWith("tools-")) {
+        return (
+          <ToolGroupComponent indices={indices}>{children}</ToolGroupComponent>
+        );
+      }
+      if (groupKey?.startsWith("reasoning-")) {
+        return (
+          <ReasoningGroupComponent
+            startIndex={indices[0] ?? 0}
+            endIndex={indices[indices.length - 1] ?? 0}
+          >
+            {children}
+          </ReasoningGroupComponent>
+        );
+      }
+      return children;
+    };
+    return {
+      Text: withToolCallAnnotationSuppression(components?.Text ?? MarkdownText),
       Image: components?.Image ?? Image,
       tools: {
         by_name: toolsComponents,
         Fallback: components?.ToolFallback ?? ToolFallback,
       },
       Reasoning: components?.Reasoning ?? Reasoning,
-      ReasoningGroup: components?.ReasoningGroup ?? ReasoningGroup,
-      ToolGroup: components?.ToolGroup ?? ToolGroup,
-    }),
-    [components, toolsComponents],
-  );
+      Group,
+    };
+  }, [components, toolsComponents]);
 
   return (
     <MessagePrimitive.Root asChild>
@@ -1363,7 +1430,10 @@ const AssistantMessage: FC = () => {
         data-role="assistant"
       >
         <div className="aui-assistant-message-content mx-2 leading-7 wrap-break-word text-foreground">
-          <MessagePrimitive.Parts components={partsComponents} />
+          <MessagePrimitive.Unstable_PartsGrouped
+            groupingFunction={groupAssistantMessageParts}
+            components={partsComponents}
+          />
           <ThinkingIndicator />
           <MessageError />
         </div>
