@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isToolGroupAnnotation,
   normalizeHeading,
+  toolChainEnd,
+  toolChainStart,
   toolGroupAnnotation,
 } from "./toolGroupAnnotation";
 
@@ -90,6 +92,48 @@ describe("normalizeHeading", () => {
     expect(normalizeHeading("No policies and no findings exist yet.")).toBe(
       "No policies and no findings exist yet",
     );
+  });
+});
+
+describe("tool chains", () => {
+  // parts: [text][tool][tool] [text][tool] [text][tool]  [text (answer)]
+  // One turn iterating: three runs separated only by narration; the trailing
+  // text has no tool call after it, so it stays prose.
+  const chain = [
+    text("Pulling the usage data across those dimensions"),
+    toolCall,
+    toolCall,
+    text("Checking filter format"),
+    toolCall,
+    text("Paging without filters instead"),
+    toolCall,
+    text("Here is the breakdown you asked for."),
+  ];
+
+  it("walks a narration-linked run of groups back to its head", () => {
+    expect(toolChainStart(chain, 1)).toBe(1);
+    expect(toolChainStart(chain, 4)).toBe(1);
+    expect(toolChainStart(chain, 6)).toBe(1);
+  });
+
+  it("walks forward to the chain's last call", () => {
+    expect(toolChainEnd(chain, 2)).toBe(6);
+    expect(toolChainEnd(chain, 4)).toBe(6);
+    expect(toolChainEnd(chain, 6)).toBe(6);
+  });
+
+  it("does not chain across a normal prose gap", () => {
+    // A text part with no tool call after it ends the chain; a later,
+    // separate group starts a new one.
+    const parts = [
+      text("Pulling usage"),
+      toolCall,
+      text("Standalone paragraph with no calls after it does not link"),
+      text("Checking the logs"),
+      toolCall,
+    ];
+    expect(toolChainEnd(parts, 1)).toBe(1);
+    expect(toolChainStart(parts, 4)).toBe(4);
   });
 });
 

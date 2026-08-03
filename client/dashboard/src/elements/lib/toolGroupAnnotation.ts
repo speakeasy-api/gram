@@ -142,3 +142,50 @@ export function isToolGroupAnnotation(
   if (parts[index + 1]?.type !== "tool-call") return false;
   return toolGroupAnnotation(parts, index + 1) !== "";
 }
+
+/**
+ * A turn that iterates — call tools, narrate the adjustment, call tools again —
+ * produces a CHAIN of tool groups separated only by annotation text. Rendering
+ * a headed row per group turns one question into a wall of micro-steps
+ * ("Checking filter format", "Paging without filters…", 25 rows deep), so the
+ * chain is presented as ONE group: labeled by its opening (goal-level) line,
+ * with the intermediate steps revealed on expand. These helpers find the
+ * chain's bounds from any member group.
+ */
+export function toolChainStart(
+  parts: readonly AnnotatablePart[],
+  startIndex: number,
+): number {
+  let start = startIndex;
+  while (
+    start >= 2 &&
+    isToolGroupAnnotation(parts, start - 1) &&
+    parts[start - 2]?.type === "tool-call"
+  ) {
+    let runStart = start - 2;
+    while (runStart > 0 && parts[runStart - 1]?.type === "tool-call") {
+      runStart--;
+    }
+    start = runStart;
+  }
+  return start;
+}
+
+/** The inclusive end of the chain containing the run ending at `endIndex`. */
+export function toolChainEnd(
+  parts: readonly AnnotatablePart[],
+  endIndex: number,
+): number {
+  let end = endIndex;
+  while (
+    isToolGroupAnnotation(parts, end + 1) &&
+    parts[end + 2]?.type === "tool-call"
+  ) {
+    let runEnd = end + 2;
+    while (parts[runEnd + 1]?.type === "tool-call") {
+      runEnd++;
+    }
+    end = runEnd;
+  }
+  return end;
+}

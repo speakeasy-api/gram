@@ -1177,6 +1177,14 @@ interface ToolUIGroupProps {
    * thread's own "working" indicator says the same thing twice.
    */
   headerHidden?: boolean;
+  /**
+   * Controlled expansion. When set, the group renders this state and reports
+   * toggles through `onToggleExpanded` instead of tracking its own — used when
+   * one header governs several sibling blocks (a tool-call chain).
+   */
+  expanded?: boolean;
+  /** Toggle callback for controlled expansion. */
+  onToggleExpanded?: () => void;
   /** Child tool UI components */
   children: React.ReactNode;
   /** Additional class names */
@@ -1191,10 +1199,17 @@ function ToolUIGroup({
   headerless = false,
   titleShimmer,
   headerHidden = false,
+  expanded,
+  onToggleExpanded,
   children,
   className,
 }: ToolUIGroupProps): React.JSX.Element {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
+  const isExpanded = expanded ?? internalExpanded;
+  const setIsExpanded = (next: boolean) => {
+    if (onToggleExpanded) onToggleExpanded();
+    else setInternalExpanded(next);
+  };
 
   // A headerless group shows its children unconditionally; when it gains a
   // header mid-stream, start expanded — collapsing would hide content the
@@ -1202,7 +1217,7 @@ function ToolUIGroup({
   const [prevHeaderless, setPrevHeaderless] = useState(headerless);
   if (prevHeaderless !== headerless) {
     setPrevHeaderless(headerless);
-    if (prevHeaderless) setIsExpanded(true);
+    if (prevHeaderless) setInternalExpanded(true);
   }
 
   const showChildren = headerless || isExpanded;

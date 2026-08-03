@@ -101,7 +101,7 @@ import {
   TooltipTrigger,
 } from "../ui/tooltip";
 import { ConnectionStatusIndicatorSafe } from "./connection-status-indicator";
-import { ToolGroup } from "./tool-group";
+import { ToolGroup, ToolGroupChainProvider } from "./tool-group";
 
 type Feedback = "success" | "failure";
 
@@ -1395,7 +1395,11 @@ const AssistantMessage: FC = () => {
         data-role="assistant"
       >
         <div className="aui-assistant-message-content mx-2 leading-7 wrap-break-word text-foreground">
-          <MessagePrimitive.Parts components={partsComponents} />
+          {/* One provider per message: a chain's expansion state is shared
+              between its head group and its continuations. */}
+          <ToolGroupChainProvider>
+            <MessagePrimitive.Parts components={partsComponents} />
+          </ToolGroupChainProvider>
           <ThinkingIndicator />
           <MessageError />
         </div>
