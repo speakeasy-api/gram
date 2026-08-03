@@ -91,6 +91,28 @@ func TestWorkOSBackendKeepsAuthenticateLocal(t *testing.T) {
 	require.NotEqual(t, "upstream", rec.Body.String(), "authenticate must never be proxied to real WorkOS")
 }
 
+// The inspection routes read the live WorkOS API through a client that only
+// exists under BackendWorkOS. Under BackendLocal they must say so, not
+// dereference a nil client.
+func TestLocalBackendInspectionRoutesDoNotPanic(t *testing.T) {
+	t.Parallel()
+
+	h := newTestHandler(t, Config{Backend: BackendLocal, UpstreamURL: "", APIKey: ""}, stubHandler("emulator"))
+
+	for _, path := range []string{
+		"/_inspect/currentUser",
+		"/_inspect/users/someone@example.com",
+		"/_inspect/organizations/org_123",
+	} {
+		rec := httptest.NewRecorder()
+		require.NotPanics(t, func() {
+			h.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		}, "path %s", path)
+		require.Equal(t, http.StatusConflict, rec.Code, "path %s", path)
+		require.Contains(t, rec.Body.String(), "GRAM_DEVIDP_BACKEND=workos")
+	}
+}
+
 // The proxy borrows the configured API key only when the caller did not
 // bring one of their own.
 func TestProxyInjectsAPIKeyOnlyWhenAbsent(t *testing.T) {
