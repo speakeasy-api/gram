@@ -87,9 +87,11 @@ describe("TumAdminSection", () => {
   it("keeps the contract form usable when the estimator chunk fails to load", async () => {
     await renderSection();
 
-    // The estimator's failure is contained and explained...
+    // The estimator's failure is contained and explained — and announced,
+    // since it lands asynchronously well after the page has settled.
     await waitFor(() => {
-      expect(screen.getByText(/contract estimate couldn't load/i)).toBeTruthy();
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toMatch(/contract estimate couldn't load/i);
     });
 
     // ...and the form beside it — the thing an admin actually came to change
