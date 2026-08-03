@@ -125,6 +125,13 @@ SET last_guardrail_event_at = CASE
           COALESCE(last_otel_event_at, '-infinity'::timestamptz),
           COALESCE(last_error_at, '-infinity'::timestamptz)
         )
+        -- A version observed alongside newer signals in the same write is
+        -- stale; one stamped with its own batch's timestamp still passes.
+        AND @reported_version_observed_at::timestamptz >= GREATEST(
+          COALESCE(@guardrail_observed_at::timestamptz, '-infinity'::timestamptz),
+          COALESCE(@otel_observed_at::timestamptz, '-infinity'::timestamptz),
+          COALESCE(CASE WHEN @error_kind::text <> '' THEN @error_observed_at::timestamptz END, '-infinity'::timestamptz)
+        )
         THEN @reported_litellm_version::text
       ELSE reported_litellm_version
     END
@@ -159,6 +166,11 @@ WHERE organization_id = @organization_id
         COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
         COALESCE(last_otel_event_at, '-infinity'::timestamptz),
         COALESCE(last_error_at, '-infinity'::timestamptz)
+      )
+      AND @reported_version_observed_at::timestamptz >= GREATEST(
+        COALESCE(@guardrail_observed_at::timestamptz, '-infinity'::timestamptz),
+        COALESCE(@otel_observed_at::timestamptz, '-infinity'::timestamptz),
+        COALESCE(CASE WHEN @error_kind::text <> '' THEN @error_observed_at::timestamptz END, '-infinity'::timestamptz)
       )
     )
   );

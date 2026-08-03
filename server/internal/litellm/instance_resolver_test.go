@@ -160,7 +160,7 @@ func TestAcceptedTelemetryResolvesLegacyManagedKeyBeforeEnqueue(t *testing.T) {
 	apiKeyID := uuid.New().String()
 	projectID := uuid.New().String()
 	rows := []telemetry.LogParams{liteLLMAttributionRow(projectID, apiKeyID)}
-	authCtx := liteLLMResolverAuthContext(apiKeyID, "litellm-1785700000000-1234abcd")
+	authCtx := liteLLMResolverAuthContext(apiKeyID, auth.LiteLLMAPIKeyNamePrefix+"1785700000000-1234abcd")
 	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
 	resolver.lookup = func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
 		return instanceID, nil

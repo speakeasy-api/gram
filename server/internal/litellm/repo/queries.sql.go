@@ -276,6 +276,13 @@ SET last_guardrail_event_at = CASE
           COALESCE(last_otel_event_at, '-infinity'::timestamptz),
           COALESCE(last_error_at, '-infinity'::timestamptz)
         )
+        -- A version observed alongside newer signals in the same write is
+        -- stale; one stamped with its own batch's timestamp still passes.
+        AND $6::timestamptz >= GREATEST(
+          COALESCE($1::timestamptz, '-infinity'::timestamptz),
+          COALESCE($2::timestamptz, '-infinity'::timestamptz),
+          COALESCE(CASE WHEN $4::text <> '' THEN $3::timestamptz END, '-infinity'::timestamptz)
+        )
         THEN $5::text
       ELSE reported_litellm_version
     END
@@ -310,6 +317,11 @@ WHERE organization_id = $7
         COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
         COALESCE(last_otel_event_at, '-infinity'::timestamptz),
         COALESCE(last_error_at, '-infinity'::timestamptz)
+      )
+      AND $6::timestamptz >= GREATEST(
+        COALESCE($1::timestamptz, '-infinity'::timestamptz),
+        COALESCE($2::timestamptz, '-infinity'::timestamptz),
+        COALESCE(CASE WHEN $4::text <> '' THEN $3::timestamptz END, '-infinity'::timestamptz)
       )
     )
   )
