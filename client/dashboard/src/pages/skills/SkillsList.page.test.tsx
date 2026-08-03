@@ -308,7 +308,9 @@ vi.mock("@/components/ui/Table", () => ({
     return (
       <div>
         {sortableColumns.map((column) => {
-          const label = column.sortLabel ?? column.header;
+          const label =
+            column.sortLabel ??
+            (typeof column.header === "string" ? column.header : column.key);
           const direction = sort?.id === column.key ? sort.direction : null;
           const action =
             direction === "asc"
