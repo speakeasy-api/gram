@@ -185,8 +185,10 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
                   <Tooltip key={assignment.id}>
                     <TooltipTrigger asChild>
                       <div
+                        role="img"
                         aria-label={label}
-                        className="bg-muted text-muted-foreground ring-background flex size-7 shrink-0 items-center justify-center rounded-full ring-2"
+                        tabIndex={0}
+                        className="bg-muted text-muted-foreground ring-background focus-visible:ring-ring flex size-7 shrink-0 items-center justify-center rounded-full ring-2 focus-visible:outline-none"
                       >
                         <PrincipalIcon className="size-3.5" />
                       </div>

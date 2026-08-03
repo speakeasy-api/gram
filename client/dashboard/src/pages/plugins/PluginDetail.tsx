@@ -655,10 +655,12 @@ export default function PluginDetail(): JSX.Element | null {
               republish. Orgs without the skills feature keep the teaser. */}
           {section === PLUGIN_SKILLS_SECTION_ID &&
             (productFeatures?.skillsEnabled ? (
+              // Skills is a whole page now, so a missing grant has to explain
+              // itself — hiding the section would leave the route blank.
               <RequireScope
                 scope="skill:read"
                 resourceId={project.id}
-                level="section"
+                level="page"
               >
                 <PluginSkillsSection
                   key={pluginId!}
@@ -694,7 +696,29 @@ export default function PluginDetail(): JSX.Element | null {
             ))}
 
           {/* Assignments only affect device-agent delivery, so the section is
-              hidden for marketplace-only orgs (see usePluginAssignmentsVisible). */}
+              hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
+              Now that it's a route, a bookmark can still land here — say why the
+              page is empty rather than rendering nothing. Wait for
+              productFeatures before doing so, since the visibility flag reads
+              false while it loads. */}
+          {section === PLUGIN_ASSIGNMENTS_SECTION_ID &&
+            !showAssignments &&
+            !!productFeatures && (
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>Assignments</SettingsSection.Title>
+                  <SettingsSection.Description>
+                    Assignments control delivery to devices running the
+                    Speakeasy agent.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <SectionEmptyState
+                  title="Assignments aren't available for this project"
+                  subtitle="Marketplace installs receive every published plugin, so there's nothing to assign."
+                />
+              </SettingsSection>
+            )}
+
           {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
             <SettingsSection>
               <div className="flex flex-wrap items-start justify-between gap-4">
