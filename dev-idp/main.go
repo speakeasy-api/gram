@@ -3,10 +3,13 @@
 //
 //   - the Goa management API (under /rpc/...) for /users, /organizations,
 //     /memberships, /organization_roles, /invitations, /devIdp;
-//   - the mock-workos mode at /mock-workos/ (mock WorkOS REST surface);
-//   - the oauth2 mode at /oauth2/;
-//   - the oauth2-1 mode at /oauth2-1/;
-//   - the workos mode at /workos/ (only when GRAM_IDP_MODE=workos and GRAM_IDP_CLIENT_SECRET is a real key).
+//   - the OAuth 2.1 authorization server at /oauth2-1/;
+//   - the WorkOS REST surface at /workos/.
+//
+// GRAM_DEVIDP_BACKEND is the only knob that changes behavior: "local"
+// (default) emulates WorkOS against the dev-idp's own SQLite store,
+// "workos" passes through to a real WorkOS environment. Both mount at the
+// same prefixes, so no URL changes when switching.
 //
 // A second tiny health server is mounted on GRAM_DEVIDP_CONTROL_ADDRESS.
 //
@@ -59,16 +62,21 @@ func run() error {
 	externalURL := flag.String("external-url", os.Getenv("GRAM_DEVIDP_EXTERNAL_URL"), "Public base URL for discovery docs / redirect URIs (defaults from --address)")
 	dbSpec := flag.String("db", os.Getenv("GRAM_DEVIDP_DB"), "SQLite location: 'memory' or 'file:<path>' (default file:local/devidp/devidp.db)")
 	rsaKey := flag.String("rsa-private-key", os.Getenv("GRAM_DEVIDP_RSA_PRIVATE_KEY"), "PEM-encoded RSA private key (omit to generate a fresh ephemeral key)")
-	idpMode := flag.String("idp-mode", envOr("GRAM_IDP_MODE", "mock-workos"), "IDP mode: mock-workos (default) or workos")
+	backendName := flag.String("backend", os.Getenv("GRAM_DEVIDP_BACKEND"), "Identity backend: local (default) or workos")
 	loginClientID := flag.String("login-client-id", envOr("GRAM_IDP_CLIENT_ID", "gram-local-dev"), "Statically provisioned first-party client id used for dashboard login (skips dynamic client registration)")
-	workosKey := flag.String("workos-api-key", os.Getenv("GRAM_IDP_CLIENT_SECRET"), "WorkOS API key (required when --idp-mode=workos)")
-	workosHost := flag.String("workos-host", envOr("WORKOS_API_URL", "https://api.workos.com"), "Base URL of the WorkOS API")
+	workosKey := flag.String("workos-api-key", os.Getenv("GRAM_IDP_CLIENT_SECRET"), "WorkOS API key (required when --backend=workos)")
+	workosUpstream := flag.String("workos-upstream-url", envOr("GRAM_DEVIDP_WORKOS_UPSTREAM_URL", "https://api.workos.com"), "Real WorkOS API base URL proxied to when --backend=workos")
 	flag.Parse()
 
 	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp"))
 	slog.SetDefault(logger)
 
 	dbCfg, err := config.ParseDB(*dbSpec)
+	if err != nil {
+		return err
+	}
+
+	backend, err := devidpworkos.ParseBackend(*backendName)
 	if err != nil {
 		return err
 	}
@@ -121,9 +129,6 @@ func run() error {
 
 	outer := http.NewServeMux()
 
-	mockHandler := mockworkos.NewHandler(logger, tp, db)
-	outer.Handle(mockworkos.Prefix+"/", http.StripPrefix(mockworkos.Prefix, mockHandler.Handler()))
-
 	oauth21Handler := oauth21.NewHandler(
 		oauth21.Config{ExternalURL: pubURL, LoginClientID: *loginClientID},
 		ks, logger, tp, db,
@@ -131,21 +136,30 @@ func run() error {
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21Handler.Handler()))
 	oauth21Handler.RegisterRootRoutes(outer)
 
-	if *idpMode == "workos" {
-		if *workosKey == "" {
-			return fmt.Errorf("GRAM_IDP_MODE=workos requires GRAM_IDP_CLIENT_SECRET to be a real WorkOS API key")
+	// The WorkOS surface always mounts at the same prefix; only what backs
+	// it changes. That keeps WORKOS_API_URL a constant across backends.
+	var wsClient *workos.Client
+	if backend == devidpworkos.BackendWorkOS {
+		if *workosKey == "" || *workosKey == "unset" {
+			return errors.New("GRAM_DEVIDP_BACKEND=workos requires GRAM_IDP_CLIENT_SECRET to be a real WorkOS API key")
 		}
-		wsClient := workos.NewClient(*workosKey, workos.Opts{
-			Endpoint: *workosHost,
-		})
-		wsHandler := devidpworkos.NewHandler(
-			wsClient, logger, tp, db,
-		)
-		outer.Handle(devidpworkos.Prefix+"/", http.StripPrefix(devidpworkos.Prefix, wsHandler.Handler()))
-		logger.InfoContext(ctx, "/workos/ proxy mounted (GRAM_IDP_MODE=workos)")
+		wsClient = workos.NewClient(*workosKey, workos.Opts{Endpoint: *workosUpstream})
 	}
+	wsHandler, err := devidpworkos.NewHandler(
+		devidpworkos.Config{
+			Backend:     backend,
+			UpstreamURL: *workosUpstream,
+			APIKey:      *workosKey,
+		},
+		mockworkos.NewHandler(logger, tp, db).Handler(),
+		wsClient, logger, tp, db,
+	)
+	if err != nil {
+		return fmt.Errorf("init workos surface: %w", err)
+	}
+	outer.Handle(devidpworkos.Prefix+"/", http.StripPrefix(devidpworkos.Prefix, wsHandler.Handler()))
 
-	logger.InfoContext(ctx, "idp mode", slog.String("mode", *idpMode))
+	logger.InfoContext(ctx, "dev-idp backend", slog.String("backend", backend.String()))
 
 	outer.Handle("/", goaMux)
 
