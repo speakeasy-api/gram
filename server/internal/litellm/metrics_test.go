@@ -32,7 +32,7 @@ func TestMetricHTTPAcceptsLiteLLMJSONAndProtobuf(t *testing.T) {
 		return nil
 	})
 	instanceID := uuid.New()
-	service.instanceIDs.Store(authCtx.APIKeyID, instanceID)
+	service.instances.Remember(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.APIKeyID, instanceID)
 	mux := mountedTraceMux(service)
 	jsonBody := testenv.ReadFixture(t, contractFixtureDir+"otlp-metrics.json")
 	protobufBody := testenv.ReadFixture(t, contractFixtureDir+"otlp-metrics.pb")

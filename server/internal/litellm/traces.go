@@ -262,12 +262,8 @@ func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequ
 	if len(params) == 0 {
 		return nil
 	}
-	instanceID, managed := s.instanceIDForRequest(ctx)
 	for i := range params {
 		params[i].Attributes[attr.APIKeyIDKey] = authCtx.APIKeyID
-		if managed {
-			params[i].Attributes[attr.LiteLLMInstanceIDKey] = instanceID.String()
-		}
 	}
 	s.traces.Enqueue(ctx, params)
 	return nil

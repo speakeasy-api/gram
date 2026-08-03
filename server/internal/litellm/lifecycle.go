@@ -103,7 +103,7 @@ func (s *Service) CreateInstance(ctx context.Context, payload *gen.CreateInstanc
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit LiteLLM instance creation").LogError(ctx, s.logger)
 	}
-	s.instanceIDs.Store(key.ID.String(), instance.ID)
+	s.instances.Remember(instance.OrganizationID, instance.ProjectID, key.ID.String(), instance.ID)
 
 	return &gen.LitellmInstanceKeyResult{Instance: buildInstanceView(instanceView{
 		ID: instance.ID, OrganizationID: instance.OrganizationID, ProjectID: project.ID, ProjectName: project.Name, ProjectSlug: project.Slug,
@@ -220,7 +220,8 @@ func (s *Service) RotateInstanceKey(ctx context.Context, payload *gen.RotateInst
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit LiteLLM instance key rotation").LogError(ctx, s.logger)
 	}
-	s.instanceIDs.Store(newKey.ID.String(), instance.ID)
+	s.instances.Forget(instance.OrganizationID, instance.ProjectID, oldAPIKeyID.String())
+	s.instances.Remember(instance.OrganizationID, instance.ProjectID, newKey.ID.String(), instance.ID)
 	return &gen.LitellmInstanceKeyResult{Instance: buildInstanceView(instanceView{
 		ID: instance.ID, OrganizationID: instance.OrganizationID, ProjectID: project.ID, ProjectName: project.Name, ProjectSlug: project.Slug,
 		Name: instance.Name, FailurePosture: instance.FailurePosture, KeyPrefix: newKey.KeyPrefix, CreatedByUserID: instance.CreatedByUserID,
@@ -271,6 +272,7 @@ func (s *Service) RevokeInstance(ctx context.Context, payload *gen.RevokeInstanc
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit LiteLLM instance revocation").LogError(ctx, s.logger)
 	}
+	s.instances.Forget(instance.OrganizationID, instance.ProjectID, instance.ApiKeyID.String())
 	return nil
 }
 

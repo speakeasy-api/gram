@@ -3,7 +3,6 @@ package litellm
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -70,14 +69,14 @@ func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 		ProjectID:              *authCtx.ProjectID,
 		ApiKeyID:               managedKey.ID,
 	}))
-	ti.service.instanceIDs = &sync.Map{}
 	keyScheme := &security.APIKeyScheme{Name: constants.KeySecurityScheme, Scopes: []string{}, RequiredScopes: []string{"hooks"}}
 	projectScheme := &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: []string{}, RequiredScopes: []string{"hooks"}}
 	ingestCtx, err := ti.service.APIKeyAuth(t.Context(), created.Key, keyScheme)
 	require.NoError(t, err)
 	ingestCtx, err = ti.service.APIKeyAuth(ingestCtx, string(created.Instance.Project.Slug), projectScheme)
 	require.NoError(t, err)
-	resolvedInstanceID, managed := ti.service.instanceIDForRequest(ingestCtx)
+	coldResolver := NewInstanceResolver(testenv.NewLogger(t), ti.conn)
+	resolvedInstanceID, managed := coldResolver.Resolve(ingestCtx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), managedKey.ID.String())
 	require.True(t, managed)
 	require.Equal(t, instanceID, resolvedInstanceID)
 

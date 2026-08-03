@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -148,21 +147,21 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 	t.Helper()
 	tracerProvider := testenv.NewTracerProvider(t)
 	return &Service{
-		tracer:      tracerProvider.Tracer("test"),
-		logger:      testenv.NewLogger(t),
-		auth:        fixedAuthorizer{authCtx: authCtx},
-		hooks:       ingester,
-		calls:       callcache.New(newMemoryCache()),
-		traces:      newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
-		metrics:     nil,
-		health:      newDisabledHealthProcessor(t),
-		db:          nil,
-		telemetry:   nil,
-		instanceIDs: &sync.Map{},
-		authz:       nil,
-		features:    nil,
-		audit:       nil,
-		keyPrefix:   "",
+		tracer:    tracerProvider.Tracer("test"),
+		logger:    testenv.NewLogger(t),
+		auth:      fixedAuthorizer{authCtx: authCtx},
+		hooks:     ingester,
+		calls:     callcache.New(newMemoryCache()),
+		traces:    newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
+		metrics:   nil,
+		health:    newDisabledHealthProcessor(t),
+		db:        nil,
+		telemetry: nil,
+		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
+		authz:     nil,
+		features:  nil,
+		audit:     nil,
+		keyPrefix: "",
 	}
 }
 
