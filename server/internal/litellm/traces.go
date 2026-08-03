@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -125,6 +126,12 @@ func readOTLPRequest(r *http.Request) (string, []byte, error) {
 }
 
 func (s *Service) authenticateOTLPRequest(ctx context.Context, header http.Header) (context.Context, error) {
+	// The canonical-route dispatch runs this same authenticator to pick a
+	// handler; a context carrying a litellm-named key can only come from that
+	// pass, so skip the redundant authorize round trip.
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && strings.HasPrefix(authCtx.APIKeyName, auth.LiteLLMAPIKeyNamePrefix) {
+		return ctx, nil
+	}
 	keyScheme := &security.APIKeyScheme{
 		Name:           constants.KeySecurityScheme,
 		Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},

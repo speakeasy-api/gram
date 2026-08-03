@@ -41,7 +41,7 @@ func OTLPMetricsDispatch(service func() *Service) func(http.Handler) http.Handle
 				next.ServeHTTP(w, r)
 				return
 			}
-			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && strings.HasPrefix(authCtx.APIKeyName, auth.LiteLLMAPIKeyNamePrefix) {
+			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && strings.HasPrefix(authCtx.APIKeyName, auth.LiteLLMAPIKeyNamePrefix) {
 				s.metricHTTPHandler().ServeHTTP(w, r.WithContext(ctx))
 				return
 			}

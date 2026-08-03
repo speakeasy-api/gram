@@ -97,12 +97,14 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	// Plugin distribution reserves plugins- names. Hook ingestion recognizes
-	// the stricter generated name shape so legacy user-created prefixed keys
-	// retain owner attribution, but reserving the whole namespace prevents new
-	// keys from becoming ambiguous with present or future plugin key purposes.
-	if strings.HasPrefix(payload.Name, auth.PluginAPIKeyNamePrefix) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", auth.PluginAPIKeyNamePrefix).LogError(ctx, s.logger)
+	// Plugin distribution reserves plugins- names and LiteLLM instance minting
+	// reserves litellm- names; both prefixes act as provenance discriminators
+	// during ingestion, so reserving the namespaces prevents user-created keys
+	// from becoming ambiguous with server-minted key purposes.
+	for _, reserved := range []string{auth.PluginAPIKeyNamePrefix, auth.LiteLLMAPIKeyNamePrefix} {
+		if strings.HasPrefix(payload.Name, reserved) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", reserved).LogError(ctx, s.logger)
+		}
 	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
