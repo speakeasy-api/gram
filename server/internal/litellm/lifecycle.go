@@ -71,12 +71,14 @@ func (s *Service) CreateInstance(ctx context.Context, payload *gen.CreateInstanc
 		return nil, oops.E(oops.CodeUnexpected, err, "validate LiteLLM project").LogError(ctx, s.logger)
 	}
 
-	key, plaintext, err := s.mintInstanceKey(ctx, keysrepo.New(dbtx), authCtx.ActiveOrganizationID, projectID, authCtx.UserID)
+	instanceID := uuid.New()
+	key, plaintext, err := s.mintInstanceKey(ctx, keysrepo.New(dbtx), authCtx.ActiveOrganizationID, projectID, authCtx.UserID, instanceID)
 	if err != nil {
 		return nil, err
 	}
 
 	instance, err := queries.CreateLiteLLMInstance(ctx, repo.CreateLiteLLMInstanceParams{
+		ID:              instanceID,
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		ProjectID:       projectID,
 		ApiKeyID:        key.ID,
@@ -187,7 +189,7 @@ func (s *Service) RotateInstanceKey(ctx context.Context, payload *gen.RotateInst
 		return nil, oops.E(oops.CodeUnexpected, err, "validate LiteLLM project").LogError(ctx, s.logger)
 	}
 	keyQueries := keysrepo.New(dbtx)
-	newKey, plaintext, err := s.mintInstanceKey(ctx, keyQueries, authCtx.ActiveOrganizationID, projectID, authCtx.UserID)
+	newKey, plaintext, err := s.mintInstanceKey(ctx, keyQueries, authCtx.ActiveOrganizationID, projectID, authCtx.UserID, instance.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -292,14 +294,14 @@ func (s *Service) requireInstanceAdmin(ctx context.Context) (*contextvalues.Auth
 	return authCtx, *authCtx.ProjectID, nil
 }
 
-func (s *Service) mintInstanceKey(ctx context.Context, queries *keysrepo.Queries, organizationID string, projectID uuid.UUID, userID string) (keysrepo.ApiKey, string, error) {
+func (s *Service) mintInstanceKey(ctx context.Context, queries *keysrepo.Queries, organizationID string, projectID uuid.UUID, userID string, instanceID uuid.UUID) (keysrepo.ApiKey, string, error) {
 	plaintext, hash, displayPrefix, err := auth.GenerateAPIKeyMaterial(s.keyPrefix)
 	if err != nil {
 		return keysrepo.ApiKey{}, "", oops.E(oops.CodeUnexpected, err, "generate LiteLLM API key").LogError(ctx, s.logger)
 	}
 	key, err := queries.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID: organizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, CreatedByUserID: userID,
-		Name:      fmt.Sprintf("%s%d-%s", auth.LiteLLMAPIKeyNamePrefix, time.Now().UTC().UnixMilli(), uuid.NewString()[:8]),
+		Name:      fmt.Sprintf("%s%s-%d-%s", auth.LiteLLMAPIKeyNamePrefix, strings.ReplaceAll(instanceID.String(), "-", ""), time.Now().UTC().UnixMilli(), uuid.NewString()[:8]),
 		KeyPrefix: displayPrefix, KeyHash: hash, Scopes: []string{auth.APIKeyScopeHooks.String()},
 	})
 	if err != nil {

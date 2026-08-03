@@ -2,12 +2,16 @@ package litellm
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -96,6 +100,78 @@ func TestInstanceResolverForgetLeavesOtherKeysInflight(t *testing.T) {
 	require.Empty(t, resolver.generations)
 }
 
+func TestInstanceResolverRememberWinsOverInflightMiss(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
+	projectID := uuid.New()
+	apiKeyID := uuid.New().String()
+	instanceID := uuid.New()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	resolver.lookup = func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+		close(started)
+		<-release
+		return uuid.Nil, pgx.ErrNoRows
+	}
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	result := make(chan uuid.UUID, 1)
+	go func() {
+		resolvedID, _ := resolver.Resolve(t.Context(), "org-test", projectID.String(), apiKeyID)
+		result <- resolvedID
+	}()
+	<-started
+
+	resolver.Remember("org-test", projectID, apiKeyID, instanceID)
+	close(release)
+
+	require.Equal(t, instanceID, <-result)
+}
+
+func TestAcceptedTelemetryUsesEncodedInstanceID(t *testing.T) {
+	t.Parallel()
+
+	instanceID := uuid.New()
+	apiKeyID := uuid.New().String()
+	rows := []telemetry.LogParams{liteLLMAttributionRow(uuid.New().String(), apiKeyID)}
+	authCtx := liteLLMResolverAuthContext(apiKeyID, auth.LiteLLMAPIKeyNamePrefix+strings.ReplaceAll(instanceID.String(), "-", "")+"-1785700000000-1234abcd")
+	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
+	resolver.lookup = func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+		t.Fatal("encoded managed key should not query the resolver")
+		return uuid.Nil, nil
+	}
+
+	enrichAcceptedTelemetryAttribution(t.Context(), resolver, authCtx, rows)
+
+	require.Equal(t, apiKeyID, rows[0].Attributes[attr.APIKeyIDKey])
+	require.Equal(t, instanceID.String(), rows[0].Attributes[attr.LiteLLMInstanceIDKey])
+}
+
+func TestAcceptedTelemetryResolvesLegacyManagedKeyBeforeEnqueue(t *testing.T) {
+	t.Parallel()
+
+	instanceID := uuid.New()
+	apiKeyID := uuid.New().String()
+	projectID := uuid.New().String()
+	rows := []telemetry.LogParams{liteLLMAttributionRow(projectID, apiKeyID)}
+	authCtx := liteLLMResolverAuthContext(apiKeyID, "litellm-1785700000000-1234abcd")
+	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
+	resolver.lookup = func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+		return instanceID, nil
+	}
+
+	enrichAcceptedTelemetryAttribution(t.Context(), resolver, authCtx, rows)
+
+	require.Equal(t, apiKeyID, rows[0].Attributes[attr.APIKeyIDKey])
+	require.Equal(t, instanceID.String(), rows[0].Attributes[attr.LiteLLMInstanceIDKey])
+}
+
 func TestInstanceAttributionStopsAfterDeadline(t *testing.T) {
 	t.Parallel()
 
@@ -151,5 +227,26 @@ func liteLLMAttributionRow(projectID, apiKeyID string) telemetry.LogParams {
 			ProjectID:      projectID,
 		},
 		Attributes: map[attr.Key]any{attr.APIKeyIDKey: apiKeyID},
+	}
+}
+
+func liteLLMResolverAuthContext(apiKeyID, apiKeyName string) *contextvalues.AuthContext {
+	return &contextvalues.AuthContext{
+		ActiveOrganizationID:  "org-test",
+		UserID:                "",
+		ExternalUserID:        "",
+		APIKeyID:              apiKeyID,
+		APIKeyName:            apiKeyName,
+		OrgWidePluginHooksKey: false,
+		SessionID:             nil,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		IsAdmin:               false,
 	}
 }

@@ -14,7 +14,8 @@ import (
 
 const createLiteLLMInstance = `-- name: CreateLiteLLMInstance :one
 INSERT INTO litellm_instances (
-    organization_id
+    id
+  , organization_id
   , project_id
   , api_key_id
   , created_by_user_id
@@ -27,11 +28,13 @@ INSERT INTO litellm_instances (
   , $4
   , $5
   , $6
+  , $7
 )
 RETURNING id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, last_guardrail_event_at, last_otel_event_at, last_error_at, last_error_kind, reported_litellm_version, reported_litellm_version_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateLiteLLMInstanceParams struct {
+	ID              uuid.UUID
 	OrganizationID  string
 	ProjectID       uuid.UUID
 	ApiKeyID        uuid.UUID
@@ -42,6 +45,7 @@ type CreateLiteLLMInstanceParams struct {
 
 func (q *Queries) CreateLiteLLMInstance(ctx context.Context, arg CreateLiteLLMInstanceParams) (LitellmInstance, error) {
 	row := q.db.QueryRow(ctx, createLiteLLMInstance,
+		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ApiKeyID,
@@ -239,111 +243,102 @@ func (q *Queries) ListLiteLLMInstances(ctx context.Context, arg ListLiteLLMInsta
 const recordLiteLLMInstanceHealth = `-- name: RecordLiteLLMInstanceHealth :exec
 UPDATE litellm_instances
 SET last_guardrail_event_at = CASE
-      WHEN $1::boolean
-        AND (
-          last_guardrail_event_at IS NULL
-          OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'
-          OR last_guardrail_event_at <= last_error_at
-        )
-        THEN clock_timestamp()
+      WHEN $1::timestamptz IS NOT NULL
+        AND (last_guardrail_event_at IS NULL OR $1::timestamptz > last_guardrail_event_at)
+        THEN $1::timestamptz
       ELSE last_guardrail_event_at
     END
   , last_otel_event_at = CASE
-      WHEN $2::boolean
-        AND (
-          last_otel_event_at IS NULL
-          OR last_otel_event_at < clock_timestamp() - interval '1 minute'
-          OR last_otel_event_at <= last_error_at
-        )
-        THEN clock_timestamp()
+      WHEN $2::timestamptz IS NOT NULL
+        AND (last_otel_event_at IS NULL OR $2::timestamptz > last_otel_event_at)
+        THEN $2::timestamptz
       ELSE last_otel_event_at
     END
   , last_error_at = CASE
-      WHEN $3::text <> ''
-        AND (
-          last_error_kind IS DISTINCT FROM $3::text
-          OR last_error_at IS NULL
-          OR last_error_at < clock_timestamp() - interval '1 minute'
-          OR last_error_at <= last_guardrail_event_at
-          OR last_error_at <= last_otel_event_at
-        )
-        THEN clock_timestamp()
+      WHEN $3::timestamptz IS NOT NULL
+        AND $4::text <> ''
+        AND (last_error_at IS NULL OR $3::timestamptz > last_error_at)
+        THEN $3::timestamptz
       ELSE last_error_at
     END
   , last_error_kind = CASE
-      WHEN $3::text <> ''
-        AND (
-          last_error_kind IS DISTINCT FROM $3::text
-          OR last_error_at IS NULL
-          OR last_error_at < clock_timestamp() - interval '1 minute'
-          OR last_error_at <= last_guardrail_event_at
-          OR last_error_at <= last_otel_event_at
-        )
-        THEN $3::text
+      WHEN $3::timestamptz IS NOT NULL
+        AND $4::text <> ''
+        AND (last_error_at IS NULL OR $3::timestamptz > last_error_at)
+        THEN $4::text
       ELSE last_error_kind
     END
   , reported_litellm_version = CASE
-      WHEN $4::text <> ''
-        AND reported_litellm_version IS DISTINCT FROM $4::text
-        THEN $4::text
+      WHEN $5::text <> ''
+        AND $6::timestamptz IS NOT NULL
+        AND $6::timestamptz > GREATEST(
+          COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
+          COALESCE(last_otel_event_at, '-infinity'::timestamptz),
+          COALESCE(last_error_at, '-infinity'::timestamptz)
+        )
+        THEN $5::text
       ELSE reported_litellm_version
     END
-WHERE organization_id = $5
-  AND project_id = $6
-  AND api_key_id = $7
-  AND deleted IS FALSE
+WHERE organization_id = $7
+  AND project_id = $8
+  AND (
+    ($9::uuid IS NOT NULL AND id = $9::uuid)
+    OR (
+      $9::uuid IS NULL
+      AND api_key_id = $10
+      AND deleted IS FALSE
+    )
+  )
   AND (
     (
-      $1::boolean
-      AND (
-        last_guardrail_event_at IS NULL
-        OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'
-        OR last_guardrail_event_at <= last_error_at
-      )
+      $1::timestamptz IS NOT NULL
+      AND (last_guardrail_event_at IS NULL OR $1::timestamptz > last_guardrail_event_at)
     )
     OR (
-      $2::boolean
-      AND (
-        last_otel_event_at IS NULL
-        OR last_otel_event_at < clock_timestamp() - interval '1 minute'
-        OR last_otel_event_at <= last_error_at
-      )
+      $2::timestamptz IS NOT NULL
+      AND (last_otel_event_at IS NULL OR $2::timestamptz > last_otel_event_at)
     )
     OR (
-      $3::text <> ''
-      AND (
-        last_error_kind IS DISTINCT FROM $3::text
-        OR last_error_at IS NULL
-        OR last_error_at < clock_timestamp() - interval '1 minute'
-        OR last_error_at <= last_guardrail_event_at
-        OR last_error_at <= last_otel_event_at
-      )
+      $3::timestamptz IS NOT NULL
+      AND $4::text <> ''
+      AND (last_error_at IS NULL OR $3::timestamptz > last_error_at)
     )
     OR (
-      $4::text <> ''
-      AND reported_litellm_version IS DISTINCT FROM $4::text
+      $5::text <> ''
+      AND $6::timestamptz IS NOT NULL
+      AND $6::timestamptz > GREATEST(
+        COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
+        COALESCE(last_otel_event_at, '-infinity'::timestamptz),
+        COALESCE(last_error_at, '-infinity'::timestamptz)
+      )
     )
   )
 `
 
 type RecordLiteLLMInstanceHealthParams struct {
-	GuardrailEvent         bool
-	OtelEvent              bool
-	ErrorKind              string
-	ReportedLitellmVersion string
-	OrganizationID         string
-	ProjectID              uuid.UUID
-	ApiKeyID               uuid.UUID
+	GuardrailObservedAt       pgtype.Timestamptz
+	OtelObservedAt            pgtype.Timestamptz
+	ErrorObservedAt           pgtype.Timestamptz
+	ErrorKind                 string
+	ReportedLitellmVersion    string
+	ReportedVersionObservedAt pgtype.Timestamptz
+	OrganizationID            string
+	ProjectID                 uuid.UUID
+	InstanceID                uuid.NullUUID
+	ApiKeyID                  uuid.UUID
 }
 
 func (q *Queries) RecordLiteLLMInstanceHealth(ctx context.Context, arg RecordLiteLLMInstanceHealthParams) error {
 	_, err := q.db.Exec(ctx, recordLiteLLMInstanceHealth,
-		arg.GuardrailEvent,
-		arg.OtelEvent,
+		arg.GuardrailObservedAt,
+		arg.OtelObservedAt,
+		arg.ErrorObservedAt,
 		arg.ErrorKind,
 		arg.ReportedLitellmVersion,
+		arg.ReportedVersionObservedAt,
 		arg.OrganizationID,
 		arg.ProjectID,
+		arg.InstanceID,
 		arg.ApiKeyID,
 	)
 	return err

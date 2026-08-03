@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	litellmrepo "github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -60,14 +61,18 @@ func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 	require.NoError(t, err)
 	instanceID, err := uuid.Parse(created.Instance.ID)
 	require.NoError(t, err)
+	failedAt := time.Now().UTC()
 	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
-		GuardrailEvent:         true,
-		OtelEvent:              false,
-		ErrorKind:              "decode_failure",
-		ReportedLitellmVersion: "1.94.0",
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		ApiKeyID:               managedKey.ID,
+		GuardrailObservedAt:       conv.ToPGTimestamptz(failedAt),
+		OtelObservedAt:            conv.PtrToPGTimestamptz(nil),
+		ErrorObservedAt:           conv.ToPGTimestamptz(failedAt),
+		ErrorKind:                 "decode_failure",
+		ReportedLitellmVersion:    "1.94.0",
+		ReportedVersionObservedAt: conv.ToPGTimestamptz(failedAt),
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		InstanceID:                uuid.NullUUID{UUID: instanceID, Valid: true},
+		ApiKeyID:                  managedKey.ID,
 	}))
 	keyScheme := &security.APIKeyScheme{Name: constants.KeySecurityScheme, Scopes: []string{}, RequiredScopes: []string{"hooks"}}
 	projectScheme := &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: []string{}, RequiredScopes: []string{"hooks"}}
@@ -148,31 +153,86 @@ func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 	require.NotContains(t, view, "unknown@example.test")
 	require.Equal(t, gen.LiteLLMInstanceHealthStatus("pending"), withoutTraffic.Instance.Diagnostics.Status)
 
+	recoveredAt := failedAt.Add(time.Second)
 	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
-		GuardrailEvent:         true,
-		OtelEvent:              false,
-		ErrorKind:              "",
-		ReportedLitellmVersion: "",
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		ApiKeyID:               rotatedKey.ID,
+		GuardrailObservedAt:       conv.ToPGTimestamptz(recoveredAt),
+		OtelObservedAt:            conv.PtrToPGTimestamptz(nil),
+		ErrorObservedAt:           conv.PtrToPGTimestamptz(nil),
+		ErrorKind:                 "",
+		ReportedLitellmVersion:    "",
+		ReportedVersionObservedAt: conv.PtrToPGTimestamptz(nil),
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		InstanceID:                uuid.NullUUID{UUID: instanceID, Valid: true},
+		ApiKeyID:                  rotatedKey.ID,
 	}))
 	listedAfterRecovery, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
 	require.NoError(t, err)
 	require.Equal(t, gen.LiteLLMInstanceHealthStatus("success"), instanceByName(t, listedAfterRecovery, "with-traffic").Diagnostics.Status)
 
+	relapsedAt := recoveredAt.Add(time.Second)
 	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
-		GuardrailEvent:         false,
-		OtelEvent:              false,
-		ErrorKind:              "decode_failure",
-		ReportedLitellmVersion: "",
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		ApiKeyID:               rotatedKey.ID,
+		GuardrailObservedAt:       conv.PtrToPGTimestamptz(nil),
+		OtelObservedAt:            conv.PtrToPGTimestamptz(nil),
+		ErrorObservedAt:           conv.ToPGTimestamptz(relapsedAt),
+		ErrorKind:                 "decode_failure",
+		ReportedLitellmVersion:    "",
+		ReportedVersionObservedAt: conv.PtrToPGTimestamptz(nil),
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		InstanceID:                uuid.NullUUID{UUID: instanceID, Valid: true},
+		ApiKeyID:                  rotatedKey.ID,
 	}))
 	listedAfterRelapse, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
 	require.NoError(t, err)
 	require.Equal(t, gen.LiteLLMInstanceHealthStatus("failed"), instanceByName(t, listedAfterRelapse, "with-traffic").Diagnostics.Status)
+
+	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
+		GuardrailObservedAt:       conv.ToPGTimestamptz(recoveredAt.Add(500 * time.Millisecond)),
+		OtelObservedAt:            conv.PtrToPGTimestamptz(nil),
+		ErrorObservedAt:           conv.PtrToPGTimestamptz(nil),
+		ErrorKind:                 "",
+		ReportedLitellmVersion:    "",
+		ReportedVersionObservedAt: conv.PtrToPGTimestamptz(nil),
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		InstanceID:                uuid.NullUUID{UUID: instanceID, Valid: true},
+		ApiKeyID:                  rotatedKey.ID,
+	}))
+	listedAfterStaleRecovery, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMInstanceHealthStatus("failed"), instanceByName(t, listedAfterStaleRecovery, "with-traffic").Diagnostics.Status)
+
+	finalRecoveryAt := relapsedAt.Add(time.Second)
+	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
+		GuardrailObservedAt:       conv.ToPGTimestamptz(finalRecoveryAt),
+		OtelObservedAt:            conv.PtrToPGTimestamptz(nil),
+		ErrorObservedAt:           conv.PtrToPGTimestamptz(nil),
+		ErrorKind:                 "",
+		ReportedLitellmVersion:    "1.95.0",
+		ReportedVersionObservedAt: conv.ToPGTimestamptz(finalRecoveryAt),
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		InstanceID:                uuid.NullUUID{UUID: instanceID, Valid: true},
+		ApiKeyID:                  rotatedKey.ID,
+	}))
+	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
+		GuardrailObservedAt:       conv.PtrToPGTimestamptz(nil),
+		OtelObservedAt:            conv.PtrToPGTimestamptz(nil),
+		ErrorObservedAt:           conv.ToPGTimestamptz(relapsedAt.Add(500 * time.Millisecond)),
+		ErrorKind:                 "decode_failure",
+		ReportedLitellmVersion:    "1.93.0",
+		ReportedVersionObservedAt: conv.ToPGTimestamptz(relapsedAt.Add(500 * time.Millisecond)),
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		InstanceID:                uuid.NullUUID{UUID: instanceID, Valid: true},
+		ApiKeyID:                  rotatedKey.ID,
+	}))
+	listedAfterStaleError, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
+	require.NoError(t, err)
+	finalDiagnostics := instanceByName(t, listedAfterStaleError, "with-traffic").Diagnostics
+	require.Equal(t, gen.LiteLLMInstanceHealthStatus("success"), finalDiagnostics.Status)
+	require.Equal(t, "1.95.0", *finalDiagnostics.ReportedLitellmVersion)
 }
 
 func liteLLMTrafficLog(t *testing.T, projectID, instanceID, apiKeyID uuid.UUID, observed time.Time, callID, email, userID, eventURN string) telemetryrepo.InsertTelemetryLogParams {

@@ -1,13 +1,15 @@
 -- name: CreateLiteLLMInstance :one
 INSERT INTO litellm_instances (
-    organization_id
+    id
+  , organization_id
   , project_id
   , api_key_id
   , created_by_user_id
   , name
   , failure_posture
 ) VALUES (
-    @organization_id
+    @id
+  , @organization_id
   , @project_id
   , @api_key_id
   , @created_by_user_id
@@ -90,88 +92,73 @@ RETURNING *;
 -- name: RecordLiteLLMInstanceHealth :exec
 UPDATE litellm_instances
 SET last_guardrail_event_at = CASE
-      WHEN @guardrail_event::boolean
-        AND (
-          last_guardrail_event_at IS NULL
-          OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'
-          OR last_guardrail_event_at <= last_error_at
-        )
-        THEN clock_timestamp()
+      WHEN @guardrail_observed_at::timestamptz IS NOT NULL
+        AND (last_guardrail_event_at IS NULL OR @guardrail_observed_at::timestamptz > last_guardrail_event_at)
+        THEN @guardrail_observed_at::timestamptz
       ELSE last_guardrail_event_at
     END
   , last_otel_event_at = CASE
-      WHEN @otel_event::boolean
-        AND (
-          last_otel_event_at IS NULL
-          OR last_otel_event_at < clock_timestamp() - interval '1 minute'
-          OR last_otel_event_at <= last_error_at
-        )
-        THEN clock_timestamp()
+      WHEN @otel_observed_at::timestamptz IS NOT NULL
+        AND (last_otel_event_at IS NULL OR @otel_observed_at::timestamptz > last_otel_event_at)
+        THEN @otel_observed_at::timestamptz
       ELSE last_otel_event_at
     END
   , last_error_at = CASE
-      WHEN @error_kind::text <> ''
-        AND (
-          last_error_kind IS DISTINCT FROM @error_kind::text
-          OR last_error_at IS NULL
-          OR last_error_at < clock_timestamp() - interval '1 minute'
-          OR last_error_at <= last_guardrail_event_at
-          OR last_error_at <= last_otel_event_at
-        )
-        THEN clock_timestamp()
+      WHEN @error_observed_at::timestamptz IS NOT NULL
+        AND @error_kind::text <> ''
+        AND (last_error_at IS NULL OR @error_observed_at::timestamptz > last_error_at)
+        THEN @error_observed_at::timestamptz
       ELSE last_error_at
     END
   , last_error_kind = CASE
-      WHEN @error_kind::text <> ''
-        AND (
-          last_error_kind IS DISTINCT FROM @error_kind::text
-          OR last_error_at IS NULL
-          OR last_error_at < clock_timestamp() - interval '1 minute'
-          OR last_error_at <= last_guardrail_event_at
-          OR last_error_at <= last_otel_event_at
-        )
+      WHEN @error_observed_at::timestamptz IS NOT NULL
+        AND @error_kind::text <> ''
+        AND (last_error_at IS NULL OR @error_observed_at::timestamptz > last_error_at)
         THEN @error_kind::text
       ELSE last_error_kind
     END
   , reported_litellm_version = CASE
       WHEN @reported_litellm_version::text <> ''
-        AND reported_litellm_version IS DISTINCT FROM @reported_litellm_version::text
+        AND @reported_version_observed_at::timestamptz IS NOT NULL
+        AND @reported_version_observed_at::timestamptz > GREATEST(
+          COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
+          COALESCE(last_otel_event_at, '-infinity'::timestamptz),
+          COALESCE(last_error_at, '-infinity'::timestamptz)
+        )
         THEN @reported_litellm_version::text
       ELSE reported_litellm_version
     END
 WHERE organization_id = @organization_id
   AND project_id = @project_id
-  AND api_key_id = @api_key_id
-  AND deleted IS FALSE
+  AND (
+    (sqlc.narg('instance_id')::uuid IS NOT NULL AND id = sqlc.narg('instance_id')::uuid)
+    OR (
+      sqlc.narg('instance_id')::uuid IS NULL
+      AND api_key_id = @api_key_id
+      AND deleted IS FALSE
+    )
+  )
   AND (
     (
-      @guardrail_event::boolean
-      AND (
-        last_guardrail_event_at IS NULL
-        OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'
-        OR last_guardrail_event_at <= last_error_at
-      )
+      @guardrail_observed_at::timestamptz IS NOT NULL
+      AND (last_guardrail_event_at IS NULL OR @guardrail_observed_at::timestamptz > last_guardrail_event_at)
     )
     OR (
-      @otel_event::boolean
-      AND (
-        last_otel_event_at IS NULL
-        OR last_otel_event_at < clock_timestamp() - interval '1 minute'
-        OR last_otel_event_at <= last_error_at
-      )
+      @otel_observed_at::timestamptz IS NOT NULL
+      AND (last_otel_event_at IS NULL OR @otel_observed_at::timestamptz > last_otel_event_at)
     )
     OR (
-      @error_kind::text <> ''
-      AND (
-        last_error_kind IS DISTINCT FROM @error_kind::text
-        OR last_error_at IS NULL
-        OR last_error_at < clock_timestamp() - interval '1 minute'
-        OR last_error_at <= last_guardrail_event_at
-        OR last_error_at <= last_otel_event_at
-      )
+      @error_observed_at::timestamptz IS NOT NULL
+      AND @error_kind::text <> ''
+      AND (last_error_at IS NULL OR @error_observed_at::timestamptz > last_error_at)
     )
     OR (
       @reported_litellm_version::text <> ''
-      AND reported_litellm_version IS DISTINCT FROM @reported_litellm_version::text
+      AND @reported_version_observed_at::timestamptz IS NOT NULL
+      AND @reported_version_observed_at::timestamptz > GREATEST(
+        COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
+        COALESCE(last_otel_event_at, '-infinity'::timestamptz),
+        COALESCE(last_error_at, '-infinity'::timestamptz)
+      )
     )
   );

@@ -59,17 +59,17 @@ func TestHealthProcessorCoalescesUpdates(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	require.Len(t, writes, 2)
-	require.True(t, writes[0].GuardrailEvent)
-	require.True(t, writes[0].OtelEvent)
-	require.Empty(t, writes[0].ErrorKind)
-	require.Equal(t, "limit_exceeded", writes[1].ErrorKind)
-	require.False(t, writes[1].GuardrailEvent)
-	require.False(t, writes[1].OtelEvent)
-	require.Equal(t, "1.95.0", writes[1].ReportedLitellmVersion)
-	require.Equal(t, "org_test", writes[1].OrganizationID)
-	require.Equal(t, projectID, writes[1].ProjectID)
-	require.Equal(t, apiKeyID, writes[1].ApiKeyID)
+	require.Len(t, writes, 1)
+	require.True(t, writes[0].GuardrailObservedAt.Valid)
+	require.True(t, writes[0].OtelObservedAt.Valid)
+	require.True(t, writes[0].ErrorObservedAt.Valid)
+	require.Equal(t, writes[0].OtelObservedAt.Time, writes[0].ErrorObservedAt.Time)
+	require.True(t, writes[0].ReportedVersionObservedAt.Valid)
+	require.Equal(t, "limit_exceeded", writes[0].ErrorKind)
+	require.Equal(t, "1.95.0", writes[0].ReportedLitellmVersion)
+	require.Equal(t, "org_test", writes[0].OrganizationID)
+	require.Equal(t, projectID, writes[0].ProjectID)
+	require.Equal(t, apiKeyID, writes[0].ApiKeyID)
 }
 
 func TestHealthProcessorRecordsRecoveryAfterError(t *testing.T) {
@@ -95,7 +95,7 @@ func TestHealthProcessorRecordsRecoveryAfterError(t *testing.T) {
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
 	})
-	writes := make([]repo.RecordLiteLLMInstanceHealthParams, 0, 2)
+	writes := make([]repo.RecordLiteLLMInstanceHealthParams, 0, 1)
 	processor := newHealthProcessor(testenv.NewLogger(t), time.Hour, func(_ context.Context, params repo.RecordLiteLLMInstanceHealthParams) error {
 		writes = append(writes, params)
 		return nil
@@ -105,13 +105,13 @@ func TestHealthProcessorRecordsRecoveryAfterError(t *testing.T) {
 	processor.Record(ctx, healthSignalGuardrail, "1.94.0", nil)
 	require.NoError(t, processor.Shutdown(t.Context()))
 
-	require.Len(t, writes, 2)
+	require.Len(t, writes, 1)
 	require.Equal(t, "decode_failure", writes[0].ErrorKind)
-	require.False(t, writes[0].GuardrailEvent)
-	require.False(t, writes[0].OtelEvent)
-	require.Empty(t, writes[1].ErrorKind)
-	require.True(t, writes[1].GuardrailEvent)
-	require.True(t, writes[1].OtelEvent)
+	require.True(t, writes[0].GuardrailObservedAt.Valid)
+	require.True(t, writes[0].OtelObservedAt.Valid)
+	require.True(t, writes[0].ErrorObservedAt.Valid)
+	require.True(t, writes[0].ReportedVersionObservedAt.Valid)
+	require.True(t, writes[0].GuardrailObservedAt.Time.After(writes[0].ErrorObservedAt.Time))
 }
 
 func TestClassifyHealthErrorUsesFixedCategories(t *testing.T) {
@@ -174,6 +174,42 @@ func TestManagedInstanceIngestUpdatesHealth(t *testing.T) {
 		assert.Equal(collect, "decode_failure", instance.LastErrorKind.String)
 		assert.Equal(collect, "1.95.0", instance.ReportedLitellmVersion.String)
 	}, 5*time.Second, 20*time.Millisecond)
+}
+
+func TestHealthProcessorPersistsAcceptedUpdatesAcrossLifecycleChanges(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newRealTestService(t, nil)
+	ti.features.enabled = true
+	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "health-lifecycle", FailurePosture: "fail_closed"})
+	require.NoError(t, err)
+
+	keyScheme := &security.APIKeyScheme{Name: constants.KeySecurityScheme, Scopes: []string{}, RequiredScopes: []string{"hooks"}}
+	projectScheme := &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: []string{}, RequiredScopes: []string{"hooks"}}
+	oldKeyCtx, err := ti.service.APIKeyAuth(t.Context(), created.Key, keyScheme)
+	require.NoError(t, err)
+	oldKeyCtx, err = ti.service.APIKeyAuth(oldKeyCtx, string(created.Instance.Project.Slug), projectScheme)
+	require.NoError(t, err)
+	ti.service.health.Record(oldKeyCtx, healthSignalGuardrail, "1.94.0", nil)
+
+	rotated, err := ti.service.RotateInstanceKey(ctx, &gen.RotateInstanceKeyPayload{ID: created.Instance.ID})
+	require.NoError(t, err)
+	newKeyCtx, err := ti.service.APIKeyAuth(t.Context(), rotated.Key, keyScheme)
+	require.NoError(t, err)
+	newKeyCtx, err = ti.service.APIKeyAuth(newKeyCtx, string(created.Instance.Project.Slug), projectScheme)
+	require.NoError(t, err)
+	ti.service.health.Record(newKeyCtx, healthSignalOTEL, "1.95.0", oops.C(oops.CodeBadRequest))
+	require.NoError(t, ti.service.RevokeInstance(ctx, &gen.RevokeInstancePayload{ID: created.Instance.ID}))
+	require.NoError(t, ti.service.health.Shutdown(t.Context()))
+
+	listed, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
+	require.NoError(t, err)
+	instance := instanceByName(t, listed, "health-lifecycle")
+	require.Equal(t, gen.LiteLLMInstanceHealthStatus("failed"), instance.Diagnostics.Status)
+	require.NotNil(t, instance.Diagnostics.LastGuardrailEventAt)
+	require.NotNil(t, instance.Diagnostics.LastOtelEventAt)
+	require.NotNil(t, instance.Diagnostics.LastErrorAt)
+	require.Equal(t, "1.95.0", *instance.Diagnostics.ReportedLitellmVersion)
 }
 
 func TestReportedVersionsIgnoreOtherOTLPServices(t *testing.T) {

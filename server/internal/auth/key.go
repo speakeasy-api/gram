@@ -56,6 +56,9 @@ const (
 // Checking the full shape preserves last-access tracking for historical user
 // keys that happened to use the prefix before it was reserved.
 func IsLiteLLMAPIKeyName(name string) bool {
+	if _, ok := LiteLLMInstanceIDFromAPIKeyName(name); ok {
+		return true
+	}
 	suffix, ok := strings.CutPrefix(name, LiteLLMAPIKeyNamePrefix)
 	if !ok {
 		return false
@@ -75,6 +78,31 @@ func IsLiteLLMAPIKeyName(name string) bool {
 		}
 	}
 	return true
+}
+
+// LiteLLMInstanceIDFromAPIKeyName returns the stable instance ID encoded in
+// managed keys minted after diagnostics attribution was introduced.
+func LiteLLMInstanceIDFromAPIKeyName(name string) (uuid.UUID, bool) {
+	suffix, ok := strings.CutPrefix(name, LiteLLMAPIKeyNamePrefix)
+	if !ok {
+		return uuid.Nil, false
+	}
+	parts := strings.Split(suffix, "-")
+	if len(parts) != 3 || len(parts[0]) != 32 || len(parts[1]) != 13 || len(parts[2]) != 8 {
+		return uuid.Nil, false
+	}
+	for _, char := range parts[1] {
+		if char < '0' || char > '9' {
+			return uuid.Nil, false
+		}
+	}
+	for _, char := range parts[2] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return uuid.Nil, false
+		}
+	}
+	instanceID, err := uuid.Parse(parts[0])
+	return instanceID, err == nil
 }
 
 func GenerateAPIKeyMaterial(keyPrefix string) (plaintext, keyHash, displayPrefix string, err error) {

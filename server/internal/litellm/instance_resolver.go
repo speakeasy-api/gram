@@ -127,7 +127,13 @@ func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectI
 }
 
 func (r *InstanceResolver) Remember(organizationID string, projectID uuid.UUID, apiKeyID string, instanceID uuid.UUID) {
-	r.cache.Add(instanceResolverCacheKey(organizationID, projectID.String(), apiKeyID), instanceID)
+	cacheKey := instanceResolverCacheKey(organizationID, projectID.String(), apiKeyID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if gen, ok := r.generations[cacheKey]; ok {
+		gen.generation++
+	}
+	r.cache.Add(cacheKey, instanceID)
 }
 
 func (r *InstanceResolver) Forget(organizationID string, projectID uuid.UUID, apiKeyID string) {

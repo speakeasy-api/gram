@@ -11,6 +11,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -301,6 +303,9 @@ func enrichLiteLLMInstanceAttribution(ctx context.Context, resolver *InstanceRes
 	defer cancel()
 	resolved := make(map[string]resolvedLiteLLMInstance)
 	for i := range rows {
+		if _, ok := rows[i].Attributes[attr.LiteLLMInstanceIDKey]; ok {
+			continue
+		}
 		apiKeyID, _ := rows[i].Attributes[attr.APIKeyIDKey].(string)
 		if apiKeyID == "" {
 			continue
@@ -320,6 +325,19 @@ func enrichLiteLLMInstanceAttribution(ctx context.Context, resolver *InstanceRes
 		if instance.found {
 			rows[i].Attributes[attr.LiteLLMInstanceIDKey] = instance.id
 		}
+	}
+}
+
+func enrichAcceptedTelemetryAttribution(ctx context.Context, resolver *InstanceResolver, authCtx *contextvalues.AuthContext, rows []telemetry.LogParams) {
+	instanceID, encoded := auth.LiteLLMInstanceIDFromAPIKeyName(authCtx.APIKeyName)
+	for i := range rows {
+		rows[i].Attributes[attr.APIKeyIDKey] = authCtx.APIKeyID
+		if encoded {
+			rows[i].Attributes[attr.LiteLLMInstanceIDKey] = instanceID.String()
+		}
+	}
+	if !encoded && auth.IsLiteLLMAPIKeyName(authCtx.APIKeyName) {
+		enrichLiteLLMInstanceAttribution(ctx, resolver, rows)
 	}
 }
 

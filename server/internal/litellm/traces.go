@@ -18,7 +18,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -269,9 +268,7 @@ func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequ
 	if len(params) == 0 {
 		return nil
 	}
-	for i := range params {
-		params[i].Attributes[attr.APIKeyIDKey] = authCtx.APIKeyID
-	}
+	enrichAcceptedTelemetryAttribution(ctx, s.instances, authCtx, params)
 	s.traces.Enqueue(ctx, params)
 	return nil
 }

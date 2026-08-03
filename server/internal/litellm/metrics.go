@@ -168,9 +168,7 @@ func (s *Service) ingestMetricExport(ctx context.Context, request *collectorv1.E
 	if len(params) == 0 {
 		return nil
 	}
-	for i := range params {
-		params[i].Attributes[attr.APIKeyIDKey] = authCtx.APIKeyID
-	}
+	enrichAcceptedTelemetryAttribution(ctx, s.instances, authCtx, params)
 	s.metrics.Enqueue(ctx, params)
 	return nil
 }

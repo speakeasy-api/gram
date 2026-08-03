@@ -13,7 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -45,14 +47,16 @@ type healthInstanceKey struct {
 	organizationID string
 	projectID      uuid.UUID
 	apiKeyID       uuid.UUID
+	instanceID     uuid.UUID
 }
 
 type healthUpdate struct {
-	guardrailEvent  bool
-	otelEvent       bool
-	errorKind       healthErrorKind
-	reportedVersion string
-	latestFailed    bool
+	guardrailObservedAt time.Time
+	otelObservedAt      time.Time
+	errorObservedAt     time.Time
+	errorKind           healthErrorKind
+	reportedVersionAt   time.Time
+	reportedVersion     string
 }
 
 type healthWriteFunc func(context.Context, repo.RecordLiteLLMInstanceHealthParams) error
@@ -149,19 +153,34 @@ func (p *HealthProcessor) Record(ctx context.Context, signal healthSignal, versi
 	if len(version) > maxReportedVersion {
 		version = ""
 	}
+	observedAt := time.Now().UTC()
 	update := healthUpdate{
-		guardrailEvent:  signal == healthSignalGuardrail,
-		otelEvent:       signal == healthSignalOTEL,
-		errorKind:       classifyHealthError(observedErr),
-		reportedVersion: version,
-		latestFailed:    false,
+		guardrailObservedAt: time.Time{},
+		otelObservedAt:      time.Time{},
+		errorObservedAt:     time.Time{},
+		errorKind:           classifyHealthError(observedErr),
+		reportedVersionAt:   time.Time{},
+		reportedVersion:     version,
 	}
-	update.latestFailed = update.errorKind != healthErrorNone
+	if signal == healthSignalGuardrail {
+		update.guardrailObservedAt = observedAt
+	}
+	if signal == healthSignalOTEL {
+		update.otelObservedAt = observedAt
+	}
+	if update.errorKind != healthErrorNone {
+		update.errorObservedAt = observedAt
+	}
+	if update.reportedVersion != "" {
+		update.reportedVersionAt = observedAt
+	}
 	key := healthInstanceKey{
 		organizationID: authCtx.ActiveOrganizationID,
 		projectID:      *authCtx.ProjectID,
 		apiKeyID:       apiKeyID,
+		instanceID:     uuid.Nil,
 	}
+	key.instanceID, _ = auth.LiteLLMInstanceIDFromAPIKeyName(authCtx.APIKeyName)
 
 	p.mu.Lock()
 	if p.stopping {
@@ -169,16 +188,19 @@ func (p *HealthProcessor) Record(ctx context.Context, signal healthSignal, versi
 		return
 	}
 	current := p.pending[key]
-	current.guardrailEvent = current.guardrailEvent || update.guardrailEvent
-	current.otelEvent = current.otelEvent || update.otelEvent
-	if update.errorKind != healthErrorNone {
+	if update.guardrailObservedAt.After(current.guardrailObservedAt) {
+		current.guardrailObservedAt = update.guardrailObservedAt
+	}
+	if update.otelObservedAt.After(current.otelObservedAt) {
+		current.otelObservedAt = update.otelObservedAt
+	}
+	if update.errorObservedAt.After(current.errorObservedAt) {
+		current.errorObservedAt = update.errorObservedAt
 		current.errorKind = update.errorKind
 	}
-	if update.reportedVersion != "" {
+	if update.reportedVersionAt.After(current.reportedVersionAt) {
+		current.reportedVersionAt = update.reportedVersionAt
 		current.reportedVersion = update.reportedVersion
-	}
-	if update.guardrailEvent || update.otelEvent || update.errorKind != healthErrorNone {
-		current.latestFailed = update.latestFailed
 	}
 	p.pending[key] = current
 	p.mu.Unlock()
@@ -247,39 +269,25 @@ func (p *HealthProcessor) flush(ctx context.Context) {
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), healthWriteTimeout)
 	defer cancel()
 	for key, update := range pending {
-		params := repo.RecordLiteLLMInstanceHealthParams{
-			GuardrailEvent:         update.guardrailEvent,
-			OtelEvent:              update.otelEvent,
-			ErrorKind:              string(update.errorKind),
-			ReportedLitellmVersion: update.reportedVersion,
-			OrganizationID:         key.organizationID,
-			ProjectID:              key.projectID,
-			ApiKeyID:               key.apiKeyID,
+		err := p.write(writeCtx, repo.RecordLiteLLMInstanceHealthParams{
+			GuardrailObservedAt:       conv.PtrToPGTimestamptz(conv.PtrEmpty(update.guardrailObservedAt)),
+			OtelObservedAt:            conv.PtrToPGTimestamptz(conv.PtrEmpty(update.otelObservedAt)),
+			ErrorObservedAt:           conv.PtrToPGTimestamptz(conv.PtrEmpty(update.errorObservedAt)),
+			ErrorKind:                 string(update.errorKind),
+			ReportedVersionObservedAt: conv.PtrToPGTimestamptz(conv.PtrEmpty(update.reportedVersionAt)),
+			ReportedLitellmVersion:    update.reportedVersion,
+			OrganizationID:            key.organizationID,
+			ProjectID:                 key.projectID,
+			InstanceID:                uuid.NullUUID{UUID: key.instanceID, Valid: key.instanceID != uuid.Nil},
+			ApiKeyID:                  key.apiKeyID,
+		})
+		if err != nil {
+			p.logger.WarnContext(writeCtx, "record LiteLLM instance health",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(key.organizationID),
+				attr.SlogProjectID(key.projectID.String()),
+				attr.SlogAPIKeyID(key.apiKeyID.String()),
+			)
 		}
-		write := func(params repo.RecordLiteLLMInstanceHealthParams) {
-			if err := p.write(writeCtx, params); err != nil {
-				p.logger.WarnContext(writeCtx, "record LiteLLM instance health",
-					attr.SlogError(err),
-					attr.SlogOrganizationID(key.organizationID),
-					attr.SlogProjectID(key.projectID.String()),
-					attr.SlogAPIKeyID(key.apiKeyID.String()),
-				)
-			}
-		}
-		if update.errorKind != healthErrorNone && (update.guardrailEvent || update.otelEvent) {
-			first := params
-			first.ReportedLitellmVersion = ""
-			if update.latestFailed {
-				first.ErrorKind = ""
-				params.GuardrailEvent = false
-				params.OtelEvent = false
-			} else {
-				first.GuardrailEvent = false
-				first.OtelEvent = false
-				params.ErrorKind = ""
-			}
-			write(first)
-		}
-		write(params)
 	}
 }
