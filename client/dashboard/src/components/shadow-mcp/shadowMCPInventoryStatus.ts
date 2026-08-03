@@ -4,6 +4,7 @@ import { type BadgeProps } from "@/components/ui/Badge";
 
 export type ShadowMCPPolicyState =
   | "blocking"
+  | "warning"
   | "flagging"
   | "none"
   | "unavailable";
@@ -56,6 +57,10 @@ export function shadowMCPPolicyState(
 
   if (shadowPolicies.some((policy) => policy.action === "block")) {
     return "blocking";
+  }
+
+  if (shadowPolicies.some((policy) => policy.action === "warn")) {
+    return "warning";
   }
 
   if (shadowPolicies.some((policy) => policy.action === "flag")) {
