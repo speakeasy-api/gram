@@ -16,12 +16,12 @@ export const ENV_DOCS: readonly EnvDoc[] = [
   {
     name: "GRAM_IDP_BASE_URL",
     description:
-      "Base URL for OIDC auth (token exchange, userinfo). Typically points at the dev-idp's /oauth2 endpoint.",
+      "Base URL for OIDC auth. Points at the dev-idp /oauth2-1 authorization server.",
   },
   {
     name: "WORKOS_API_URL",
     description:
-      "Base URL the Gram server uses to call WorkOS REST API. Drives mode detection: when this starts with $GRAM_DEVIDP_EXTERNAL_URL/mock-workos, the dashboard reports mock-workos mode.",
+      "Base URL the Gram server uses to call the WorkOS REST API. Points at the dev-idp /workos surface in both backends; GRAM_DEVIDP_BACKEND decides what serves it.",
   },
   {
     name: "GRAM_DEVIDP_EXTERNAL_URL",
@@ -31,7 +31,7 @@ export const ENV_DOCS: readonly EnvDoc[] = [
   {
     name: "GRAM_IDP_CLIENT_SECRET",
     description:
-      "WorkOS API key. In mock-workos mode any value works; in workos mode must be a real sk_test_... key for the live /workos passthrough.",
+      "WorkOS API key. The local backend accepts any value; the workos backend needs a real sk_test_... key for the passthrough.",
     sensitive: true,
   },
 ] as const;
