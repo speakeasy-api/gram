@@ -49,6 +49,9 @@ func TestInstanceResolverForgetWinsOverInflightResolution(t *testing.T) {
 	cached, ok := resolver.cache.Get(cacheKey)
 	require.True(t, ok)
 	require.Equal(t, uuid.Nil, cached)
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	require.Empty(t, resolver.generations)
 }
 
 func TestInstanceResolverForgetLeavesOtherKeysInflight(t *testing.T) {
@@ -88,6 +91,9 @@ func TestInstanceResolverForgetLeavesOtherKeysInflight(t *testing.T) {
 	cached, ok := resolver.cache.Get(cacheKey)
 	require.True(t, ok)
 	require.Equal(t, instanceID, cached)
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	require.Empty(t, resolver.generations)
 }
 
 func TestInstanceAttributionStopsAfterDeadline(t *testing.T) {

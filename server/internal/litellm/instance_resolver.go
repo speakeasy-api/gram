@@ -32,9 +32,15 @@ type InstanceResolver struct {
 	group  singleflight.Group
 	mu     sync.Mutex
 	// generations invalidates in-flight fills per cache key, so forgetting one
-	// key never discards concurrent resolutions for unrelated keys.
-	generations map[string]uint64
+	// key never discards concurrent resolutions for unrelated keys. Entries
+	// exist only while a fill is in flight, keeping the map bounded.
+	generations map[string]*fillGeneration
 	lookup      func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error)
+}
+
+type fillGeneration struct {
+	generation uint64
+	inflight   int
 }
 
 func NewInstanceResolver(logger *slog.Logger, db *pgxpool.Pool) *InstanceResolver {
@@ -43,7 +49,7 @@ func NewInstanceResolver(logger *slog.Logger, db *pgxpool.Pool) *InstanceResolve
 		cache:       lru.NewLRU[string, uuid.UUID](instanceResolverCacheSize, nil, instanceResolverCacheTTL),
 		group:       singleflight.Group{},
 		mu:          sync.Mutex{},
-		generations: make(map[string]uint64),
+		generations: make(map[string]*fillGeneration),
 		lookup:      nil,
 	}
 	resolver.lookup = func(ctx context.Context, params repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
@@ -70,8 +76,22 @@ func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectI
 			return instanceID, nil
 		}
 		r.mu.Lock()
-		generation := r.generations[cacheKey]
+		gen := r.generations[cacheKey]
+		if gen == nil {
+			gen = &fillGeneration{generation: 0, inflight: 0}
+			r.generations[cacheKey] = gen
+		}
+		gen.inflight++
+		generation := gen.generation
 		r.mu.Unlock()
+		defer func() {
+			r.mu.Lock()
+			gen.inflight--
+			if gen.inflight == 0 {
+				delete(r.generations, cacheKey)
+			}
+			r.mu.Unlock()
+		}()
 		instanceID, queryErr := r.lookup(ctx, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams{
 			OrganizationID: organizationID,
 			ProjectID:      projectUUID,
@@ -87,7 +107,7 @@ func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectI
 		if cached, ok := r.cache.Get(cacheKey); ok {
 			return cached, nil
 		}
-		if generation != r.generations[cacheKey] {
+		if generation != gen.generation {
 			return uuid.Nil, nil
 		}
 		r.cache.Add(cacheKey, instanceID)
@@ -114,7 +134,9 @@ func (r *InstanceResolver) Forget(organizationID string, projectID uuid.UUID, ap
 	cacheKey := instanceResolverCacheKey(organizationID, projectID.String(), apiKeyID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.generations[cacheKey]++
+	if gen, ok := r.generations[cacheKey]; ok {
+		gen.generation++
+	}
 	r.cache.Add(cacheKey, uuid.Nil)
 }
 
