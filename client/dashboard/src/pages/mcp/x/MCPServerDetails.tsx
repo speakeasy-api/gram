@@ -114,6 +114,9 @@ export default function MCPServerDetails(): JSX.Element {
           (mcpServer.unproxiedMcpServerId ? (
             <UnproxiedMcpOverviewTab
               unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
+              mcpServerId={mcpServer.id}
+              mcpServerSlug={mcpServer.slug ?? ""}
+              mcpServerName={mcpServer.name ?? "MCP Server"}
             />
           ) : (
             mcpServer.slug && (
@@ -315,6 +318,18 @@ export function MCPServerStatusDropdown({
   const currentDotClass =
     options.find((option) => option.value === server.visibility)?.dotClass ??
     "bg-green-400";
+
+  // Unproxied servers have no Gram-hosted endpoint for disabled/private to
+  // gate — the vendor's own server is reachable regardless of this setting —
+  // so there's only one honest state to show, and no dropdown to open.
+  if (server.unproxiedMcpServerId) {
+    return (
+      <span className="text-foreground border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-green-400" />
+        Public
+      </span>
+    );
+  }
 
   return (
     <DropdownMenu>

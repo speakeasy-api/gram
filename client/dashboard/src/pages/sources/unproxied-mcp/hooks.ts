@@ -44,10 +44,11 @@ export function useCreateUnproxiedMcpSource(): UseMutationResult<
             // dashboard shows for the source.
             name: formatRemoteMcpDisplay(unproxiedMcpServer),
             unproxiedMcpServerId: unproxiedMcpServer.id,
-            // No further configuration step exists for an unproxied
-            // server (no OAuth, no endpoint to stage), so it can go live
-            // immediately rather than parking disabled.
-            visibility: "private",
+            // Unproxied servers have no Gram-hosted endpoint, so
+            // disabled/private/public gates nothing Gram actually serves —
+            // the vendor's own server is reachable regardless. "public" is
+            // the only value that isn't misleading.
+            visibility: "public",
           },
         });
       } catch (linkError) {
