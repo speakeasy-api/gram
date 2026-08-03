@@ -1,4 +1,4 @@
-import { useAuiState, useThreadRuntime } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 import { useMemo, type FC, type PropsWithChildren } from "react";
 import { useElements } from "@/elements/hooks/useElements";
 import { useToolActivitySummary } from "@/elements/hooks/useToolActivitySummary";
@@ -80,13 +80,13 @@ export const ToolGroup: FC<
     [toolCallsJson],
   );
 
-  // The prompt that initiated this turn. This ToolGroup instance belongs to a
-  // single assistant message, and the user turn is already in the thread before
-  // the tools stream in, so reading it once (per stable runtime) is sufficient.
-  const runtime = useThreadRuntime();
-  const userMessage = useMemo(
-    () => latestUserText(runtime.getState().messages),
-    [runtime],
+  // The prompt that initiated this turn. Read from thread state rather than
+  // memoized on the runtime identity: the runtime object is stable for the
+  // thread's whole life, so a memo keyed on it never re-runs and a group that
+  // mounted before the user message was in state would keep an empty prompt —
+  // leaving the summary with nothing to ground itself in.
+  const userMessage = useAuiState(({ thread }) =>
+    latestUserText(thread.messages),
   );
 
   // A single tool with a custom component renders directly and never shows this
@@ -116,7 +116,10 @@ export const ToolGroup: FC<
     <div className="my-4 w-full max-w-xl">
       <ToolUIGroup
         title={label}
-        status={anyMessagePartsAreRunning ? "running" : "complete"}
+        // A completion check next to a shimmering, present-tense, still-changing
+        // label contradicts itself, so the group stays "running" until its label
+        // is final — the tools finishing is not the whole of the group settling.
+        status={anyMessagePartsAreRunning || pending ? "running" : "complete"}
         // Shimmer while the tools run and while the label is still settling (an
         // enriched summary in flight after completion / on a material change).
         titleShimmer={anyMessagePartsAreRunning || pending}

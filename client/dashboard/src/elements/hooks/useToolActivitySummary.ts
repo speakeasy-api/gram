@@ -97,16 +97,6 @@ export function useToolActivitySummary({
     [toolCalls, inProgress, userMessage],
   );
 
-  const heuristic = useMemo(
-    () =>
-      describeToolActivity(
-        toolCalls as HeuristicToolCall[],
-        inProgress,
-        userMessage,
-      ),
-    [toolCalls, inProgress, userMessage],
-  );
-
   const [enrichedByKey, setEnrichedByKey] = useState<Record<string, string>>(
     {},
   );
@@ -239,6 +229,15 @@ export function useToolActivitySummary({
 
   const enrichedLabel = current ?? retained;
   if (!summarizer || !enrichedLabel) {
+    // While an enriched label is still coming, describe the activity in the
+    // present tense even though the tools have finished: a past-tense phrase
+    // next to a completion check reads as the final answer, and then changes
+    // under the user when the summary lands.
+    const heuristic = describeToolActivity(
+      toolCalls as HeuristicToolCall[],
+      inProgress || pending,
+      userMessage,
+    );
     return { label: heuristic, enriched: false, pending };
   }
   return { label: enrichedLabel, enriched: true, pending };

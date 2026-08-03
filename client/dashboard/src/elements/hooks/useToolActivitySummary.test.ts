@@ -150,13 +150,18 @@ describe("useToolActivitySummary", () => {
     await flushSummary();
     expect(result.current.label).toBe("Searching the web for pricing");
 
-    // On completion the present-tense label must not linger; the past-tense
-    // heuristic stands in immediately, and stays when the summary fails.
+    // On completion the present-tense *summary* must not linger. The heuristic
+    // stands in, and stays present-tense while the completion summary is still
+    // pending — a past-tense phrase next to the completion check would read as
+    // final and then change under the user.
     rerender({ toolCalls: [{ name: "search_web" }], inProgress: false });
-    expect(result.current.label).toBe("Used Search Web");
+    expect(result.current.label).toBe("Calling Search Web…");
+    expect(result.current.pending).toBe(true);
 
+    // Once the attempt settles (here: failed), the label is final and past tense.
     await flushSummary();
     expect(result.current.label).toBe("Used Search Web");
+    expect(result.current.pending).toBe(false);
   });
 
   it("resolves to the heuristic when the summarizer hangs", async () => {
