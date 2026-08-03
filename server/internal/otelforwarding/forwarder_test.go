@@ -125,6 +125,6 @@ func TestForwarderSendSuccessNoWarning(t *testing.T) {
 func TestMiddlewareDoesNotInterceptLiteLLMTraceIngest(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", http.NoBody)
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.otel/v1/traces", http.NoBody)
 	require.False(t, shouldIntercept(req))
 }

@@ -90,7 +90,7 @@ func mountedTraceMux(service *Service) http.Handler {
 
 func serveTraceRequest(t *testing.T, mux http.Handler, body []byte, contentType, contentEncoding, key, project string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.otel/v1/traces", bytes.NewReader(body))
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -266,7 +266,7 @@ func TestTraceHTTPValidatesMediaEncodingAndBodyLimits(t *testing.T) {
 	require.Error(t, preflightOTLPProtobuf(malformedProtobuf))
 	require.Equal(t, http.StatusBadRequest, serveTraceRequest(t, mux, malformedProtobuf, "application/x-protobuf", "", "valid-key", "project-test").Code)
 
-	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", bytes.NewReader(valid))
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.otel/v1/traces", bytes.NewReader(valid))
 	req.ContentLength = maxTraceBodyBytes + 100
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Gram-Key", "valid-key")
@@ -285,7 +285,7 @@ func TestTraceHTTPRejectsRepeatedContentHeaders(t *testing.T) {
 	mux := mountedTraceMux(service)
 	for _, header := range []string{"Content-Type", "Content-Encoding"} {
 		reader := &trackingReader{}
-		req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", reader)
+		req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.otel/v1/traces", reader)
 		req.Header.Set(constants.APIKeyHeader, "valid-key")
 		req.Header.Set(constants.ProjectHeader, "project-test")
 		if header == "Content-Encoding" {
@@ -307,7 +307,7 @@ func TestTraceHTTPRejectsEncodingBeforeReadingBody(t *testing.T) {
 	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
 	service, _ := newTraceTestService(t, authorizer, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
 	reader := &trackingReader{}
-	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/traces", reader)
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.otel/v1/traces", reader)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "br")
 	req.Header.Set(constants.APIKeyHeader, "valid-key")

@@ -105,7 +105,10 @@ var _ = Service("litellm", func() {
 		Result(Empty)
 
 		HTTP(func() {
-			POST("/rpc/litellm.otel/v1/traces") //nolint:glint // LiteLLM uses the standard OTLP HTTP path suffix
+			// Served on the canonical hooks.otel base so every OTLP signal shares
+			// one customer-facing endpoint; provider semantics resolve from the
+			// API key, not the route.
+			POST("/rpc/hooks.otel/v1/traces") //nolint:glint // OTLP ingestion path must match OpenTelemetry conventions
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)

@@ -14,5 +14,5 @@ func IngestLitellmPath() string {
 
 // TracesLitellmPath returns the URL path to the litellm service traces HTTP endpoint.
 func TracesLitellmPath() string {
-	return "/rpc/litellm.otel/v1/traces"
+	return "/rpc/hooks.otel/v1/traces"
 }

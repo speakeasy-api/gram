@@ -51,7 +51,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Ingest", "POST", "/rpc/litellm.ingest/beta/litellm_basic_guardrail_api"},
-			{"Traces", "POST", "/rpc/litellm.otel/v1/traces"},
+			{"Traces", "POST", "/rpc/hooks.otel/v1/traces"},
 		},
 		Ingest: NewIngestHandler(e.Ingest, mux, decoder, encoder, errhandler, formatter),
 		Traces: NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
@@ -143,7 +143,7 @@ func MountTracesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/litellm.otel/v1/traces", f)
+	mux.Handle("POST", "/rpc/hooks.otel/v1/traces", f)
 }
 
 // NewTracesHandler creates a HTTP handler which loads the HTTP request and
