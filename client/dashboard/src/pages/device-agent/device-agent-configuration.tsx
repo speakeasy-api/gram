@@ -1,22 +1,22 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
+import { ErrorAlert } from "@/components/ui/Alert";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+} from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { DeviceAgentConfiguration } from "@gram/client/models/components/deviceagentconfiguration.js";
 import {
@@ -24,7 +24,8 @@ import {
   useDeviceAgentConfiguration,
 } from "@gram/client/react-query/deviceAgentConfiguration.js";
 import { useUpdateDeviceAgentConfigurationMutation } from "@gram/client/react-query/updateDeviceAgentConfiguration.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -271,12 +272,12 @@ function DeviceAgentConfigurationForm({
     <div className="border-border bg-card max-w-2xl rounded-lg border p-6">
       <Stack gap={6}>
         <div>
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             Managed tools
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Choose where the agent enforces each tool&apos;s configuration.
-          </Type>
+          </Text>
         </div>
 
         <div className="divide-border divide-y">
@@ -286,12 +287,12 @@ function DeviceAgentConfigurationForm({
               className="flex items-center justify-between gap-6 py-4 first:pt-0 last:pb-0"
             >
               <div>
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   {platform.label}
-                </Type>
-                <Type muted small>
+                </Text>
+                <Text muted small>
                   {platform.description}
-                </Type>
+                </Text>
               </div>
               <Select
                 value={platformLayers[platform.key]}
@@ -419,21 +420,21 @@ function DeviceAgentConfigurationForm({
         </Field>
 
         <div className="bg-muted/40 rounded-md border p-4">
-          <Type muted small>
+          <Text muted small>
             After the first successful fetch, these settings override the same
             non-secret fields from local and MDM configuration. Device identity
             and credentials always remain local. If Gram is temporarily
             unreachable, agents use their last-known remote configuration; an
             agent without a cached remote configuration falls back to local
             settings.
-          </Type>
+          </Text>
         </div>
 
         {!configuration.isConfigured && (
-          <Type muted small>
+          <Text muted small>
             No remote configuration is active yet. Saving enables this layer for
             enrolled agents.
-          </Type>
+          </Text>
         )}
 
         {saveError && (
