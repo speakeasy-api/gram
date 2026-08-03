@@ -773,6 +773,11 @@ CREATE TABLE IF NOT EXISTS litellm_instances (
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 255),
   failure_posture TEXT NOT NULL DEFAULT 'fail_closed',
+  last_guardrail_event_at timestamptz,
+  last_otel_event_at timestamptz,
+  last_error_at timestamptz,
+  last_error_kind TEXT,
+  reported_litellm_version TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

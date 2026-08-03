@@ -1,4 +1,4 @@
-h1:b22Bxp8AksgVDwFaC//6tsvNhYj5h5UIUK34EJWzYfQ=
+h1:EO6x06WunY8QZ2eRYMdlGh4vYq1hy0PfKp+NETUJNZI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -311,3 +311,4 @@ h1:b22Bxp8AksgVDwFaC//6tsvNhYj5h5UIUK34EJWzYfQ=
 20260730125106_custom-domain-root-mcp-and-challenge.sql h1:RBOpyM/n3XVpvcfMBEhhY2FojQ9DYg4UwVuFtqTYzno=
 20260730222817_business-memories.sql h1:yk1Da+musAggroaqFiaKhRYD9cn09Y1i2V9DCrHu03M=
 20260802223152_litellm-instances.sql h1:1k6qyBS3+uHtVGycthurSiHgU/6LSk/R4j7MHiOVRAs=
+20260803094011_litellm-instance-health.sql h1:rvluODLQEi2RauaXCoJO2t+o08UrYqAwvGfRWQfos5Y=
