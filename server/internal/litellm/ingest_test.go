@@ -147,13 +147,18 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 	t.Helper()
 	tracerProvider := testenv.NewTracerProvider(t)
 	return &Service{
-		tracer:  tracerProvider.Tracer("test"),
-		logger:  testenv.NewLogger(t),
-		auth:    fixedAuthorizer{authCtx: authCtx},
-		hooks:   ingester,
-		calls:   callcache.New(newMemoryCache()),
-		traces:  newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
-		metrics: nil,
+		tracer:    tracerProvider.Tracer("test"),
+		logger:    testenv.NewLogger(t),
+		auth:      fixedAuthorizer{authCtx: authCtx},
+		hooks:     ingester,
+		calls:     callcache.New(newMemoryCache()),
+		traces:    newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
+		metrics:   nil,
+		db:        nil,
+		authz:     nil,
+		features:  nil,
+		audit:     nil,
+		keyPrefix: "",
 	}
 }
 

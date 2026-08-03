@@ -290,6 +290,20 @@ func TestKeysService_CreateKey_RejectsReservedPluginPrefix(t *testing.T) {
 	require.Contains(t, err.Error(), "reserved")
 }
 
+func TestKeysService_CreateKey_RejectsReservedLiteLLMPrefix(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestKeysService(t)
+
+	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+		SessionToken: nil,
+		Name:         "litellm-sneaky-" + randstr(6),
+		Scopes:       []string{"hooks"},
+	})
+	require.Error(t, err)
+	require.Nil(t, key)
+	require.Contains(t, err.Error(), "reserved")
+}
+
 func TestKeysService_CreateKey_AuditLogMetadata(t *testing.T) {
 	t.Parallel()
 

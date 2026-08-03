@@ -145,3 +145,19 @@ func TestIsOrgWidePluginHooksAPIKey(t *testing.T) {
 		})
 	}
 }
+
+func TestIsLiteLLMAPIKeyName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		"litellm-1785700000000-1234abcd": true,
+		"litellm-personal":               false,
+		"litellm-178570000000-1234abcd":  false,
+		"litellm-1785700000000-1234ABCd": false,
+		"litellm-1785700000000-1234abc":  false,
+		"other-1785700000000-1234abcd":   false,
+	}
+	for name, expected := range tests {
+		require.Equal(t, expected, IsLiteLLMAPIKeyName(name), name)
+	}
+}

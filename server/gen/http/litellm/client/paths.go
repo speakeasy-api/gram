@@ -7,6 +7,26 @@
 
 package client
 
+// CreateInstanceLitellmPath returns the URL path to the litellm service createInstance HTTP endpoint.
+func CreateInstanceLitellmPath() string {
+	return "/rpc/litellm.createInstance"
+}
+
+// ListInstancesLitellmPath returns the URL path to the litellm service listInstances HTTP endpoint.
+func ListInstancesLitellmPath() string {
+	return "/rpc/litellm.listInstances"
+}
+
+// RotateInstanceKeyLitellmPath returns the URL path to the litellm service rotateInstanceKey HTTP endpoint.
+func RotateInstanceKeyLitellmPath() string {
+	return "/rpc/litellm.rotateInstanceKey"
+}
+
+// RevokeInstanceLitellmPath returns the URL path to the litellm service revokeInstance HTTP endpoint.
+func RevokeInstanceLitellmPath() string {
+	return "/rpc/litellm.revokeInstance"
+}
+
 // IngestLitellmPath returns the URL path to the litellm service ingest HTTP endpoint.
 func IngestLitellmPath() string {
 	return "/rpc/litellm.ingest/beta/litellm_basic_guardrail_api"

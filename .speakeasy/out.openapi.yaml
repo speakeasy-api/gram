@@ -17933,6 +17933,102 @@ paths:
       x-speakeasy-name-override: validate
       x-speakeasy-react-hook:
         name: ValidateAPIKey
+  /rpc/litellm.createInstance:
+    post:
+      description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once.
+      operationId: createLiteLLMInstance
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInstanceRequestBody'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LitellmInstanceKeyResult'
+          description: Created response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: createInstance litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: createInstance
+      x-speakeasy-react-hook:
+        name: CreateLiteLLMInstance
   /rpc/litellm.ingest/beta/litellm_basic_guardrail_api:
     post:
       description: Evaluates and captures a LiteLLM model request before it reaches the provider.
@@ -18029,6 +18125,285 @@ paths:
       x-speakeasy-name-override: ingestGuardrail
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/litellm.listInstances:
+    get:
+      description: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.
+      operationId: listLiteLLMInstances
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInstancesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listInstances litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: listInstances
+      x-speakeasy-react-hook:
+        name: LiteLLMInstances
+  /rpc/litellm.revokeInstance:
+    delete:
+      description: Revoke a LiteLLM integration and immediately invalidate its active key.
+      operationId: revokeLiteLLMInstance
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: revokeInstance litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: revokeInstance
+      x-speakeasy-react-hook:
+        name: RevokeLiteLLMInstance
+  /rpc/litellm.rotateInstanceKey:
+    post:
+      description: Atomically replace a LiteLLM integration key and return the new plaintext value once.
+      operationId: rotateLiteLLMInstanceKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LitellmInstanceKeyResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: rotateInstanceKey litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: rotateInstanceKey
+      x-speakeasy-react-hook:
+        name: RotateLiteLLMInstanceKey
   /rpc/mcpEndpoints.checkSlugAvailability:
     get:
       description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -53149,6 +53524,19 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
+    CreateInstanceRequestBody:
+      type: object
+      properties:
+        failure_posture:
+          type: string
+          enum:
+            - fail_closed
+            - fail_open
+        name:
+          type: string
+          maxLength: 255
+      required:
+        - name
     CreateIssuerRequestBody:
       type: object
       properties:
@@ -56670,6 +57058,9 @@ components:
     GetProductFeaturesResponseBody:
       type: object
       properties:
+        ai_platform_push_integrations_enabled:
+          type: boolean
+          description: Whether the organization can provision push integrations for AI platforms
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -56722,6 +57113,7 @@ components:
         - custom_model_keys_enabled
         - skills_enabled
         - skill_capture_metadata_only
+        - ai_platform_push_integrations_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -58507,6 +58899,15 @@ components:
       description: Result of listing hook traces
       required:
         - traces
+    ListInstancesResponseBody:
+      type: object
+      properties:
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteLLMInstance'
+      required:
+        - instances
     ListIntegrationsForm:
       type: object
       properties:
@@ -59554,6 +59955,51 @@ components:
       required:
         - package
         - versions
+    LiteLLMInstance:
+      type: object
+      properties:
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        created_by_user_id:
+          type: string
+        failure_posture:
+          type: string
+          description: How LiteLLM behaves when Gram cannot evaluate a request.
+          enum:
+            - fail_closed
+            - fail_open
+        id:
+          type: string
+          format: uuid
+        key_prefix:
+          type: string
+        last_used_at:
+          type: string
+          format: date-time
+        name:
+          type: string
+        organization_id:
+          type: string
+        project:
+          $ref: '#/components/schemas/ProjectEntry'
+        updated_at:
+          type: string
+          format: date-time
+      description: A provisioned LiteLLM integration and its project-bound ingestion credential metadata.
+      required:
+        - id
+        - organization_id
+        - project
+        - name
+        - failure_posture
+        - key_prefix
+        - created_by_user_id
+        - created_at
+        - updated_at
+        - active
     LiteLLMRequestData:
       type: object
       properties:
@@ -59614,6 +60060,17 @@ components:
       description: LiteLLM Generic Guardrail decision.
       required:
         - action
+    LitellmInstanceKeyResult:
+      type: object
+      properties:
+        instance:
+          $ref: '#/components/schemas/LiteLLMInstance'
+        key:
+          type: string
+      description: A LiteLLM instance and its newly minted plaintext key. The key is shown only once.
+      required:
+        - instance
+        - key
     LogFilter:
       type: object
       properties:
@@ -65443,6 +65900,7 @@ components:
             - custom_model_keys
             - skills
             - skill_capture_metadata_only
+            - ai_platform_push_integrations
           maxLength: 60
       required:
         - feature_name

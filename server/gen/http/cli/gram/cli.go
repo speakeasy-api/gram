@@ -119,7 +119,7 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
-		"litellm (ingest|traces|metrics)",
+		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces|metrics)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
@@ -1158,6 +1158,25 @@ func ParseEndpoint(
 		keysVerifyKeyApikeyTokenFlag = keysVerifyKeyFlags.String("apikey-token", "", "")
 
 		litellmFlags = flag.NewFlagSet("litellm", flag.ContinueOnError)
+
+		litellmCreateInstanceFlags                = flag.NewFlagSet("create-instance", flag.ExitOnError)
+		litellmCreateInstanceBodyFlag             = litellmCreateInstanceFlags.String("body", "REQUIRED", "")
+		litellmCreateInstanceSessionTokenFlag     = litellmCreateInstanceFlags.String("session-token", "", "")
+		litellmCreateInstanceProjectSlugInputFlag = litellmCreateInstanceFlags.String("project-slug-input", "", "")
+
+		litellmListInstancesFlags                = flag.NewFlagSet("list-instances", flag.ExitOnError)
+		litellmListInstancesSessionTokenFlag     = litellmListInstancesFlags.String("session-token", "", "")
+		litellmListInstancesProjectSlugInputFlag = litellmListInstancesFlags.String("project-slug-input", "", "")
+
+		litellmRotateInstanceKeyFlags                = flag.NewFlagSet("rotate-instance-key", flag.ExitOnError)
+		litellmRotateInstanceKeyBodyFlag             = litellmRotateInstanceKeyFlags.String("body", "REQUIRED", "")
+		litellmRotateInstanceKeySessionTokenFlag     = litellmRotateInstanceKeyFlags.String("session-token", "", "")
+		litellmRotateInstanceKeyProjectSlugInputFlag = litellmRotateInstanceKeyFlags.String("project-slug-input", "", "")
+
+		litellmRevokeInstanceFlags                = flag.NewFlagSet("revoke-instance", flag.ExitOnError)
+		litellmRevokeInstanceIDFlag               = litellmRevokeInstanceFlags.String("id", "REQUIRED", "")
+		litellmRevokeInstanceSessionTokenFlag     = litellmRevokeInstanceFlags.String("session-token", "", "")
+		litellmRevokeInstanceProjectSlugInputFlag = litellmRevokeInstanceFlags.String("project-slug-input", "", "")
 
 		litellmIngestFlags                = flag.NewFlagSet("ingest", flag.ExitOnError)
 		litellmIngestBodyFlag             = litellmIngestFlags.String("body", "REQUIRED", "")
@@ -3323,6 +3342,10 @@ func ParseEndpoint(
 	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
 
 	litellmFlags.Usage = litellmUsage
+	litellmCreateInstanceFlags.Usage = litellmCreateInstanceUsage
+	litellmListInstancesFlags.Usage = litellmListInstancesUsage
+	litellmRotateInstanceKeyFlags.Usage = litellmRotateInstanceKeyUsage
+	litellmRevokeInstanceFlags.Usage = litellmRevokeInstanceUsage
 	litellmIngestFlags.Usage = litellmIngestUsage
 	litellmTracesFlags.Usage = litellmTracesUsage
 	litellmMetricsFlags.Usage = litellmMetricsUsage
@@ -4548,6 +4571,18 @@ func ParseEndpoint(
 
 		case "litellm":
 			switch epn {
+			case "create-instance":
+				epf = litellmCreateInstanceFlags
+
+			case "list-instances":
+				epf = litellmListInstancesFlags
+
+			case "rotate-instance-key":
+				epf = litellmRotateInstanceKeyFlags
+
+			case "revoke-instance":
+				epf = litellmRevokeInstanceFlags
+
 			case "ingest":
 				epf = litellmIngestFlags
 
@@ -6373,6 +6408,18 @@ func ParseEndpoint(
 		case "litellm":
 			c := litellmc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "create-instance":
+				endpoint = c.CreateInstance()
+				data, err = litellmc.BuildCreateInstancePayload(*litellmCreateInstanceBodyFlag, *litellmCreateInstanceSessionTokenFlag, *litellmCreateInstanceProjectSlugInputFlag)
+			case "list-instances":
+				endpoint = c.ListInstances()
+				data, err = litellmc.BuildListInstancesPayload(*litellmListInstancesSessionTokenFlag, *litellmListInstancesProjectSlugInputFlag)
+			case "rotate-instance-key":
+				endpoint = c.RotateInstanceKey()
+				data, err = litellmc.BuildRotateInstanceKeyPayload(*litellmRotateInstanceKeyBodyFlag, *litellmRotateInstanceKeySessionTokenFlag, *litellmRotateInstanceKeyProjectSlugInputFlag)
+			case "revoke-instance":
+				endpoint = c.RevokeInstance()
+				data, err = litellmc.BuildRevokeInstancePayload(*litellmRevokeInstanceIDFlag, *litellmRevokeInstanceSessionTokenFlag, *litellmRevokeInstanceProjectSlugInputFlag)
 			case "ingest":
 				endpoint = c.Ingest()
 				data, err = litellmc.BuildIngestPayload(*litellmIngestBodyFlag, *litellmIngestApikeyTokenFlag, *litellmIngestProjectSlugInputFlag)
@@ -11961,6 +12008,10 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, `Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] litellm COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-instance: Provision a LiteLLM integration for a project and return its plaintext ingestion key once.`)
+	fmt.Fprintln(os.Stderr, `    list-instances: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.`)
+	fmt.Fprintln(os.Stderr, `    rotate-instance-key: Atomically replace a LiteLLM integration key and return the new plaintext value once.`)
+	fmt.Fprintln(os.Stderr, `    revoke-instance: Revoke a LiteLLM integration and immediately invalidate its active key.`)
 	fmt.Fprintln(os.Stderr, `    ingest: Evaluates and captures a LiteLLM model request before it reaches the provider.`)
 	fmt.Fprintln(os.Stderr, `    traces: Accepts LiteLLM OTLP trace exports. Send the standard OTLP JSON ExportTraceServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
@@ -11968,6 +12019,92 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s litellm COMMAND --help\n", os.Args[0])
 }
+func litellmCreateInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm create-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Provision a LiteLLM integration for a project and return its plaintext ingestion key once.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm create-instance --body '{\n      \"failure_posture\": \"fail_open\",\n      \"name\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmListInstancesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm list-instances", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm list-instances --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmRotateInstanceKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm rotate-instance-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Atomically replace a LiteLLM integration key and return the new plaintext value once.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm rotate-instance-key --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmRevokeInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm revoke-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a LiteLLM integration and immediately invalidate its active key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm revoke-instance --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func litellmIngestUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] litellm ingest", os.Args[0])

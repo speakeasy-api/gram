@@ -78,13 +78,18 @@ func newTraceTestService(t *testing.T, authorizer authorizer, meterProvider metr
 		require.NoError(t, metricProcessor.Shutdown(ctx))
 	})
 	return &Service{
-		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
-		logger:  testenv.NewLogger(t),
-		auth:    authorizer,
-		hooks:   nil,
-		calls:   nil,
-		traces:  processor,
-		metrics: metricProcessor,
+		tracer:    testenv.NewTracerProvider(t).Tracer("test"),
+		logger:    testenv.NewLogger(t),
+		auth:      authorizer,
+		hooks:     nil,
+		calls:     nil,
+		traces:    processor,
+		metrics:   metricProcessor,
+		db:        nil,
+		authz:     nil,
+		features:  nil,
+		audit:     nil,
+		keyPrefix: "",
 	}, processor
 }
 
@@ -780,13 +785,18 @@ func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 	authCtx := testAuthContext()
 	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
 	service := &Service{
-		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
-		logger:  testenv.NewLogger(t),
-		auth:    authorizer,
-		hooks:   nil,
-		calls:   nil,
-		traces:  processor,
-		metrics: nil,
+		tracer:    testenv.NewTracerProvider(t).Tracer("test"),
+		logger:    testenv.NewLogger(t),
+		auth:      authorizer,
+		hooks:     nil,
+		calls:     nil,
+		traces:    processor,
+		metrics:   nil,
+		db:        nil,
+		authz:     nil,
+		features:  nil,
+		audit:     nil,
+		keyPrefix: "",
 	}
 	response := serveTraceRequest(t, mountedTraceMux(service), []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"0123456789abcdef","name":"queue test"}]}]}]}`), "application/json", "", "valid-key", "project-test")
 	require.Equal(t, http.StatusAccepted, response.Code)

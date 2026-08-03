@@ -104,6 +104,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if strings.HasPrefix(payload.Name, auth.PluginAPIKeyNamePrefix) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", auth.PluginAPIKeyNamePrefix).LogError(ctx, s.logger)
 	}
+	if strings.HasPrefix(payload.Name, auth.LiteLLMAPIKeyNamePrefix) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", auth.LiteLLMAPIKeyNamePrefix).LogError(ctx, s.logger)
+	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
 		scope, ok := auth.APIKeyScopes[rawscope]
@@ -267,6 +270,17 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	keyID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
+	}
+
+	managed, err := kr.IsAPIKeyManagedByActiveLiteLLMInstance(ctx, repo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{
+		ID:             keyID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check API key ownership").LogError(ctx, s.logger)
+	}
+	if managed {
+		return oops.E(oops.CodeConflict, nil, "API key is managed by an active LiteLLM instance; revoke the instance instead")
 	}
 
 	deleted, err := kr.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
