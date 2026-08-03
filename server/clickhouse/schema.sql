@@ -624,8 +624,10 @@ WITH
     (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
     -- Codex reports usage on the SSE event that closes a turn; only some
     -- response.completed events carry token counts, signalled by an input or
-    -- output count being present. The sole Codex usage source — the derived
-    -- codex:usage:metrics rows are deprecated and no longer written.
+    -- output count being present. The sole Codex TOKEN source: codex:usage
+    -- rows still arrive from the compliance COSTS import but carry cost only
+    -- (their token counts ride unmetered codex.compliance.* keys precisely so
+    -- they cannot double count against this stream).
     (
         is_codex_otel_row
         AND toString(attributes.event.name) = 'codex.sse_event'
@@ -642,11 +644,13 @@ WITH
     -- claude_chat:usage rows carry Claude Chat (web/desktop) per-user token
     -- usage and claude_chat:cost rows the matching spend, both polled from the
     -- Anthropic Admin Analytics API — sessionless usage, like Cursor's Admin
-    -- API rows. Deliberately NOT claude-code:usage, which stays excluded as a
-    -- duplicate of the OTEL api_request stream. The codex:usage prefix is
-    -- kept so in-flight rows from pods that predate the Codex raw-stream
-    -- cutover still land; no new rows carry it.
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+    -- API rows. chatgpt:usage rows are ChatGPT/Work per-user usage+spend from
+    -- the OpenAI compliance COSTS import, the only pipeline that observes
+    -- those surfaces. codex:usage rows are the same import's Codex spend,
+    -- cost-only since DNO-733: their token counts would duplicate the Codex
+    -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
+    -- excluded as a duplicate of the OTEL api_request stream.
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
     -- opencode reports per-turn tokens and cost on its unified-ingest
     -- assistant.responded rows, under the canonical gen_ai.usage.* keys that
     -- every fallback branch below already reads. It has no OTEL stream and the
@@ -1024,7 +1028,10 @@ WITH
     -- attribute_metrics_summaries_mv above.
     least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
     (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+    -- chatgpt:usage / claude_chat:* rows are chat-less and never pass the
+    -- chat_id guard below — listed here only to keep this predicate textually
+    -- aligned with attribute_metrics_summaries_mv and the Go session path.
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
     -- opencode usage rides on its unified-ingest assistant.responded rows,
     -- anchored on hook_source because that path stamps no gram_urn, and gated on
     -- the AfterAgentResponse event so thoughts/usage.reported/tool-call rows are
