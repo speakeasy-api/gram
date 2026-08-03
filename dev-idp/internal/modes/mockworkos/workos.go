@@ -48,6 +48,7 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 )
 
 // invitationLifetime is how long an emulated invitation stays in the
@@ -132,10 +133,14 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 
 	queries := repo.New(h.db)
 
-	// Consume the auth code — issued by oauth2 mode's /authorize handler.
+	// Consume the auth code — issued by the OAuth 2.1 /authorize handler.
+	// This is the second leg of non-interactive login: the Gram server sends
+	// the browser to /oauth2-1/authorize, then exchanges the returned code
+	// here rather than at the OAuth token endpoint, because it drives login
+	// through the WorkOS user-management SDK.
 	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
 		Code: body.Code,
-		Mode: "oauth2",
+		Mode: oauth21.Mode,
 		Ts:   time.Now(),
 	})
 	if err != nil {
