@@ -23,7 +23,7 @@ const fixtureRedirectURI = "http://localhost:8080/callback"
 func TestLoginClient_AuthCodeFlowWithoutPKCE(t *testing.T) {
 	t.Parallel()
 
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: false, Key: nil})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil})
 	client := noRedirectClient()
 
 	authorizeURL := inst.OAuth21URL + "/authorize?" + url.Values{
@@ -85,7 +85,7 @@ func TestLoginClient_AuthCodeFlowWithoutPKCE(t *testing.T) {
 func TestUnregisteredClient_AuthorizeRejected(t *testing.T) {
 	t.Parallel()
 
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: false, Key: nil})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil})
 
 	authorizeURL := inst.OAuth21URL + "/authorize?" + url.Values{
 		"response_type": {"code"},

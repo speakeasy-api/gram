@@ -247,7 +247,7 @@ async function authenticateViaDevIDP(serverURL: string): Promise<string> {
   }
   const nonceCookieValue = nonceCookie.split(";")[0]; // "gram_auth_nonce=<value>"
 
-  // Step 2: Follow the redirect to dev-idp's /oauth2/authorize.
+  // Step 2: Follow the redirect to dev-idp's authorize endpoint.
   // dev-idp auto-resolves the current user and redirects back with code+state.
   const authorizeRes = await fetch(authorizeURL, { redirect: "manual" });
   const callbackLocation = authorizeRes.headers.get("location");
