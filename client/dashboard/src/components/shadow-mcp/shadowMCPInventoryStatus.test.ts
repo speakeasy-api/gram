@@ -90,6 +90,15 @@ describe("shadowMCPPolicyState", () => {
     expect(shadowMCPPolicyState([policy({ action: "warn" })])).toBe("warning");
   });
 
+  it("prioritizes warning policies over flagging policies", () => {
+    expect(
+      shadowMCPPolicyState([
+        policy({ action: "flag", id: "flag" }),
+        policy({ action: "warn", id: "warn" }),
+      ]),
+    ).toBe("warning");
+  });
+
   it("returns flagging for enabled flag policy without blocking policy", () => {
     expect(shadowMCPPolicyState([policy({ action: "flag" })])).toBe("flagging");
   });
@@ -133,6 +142,9 @@ describe("shadowMCPInventoryStatus", () => {
   });
 
   it("shows observed when blocking is inactive", () => {
+    expect(
+      shadowMCPInventoryStatus(server({ access: "none" }), "warning"),
+    ).toBe("observed");
     expect(
       shadowMCPInventoryStatus(server({ access: "none" }), "flagging"),
     ).toBe("observed");
