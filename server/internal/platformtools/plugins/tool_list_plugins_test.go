@@ -94,12 +94,18 @@ func TestListPluginsToolRequiresService(t *testing.T) {
 	require.ErrorContains(t, err, "plugins service not configured")
 }
 
-func TestListPluginsToolDescriptorIsReadOnly(t *testing.T) {
+// Not read-only: listing lazily provisions a missing Default plugin (and
+// audit logs it) for an org admin, so the descriptor must not promise a pure
+// read. It stays non-destructive and idempotent because the heal converges.
+func TestListPluginsToolDescriptorReportsTheLazyDefaultPluginWrite(t *testing.T) {
 	t.Parallel()
 
 	descriptor := NewListPluginsTool(nil).Descriptor()
 	require.Equal(t, "platform_list_plugins", descriptor.Name)
-	require.True(t, *descriptor.Annotations.ReadOnlyHint)
+	require.False(t, *descriptor.Annotations.ReadOnlyHint)
+	require.False(t, *descriptor.Annotations.DestructiveHint)
+	require.True(t, *descriptor.Annotations.IdempotentHint)
+	require.False(t, *descriptor.Annotations.OpenWorldHint)
 	require.JSONEq(t, `{
 		"additionalProperties": false,
 		"type": "object"

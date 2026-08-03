@@ -6,6 +6,7 @@ import (
 	"io"
 
 	genplugins "github.com/speakeasy-api/gram/server/gen/plugins"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -47,10 +48,31 @@ func (t *ListPlugins) Descriptor() core.ToolDescriptor {
 		Description: "List the plugins in the current project, including each plugin's ID, name, slug, and how many servers and skills it carries. Use this to resolve a plugin by name before distributing a skill to it with platform_distribute_skill.",
 		InputSchema: core.BuildInputSchema[listPluginsInput](),
 		Variables:   nil,
-		Annotations: core.ReadOnlyAnnotations(),
+		Annotations: pluginCatalogAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
+	}
+}
+
+// pluginCatalogAnnotations stops short of read-only on purpose. Listing
+// plugins lazily heals a project that predates the Default plugin: for a
+// caller holding org admin, the management service provisions it and writes a
+// plugin-create audit event. That heal is additive and converges — every
+// subsequent call is a pure read — so the tool is idempotent and
+// non-destructive, but claiming readOnlyHint would misreport a write that a
+// client could reasonably want to know about.
+func pluginCatalogAnnotations() *types.ToolAnnotations {
+	readOnly := false
+	destructive := false
+	idempotent := true
+	openWorld := false
+	return &types.ToolAnnotations{
+		Title:           nil,
+		ReadOnlyHint:    &readOnly,
+		DestructiveHint: &destructive,
+		IdempotentHint:  &idempotent,
+		OpenWorldHint:   &openWorld,
 	}
 }
 
