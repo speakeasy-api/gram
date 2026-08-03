@@ -1,14 +1,14 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import {
   useIsPlatformAdmin,
   useOrganization,
   useProject,
 } from "@/contexts/Auth";
 import { ShieldAlert } from "lucide-react";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
@@ -28,10 +28,10 @@ export default function Settings(): JSX.Element {
           <Heading variant="h4" className="mb-2">
             Project Settings
           </Heading>
-          <Type muted small className="mb-6">
+          <Text muted small className="mb-6">
             Manage your project configuration and perform administrative
             actions.
-          </Type>
+          </Text>
           <div className="mb-8">
             <ModelProviderKeysSection />
           </div>

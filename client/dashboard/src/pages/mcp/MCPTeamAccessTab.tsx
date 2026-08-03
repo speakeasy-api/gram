@@ -1,13 +1,13 @@
 import { Page } from "@/components/page-layout";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { Tool } from "@/lib/toolTypes";
@@ -15,8 +15,10 @@ import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Column, Table } from "@/components/ui/Table";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useMemo, useState, ReactElement } from "react";
 
 function getInitials(name: string) {
@@ -145,26 +147,26 @@ function ToolRow({ tool }: { tool: Tool }) {
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <Type variant="body" className="font-mono text-sm font-medium">
+          <Text variant="body" className="font-mono text-sm font-medium">
             {"name" in tool ? tool.name : "Unknown tool"}
-          </Type>
+          </Text>
           {httpTool?.path && (
-            <Type
+            <Text
               variant="body"
               className="text-muted-foreground mt-0.5 font-mono text-xs"
             >
               {httpTool.path}
-            </Type>
+            </Text>
           )}
         </div>
       </div>
       {"description" in tool && tool.description && (
-        <Type
+        <Text
           variant="body"
           className="text-muted-foreground mt-1.5 line-clamp-2 text-xs"
         >
           {tool.description}
-        </Type>
+        </Text>
       )}
       {annotationTags.length > 0 && (
         <div className="mt-2 flex gap-1">
@@ -330,15 +332,15 @@ export function MCPTeamAccessTab({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <Type variant="body" className="truncate font-medium">
+            <Text variant="body" className="truncate font-medium">
               {row.member.name}
-            </Type>
-            <Type
+            </Text>
+            <Text
               variant="body"
               className="text-muted-foreground truncate text-xs"
             >
               {row.member.email}
-            </Type>
+            </Text>
           </div>
         </div>
       ),
@@ -350,9 +352,9 @@ export function MCPTeamAccessTab({
       render: (row) => (
         <div className="flex flex-wrap gap-1">
           {row.roles.map((role) => (
-            <Type key={role.id} variant="body" className="text-sm">
+            <Text key={role.id} variant="body" className="text-sm">
               {role.name}
-            </Type>
+            </Text>
           ))}
         </div>
       ),
@@ -409,10 +411,10 @@ export function MCPTeamAccessTab({
       <Page.Section.Title>Team access</Page.Section.Title>
       <Page.Section.Body>
         <div className="mb-4">
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             {memberAccess.length} team member
             {memberAccess.length !== 1 ? "s" : ""} with access to this server
-          </Type>
+          </Text>
         </div>
         <Table columns={columns}>
           <Table.Header columns={columns} />
@@ -431,9 +433,9 @@ export function MCPTeamAccessTab({
           )}
           <Table.Row>
             <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
-              <Type variant="body" className="text-muted-foreground text-sm">
+              <Text variant="body" className="text-muted-foreground text-sm">
                 Want to grant new members access?
-              </Type>
+              </Text>
               <div className="mt-2">
                 <orgRoutes.access.roles.Link>
                   <Button variant="primary" size="sm">
@@ -481,12 +483,12 @@ export function MCPTeamAccessTab({
                           key={name}
                           className="border-border rounded-lg border p-3"
                         >
-                          <Type
+                          <Text
                             variant="body"
                             className="font-mono text-sm font-medium"
                           >
                             {name}
-                          </Type>
+                          </Text>
                         </div>
                       ))
                     ) : (

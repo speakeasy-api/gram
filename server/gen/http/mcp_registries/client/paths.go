@@ -26,3 +26,8 @@ func ListCatalogMcpRegistriesPath() string {
 func GetServerDetailsMcpRegistriesPath() string {
 	return "/rpc/mcpRegistries.getServerDetails"
 }
+
+// GetSetupDocsMcpRegistriesPath returns the URL path to the mcpRegistries service getSetupDocs HTTP endpoint.
+func GetSetupDocsMcpRegistriesPath() string {
+	return "/rpc/mcpRegistries.getSetupDocs"
+}

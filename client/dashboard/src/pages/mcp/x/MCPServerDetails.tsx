@@ -1,7 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { getMcpServerArgs } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -25,7 +24,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown } from "lucide-react";
 import { Navigate, useLocation, useParams } from "react-router";
@@ -35,27 +34,27 @@ import {
   activeTabFromPath,
   initialTabFromHash,
   isLegacyAuthenticationTabPath,
+  isLegacyToolsTabPath,
   mcpServerTabHref,
 } from "./MCPServerDetailsRouting";
 import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
-import { ToolsTab } from "./tabs/ToolsTab";
+import { InspectTab } from "./tabs/InspectTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
 
-const MCP_X_TAB_URLS = ["overview", "tools", "team-access", "settings"];
+const MCP_X_TAB_URLS = ["overview", "inspect", "team-access", "settings"];
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
-  const telemetry = useTelemetry();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
     location.pathname,
     idOrSlug,
   );
+  const legacyToolsPath = isLegacyToolsTabPath(location.pathname, idOrSlug);
 
   const {
     data: mcpServer,
@@ -87,8 +86,13 @@ export default function MCPServerDetails(): JSX.Element {
       />
     );
   }
+  if (legacyToolsPath) {
+    return (
+      <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
+    );
+  }
   if (!activeTab) {
-    const initialTab = initialTabFromHash(location.hash, isRbacEnabled);
+    const initialTab = initialTabFromHash(location.hash);
     const hash =
       location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
         ? `#${MCP_AUTHENTICATION_SECTION_ID}`
@@ -101,12 +105,6 @@ export default function MCPServerDetails(): JSX.Element {
       />
     );
   }
-  if (activeTab === "team-access" && !isRbacEnabled) {
-    return (
-      <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
-    );
-  }
-
   const renderTabContent = () => {
     switch (activeTab) {
       case "overview":
@@ -123,10 +121,10 @@ export default function MCPServerDetails(): JSX.Element {
             />
           )
         );
-      case "tools":
+      case "inspect":
         return (
           mcpServer && (
-            <ToolsTab
+            <InspectTab
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
@@ -135,16 +133,21 @@ export default function MCPServerDetails(): JSX.Element {
         );
       case "team-access":
         return (
-          isRbacEnabled &&
           mcpServer && (
-            <RequireScope scope="mcp:read" level="page">
-              {/* mcp_servers-backed servers grant under the same `mcp:*`
-                scope kind as toolset-backed ones (see selector.go), so
-                MCPTeamAccessTab is reused as-is with the mcp_server's
-                id as the resource id. No `tools` prop because the
-                Remote MCP backend doesn't expose a Gram-side tool
-                catalog. */}
-              <MCPTeamAccessTab resourceId={mcpServer.id} />
+            <RequireScope scope="org:read" level="page">
+              <RequireScope
+                scope="mcp:read"
+                resourceId={mcpServer.id}
+                level="page"
+              >
+                {/* mcp_servers-backed servers grant under the same `mcp:*`
+                  scope kind as toolset-backed ones (see selector.go), so
+                  MCPTeamAccessTab is reused as-is with the mcp_server's
+                  id as the resource id. No `tools` prop because the
+                  Remote MCP backend doesn't expose a Gram-side tool
+                  catalog. */}
+                <MCPTeamAccessTab resourceId={mcpServer.id} />
+              </RequireScope>
             </RequireScope>
           )
         );

@@ -1,4 +1,4 @@
-import type { Action } from "@/components/ui/more-actions";
+import type { Action } from "@/components/ui/MoreActions";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { InventoryActionMode } from "./ShadowMCPInventoryActions";
 

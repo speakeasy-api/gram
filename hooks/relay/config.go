@@ -24,6 +24,11 @@ const DefaultServerURL = "https://app.getgram.ai"
 type Config struct {
 	// ServerURL is the Gram API base, e.g. https://app.getgram.ai.
 	ServerURL string
+	// SiteURL is the dashboard origin the browser sign-in opens. Production
+	// serves the API and dashboard from one domain, so this stays empty and
+	// ServerURL is used; local development splits them across ports and needs
+	// the override.
+	SiteURL string
 	// ProjectSlug routes events to a project via the Gram-Project header.
 	ProjectSlug string
 	// OrgID scopes the cached credential so a key minted for another org can
@@ -63,6 +68,7 @@ type Config struct {
 // repurpose a key.
 type FileConfig struct {
 	ServerURL    string `json:"server_url"`
+	SiteURL      string `json:"site_url,omitempty"`
 	Project      string `json:"project"`
 	Org          string `json:"org,omitempty"`
 	HooksAPIKey  string `json:"hooks_api_key,omitempty"`
@@ -79,7 +85,7 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
@@ -88,6 +94,7 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 			if fc, err := readFileConfig(cfg.ConfigPath); err == nil {
 				cfg.ConfigError = ""
 				cfg.ServerURL = fc.ServerURL
+				cfg.SiteURL = fc.SiteURL
 				cfg.ProjectSlug = fc.Project
 				cfg.OrgID = fc.Org
 				cfg.HooksAPIKey = fc.HooksAPIKey
@@ -98,6 +105,8 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 			}
 		case strings.HasPrefix(a, "--server-url="):
 			overrides.ServerURL = strings.TrimPrefix(a, "--server-url=")
+		case strings.HasPrefix(a, "--site-url="):
+			overrides.SiteURL = strings.TrimPrefix(a, "--site-url=")
 		case strings.HasPrefix(a, "--project="):
 			overrides.ProjectSlug = strings.TrimPrefix(a, "--project=")
 		case strings.HasPrefix(a, "--org="):
@@ -112,6 +121,9 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	}
 	if overrides.ServerURL != "" {
 		cfg.ServerURL = overrides.ServerURL
+	}
+	if overrides.SiteURL != "" {
+		cfg.SiteURL = overrides.SiteURL
 	}
 	if overrides.ProjectSlug != "" {
 		cfg.ProjectSlug = overrides.ProjectSlug
@@ -152,6 +164,9 @@ func LoadConfig(defaults Config) Config {
 	if cfg.ServerURL == "" {
 		cfg.ServerURL = DefaultServerURL
 	}
+	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_SITE_URL")); v != "" {
+		cfg.SiteURL = v
+	}
 	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_PROJECT_SLUG")); v != "" {
 		cfg.ProjectSlug = v
 	}
@@ -168,5 +183,6 @@ func LoadConfig(defaults Config) Config {
 		cfg.Nonblocking = true
 	}
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
+	cfg.SiteURL = strings.TrimRight(cfg.SiteURL, "/")
 	return cfg
 }

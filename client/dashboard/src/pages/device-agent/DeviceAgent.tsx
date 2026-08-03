@@ -6,7 +6,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { MdmIntegrationsTab } from "@/pages/org/device-integrations/DeviceIntegrations";
 import React from "react";

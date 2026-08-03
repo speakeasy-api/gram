@@ -34,6 +34,7 @@ const CustomDomainHealthCheckMaxAttempts = 3
 type CustomDomainInfrastructureChecker interface {
 	CheckCustomDomainInfrastructure(ctx context.Context, check k8s.CustomDomainInfrastructureCheck) (k8s.CustomDomainInfrastructureHealth, error)
 	ListManagedCustomDomainResources(ctx context.Context) ([]k8s.ManagedCustomDomainResource, error)
+	Provisioner(kind k8s.ProvisionerKind) k8s.CustomDomainProvisioner
 }
 
 type CustomDomainHealth struct {
@@ -45,7 +46,6 @@ type CustomDomainHealth struct {
 	expectedTarget string
 	emails         *email.Service
 	siteURL        *url.URL
-	dryRun         bool
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -90,12 +90,6 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		expectedTarget: expectedTarget,
 		emails:         emails,
 		siteURL:        siteURL,
-		// The first release observes only: checks run and log their findings,
-		// including the admin notifications that would be sent, but no health
-		// state is persisted and no email goes out. Because dry run leaves no
-		// trace in the database, flipping this to false later lets the next
-		// sweep re-derive state and notify as if it were the first ever check.
-		dryRun: true,
 	}
 }
 
@@ -106,11 +100,6 @@ func (c *CustomDomainHealth) SetResolver(resolver dns.Resolver) {
 // SetProbe replaces the HTTPS probe. Intended for testing.
 func (c *CustomDomainHealth) SetProbe(probe func(ctx context.Context, domain string) error) {
 	c.probe = probe
-}
-
-// SetDryRun toggles observation-only mode. Intended for testing.
-func (c *CustomDomainHealth) SetDryRun(dryRun bool) {
-	c.dryRun = dryRun
 }
 
 func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsForHealthCheckArgs) ([]CustomDomainHealthCheckTarget, error) {
@@ -151,6 +140,23 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		return noNotification, fmt.Errorf("get custom domain for health check: %w", err)
 	}
 
+	route, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	if err != nil {
+		return noNotification, fmt.Errorf("get custom domain route for health check: %w", err)
+	}
+	rootResourceName := ""
+	wellKnownRootResourceName := ""
+	if route.RootMcpEndpointID != uuid.Nil {
+		rootResourceName, err = k8s.RootIngressNameForDomain(domain.Domain)
+		if err != nil {
+			return noNotification, fmt.Errorf("derive custom domain root resource name: %w", err)
+		}
+		wellKnownRootResourceName, err = k8s.WellKnownRootIngressNameForDomain(domain.Domain)
+		if err != nil {
+			return noNotification, fmt.Errorf("derive custom domain well-known root resource name: %w", err)
+		}
+	}
+
 	preserveCertificateExpiry := false
 
 	observation := customdomains.HealthObservation{
@@ -184,10 +190,12 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		preserveCertificateExpiry = true
 	default:
 		infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
-			Domain:          domain.Domain,
-			ResourceName:    domain.IngressName.String,
-			CertSecretName:  domain.CertSecretName.String,
-			ProvisionerKind: k8s.ProvisionerKind(domain.ProvisionerKind),
+			Domain:                    domain.Domain,
+			ResourceName:              domain.IngressName.String,
+			RootResourceName:          rootResourceName,
+			WellKnownRootResourceName: wellKnownRootResourceName,
+			CertSecretName:            domain.CertSecretName.String,
+			ProvisionerKind:           k8s.ProvisionerKind(domain.ProvisionerKind),
 		})
 		if infrastructureErr != nil {
 			if !isFinalHealthCheckAttempt(ctx) {
@@ -206,39 +214,12 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		}
 	}
 
-	if c.dryRun {
-		// Observation-only release: report what a live check would have done
-		// without flipping status, bumping consecutive_failures, or touching
-		// checked_at. Since nothing persists, an unhealthy domain re-reports a
-		// would-be transition on every sweep — that recurring log line is the
-		// point of the dry run.
-		current := customDomainHealthState(domain)
-		if preserveCertificateExpiry {
-			observation.CertificateExpiresAt = current.CertificateExpiresAt
-		}
-		next := customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
-		c.logger.InfoContext(ctx, "dry run: observed custom domain health",
-			attr.SlogURLDomain(domain.Domain),
-			attr.SlogOrganizationID(args.OrganizationID),
-			attr.SlogCustomDomainHealthStatus(string(next.Status)),
-			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
-		)
-		if customdomains.ShouldNotifyUnhealthyTransition(current, next) {
-			return NotifyCustomDomainUnhealthyArgs{
-				CustomDomainID: domain.ID,
-				OrganizationID: args.OrganizationID,
-				Domain:         domain.Domain,
-				Issue:          next.Issue,
-				CheckedAt:      args.CheckedAt,
-			}, nil
-		}
-		return noNotification, nil
-	}
-
 	var notification NotifyCustomDomainUnhealthyArgs
+	var next customdomains.HealthState
+	autoDisabled := false
 	if err := pgx.BeginFunc(ctx, c.db, func(tx pgx.Tx) error {
 		repository := customdomainsrepo.New(tx)
-		lockedDomain, err := repository.GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationForHealthUpdateParams{
+		lockedDomain, err := repository.LockCustomDomainByIDAndOrganization(ctx, customdomainsrepo.LockCustomDomainByIDAndOrganizationParams{
 			ID:             domain.ID,
 			OrganizationID: args.OrganizationID,
 		})
@@ -252,7 +233,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		if preserveCertificateExpiry {
 			observation.CertificateExpiresAt = current.CertificateExpiresAt
 		}
-		next := customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
+		next = customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
 		switch {
 		case customdomains.ShouldNotifyUnhealthyTransition(current, next):
 			notification = NotifyCustomDomainUnhealthyArgs{
@@ -288,9 +269,46 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		if err != nil {
 			return fmt.Errorf("update custom domain health: %w", err)
 		}
+		if customdomains.ShouldAutoDisable(next, args.CheckedAt) {
+			// Disable under the same row lock that persisted the decision so
+			// a recovery cannot commit in between; k8s teardown waits for commit.
+			if _, err := repository.DisableCustomDomainForHealth(ctx, customdomainsrepo.DisableCustomDomainForHealthParams{
+				ID:             domain.ID,
+				OrganizationID: args.OrganizationID,
+			}); err != nil {
+				return fmt.Errorf("disable custom domain after failed health checks: %w", err)
+			}
+			autoDisabled = true
+		}
 		return nil
 	}); err != nil {
 		return noNotification, fmt.Errorf("save custom domain health: %w", err)
+	}
+
+	// One line per check keeps the Datadog health breakdown that the dry-run
+	// phase established. CheckedAt is nil only when the locked row vanished.
+	if next.CheckedAt != nil {
+		c.logger.InfoContext(ctx, "observed custom domain health",
+			attr.SlogURLDomain(domain.Domain),
+			attr.SlogOrganizationID(args.OrganizationID),
+			attr.SlogCustomDomainHealthStatus(string(next.Status)),
+			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
+		)
+	}
+
+	if autoDisabled {
+		// Retries reuse CheckedAt, so the reconcile no-ops and this idempotent
+		// teardown re-runs until it succeeds.
+		if domain.IngressName.String != "" {
+			provisioner := c.infrastructure.Provisioner(k8s.ProvisionerKind(domain.ProvisionerKind))
+			if err := provisioner.Delete(ctx, domain.IngressName.String, domain.CertSecretName.String); err != nil {
+				return noNotification, fmt.Errorf("tear down auto-disabled custom domain resources: %w", err)
+			}
+		}
+		c.logger.WarnContext(ctx, "auto-disabled custom domain after prolonged failed health checks",
+			attr.SlogURLDomain(domain.Domain),
+			attr.SlogOrganizationID(args.OrganizationID),
+		)
 	}
 
 	return notification, nil
@@ -344,13 +362,10 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 			continue
 		}
 		seen[emailKey] = struct{}{}
-		if c.dryRun {
-			continue
-		}
 		tmpl := email.CustomDomainUnhealthy{
 			Email:        user.Email,
 			Domain:       args.Domain,
-			IssueMessage: customdomains.HealthIssueMessage(args.Issue),
+			IssueMessage: customdomains.HealthIssueMessage(args.Issue, c.expectedTarget),
 			DomainLink:   domainLink,
 		}
 		// CheckedAt is stable across retries; hashing satisfies Loops's 100-character key limit.
@@ -363,17 +378,16 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 	if err := errors.Join(notificationErrors...); err != nil {
 		return err
 	}
-	if c.dryRun {
-		// Aggregate line only after every recipient resolved cleanly, so a
-		// retried activity cannot log a misleading partial count. Addresses
-		// stay out of the logs.
-		c.logger.InfoContext(ctx, "dry run: would email org admins about unhealthy custom domain",
-			attr.SlogURLDomain(args.Domain),
-			attr.SlogOrganizationID(organizationID),
-			attr.SlogCustomDomainHealthIssue(string(args.Issue)),
-			attr.SlogCustomDomainNotifyRecipientCount(len(seen)),
-		)
-	}
+	// Aggregate line only after every recipient resolved cleanly, so a retried
+	// activity cannot log a misleading partial count. Addresses stay out of the
+	// logs. A zero count is the dead-org signal: nobody holds org:admin, so the
+	// alert reached no one.
+	c.logger.InfoContext(ctx, "emailed org admins about unhealthy custom domain",
+		attr.SlogURLDomain(args.Domain),
+		attr.SlogOrganizationID(organizationID),
+		attr.SlogCustomDomainHealthIssue(string(args.Issue)),
+		attr.SlogCustomDomainNotifyRecipientCount(len(seen)),
+	)
 	return nil
 }
 
@@ -387,15 +401,38 @@ func (c *CustomDomainHealth) FindOrphanResources(ctx context.Context) error {
 		return nil
 	}
 
-	activeResources, err := customdomainsrepo.New(c.db).ListActivatedCustomDomainResources(ctx)
+	repository := customdomainsrepo.New(c.db)
+	activeResources, err := repository.ListActivatedCustomDomainResources(ctx)
 	if err != nil {
 		return fmt.Errorf("list activated custom domain resources: %w", err)
 	}
-	active := make(map[k8s.ManagedCustomDomainResource]struct{}, len(activeResources))
+	active := make(map[k8s.ManagedCustomDomainResource]struct{}, len(activeResources)*3)
 	for _, resource := range activeResources {
 		active[k8s.ManagedCustomDomainResource{
 			Kind:   k8s.ProvisionerKind(resource.ProvisionerKind),
 			Name:   resource.ResourceName,
+			Domain: resource.Domain,
+		}] = struct{}{}
+
+		if !resource.HasRootMapping {
+			continue
+		}
+		rootName, err := k8s.RootIngressNameForDomain(resource.Domain)
+		if err != nil {
+			return fmt.Errorf("derive custom domain root resource name for orphan reconciliation: %w", err)
+		}
+		active[k8s.ManagedCustomDomainResource{
+			Kind:   k8s.ProvisionerKindIngress,
+			Name:   rootName,
+			Domain: resource.Domain,
+		}] = struct{}{}
+		wellKnownRootName, err := k8s.WellKnownRootIngressNameForDomain(resource.Domain)
+		if err != nil {
+			return fmt.Errorf("derive custom domain well-known root resource name for orphan reconciliation: %w", err)
+		}
+		active[k8s.ManagedCustomDomainResource{
+			Kind:   k8s.ProvisionerKindIngress,
+			Name:   wellKnownRootName,
 			Domain: resource.Domain,
 		}] = struct{}{}
 	}

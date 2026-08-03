@@ -1,6 +1,6 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import type { LucideIcon } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 import {
@@ -48,16 +48,16 @@ export function TabEmptyState({
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         {title}
-      </Type>
-      <Type
+      </Text>
+      <Text
         small
         muted
         className={cn("max-w-md text-center", action && "mb-4")}
       >
         {description}
-      </Type>
+      </Text>
       {action}
     </div>
   );

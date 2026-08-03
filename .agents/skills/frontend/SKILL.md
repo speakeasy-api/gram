@@ -130,10 +130,10 @@ Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller
 
 ### Tables
 
-Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. The legacy `@/components/ui/table` wrapper has been removed; do **not** recreate it, add new shadcn table wrappers, or hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. If you find a lingering legacy table pattern, migrate it to Moonshine when touched.
+Use the design system `Table` from `@/components/ui/Table` for dashboard tables. Do **not** add new shadcn table wrappers or hand-roll table styling with raw `<table>` markup when `Table` can express the UI. If you find a lingering legacy table pattern, migrate it when touched.
 
 ```tsx
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Column, Table } from "@/components/ui/Table";
 ```
 
 For normal data tables, prefer the declarative `columns` / `data` / `rowKey` API. Define `Column<T>[]` near the component so render functions stay typed, use `render` for rich cells, and use `width` for stable layouts instead of ad hoc cell class widths.
@@ -220,7 +220,7 @@ const filteredRows = useMemo(() => {
 />;
 ```
 
-Footers that summarize, paginate, or load more rows should usually be sibling bars immediately below the table. Moonshine's table API does not require a special footer component for this; keep the table declarative and put pagination/load-more controls after it.
+Footers that summarize, paginate, or load more rows should usually be sibling bars immediately below the table. The table API does not require a special footer component for this; keep the table declarative and put pagination/load-more controls after it.
 
 ```tsx
 <Table columns={columns} data={visibleRows} rowKey={(row) => row.id} />;
@@ -254,7 +254,7 @@ Footers that summarize, paginate, or load more rows should usually be sibling ba
 }
 ```
 
-Use the compound API only when the body needs custom structure that the declarative API cannot express, such as mixed rows, a full-width CTA row, or a custom no-results branch. Keep the Moonshine wrapper, header, row, and cell components as the default primitives.
+Use the compound API only when the body needs custom structure that the declarative API cannot express, such as mixed rows, a full-width CTA row, or a custom no-results branch. Keep the design system wrapper, header, row, and cell components as the default primitives.
 
 ```tsx
 <Table columns={columns}>
@@ -281,7 +281,7 @@ Use the compound API only when the body needs custom structure that the declarat
 </Table>
 ```
 
-Use grouped or expandable rows through Moonshine's table props instead of nesting unrelated cards or custom accordions around a table. Current patterns use `hideHeader` for grouped parent rows and `renderExpandedContent` for nested details.
+Use grouped or expandable rows through the table props instead of nesting unrelated cards or custom accordions around a table. Current patterns use `hideHeader` for grouped parent rows and `renderExpandedContent` for nested details.
 
 ```tsx
 <Table
@@ -300,7 +300,7 @@ Use grouped or expandable rows through Moonshine's table props instead of nestin
 />
 ```
 
-Raw `<tr>` / `<td>` should be rare and stay inside a Moonshine `<Table.Body>` only when native table semantics are needed and Moonshine does not expose them, such as a `colSpan` overflow row. If the row is a normal data row, use `<Table.Row row={row} columns={columns} />` or the declarative `data` prop.
+Raw `<tr>` / `<td>` should be rare and stay inside a `<Table.Body>` only when native table semantics are needed and `Table` does not expose them, such as a `colSpan` overflow row. If the row is a normal data row, use `<Table.Row row={row} columns={columns} />` or the declarative `data` prop.
 
 ### React Performance Patterns
 
@@ -427,7 +427,7 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 
 ### Styling and Design System
 
-- **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values
+- **ALWAYS use the design system** in `@/components/ui` and its token-based utilities instead of hardcoded Tailwind color values. Every component lives in its own directory (`@/components/ui/Button`, `@/components/ui/Table`, …) with an `index.stories.tsx` beside it; add a story whenever you add a component.
 - **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
 - `@tailwindcss/typography` must remain in `devDependencies` — the dashboard uses `prose` and `not-prose` classes directly (e.g. `CatalogDetail.tsx`, `tool.tsx`) which are provided by this plugin.
 
@@ -437,16 +437,16 @@ Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwis
 
 **Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
 
-**Underlying primitive:** Moonshine's `<Badge>` component (`@speakeasy-api/moonshine`). `ReleaseStageBadge` composes Moonshine's Badge with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+**Underlying primitive:** the design system `<Badge>` (`@/components/ui/Badge`). `ReleaseStageBadge` composes it with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
 
 **Variant → stage mapping** (variant names are hooks, not literal semantics):
 
-- `preview` → Moonshine `warning` variant (amber).
-- `beta` → Moonshine `information` variant (Speakeasy brand blue).
+- `preview` → the `warning` variant (amber).
+- `beta` → the `information` variant (Speakeasy brand blue).
 
-> Moonshine's badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
+> The badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
 
-**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing Moonshine variant or add one upstream.
+**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing variant or add one to `@/components/ui/Badge`.
 
 #### Surface 1 — sidebar nav (route-driven)
 

@@ -6,7 +6,7 @@ import { render, waitFor } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { StandardPolicyEditor } from "./PolicyDetail";
 
 const mocks = vi.hoisted(() => ({
@@ -96,9 +96,9 @@ vi.mock("@/pages/chatLogs/claudeUsage", () => ({
   formatUsageCost: () => "$0.00",
 }));
 
-vi.mock("@speakeasy-api/moonshine", async (importOriginal) => {
+vi.mock("@/components/ui/Button", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@speakeasy-api/moonshine")>();
+    await importOriginal<typeof import("@/components/ui/Button")>();
 
   function buttonLabel(children: ReactNode): string | undefined {
     for (const child of Children.toArray(children)) {

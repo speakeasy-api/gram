@@ -102,3 +102,9 @@ __pycache__/
 
 # Local kubernetes manifests (developer scratch)
 .local-k8s/
+
+# Personal impeccable ignores (.impeccable/config.json is shared and committed)
+.impeccable/config.local.json
+
+# Storybook build output
+storybook-static/

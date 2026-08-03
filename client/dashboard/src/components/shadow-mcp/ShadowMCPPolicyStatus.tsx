@@ -1,6 +1,7 @@
 import { type ShadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import { Type } from "../ui/type";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
 
 function policyStatusText(state: ShadowMCPPolicyState): {
   label: string;
@@ -56,12 +57,12 @@ export function ShadowMCPPolicyStatus({
         name={icon}
       />
       <div className="min-w-0 flex-1">
-        <Type variant="small" className="font-medium">
+        <Text variant="small" className="font-medium">
           {label}
-        </Type>
-        <Type muted className="text-xs">
+        </Text>
+        <Text muted className="text-xs">
           {description}
-        </Type>
+        </Text>
       </div>
     </div>
   );

@@ -4,16 +4,16 @@ import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeries
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
-import { Heading } from "@/components/ui/heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PluginStatusBanner } from "./PluginStatusBanner";
@@ -111,7 +111,9 @@ export function MCPOverviewTab({
   );
 
   return (
-    <Stack gap={6} className="mb-4">
+    // Container queries, not viewport ones: the side panel narrows this column
+    // without narrowing the window, and `lg:`/`xl:` would not notice.
+    <Stack gap={6} className="@container mb-4">
       <PluginStatusBanner server={server} />
 
       <div className="flex justify-end">
@@ -127,16 +129,16 @@ export function MCPOverviewTab({
 
       {isLogsDisabled ? (
         <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-          <Type muted className="mb-1 block">
+          <Text muted className="mb-1 block">
             Observability is not enabled
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Enable logs for this organization to see usage for this MCP server.
-          </Type>
+          </Text>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
             {isLoading && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
@@ -188,7 +190,7 @@ export function MCPOverviewTab({
             onExpand={setExpandedChart}
           />
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
             <div className="rounded-lg border p-5">
               <Heading variant="h5" className="mb-3">
                 Top tools by call count

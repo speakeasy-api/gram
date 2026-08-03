@@ -260,6 +260,31 @@ func TestSuggestionEngineDeclineConsumesAllLoadedFeedback(t *testing.T) {
 	require.Len(t, completion.Requests(), 2)
 }
 
+func TestSuggestionEngineForcedRunBypassesActivityAndFeedbackThresholds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "engine-forced", "Base.")
+	now := time.Now().UTC()
+	createSuggestionFeedback(t, ti, created.Skill.Name, 1)
+	completion := &suggestionCompletionStub{responses: []string{
+		`{"decision":"decline","changes":[],"rationale":"The evidence does not support an edit yet."}`,
+	}}
+	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
+	input := suggest.RunInput{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Now: now}
+
+	skipped, err := engine.Run(ctx, input)
+	require.NoError(t, err)
+	require.Equal(t, suggest.ResultSkipped, skipped.Kind)
+	require.Empty(t, completion.Requests())
+
+	forced, err := engine.RunForced(ctx, input)
+	require.NoError(t, err)
+	require.Equal(t, suggest.ResultDeclined, forced.Kind)
+	require.Equal(t, int64(1), forced.FeedbackConsumed)
+	require.Len(t, completion.Requests(), 1)
+}
+
 func TestSuggestionEngineCanonicalNoOpIsTerminalDecline(t *testing.T) {
 	t.Parallel()
 
@@ -482,7 +507,7 @@ func TestSuggestionActivityMakesModelFailureNonRetryable(t *testing.T) {
 	analyzer := backgroundactivities.NewSkillSuggestionAnalyzer(ti.conn, engine, nil)
 
 	_, err := analyzer.AnalyzeSkillSuggestion(ctx, backgroundactivities.AnalyzeSkillSuggestionParams{
-		SkillSuggestionIdentity: backgroundactivities.SkillSuggestionIdentity{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID)},
+		SkillSuggestionIdentity: backgroundactivities.SkillSuggestionIdentity{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Force: false},
 		Now:                     now,
 	})
 	require.Error(t, err)

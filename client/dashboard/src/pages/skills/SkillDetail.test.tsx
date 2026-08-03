@@ -26,8 +26,14 @@ const testState = vi.hoisted(() => ({
   toastError: vi.fn(),
   fetchNextPage: vi.fn(),
   isFetchNextPageError: false,
+  hasNextPage: false,
   versionError: null as Error | null,
   versions: [] as Array<Record<string, unknown>>,
+  sightingTimeline: [] as Array<{
+    bucketStart: Date;
+    skillVersionId?: string;
+    activationCount: number;
+  }>,
   latestVersion: undefined as Record<string, unknown> | undefined,
   version: {
     id: "version_latest",
@@ -122,7 +128,7 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         windowStart: new Date("2026-06-16T00:00:00Z"),
         windowEnd: new Date("2026-07-16T00:00:00Z"),
       },
-      sightingTimeline: [],
+      sightingTimeline: testState.sightingTimeline,
     },
   }),
   invalidateAllSkill: testState.invalidateSkill,
@@ -130,9 +136,10 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
 vi.mock("@gram/client/react-query/skillVersions.js", () => ({
   useSkillVersionsInfinite: () => ({
     isPending: false,
+    isError: testState.versionError !== null,
     error: testState.versionError,
     data: { pages: [{ result: { versions: testState.versions } }] },
-    hasNextPage: false,
+    hasNextPage: testState.hasNextPage,
     isFetchingNextPage: false,
     isFetchNextPageError: testState.isFetchNextPageError,
     fetchNextPage: testState.fetchNextPage,
@@ -162,6 +169,21 @@ vi.mock("@gram/client/react-query/shareSkill.js", () => ({
 }));
 vi.mock("@gram/client/react-query/unshareSkill.js", () => ({
   useUnshareSkillMutation: () => testState.unshare,
+}));
+vi.mock("react-chartjs-2", () => ({
+  Line: ({
+    data,
+  }: {
+    data: { datasets: Array<{ label: string; data: number[] }> };
+  }) => (
+    <div data-testid="activation-chart">
+      {data.datasets.map((dataset) => (
+        <span key={dataset.label}>
+          {dataset.label}:{dataset.data.reduce((sum, value) => sum + value, 0)}
+        </span>
+      ))}
+    </div>
+  ),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
@@ -200,12 +222,35 @@ vi.mock("@/components/page-layout", () => {
     }),
   };
 });
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-  Button: ({ children }: { children: ReactNode }) => (
-    <button>{children}</button>
-  ),
+}));
+
+vi.mock("@/components/ui/Button", () => {
+  const Button = ({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  );
+  Button.Text = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Button.LeftIcon = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Button.RightIcon = ({ children }: { children: ReactNode }) => <>{children}</>;
+  return { Button };
+});
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: () => <span />,
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: ({
     columns,
     data,
@@ -228,6 +273,11 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     </div>
   ),
 }));
+
+vi.mock("@/lib/utils", () => ({
+  cn: (...classes: Array<string | false | null | undefined>) =>
+    classes.filter(Boolean).join(" "),
+}));
 vi.mock("sonner", () => ({
   toast: { success: testState.toastSuccess, error: testState.toastError },
 }));
@@ -246,14 +296,36 @@ beforeEach(() => {
   testState.toastError.mockReset();
   testState.fetchNextPage.mockReset();
   testState.isFetchNextPageError = false;
+  testState.hasNextPage = false;
   testState.versionError = null;
   testState.versions = [testState.version];
+  testState.sightingTimeline = [];
   testState.latestVersion = testState.version;
 });
 
 afterEach(cleanup);
 
 describe("SkillDetail", () => {
+  it("charts activation counts by known and unknown version", () => {
+    testState.sightingTimeline = [
+      {
+        bucketStart: new Date("2026-07-15T00:00:00Z"),
+        skillVersionId: "version_latest",
+        activationCount: 3,
+      },
+      {
+        bucketStart: new Date("2026-07-15T00:00:00Z"),
+        activationCount: 2,
+      },
+    ];
+
+    render(<SkillDetail />);
+
+    const chart = screen.getByTestId("activation-chart");
+    expect(chart.textContent).toContain("v1 (12345678):3");
+    expect(chart.textContent).toContain("Unknown version:2");
+  });
+
   it("project-scopes every write affordance", () => {
     render(<SkillDetail />);
     const gates = screen.getAllByTestId("write-gate");
@@ -311,22 +383,38 @@ describe("SkillDetail", () => {
 
   it("keeps loaded versions visible and retries a next-page failure explicitly", () => {
     testState.isFetchNextPageError = true;
+    testState.hasNextPage = true;
     testState.versionError = new Error("next page failed");
+    testState.sightingTimeline = [
+      {
+        bucketStart: new Date("2026-07-15T00:00:00Z"),
+        skillVersionId: "version_latest",
+        activationCount: 3,
+      },
+    ];
     render(<SkillDetail />);
 
     expect(screen.getAllByText("Version table").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("activation-chart")).toBeTruthy();
     expect(screen.getByText("Unable to load more versions.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
   });
 
-  it("offers restore only for valid non-current versions", () => {
+  it("labels valid non-current version actions by direction", () => {
     testState.versions = [
+      {
+        ...testState.version,
+        id: "version_new",
+        canonicalSha256: "newvalid12345678",
+        createdAt: new Date("2026-07-17T00:00:00Z"),
+      },
       testState.version,
       {
         ...testState.version,
         id: "version_old",
         canonicalSha256: "oldvalid12345678",
+        createdAt: new Date("2026-07-15T00:00:00Z"),
       },
       {
         ...testState.version,
@@ -337,16 +425,23 @@ describe("SkillDetail", () => {
     ];
     render(<SkillDetail />);
 
-    expect(
-      screen.getAllByRole("button", { name: "Restore this version" }),
-    ).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Promote" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Roll back" })).toBeTruthy();
+    expect(screen.getByText("Current")).toBeTruthy();
     expect(
       screen.getByRole("group", {
         name: "Version 12345678, current version",
       }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("group", { name: "Version oldvalid restore target" }),
+      screen.getByRole("group", {
+        name: "Version newvalid, promotion target",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("group", {
+        name: "Version oldvalid, roll back target",
+      }),
     ).toBeTruthy();
     expect(
       screen.getByRole("group", { name: "Version invalid1, invalid version" }),

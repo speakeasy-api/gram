@@ -1,6 +1,6 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/Separator";
+import { SidebarTrigger } from "@/components/ui/Sidebar";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
 import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -11,7 +11,7 @@ import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
 import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
-import { Heading } from "./ui/heading.tsx";
+import { Heading } from "@/components/ui/Heading";
 
 function PageHeaderComponent({
   className,
@@ -78,6 +78,7 @@ const breadcrumbSubstitutions = {
   "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
   "mdm-integrations": "MDM Integrations",
+  jamf: "Jamf Pro",
   slack: "Assistants",
 };
 

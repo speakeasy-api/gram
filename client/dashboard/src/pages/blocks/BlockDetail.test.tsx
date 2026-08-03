@@ -37,8 +37,8 @@ vi.mock("@/lib/utils", () => ({ buildLoginRedirectURL: () => "/login" }));
 
 vi.mock("@/components/gram-logo", () => ({ GramLogo: () => null }));
 
-vi.mock("@/components/ui/type", () => ({
-  Type: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+vi.mock("@/components/ui/Text", () => ({
+  Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
 
 vi.mock("lucide-react", () => ({
@@ -46,9 +46,9 @@ vi.mock("lucide-react", () => ({
   ThumbsDown: () => null,
 }));
 
-// moonshine pulls lucide dynamicIconImports which can't resolve in the test env;
+// Icon pulls lucide dynamicIconImports, which cannot resolve in the test env;
 // stub the few primitives the page uses so Button renders as a plain <button>.
-vi.mock("@speakeasy-api/moonshine", () => {
+vi.mock("@/components/ui/Button", () => {
   const Button = ({
     children,
     onClick,
@@ -65,12 +65,16 @@ vi.mock("@speakeasy-api/moonshine", () => {
   );
   Button.LeftIcon = ({ children }: { children: ReactNode }) => <>{children}</>;
   Button.Text = ({ children }: { children: ReactNode }) => <>{children}</>;
-  return {
-    Button,
-    Icon: () => null,
-    Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  };
+  return { Button };
 });
+
+vi.mock("@/components/ui/Icon", () => ({
+  Icon: () => null,
+}));
+
+vi.mock("@/components/ui/Stack", () => ({
+  Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
 
 import { BlockPage } from "./BlockDetail";
 

@@ -1256,7 +1256,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- its length, a redacted display string, and one-way fingerprints. Plaintext
     -- stays in Postgres for the audited unmask path.
     match_len UInt32 DEFAULT 0 COMMENT 'Byte length of the raw match, used to render the redacted display.',
-    match_redacted String DEFAULT '' COMMENT 'Precomputed display string in the form redacted len=N sha=XXXXXXXX. Every source is redacted here including shadow_mcp and account_identity so no plaintext or PII is ever stored in ClickHouse. The verbatim value stays in Postgres for the audited unmask path.' CODEC(ZSTD),
+    match_redacted String DEFAULT '' COMMENT 'Partial-mask display string rendered as the match by default in listings. General tier shows first 4 and last 2 characters for length 8 and up, first 2 and last 1 for length 5 to 7, first 1 and last 1 below 5, stars in between. Financial-category matches show only the last 4 characters. Emails show ***@ followed by the real domain. Prompt injection, llm_judge and destructive sources leave it empty since the rationale carries the signal. Shadow MCP stores the server identifier verbatim as a documented carve-out. Storing boundary characters of real matches here is a deliberate, signed-off relaxation of the earlier no-plaintext rule per the reveal-from-ClickHouse design. Rows written before the change may still carry the legacy redacted len=N sha=XXXX form.' CODEC(ZSTD),
 
     -- One-way fingerprints (base64url of HMAC-SHA256). See internal/risk/fingerprint.go.
     fingerprint_pepper_version String DEFAULT '' COMMENT 'Pepper keyring version used to compute the fingerprints.',
@@ -1268,7 +1268,26 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- auditable and can be filtered in or out at read time.
     excluded_at Nullable(DateTime64(9)) COMMENT 'Time the finding was suppressed by an exclusion. Null when the finding is not excluded.' CODEC(DoubleDelta, ZSTD),
     exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD),
-    false_positive_at Nullable(DateTime64(9)) COMMENT 'Time the finding was marked a false positive, mirrored from Postgres after the fact. Null when the finding is not marked.' CODEC(DoubleDelta, ZSTD)
+    false_positive_at Nullable(DateTime64(9)) COMMENT 'Time the finding was marked a false positive, mirrored from Postgres after the fact. Null when the finding is not marked.' CODEC(DoubleDelta, ZSTD),
+
+    -- List-path denormalization. The Risk Events listing sorts and paginates by
+    -- the scanned message's event time and filters by assistant, so both are
+    -- stamped at ingest from the same Postgres attribution lookup as
+    -- chat_id/user_id above. The DEFAULT created_at on message_created_at makes
+    -- pre-column rows read as their scan time, a close approximation for live
+    -- traffic (scans follow messages within seconds).
+    message_created_at DateTime64(9) DEFAULT created_at COMMENT 'Event time of the scanned chat message (chat_messages.created_at). Defaults to created_at (scan time) for rows written before the column existed or when attribution is unresolved.' CODEC(DoubleDelta, ZSTD),
+    assistant_id String DEFAULT '' COMMENT 'Assistant linked to the finding chat via a live assistant_threads row at ingest. Empty when the chat has no assistant link or attribution is unresolved.' CODEC(ZSTD),
+
+    -- Reveal metadata. The raw match is reconstructed at reveal time by
+    -- slicing the original chat data at start_pos and end_pos, then verified
+    -- against match_len and the HMAC fingerprints. These columns say WHICH
+    -- text those offsets index, removing the per-source ambiguity that made
+    -- position-based reconstruction unreliable for historical rows.
+    surface LowCardinality(String) DEFAULT '' COMMENT 'Which text start_pos and end_pos index: content, scan_surface, tool_args, json_path, derived, legacy_presidio or none. Empty for rows written before this column existed, where reveal falls back to a verified candidate cascade.',
+    field LowCardinality(String) DEFAULT '' COMMENT 'Scanner field the finding was detected in, e.g. content or tool.args, copied from the scanner span. Empty when unknown.',
+    path String DEFAULT '' COMMENT 'JSON path of the extracted value within the field for json_path surfaces, gjson syntax. Empty otherwise.' CODEC(ZSTD),
+    tool_call_id String DEFAULT '' COMMENT 'Recorded tool call id anchoring the finding when the scanned text belongs to a tool call. Empty when not applicable or unknown.' CODEC(ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1283,6 +1302,7 @@ CREATE INDEX IF NOT EXISTS idx_risk_findings_content_part_id ON risk_findings (c
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_id ON risk_findings (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_assistant_id ON risk_findings (assistant_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS skill_efficacy_scores (
     id UUID COMMENT 'Producer-supplied score identifier.',

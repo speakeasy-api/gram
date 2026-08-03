@@ -208,7 +208,7 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 
 // BuildListPayload builds the payload for the skills list endpoint from CLI
 // flags.
-func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
+func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSearch string, skillsListSourceKinds string, skillsListClassifications string, skillsListSort string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -236,6 +236,64 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 			}
 		}
 	}
+	var search *string
+	{
+		if skillsListSearch != "" {
+			search = &skillsListSearch
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sourceKinds []string
+	{
+		if skillsListSourceKinds != "" {
+			err = json.Unmarshal([]byte(skillsListSourceKinds), &sourceKinds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for sourceKinds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"captured\"\n   ]'")
+			}
+			for _, e := range sourceKinds {
+				if !(e == "manual" || e == "captured") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_kinds[*]", e, []any{"manual", "captured"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var classifications []string
+	{
+		if skillsListClassifications != "" {
+			err = json.Unmarshal([]byte(skillsListClassifications), &classifications)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for classifications, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"built_in\"\n   ]'")
+			}
+			for _, e := range classifications {
+				if !(e == "custom" || e == "built_in") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("classifications[*]", e, []any{"custom", "built_in"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sort string
+	{
+		if skillsListSort != "" {
+			sort = skillsListSort
+			if !(sort == "name" || sort == "updated") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"name", "updated"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if skillsListSessionToken != "" {
@@ -257,6 +315,10 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 	v := &skills.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Search = search
+	v.SourceKinds = sourceKinds
+	v.Classifications = classifications
+	v.Sort = sort
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -400,6 +462,49 @@ func BuildListFeedbackPayload(skillsListFeedbackID string, skillsListFeedbackCur
 	return v, nil
 }
 
+// BuildTriggerSuggestionPayload builds the payload for the skills
+// triggerSuggestion endpoint from CLI flags.
+func BuildTriggerSuggestionPayload(skillsTriggerSuggestionBody string, skillsTriggerSuggestionSessionToken string, skillsTriggerSuggestionApikeyToken string, skillsTriggerSuggestionProjectSlugInput string) (*skills.TriggerSuggestionPayload, error) {
+	var err error
+	var body TriggerSuggestionRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsTriggerSuggestionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsTriggerSuggestionSessionToken != "" {
+			sessionToken = &skillsTriggerSuggestionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsTriggerSuggestionApikeyToken != "" {
+			apikeyToken = &skillsTriggerSuggestionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsTriggerSuggestionProjectSlugInput != "" {
+			projectSlugInput = &skillsTriggerSuggestionProjectSlugInput
+		}
+	}
+	v := &skills.TriggerSuggestionPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildApproveSuggestionPayload builds the payload for the skills
 // approveSuggestion endpoint from CLI flags.
 func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApproveSuggestionSessionToken string, skillsApproveSuggestionApikeyToken string, skillsApproveSuggestionProjectSlugInput string) (*skills.ApproveSuggestionPayload, error) {
@@ -408,11 +513,11 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 	{
 		err = json.Unmarshal([]byte(skillsApproveSuggestionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if body.ChangeID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.change_id", *body.ChangeID, goa.FormatUUID))
+		for _, e := range body.ChangeIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.change_ids[*]", e, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -437,9 +542,14 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 		}
 	}
 	v := &skills.ApproveSuggestionPayload{
-		ID:       body.ID,
-		Content:  body.Content,
-		ChangeID: body.ChangeID,
+		ID:      body.ID,
+		Content: body.Content,
+	}
+	if body.ChangeIds != nil {
+		v.ChangeIds = make([]string, len(body.ChangeIds))
+		for i, val := range body.ChangeIds {
+			v.ChangeIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

@@ -259,7 +259,7 @@ func TestBuildPromptBoundsNotesDropsOldestEvidenceAndOmitsSessionIDs(t *testing.
 	for i := range feedback {
 		feedback[i] = repo.SkillFeedback{
 			Outcome: fmt.Sprintf("outcome-%d", i), Source: "test",
-			Note:      pgtype.Text{String: strings.Repeat("\x00", 2000), Valid: true},
+			Note:      pgtype.Text{String: strings.Repeat("\x00", skills.MaxFeedbackNoteRunes+1000), Valid: true},
 			CreatedAt: pgtype.Timestamptz{Time: policyNow.Add(time.Duration(i) * time.Second), Valid: true},
 		}
 	}
@@ -284,7 +284,7 @@ func TestBuildPromptBoundsNotesDropsOldestEvidenceAndOmitsSessionIDs(t *testing.
 	require.Less(t, len(payload.Feedback), len(feedback))
 	require.Equal(t, "outcome-49", payload.Feedback[len(payload.Feedback)-1].Outcome)
 	for _, item := range payload.Feedback {
-		require.LessOrEqual(t, utf8.RuneCountInString(item.Note), maxFeedbackNoteRunes)
+		require.LessOrEqual(t, utf8.RuneCountInString(item.Note), skills.MaxFeedbackNoteRunes)
 	}
 	for _, item := range payload.Transcripts {
 		require.NotEqual(t, "oldest", item.Surface)

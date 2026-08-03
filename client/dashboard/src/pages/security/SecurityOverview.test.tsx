@@ -52,7 +52,7 @@ vi.mock("@/components/require-scope", async () => {
   };
 });
 
-vi.mock("@/components/ui/dashboard-card", async () => {
+vi.mock("@/components/ui/DashboardCard", async () => {
   const { createElement } = await import("react");
 
   return {
@@ -61,7 +61,7 @@ vi.mock("@/components/ui/dashboard-card", async () => {
   };
 });
 
-vi.mock("@/components/ui/skeleton", () => ({
+vi.mock("@/components/ui/Skeleton", () => ({
   Skeleton: () => null,
 }));
 
@@ -100,7 +100,7 @@ vi.mock("@gram/client/react-query/riskOverview.js", () => ({
   useRiskOverview: mocks.useRiskOverview,
 }));
 
-vi.mock("@speakeasy-api/moonshine", async () => {
+vi.mock("@/components/ui/Button", async () => {
   const { createElement } = await import("react");
 
   function Container({ children }: { children?: ReactNode }) {
@@ -113,6 +113,13 @@ vi.mock("@speakeasy-api/moonshine", async () => {
       RightIcon: Container,
       Text: Container,
     }),
+  };
+});
+
+vi.mock("@/components/ui/Icon", async () => {
+  const { createElement } = await import("react");
+
+  return {
     Icon: ({ name }: { name: string }) => createElement("span", null, name),
   };
 });

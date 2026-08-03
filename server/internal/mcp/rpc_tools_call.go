@@ -52,6 +52,23 @@ import (
 type toolsCallParams struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+	Meta      *toolsCallMeta  `json:"_meta,omitempty"`
+}
+
+// toolsCallMeta is the subset of request `_meta` Gram reads. Clients may send
+// any keys they like; unknown ones are dropped on decode.
+type toolsCallMeta struct {
+	// ClientInfo is the per-request caller identity introduced by the draft
+	// stateless MCP work (SEP-2575), where the handshake fields move onto
+	// every request.
+	ClientInfo *mcpClientInfoHint `json:"io.modelcontextprotocol/clientInfo,omitempty"`
+}
+
+// mcpClientInfoHint is an MCP `Implementation` value as reported by a client.
+// Untrusted and self-reported.
+type mcpClientInfoHint struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 const (
@@ -80,6 +97,7 @@ func handleToolsCall(
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
+	clientInfoStore sessionClientInfoStore,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -257,12 +275,18 @@ func handleToolsCall(
 		}
 	}
 
+	var clientInfoHint *mcpClientInfoHint
+	if params.Meta != nil {
+		clientInfoHint = params.Meta.ClientInfo
+	}
+
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
 		OAuthToken: oauthToken,
 		GramEmail:  gramEmail,
 		GramChatID: payload.chatID,
+		MCPClient:  resolveClientIdentity(ctx, logger, clientInfoStore, payload, clientInfoHint),
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)

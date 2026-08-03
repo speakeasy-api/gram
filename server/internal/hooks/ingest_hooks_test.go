@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,18 +15,22 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // ingestUserScopedShadowMCPScanner reports a blocking shadow-MCP policy for a
@@ -206,6 +211,51 @@ func TestIngest_RejectedCredentialsUnauthorized(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, strings.ToLower(err.Error()), "unauthorized")
+}
+
+func TestIngestAuthenticated_UsesSuppliedIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "authenticated-ingest-" + uuid.NewString()
+	idempotencyKey := "authenticated-ingest-" + uuid.NewString()
+	prompt := "authenticated ingestion prompt " + uuid.NewString()
+	untrustedAPIKey := "must-not-override-authenticated-context"
+	untrustedProjectSlug := "must-not-override-authenticated-project"
+	payload := canonicalIngestPayload("litellm", "prompt.submitted", sessionID)
+	payload.ApikeyToken = &untrustedAPIKey
+	payload.ProjectSlugInput = &untrustedProjectSlug
+	payload.IdempotencyKey = &idempotencyKey
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:      "block",
+		PolicyID:    uuid.NewString(),
+		PolicyName:  "authenticated boundary policy",
+		Description: "blocked by deterministic test scanner",
+	}}
+
+	result, err := ti.service.IngestAuthenticated(t.Context(), authCtx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.True(t, messages[0].ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, messages[0].ProjectID.UUID)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, prompt, messages[0].Content)
 }
 
 // A shared plugins-* key carries no usable identity of its own, but the
@@ -660,7 +710,8 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 	require.Contains(t, skillRow.Attributes, "repo-review")
 	require.Contains(t, skillRow.Attributes, `"Skill"`)
 	require.NotNil(t, skillRow.GramChatID)
-	require.Equal(t, "codex-skill-session", *skillRow.GramChatID)
+	require.Equal(t, sessionIDToUUID("codex-skill-session").String(), *skillRow.GramChatID,
+		"telemetry carries the resolved chat id, not the raw session id")
 
 	// trace_summaries resolves tool_name with any(): on a shared trace the
 	// Bash sibling could win the summary and hide the activation from
@@ -944,6 +995,64 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 	require.Equal(t, "assistant", msgs[0].Role)
 }
 
+// TestIngest_NonUUIDSessionIDStampsResolvedChatID pins the cross-store identity
+// invariant: telemetry_logs.chat_id (gen_ai.conversation.id) must be the chats
+// row id, not the raw agent session id. Claude/Codex/Cursor session ids are
+// themselves UUIDs so the two coincided by accident; opencode's ("ses_...") are
+// not, and stamping the raw string sent a malformed UUID to every consumer that
+// loads a chat by the telemetry id — the costs page session drill-in among them.
+func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	// The chats row only exists when session capture is on — this test compares
+	// the two stores, so it needs the transcript side written.
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	const sessionID = "ses_05c47a44fffeCPIAOSNROITwrf"
+	_, err := uuid.Parse(sessionID)
+	require.Error(t, err, "the fixture must be a non-UUID session id for this test to mean anything")
+
+	chatID := sessionIDToUUID(sessionID)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	prompt := "hello from opencode"
+	payload := canonicalIngestPayload("opencode", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// The transcript lands under the mapped UUID.
+	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the ingested prompt row")
+
+	require.NotNil(t, logs[0].GramChatID)
+	require.NotEqual(t, sessionID, *logs[0].GramChatID, "the raw agent session id must not reach telemetry as the chat id")
+	require.Equal(t, persisted.ID.String(), *logs[0].GramChatID,
+		"telemetry chat_id must resolve to the same chats row the transcript was stored under")
+
+	// The costs page hands this value straight to a uuid-typed endpoint.
+	_, err = uuid.Parse(*logs[0].GramChatID)
+	require.NoError(t, err, "telemetry chat_id must be a parseable UUID")
+}
+
 // TestIngest_LinksChatToUserAccount confirms the canonical ingest path adopts
 // the account attribution the OTEL path cached for the session, so a chat
 // created here is linked to its user_accounts row — the join the
@@ -1098,8 +1207,9 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.False(t, secondPromptRow.MessageID.Valid, "hash match must not stamp the newer unrelated prompt")
 
 	parts, err := chatRepo.New(ti.conn).ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
+		ChatID:               chatID,
+		ProjectID:            *authCtx.ProjectID,
+		ParentChatMessageIds: []uuid.UUID{promptRow.ID, secondPromptRow.ID},
 	})
 	require.NoError(t, err)
 	require.Len(t, parts, 1)
@@ -1119,6 +1229,88 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.JSONEq(t, `{"display_path": "marker.txt", "kind": "file"}`, string(attachmentRow.Metadata))
 	require.True(t, attachmentRow.CreatedAt.Valid)
 	require.Equal(t, int64(2026), int64(attachmentRow.CreatedAt.Time.Year()))
+
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskRepo.New(ti.conn).CreateRiskPolicy(ctx, riskRepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "content part test policy",
+		Sources:        []string{"gitleaks"},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		UserMessage:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+	resultID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = riskRepo.New(ti.conn).InsertRiskResults(ctx, []riskRepo.InsertRiskResultsParams{{
+		ID:                resultID,
+		ProjectID:         *authCtx.ProjectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		RiskPolicyID:      policy.ID,
+		RiskPolicyVersion: policy.Version,
+		ChatMessageID:     uuid.NullUUID{},
+		ChatContentPartID: uuid.NullUUID{UUID: attachmentRow.ID, Valid: true},
+		Source:            "gitleaks",
+		Found:             true,
+		RuleID:            pgtype.Text{String: "secret.test", Valid: true},
+		Description:       pgtype.Text{String: "test finding", Valid: true},
+		Match:             pgtype.Text{String: "secret", Valid: true},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
+		EndPos:            pgtype.Int4{Int32: 6, Valid: true},
+		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
+		Tags:              []string{},
+	}})
+	require.NoError(t, err)
+	results, err := testrepo.New(ti.conn).ListRiskResultsAll(ctx, testrepo.ListRiskResultsAllParams{
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.False(t, results[0].ChatMessageID.Valid)
+	require.Equal(t, attachmentRow.ID, results[0].ChatContentPartID.UUID)
+
+	findingID, err := uuid.NewV7()
+	require.NoError(t, err)
+	chInserter := &recordingRiskFindingInserter{rows: nil}
+	fingerprinter, err := risk.ParsePepperKeyRing(fmt.Appendf(nil, `{"current":"v1","keys":{"v1":%q}}`, base64.StdEncoding.EncodeToString([]byte("test-fingerprint-key-material"))))
+	require.NoError(t, err)
+	chWriter := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), chInserter, fingerprinter)
+	startPos := int32(0)
+	endPos := int32(6)
+	confidence := float64(1)
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	require.NoError(t, chWriter.HandleBatch(ctx, []*riskv1.Finding{
+		riskv1.Finding_builder{
+			Id:                new(findingID.String()),
+			RequestId:         new("req-content-part"),
+			ChatMessageId:     nil,
+			ContentPartId:     new(attachmentRow.ID.String()),
+			ProjectId:         new(authCtx.ProjectID.String()),
+			OrganizationId:    &authCtx.ActiveOrganizationID,
+			RiskPolicyId:      new(policy.ID.String()),
+			RiskPolicyVersion: &policy.Version,
+			CreatedAt:         &createdAt,
+			RuleId:            new("secret.test"),
+			Description:       new("test finding"),
+			Match:             new("secret"),
+			StartPos:          &startPos,
+			EndPos:            &endPos,
+			Tags:              []string{},
+			Source:            new("gitleaks"),
+			Confidence:        &confidence,
+			DeadLetterReason:  nil,
+		}.Build(),
+	}, nil))
+	require.Len(t, chInserter.rows, 1)
+	require.Empty(t, chInserter.rows[0].ChatMessageID)
+	require.Equal(t, attachmentRow.ID.String(), chInserter.rows[0].ContentPartID)
+	require.Equal(t, chatID.String(), chInserter.rows[0].ChatID)
 
 	// A redelivered attachment event must not stamp an unrelated prompt row.
 	redelivery := canonicalIngestPayload("claude", "assistant.responded", sessionID)
@@ -1445,6 +1637,14 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	// Unrecognized raw names for known adapters fall back to the canonical map.
 	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeReadFile")))
 
+	// OpenCode's message.part.updated carries every streaming part update, not
+	// just failures; agenthooks decides whether it is a real tool failure, so the
+	// raw name must defer to the canonical Event.Type instead of forcing a
+	// failure. session.idle likewise defers (canonical assistant.responded).
+	require.Equal(t, "PostToolUseFailure", telemetryHookEventName(withRaw("opencode", "tool.failed", "message.part.updated")))
+	require.Equal(t, "session.updated", telemetryHookEventName(withRaw("opencode", "session.updated", "message.part.updated")))
+	require.Equal(t, "AfterAgentResponse", telemetryHookEventName(withRaw("opencode", "assistant.responded", "session.idle")))
+
 	// Custom adapters have no raw vocabulary: canonical types map to their
 	// provider-style equivalents so summaries still count them.
 	require.Equal(t, "PostToolUse", telemetryHookEventName(canonicalIngestPayload("openclaw", "tool.completed", "vocab-session")))
@@ -1600,4 +1800,13 @@ func TestIngest_ReplayedMessageSortsByOccurredAt(t *testing.T) {
 	require.WithinDuration(t, wantBacklogAt, msgs[1].CreatedAt.Time, time.Second, "created_at must carry the event's occurred_at")
 	require.WithinDuration(t, time.Now(), msgs[3].CreatedAt.Time, 30*time.Second, "a future occurred_at must be clamped to arrival time")
 	require.WithinDuration(t, time.Now().Add(-14*24*time.Hour), msgs[0].CreatedAt.Time, 30*time.Second, "a far-past occurred_at must be floored to the 14-day backdate bound")
+}
+
+type recordingRiskFindingInserter struct {
+	rows []chrepo.RiskFindingRow
+}
+
+func (r *recordingRiskFindingInserter) InsertRiskFindings(_ context.Context, rows []chrepo.RiskFindingRow) error {
+	r.rows = rows
+	return nil
 }

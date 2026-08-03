@@ -58,7 +58,7 @@ func parseInitializeParams(raw json.RawMessage) (initializeParams, []string, err
 	return params, slices.Sorted(maps.Keys(params.Capabilities)), nil
 }
 
-func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries) (json.RawMessage, error) {
+func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries, clientInfoStore sessionClientInfoStore) (json.RawMessage, error) {
 	params, capabilities, err := parseInitializeParams(req.Params)
 	validParams := err == nil
 	if err != nil {
@@ -66,6 +66,8 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 		// recorded client info for this request.
 		logger.WarnContext(ctx, "failed to parse mcp initialize params", attr.SlogError(err))
 	}
+
+	storeSessionClientInfo(ctx, logger, clientInfoStore, payload, params.ClientInfo.Name, params.ClientInfo.Version)
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		if err := productMetrics.CaptureEvent(ctx, "mcp_initialized", payload.sessionID, map[string]any{

@@ -20,6 +20,10 @@ export type SkillEfficacyInsightsResult = {
   from: Date;
   insights: Array<SkillEfficacyInsight>;
   intervalSeconds: number;
+  /**
+   * Cursor for the next page of scored sessions; absent when exhausted.
+   */
+  nextCursor?: string | undefined;
   scoredSessions: Array<SkillEfficacyScoredSession>;
   scoresAvailable: boolean;
   to: Date;
@@ -37,6 +41,7 @@ export const SkillEfficacyInsightsResult$inboundSchema: z.ZodMiniType<
     ),
     insights: z.array(SkillEfficacyInsight$inboundSchema),
     interval_seconds: z.int(),
+    next_cursor: z.optional(z.string()),
     scored_sessions: z.array(SkillEfficacyScoredSession$inboundSchema),
     scores_available: z.boolean(),
     to: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -44,6 +49,7 @@ export const SkillEfficacyInsightsResult$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "interval_seconds": "intervalSeconds",
+      "next_cursor": "nextCursor",
       "scored_sessions": "scoredSessions",
       "scores_available": "scoresAvailable",
     });

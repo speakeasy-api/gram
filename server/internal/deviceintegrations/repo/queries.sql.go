@@ -67,17 +67,46 @@ WHERE das.organization_id = $1
       AND LOWER(d.user_email) = LOWER(das.email)
       AND ($2::text IS NULL OR c.provider = $2::text)
   )
+  -- Under device-level matching the email link is no longer the only way an
+  -- agent user can be managed: one of their machines may be in inventory
+  -- under a different email, or none at all. Without this escape hatch the
+  -- tile would report a user as having no managed device while the coverage
+  -- list shows that very device as active.
+  -- Written as a top-level NOT EXISTS with the flag INSIDE, not as
+  -- NOT (@device_level AND EXISTS (...)). Nesting the sublink under NOT(AND ...)
+  -- blocks pull_up_sublinks (it runs before const-folding, so even a literal
+  -- true does not help): Postgres falls back to a hashed SubPlan and hoists the
+  -- correlation quals into hash keys, leaving the scans with no organization_id
+  -- predicate — so it reads EVERY tenant's rows on a user-facing dashboard
+  -- call. At top level it plans as an org-scoped anti-join over the serial
+  -- indexes, and degenerates to a cheap constant-false scan when the flag is off.
+  AND NOT EXISTS (
+    SELECT 1
+    FROM device_agent_device_syncs dads
+    JOIN mdm_devices d2
+      ON d2.organization_id = dads.organization_id
+     AND LOWER(d2.serial_number) = LOWER(dads.serial_number)
+     AND d2.missing_since IS NULL
+    JOIN device_integration_configs c2
+      ON c2.id = d2.device_integration_config_id
+     AND c2.deleted IS FALSE
+    WHERE $3::boolean
+      AND dads.organization_id = $1
+      AND LOWER(dads.email) = LOWER(das.email)
+      AND ($2::text IS NULL OR c2.provider = $2::text)
+  )
 `
 
 type CountUnmanagedAgentUsersParams struct {
 	OrganizationID string
 	Provider       pgtype.Text
+	DeviceLevel    bool
 }
 
 // When scoped to one provider, "unmanaged" means no managed device from THAT
 // provider — an agent user covered only by a different MDM still counts.
 func (q *Queries) CountUnmanagedAgentUsers(ctx context.Context, arg CountUnmanagedAgentUsersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countUnmanagedAgentUsers, arg.OrganizationID, arg.Provider)
+	row := q.db.QueryRow(ctx, countUnmanagedAgentUsers, arg.OrganizationID, arg.Provider, arg.DeviceLevel)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -250,12 +279,24 @@ func (q *Queries) GetConfigByOrgAndProviderForUpdate(ctx context.Context, arg Ge
 const getCoverageCounts = `-- name: GetCoverageCounts :one
 
 SELECT
-    count(*) FILTER (WHERE d.missing_since IS NOT NULL) AS missing
-  , count(*) FILTER (WHERE d.missing_since IS NULL AND coalesce(d.user_email, '') = '') AS no_email
-  , count(*) FILTER (WHERE d.missing_since IS NULL AND coalesce(d.user_email, '') <> '' AND das.last_seen_at >= $1::timestamptz) AS agent_active
-  , count(*) FILTER (WHERE d.missing_since IS NULL AND coalesce(d.user_email, '') <> '' AND das.last_seen_at < $1::timestamptz) AS agent_stale
-  , count(*) FILTER (WHERE d.missing_since IS NULL AND coalesce(d.user_email, '') <> '' AND das.id IS NULL AND d.user_id IS NOT NULL) AS no_agent
-  , count(*) FILTER (WHERE d.missing_since IS NULL AND coalesce(d.user_email, '') <> '' AND das.id IS NULL AND d.user_id IS NULL) AS unresolved_email
+    count(*) FILTER (WHERE cov.coverage_bucket = 'missing') AS missing
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'no_email') AS no_email
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_active') AS agent_active
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_stale') AS agent_stale
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_other_device') AS agent_other_device
+    -- How many of the agent_active devices are backed by their OWN heartbeat.
+    -- agent_active is reachable via the email fallback even in device-level
+    -- mode, so without this the caller cannot tell whether "active" means
+    -- "this machine reported" for every device or only for some — and would
+    -- have to state the strong claim for all of them.
+    -- The bucket guard is load-bearing, not decoration. A device retired from
+    -- MDM keeps bucket 'missing' while its agent may still be installed and
+    -- reporting, so without it this count could EXCEED agent_active and the
+    -- caller's equality check would never match again — permanently printing
+    -- the weaker claim for an org whose every active device is serial-attested.
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_active' AND $1::boolean AND dads.last_seen_at >= $2::timestamptz) AS agent_active_device_attested
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'no_agent') AS no_agent
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'unresolved_email') AS unresolved_email
   , count(*) AS total
 FROM mdm_devices d
 JOIN device_integration_configs c
@@ -264,47 +305,116 @@ JOIN device_integration_configs c
 LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
-WHERE d.organization_id = $2
-  AND ($3::text IS NULL OR c.provider = $3::text)
+LEFT JOIN device_agent_device_syncs dads
+  ON dads.organization_id = d.organization_id
+ AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+LEFT JOIN LATERAL (
+  SELECT 1 AS found
+  FROM device_agent_device_syncs o
+  WHERE o.organization_id = d.organization_id
+    AND LOWER(o.email) = LOWER(d.user_email)
+    AND LOWER(o.serial_number) IS DISTINCT FROM LOWER(d.serial_number)
+    AND o.last_seen_at >= $2::timestamptz
+  LIMIT 1
+) other ON TRUE
+CROSS JOIN LATERAL (
+  SELECT CASE
+    WHEN d.missing_since IS NOT NULL THEN 'missing'
+    -- Device-level: this machine's own heartbeat answers for it, and outranks
+    -- everything email-based including no_email — a device the MDM records
+    -- with no assigned user is still legible when its own agent reports in.
+    WHEN $1::boolean AND dads.last_seen_at >= $2::timestamptz THEN 'agent_active'
+    WHEN $1::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
+    -- Device-level only, and it requires POSITIVE evidence: the assigned user
+    -- has a fresh heartbeat from a different serial-identified machine, so
+    -- this one is a real gap. Without that evidence we must NOT land here —
+    -- an agent that reports no serial is indistinguishable from one running
+    -- on another machine, and guessing "elsewhere" would tell an admin to
+    -- reinstall on a device already running the agent.
+    WHEN $1::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
+    -- Shared fallback, identical in both modes. This is what keeps the two
+    -- consistent: a device with only a user-level heartbeat stays
+    -- agent_active (the evidence push says the same thing, at "user"
+    -- attestation), so enabling device-level matching can never demote a
+    -- covered fleet to 0%.
+    WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
+    WHEN das.last_seen_at >= $2::timestamptz THEN 'agent_active'
+    WHEN das.id IS NOT NULL THEN 'agent_stale'
+    WHEN d.user_id IS NOT NULL THEN 'no_agent'
+    ELSE 'unresolved_email'
+  END AS coverage_bucket
+) cov
+WHERE d.organization_id = $3
+  AND ($4::text IS NULL OR c.provider = $4::text)
 `
 
 type GetCoverageCountsParams struct {
+	DeviceLevel    bool
 	ActiveCutoff   pgtype.Timestamptz
 	OrganizationID string
 	Provider       pgtype.Text
 }
 
 type GetCoverageCountsRow struct {
-	Missing         int64
-	NoEmail         int64
-	AgentActive     int64
-	AgentStale      int64
-	NoAgent         int64
-	UnresolvedEmail int64
-	Total           int64
+	Missing                   int64
+	NoEmail                   int64
+	AgentActive               int64
+	AgentStale                int64
+	AgentOtherDevice          int64
+	AgentActiveDeviceAttested int64
+	NoAgent                   int64
+	UnresolvedEmail           int64
+	Total                     int64
 }
 
 // Coverage classifies each present (non-missing) device of the org's live
-// configs by joining the MDM-reported assigned-user email against agent
-// heartbeats (device_agent_syncs, LOWER(email) on both sides). Buckets, in
-// precedence order:
+// configs against agent heartbeats. There are two matching modes, selected by
+// the @device_level parameter (the caller resolves feature.FlagDeviceLevelCoverage):
 //
-//	no_email          the MDM reported no assigned-user email
-//	agent_active      assigned user's agent heartbeat is within the window
-//	agent_stale       assigned user has an agent, but it went quiet (drift)
-//	no_agent          email resolves to an org member with no agent at all
-//	unresolved_email  email matches neither an agent user nor an org member
+//	device-level  the device's hardware serial against device_agent_device_syncs
+//	              (LOWER(serial_number) on both sides), falling back to email
+//	user-level    the MDM-reported assigned-user email against device_agent_syncs
+//	              (LOWER(email) on both sides) — the pre-DNO-643 behavior
 //
-// Naming is deliberate: the heartbeat attests the assigned USER runs the
-// agent somewhere, not that this device runs it.
+// Buckets, in precedence order:
+//
+//	missing             the device stopped appearing in MDM inventory
+//	agent_active        the agent heartbeat is within the window
+//	agent_stale         an agent is known, but it went quiet (drift)
+//	agent_other_device  device-level only: the assigned user runs the agent,
+//	                    just not on this machine
+//	no_email            the MDM reported no assigned-user email
+//	no_agent            email resolves to an org member with no agent at all
+//	unresolved_email    email matches neither an agent user nor an org member
+//
+// Two precedence details matter. A serial match outranks no_email: a device
+// with no assigned user in the MDM is still legible when its own agent reports
+// in, which is most of what device-level matching buys. And agent_other_device
+// is deliberately distinct from no_agent — "installed, wrong machine" and
+// "never installed" need different remediation.
+//
+// Under user-level matching the heartbeat attests only that the assigned USER
+// runs the agent somewhere, never that this device does.
+// Counts read the lateral's bucket rather than restating its predicates, so
+// the aggregate and the per-row list in ListManagedDevices cannot disagree.
+// Positive evidence for the agent_other_device bucket: a fresh heartbeat from
+// this user on a DIFFERENT machine. LIMIT 1 because existence is the whole
+// question.
 func (q *Queries) GetCoverageCounts(ctx context.Context, arg GetCoverageCountsParams) (GetCoverageCountsRow, error) {
-	row := q.db.QueryRow(ctx, getCoverageCounts, arg.ActiveCutoff, arg.OrganizationID, arg.Provider)
+	row := q.db.QueryRow(ctx, getCoverageCounts,
+		arg.DeviceLevel,
+		arg.ActiveCutoff,
+		arg.OrganizationID,
+		arg.Provider,
+	)
 	var i GetCoverageCountsRow
 	err := row.Scan(
 		&i.Missing,
 		&i.NoEmail,
 		&i.AgentActive,
 		&i.AgentStale,
+		&i.AgentOtherDevice,
+		&i.AgentActiveDeviceAttested,
 		&i.NoAgent,
 		&i.UnresolvedEmail,
 		&i.Total,
@@ -489,7 +599,11 @@ SELECT
   , d.serial_number
   , d.hostname
   , d.user_email
-  , das.last_seen_at AS agent_last_seen_at
+  , (CASE
+      WHEN $1::boolean AND dads.id IS NOT NULL THEN dads.last_seen_at
+      ELSE das.last_seen_at
+    END)::timestamptz AS agent_last_seen_at
+  , ($1::boolean AND dads.id IS NOT NULL) AS device_attested
 FROM mdm_devices d
 JOIN device_integration_configs c
   ON c.id = d.device_integration_config_id
@@ -497,10 +611,18 @@ JOIN device_integration_configs c
 LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
-WHERE d.organization_id = $1
+LEFT JOIN device_agent_device_syncs dads
+  ON dads.organization_id = d.organization_id
+ AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+WHERE d.organization_id = $2
   AND d.missing_since IS NULL
 ORDER BY d.external_id ASC, d.id ASC
 `
+
+type ListCoverageSnapshotDevicesParams struct {
+	DeviceLevel    bool
+	OrganizationID string
+}
 
 type ListCoverageSnapshotDevicesRow struct {
 	ExternalID      string
@@ -508,13 +630,19 @@ type ListCoverageSnapshotDevicesRow struct {
 	Hostname        pgtype.Text
 	UserEmail       pgtype.Text
 	AgentLastSeenAt pgtype.Timestamptz
+	DeviceAttested  pgtype.Bool
 }
 
 // ListCoverageSnapshotDevices feeds evidence-sink pushes: every present
 // device across the org's live configs, with the assigned user's agent
 // heartbeat. Ordered by external id so the snapshot digest is deterministic.
-func (q *Queries) ListCoverageSnapshotDevices(ctx context.Context, organizationID string) ([]ListCoverageSnapshotDevicesRow, error) {
-	rows, err := q.db.Query(ctx, listCoverageSnapshotDevices, organizationID)
+// Prefers the machine's own heartbeat, falling back to its assigned user's.
+// device_attested travels with each row because the answer is per device, not
+// per org: even with device-level matching on, a machine whose agent cannot
+// report a serial is still only user-attested, and pushed evidence must say
+// so rather than let the stronger claim leak across.
+func (q *Queries) ListCoverageSnapshotDevices(ctx context.Context, arg ListCoverageSnapshotDevicesParams) ([]ListCoverageSnapshotDevicesRow, error) {
+	rows, err := q.db.Query(ctx, listCoverageSnapshotDevices, arg.DeviceLevel, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -528,6 +656,7 @@ func (q *Queries) ListCoverageSnapshotDevices(ctx context.Context, organizationI
 			&i.Hostname,
 			&i.UserEmail,
 			&i.AgentLastSeenAt,
+			&i.DeviceAttested,
 		); err != nil {
 			return nil, err
 		}
@@ -544,7 +673,13 @@ const listManagedDevices = `-- name: ListManagedDevices :many
 SELECT
     d.id, d.device_integration_config_id, d.organization_id, d.external_id, d.serial_number, d.hostname, d.os_name, d.os_version, d.user_email, d.user_id, d.mdm_last_check_in_at, d.raw, d.first_seen_at, d.last_seen_at, d.missing_since, d.created_at, d.updated_at
   , c.provider
-  , das.last_seen_at AS agent_last_seen_at
+    -- Show the heartbeat that classified the row: under device-level matching
+    -- a serial match is what makes the device active, so surfacing the user's
+    -- timestamp instead would contradict the bucket beside it.
+  , (CASE
+      WHEN $1::boolean AND dads.id IS NOT NULL THEN dads.last_seen_at
+      ELSE das.last_seen_at
+    END)::timestamptz AS agent_last_seen_at
   , cov.coverage_bucket
 FROM mdm_devices d
 JOIN device_integration_configs c
@@ -553,28 +688,58 @@ JOIN device_integration_configs c
 LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
+LEFT JOIN device_agent_device_syncs dads
+  ON dads.organization_id = d.organization_id
+ AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+LEFT JOIN LATERAL (
+  SELECT 1 AS found
+  FROM device_agent_device_syncs o
+  WHERE o.organization_id = d.organization_id
+    AND LOWER(o.email) = LOWER(d.user_email)
+    AND LOWER(o.serial_number) IS DISTINCT FROM LOWER(d.serial_number)
+    AND o.last_seen_at >= $2::timestamptz
+  LIMIT 1
+) other ON TRUE
 CROSS JOIN LATERAL (
-  -- The single source of the bucket classification for this query: both the
-  -- projected column and the bucket filter below read this alias, so the
-  -- rules cannot drift apart between what is shown and what is filtered.
+  -- Kept byte-identical to the CASE in GetCoverageCounts. Both the projected
+  -- column and the bucket filter below read this alias, so what is shown and
+  -- what is filtered cannot drift apart.
   SELECT CASE
     WHEN d.missing_since IS NOT NULL THEN 'missing'
+    -- Device-level: this machine's own heartbeat answers for it, and outranks
+    -- everything email-based including no_email — a device the MDM records
+    -- with no assigned user is still legible when its own agent reports in.
+    WHEN $1::boolean AND dads.last_seen_at >= $2::timestamptz THEN 'agent_active'
+    WHEN $1::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
+    -- Device-level only, and it requires POSITIVE evidence: the assigned user
+    -- has a fresh heartbeat from a different serial-identified machine, so
+    -- this one is a real gap. Without that evidence we must NOT land here —
+    -- an agent that reports no serial is indistinguishable from one running
+    -- on another machine, and guessing "elsewhere" would tell an admin to
+    -- reinstall on a device already running the agent.
+    WHEN $1::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
+    -- Shared fallback, identical in both modes. This is what keeps the two
+    -- consistent: a device with only a user-level heartbeat stays
+    -- agent_active (the evidence push says the same thing, at "user"
+    -- attestation), so enabling device-level matching can never demote a
+    -- covered fleet to 0%.
     WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
-    WHEN das.last_seen_at >= $1::timestamptz THEN 'agent_active'
+    WHEN das.last_seen_at >= $2::timestamptz THEN 'agent_active'
     WHEN das.id IS NOT NULL THEN 'agent_stale'
     WHEN d.user_id IS NOT NULL THEN 'no_agent'
     ELSE 'unresolved_email'
   END AS coverage_bucket
 ) cov
-WHERE d.organization_id = $2
-  AND ($3::text IS NULL OR c.provider = $3::text)
-  AND ($4::uuid IS NULL OR d.id < $4::uuid)
-  AND ($5::text IS NULL OR $5::text = cov.coverage_bucket)
+WHERE d.organization_id = $3
+  AND ($4::text IS NULL OR c.provider = $4::text)
+  AND ($5::uuid IS NULL OR d.id < $5::uuid)
+  AND ($6::text IS NULL OR $6::text = cov.coverage_bucket)
 ORDER BY d.id DESC
-LIMIT $6
+LIMIT $7
 `
 
 type ListManagedDevicesParams struct {
+	DeviceLevel    bool
 	ActiveCutoff   pgtype.Timestamptz
 	OrganizationID string
 	Provider       pgtype.Text
@@ -610,8 +775,12 @@ type ListManagedDevicesRow struct {
 // (UUIDv7, so id order is creation order) with an `id <` cursor, computing
 // each device's coverage bucket with the same rules as GetCoverageCounts.
 // The optional bucket filter accepts the bucket names plus 'missing'.
+// Positive evidence for the agent_other_device bucket: a fresh heartbeat from
+// this user on a DIFFERENT machine. LIMIT 1 because existence is the whole
+// question.
 func (q *Queries) ListManagedDevices(ctx context.Context, arg ListManagedDevicesParams) ([]ListManagedDevicesRow, error) {
 	rows, err := q.db.Query(ctx, listManagedDevices,
+		arg.DeviceLevel,
 		arg.ActiveCutoff,
 		arg.OrganizationID,
 		arg.Provider,
@@ -825,7 +994,7 @@ func (q *Queries) MarkDevicesMissing(ctx context.Context, arg MarkDevicesMissing
 	return err
 }
 
-const recordSyncFailure = `-- name: RecordSyncFailure :exec
+const recordSyncFailure = `-- name: RecordSyncFailure :one
 
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + make_interval(secs => $1::int),
@@ -851,6 +1020,7 @@ JOIN device_integration_configs c
 WHERE s.id = $5
   AND sch.id = s.device_integration_schedule_id
   AND c.updated_at = $6
+RETURNING (s.auto_paused_at IS NOT NULL)::boolean AS auto_paused
 `
 
 type RecordSyncFailureParams struct {
@@ -866,8 +1036,12 @@ type RecordSyncFailureParams struct {
 // positive and the new streak reaches it, auto-pauses the schedule so
 // candidate selection stops re-enqueueing it. Callers pass zero pause_after
 // for failures that should never pause (e.g. transient network errors).
-func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailureParams) error {
-	_, err := q.db.Exec(ctx, recordSyncFailure,
+// Returns whether this call left the schedule auto-paused: the caller loads a
+// runnable (never-paused) sync, so a non-null auto_paused_at can only mean
+// THIS failure crossed the threshold — a clean auto-pause metric signal. Zero
+// rows (a concurrent config save moved updated_at) returns no row.
+func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, recordSyncFailure,
 		arg.NextInSeconds,
 		arg.LastPollError,
 		arg.AuthRejection,
@@ -875,7 +1049,9 @@ func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailurePa
 		arg.SyncID,
 		arg.ConfigUpdatedAt,
 	)
-	return err
+	var auto_paused bool
+	err := row.Scan(&auto_paused)
+	return auto_paused, err
 }
 
 const recordSyncSuccess = `-- name: RecordSyncSuccess :execrows

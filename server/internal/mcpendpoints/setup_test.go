@@ -85,7 +85,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -251,6 +251,12 @@ func seedUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 
+	return seedMcpServerWithVisibility(t, ctx, conn, projectID, "disabled")
+}
+
+func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string) uuid.UUID {
+	t.Helper()
+
 	server := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
@@ -270,7 +276,7 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: server.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:          "disabled",
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 

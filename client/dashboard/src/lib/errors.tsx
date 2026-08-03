@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 
 interface ErrorHandlerOptions {
@@ -26,6 +26,15 @@ export function toError(error: unknown): Error {
   }
 }
 
+// isNotFoundError reports whether an SDK call failed with a 404. Some lookups
+// treat "not found" as a normal answer rather than a failure — asking whether a
+// record exists before creating it — so they catch the rejection and branch on
+// this instead of surfacing an error.
+export function isNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return "statusCode" in error && error.statusCode === 404;
+}
+
 export function handleError(
   error: unknown,
   options: ErrorHandlerOptions = {},
@@ -47,12 +56,12 @@ export function handleError(
   if (!silent) {
     toast.error(
       <Stack gap={1}>
-        <Type variant="subheading" className="text-destructive!">
+        <Text variant="subheading" className="text-destructive!">
           {title}
-        </Type>
-        <Type small muted>
+        </Text>
+        <Text small muted>
           {errorMessage}
-        </Type>
+        </Text>
       </Stack>,
       {
         duration: persist ? Infinity : 5000,

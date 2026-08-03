@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "adminChatAnalysis" service endpoints.
 type Endpoints struct {
-	GetSettings             goa.Endpoint
-	UpsertWorkUnitsSettings goa.Endpoint
-	TriggerAnalysis         goa.Endpoint
+	GetSettings                  goa.Endpoint
+	UpsertWorkUnitsSettings      goa.Endpoint
+	UpsertBusinessMemorySettings goa.Endpoint
+	TriggerAnalysis              goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "adminChatAnalysis" service with
@@ -27,9 +28,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetSettings:             NewGetSettingsEndpoint(s, a.APIKeyAuth),
-		UpsertWorkUnitsSettings: NewUpsertWorkUnitsSettingsEndpoint(s, a.APIKeyAuth),
-		TriggerAnalysis:         NewTriggerAnalysisEndpoint(s, a.APIKeyAuth),
+		GetSettings:                  NewGetSettingsEndpoint(s, a.APIKeyAuth),
+		UpsertWorkUnitsSettings:      NewUpsertWorkUnitsSettingsEndpoint(s, a.APIKeyAuth),
+		UpsertBusinessMemorySettings: NewUpsertBusinessMemorySettingsEndpoint(s, a.APIKeyAuth),
+		TriggerAnalysis:              NewTriggerAnalysisEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -38,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSettings = m(e.GetSettings)
 	e.UpsertWorkUnitsSettings = m(e.UpsertWorkUnitsSettings)
+	e.UpsertBusinessMemorySettings = m(e.UpsertBusinessMemorySettings)
 	e.TriggerAnalysis = m(e.TriggerAnalysis)
 }
 
@@ -84,6 +87,30 @@ func NewUpsertWorkUnitsSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		return s.UpsertWorkUnitsSettings(ctx, p)
+	}
+}
+
+// NewUpsertBusinessMemorySettingsEndpoint returns an endpoint function that
+// calls the method "upsertBusinessMemorySettings" of service
+// "adminChatAnalysis".
+func NewUpsertBusinessMemorySettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpsertBusinessMemorySettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpsertBusinessMemorySettings(ctx, p)
 	}
 }
 

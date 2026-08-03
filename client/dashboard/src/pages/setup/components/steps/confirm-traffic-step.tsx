@@ -165,7 +165,7 @@ export function ConfirmTrafficStep({
             </div>
           </div>
           <p className="text-muted-foreground text-sm">
-            Listening for Claude Code, Cursor, and Codex hooks…
+            Listening for agent hooks…
           </p>
         </div>
       </StepContainer>
@@ -180,7 +180,7 @@ export function ConfirmTrafficStep({
         </div>
       }
       title="Confirm traffic"
-      description="We're listening for events from your agent platforms. Trigger any action in Claude Code, Cursor, or Codex on a managed machine to confirm the instrumentation works."
+      description="We're listening for events from your agent platforms. Trigger any action in a managed coding agent to confirm the instrumentation works."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack

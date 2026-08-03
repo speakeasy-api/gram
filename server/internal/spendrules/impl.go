@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -195,7 +196,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		Version:        1,
 	})
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 		// Lost a race with a concurrent create picking the same slug.
 		return nil, oops.E(oops.CodeConflict, err, "a rule with a conflicting name was just created, try again")
 	}

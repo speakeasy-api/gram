@@ -44,6 +44,29 @@ func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
 }
 
+// IngestAuthenticated bypasses transport authentication for trusted in-process
+// callers that have already authenticated the supplied organization and project.
+func (s *Service) IngestAuthenticated(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
+	if payload == nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "ingest payload is required")
+	}
+	if authCtx == nil || strings.TrimSpace(authCtx.ActiveOrganizationID) == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "authenticated organization is required")
+	}
+	if authCtx.ProjectID == nil || *authCtx.ProjectID == uuid.Nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "authenticated project is required")
+	}
+
+	authCopy := *authCtx
+	projectID := *authCtx.ProjectID
+	authCopy.ProjectID = &projectID
+	payloadCopy := *payload
+	payloadCopy.ApikeyToken = nil
+	payloadCopy.ProjectSlugInput = nil
+
+	return s.Ingest(contextvalues.SetAuthContext(ctx, &authCopy), &payloadCopy)
+}
+
 // Ingest is the feature-first hook endpoint; this path only accepts the
 // canonical Gram contract. Auth is optional so hook senders stay non-blocking
 // for machines that never signed in: a keyless request is acknowledged without
@@ -177,7 +200,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 		return nil, false, nil
 	}
 	skill := payload.Data.Skill
-	name := strings.TrimSpace(skill.Name)
+	name := canonicalSkillName(payload)
 	if name == "" || !isExplicitSkillActivation(payload) && blockReason != "" {
 		return nil, false, nil
 	}
@@ -907,8 +930,15 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 		attr.TraceIDKey:        canonicalTraceID(payload),
 		attr.LogBodyKey:        "Hook: " + hookEventName,
 	}
+	// Stamp the resolved chat id, not the raw agent session id: every consumer
+	// treats gen_ai.conversation.id (materialized as telemetry_logs.chat_id) as
+	// the chats row id, and persistCanonicalConversationEvent stores the
+	// transcript under the same mapping. Claude/Codex/Cursor session ids are
+	// themselves UUIDs, so this was previously an accidental identity; opencode
+	// ids ("ses_...") are not, and the raw string reached the chat detail
+	// endpoint as a malformed UUID. See chat.SessionIDToChatID.
 	if sessionID := canonicalSessionID(payload); sessionID != "" {
-		attrs[attr.GenAIConversationIDKey] = sessionID
+		attrs[attr.GenAIConversationIDKey] = sessionIDToUUID(sessionID).String()
 	}
 	if conv.PtrValOr(payload.Replayed, false) {
 		// Downtime backlog redelivered from a device's offline spool: the
@@ -968,6 +998,8 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 			parse = parseCursorHookEvent
 		case "codex":
 			parse = parseCodexHookEvent
+		case "opencode":
+			parse = parseOpencodeHookEvent
 		}
 		if parse != nil {
 			if event, ok := parse(raw); ok {
@@ -1499,11 +1531,18 @@ func canonicalMessageText(payload *gen.IngestPayload) string {
 	return ""
 }
 
+// canonicalSkillName strips a single `<scope>:` plugin prefix from the
+// reported skill name so activations attribute to one canonical skill no
+// matter which plugin distributed it.
 func canonicalSkillName(payload *gen.IngestPayload) string {
-	if payload != nil && payload.Data != nil && payload.Data.Skill != nil {
-		return strings.TrimSpace(payload.Data.Skill.Name)
+	if payload == nil || payload.Data == nil || payload.Data.Skill == nil {
+		return ""
 	}
-	return ""
+	name := strings.TrimSpace(payload.Data.Skill.Name)
+	if scope, rest, scoped := strings.Cut(name, ":"); scoped && strings.TrimSpace(scope) != "" && !strings.Contains(rest, ":") {
+		name = strings.TrimSpace(rest)
+	}
+	return name
 }
 
 func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {

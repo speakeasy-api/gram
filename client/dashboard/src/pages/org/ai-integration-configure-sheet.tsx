@@ -1,13 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
@@ -15,10 +15,12 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { CheckCircle2, PauseCircle, Trash2 } from "lucide-react";
 import type { AIIntegrationProvider } from "./ai-integration-providers";
 import type { AIIntegrationConfigForm } from "./use-ai-integration-config-form";
@@ -113,9 +115,9 @@ export function ConfigureSheet({
               disabled={form.isLoading || form.isMutating}
             />
             {provider.helpText ? (
-              <Type variant="body" className="text-muted-foreground text-xs">
+              <Text variant="body" className="text-muted-foreground text-xs">
                 {provider.helpText}
-              </Type>
+              </Text>
             ) : null}
           </Stack>
 
@@ -152,11 +154,11 @@ export function ConfigureSheet({
                 </SelectItem>
               </SelectContent>
             </Select>
-            <Type variant="body" className="text-muted-foreground text-xs">
+            <Text variant="body" className="text-muted-foreground text-xs">
               Dashboard cost is estimated from token usage at API rates. Only
               "Metered" accounts are billed per token, so their cost is shown as
               real spend; subscription plans show it as an estimate.
-            </Type>
+            </Text>
           </Stack>
         </Stack>
 

@@ -1,9 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Sheet,
   SheetContent,
@@ -11,11 +11,12 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { TextArea } from "@/components/ui/Textarea";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
 import {
   ArrowLeft,
   Check,
@@ -37,7 +38,7 @@ import type { TestDetectionRuleResult } from "@gram/client/models/components/tes
 import { chatLoad } from "@gram/client/funcs/chatLoad.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useSdkClient } from "@/contexts/Sdk";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   BUILTIN_RULES_BY_CATEGORY,
   DETECTION_CEL_EXAMPLES,
@@ -241,9 +242,9 @@ function CustomRulesSection({
   const meta = RULE_CATEGORY_META.custom;
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
+      <Text variant="subheading" className="mb-3">
         Custom
-      </Type>
+      </Text>
       <div className="border-border divide-border divide-y rounded-lg border">
         <CategoryHeader
           icon={meta.icon as IconName}
@@ -285,9 +286,9 @@ function BuiltinRulesSection({
 }) {
   return (
     <div>
-      <Type variant="subheading" className="mb-3">
+      <Text variant="subheading" className="mb-3">
         Built-in
-      </Type>
+      </Text>
       <div className="border-border divide-border divide-y rounded-lg border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
@@ -361,7 +362,7 @@ function CategoryHeader({
           {description}
         </div>
       </div>
-      <Badge variant="secondary" className="shrink-0">
+      <Badge variant="neutral" className="shrink-0">
         {count}
       </Badge>
     </button>
@@ -600,7 +601,7 @@ function CustomRuleDetail({
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           onClick={onDelete}
           className="text-destructive hover:text-destructive"
@@ -1094,7 +1095,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
             (matchCount > 0 ? (
               <Badge>{matchCount}</Badge>
             ) : (
-              <Badge variant="secondary">0</Badge>
+              <Badge variant="neutral">0</Badge>
             ))}
         </span>
       </button>
@@ -1358,7 +1359,7 @@ function CreateCustomRuleSheet({
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
-              <Button variant="ghost" size="sm" onClick={handleManual}>
+              <Button variant="tertiary" size="sm" onClick={handleManual}>
                 Skip, fill manually
               </Button>
               <Button
@@ -1441,7 +1442,7 @@ function CreateCustomRuleSheet({
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
               <Button
-                variant="ghost"
+                variant="tertiary"
                 size="sm"
                 onClick={() => setStep("prompt")}
               >

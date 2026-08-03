@@ -56,13 +56,9 @@ export function activeTabFromPath(
   return tabSegment && isValidTab(tabSegment) ? tabSegment : undefined;
 }
 
-export function initialTabFromHash(
-  hash: string,
-  isRbacEnabled: boolean,
-): TabValue {
+export function initialTabFromHash(hash: string): TabValue {
   const hashValue = hash.replace("#", "");
   if (!isValidTab(hashValue)) return "overview";
-  if (hashValue === "team-access" && !isRbacEnabled) return "overview";
   return hashValue;
 }
 

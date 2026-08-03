@@ -3,7 +3,7 @@ import {
   McpSidebarNavShell,
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
@@ -25,7 +25,7 @@ import { SkillSharingCardBlocks } from "@/pages/skills/SkillSharingControl";
 import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillDistributionsInfinite } from "@gram/client/react-query/skillDistributions.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import {
   Activity,
   Braces,
@@ -111,10 +111,10 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
   const cardContent = skill && (
     <>
       <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">{skill.displayName}</Type>
-        <Type variant="small" muted className="truncate font-mono text-xs">
+        <Text className="truncate font-semibold">{skill.displayName}</Text>
+        <Text variant="small" muted className="truncate font-mono text-xs">
           {skill.name}
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -129,26 +129,26 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>Distributions</McpSidebarInfoLabel>
-        <Type variant="small" muted className="text-xs">
+        <Text variant="small" muted className="text-xs">
           {distributionCount === 1
             ? "1 plugin"
             : `${distributionCount}${
                 distributionsQuery.hasNextPage ? "+" : ""
               } plugins`}
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>Versions</McpSidebarInfoLabel>
-        <Type variant="small" muted className="text-xs">
+        <Text variant="small" muted className="text-xs">
           {skill.versionCount} · updated{" "}
           <HumanizeDateTime date={skill.updatedAt} />
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>Activations</McpSidebarInfoLabel>
-        <Type variant="small" muted className="text-xs">
+        <Text variant="small" muted className="text-xs">
           {skill.seenCount}
           {skill.lastSeenAt && (
             <>
@@ -156,7 +156,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
               · last <HumanizeDateTime date={skill.lastSeenAt} />
             </>
           )}
-        </Type>
+        </Text>
       </div>
     </>
   );

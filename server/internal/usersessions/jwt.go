@@ -7,7 +7,8 @@
 // reads. The two signers are intentionally separate code paths so the
 // chat-session signer can be deleted in isolation.
 //
-// Schema is OIDC-shaped registered claims only (per `schemas/jwt.go`): no
+// Schema is standard claims only: the OIDC registered set plus `client_id`
+// from RFC 9068 §2.2 (JWT Profile for OAuth 2.0 Access Tokens). No
 // Gram-specific extras live on the JWT. Org / project / etc. resolve from the
 // session record in Postgres (`user_sessions`), keyed by the refresh-token
 // hash on token exchange or by JTI on access-token validation.
@@ -36,10 +37,36 @@ type RevocationChecker interface {
 
 // SessionClaims is the unified JWT claim shape for Gram-issued user sessions
 // (and, as the chat-session path retires, all Gram session tokens). Carries
-// only the standard OIDC registered claims.
+// the standard OIDC registered claims plus the OAuth client the token was
+// issued to.
 type SessionClaims struct {
 	jwt.RegisteredClaims
+
+	// ClientID identifies the OAuth client this token was issued to (RFC 9068
+	// §2.2). Unlike the client identity an MCP client reports at initialize,
+	// this one is established by the authorization flow rather than
+	// self-reported.
+	//
+	// Mint paths with no registered client stamp FirstPartyClientID instead.
+	// Empty only on tokens minted before this claim existed, so readers must
+	// still treat it as optional.
+	ClientID string `json:"client_id,omitempty"`
 }
+
+// FirstPartyClientID is the `client_id` stamped on sessions minted for our own
+// surfaces, which have no registered OAuth client because they never run the
+// authorization dance.
+//
+// A deliberate departure from RFC 9068, where `client_id` names a registered
+// client. Leaving it empty is indistinguishable from "unknown", and a reader
+// asking who called cannot tell a first-party session from an old token minted
+// before the claim existed. A URN says it outright.
+//
+// Deliberately not a resolvable URL: an `https://…` value would be read as an
+// OAuth Client ID Metadata Document, which requires the client_id to equal a
+// URL serving that document (see `user_session_clients.client_id_metadata_uri`).
+// This resolves to nothing and should never be looked up.
+const FirstPartyClientID = "client:first-party"
 
 // JWTSigningKeyFlag is the CLI flag (and env var via GRAM_JWT_SIGNING_KEY)
 // that supplies the HMAC secret to NewSigner at server boot. Defining the
@@ -58,23 +85,37 @@ func NewSigner(secret string) *Signer {
 	return &Signer{key: []byte(secret)}
 }
 
-// Mint produces an HS256-signed JWT carrying the supplied subject + audience
-// + issuer + lifetime. Returns the signed token plus the JTI so the caller
-// can persist it on the user_sessions row for later revocation.
-func (s *Signer) Mint(subject urn.SessionSubject, audience, issuer string, lifetime time.Duration) (token string, jti string, err error) {
+// MintParams describes one session token to sign. A struct rather than
+// positional arguments so every caller has to state which OAuth client the
+// token belongs to — several mint paths legitimately have none.
+type MintParams struct {
+	Subject  urn.SessionSubject
+	Audience string
+	Issuer   string
+	Lifetime time.Duration
+	// ClientID is the OAuth client the token is issued to, or empty for mint
+	// paths with no client (e.g. API-key exchange).
+	ClientID string
+}
+
+// Mint produces an HS256-signed JWT from the supplied params. Returns the
+// signed token plus the JTI so the caller can persist it on the user_sessions
+// row for later revocation.
+func (s *Signer) Mint(params MintParams) (token string, jti string, err error) {
 	now := time.Now()
 	jti = uuid.NewString()
 
 	claims := SessionClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
-			Issuer:    issuer,
-			Subject:   subject.String(),
-			Audience:  jwt.ClaimStrings{audience},
+			Issuer:    params.Issuer,
+			Subject:   params.Subject.String(),
+			Audience:  jwt.ClaimStrings{params.Audience},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(lifetime)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(params.Lifetime)),
 			NotBefore: nil,
 		},
+		ClientID: params.ClientID,
 	}
 
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -99,7 +140,7 @@ func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error
 		NotBefore: nil,
 		IssuedAt:  nil,
 		ID:        "",
-	}}
+	}, ClientID: ""}
 	parsed, err := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -115,21 +156,31 @@ func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error
 	return &claims, nil
 }
 
+// ValidatedSession is what a Bearer token resolves to once it has been
+// verified: who is calling, which token it was, and which OAuth client holds
+// it.
+type ValidatedSession struct {
+	Subject urn.SessionSubject
+	JTI     string
+	// ClientID is the OAuth client the token was issued to, empty when the
+	// token carries no `client_id` claim.
+	ClientID string
+}
+
 // ValidateBearer bundles the full /mcp/{slug} Bearer validation path:
 // signature + expiry + audience match (via Validate), revocation cache
 // lookup (via the RevocationChecker), and URN parse of the `sub` claim.
-// Returns the parsed subject and JTI on success.
 //
 // Callers stay free of JWT primitives and revocation plumbing — they only
 // need a Signer + a RevocationChecker (typically *chatsessions.Manager
 // while the unified revocation keyspace is shared with chat sessions).
-func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience string, revocation RevocationChecker) (urn.SessionSubject, string, error) {
+func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience string, revocation RevocationChecker) (ValidatedSession, error) {
 	claims, err := s.Validate(token, expectedAudience)
 	if err != nil {
-		return urn.SessionSubject{}, "", err
+		return ValidatedSession{}, err
 	}
 	if claims == nil {
-		return urn.SessionSubject{}, "", errors.New("validate token: nil claims")
+		return ValidatedSession{}, errors.New("validate token: nil claims")
 	}
 	// Fail closed on revocation-cache errors: if we can't tell whether a
 	// token is revoked (Redis outage, network blip), refuse the token
@@ -139,16 +190,16 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	// worst possible failure mode for a security control.
 	revoked, err := revocation.IsTokenRevoked(ctx, claims.ID)
 	if err != nil {
-		return urn.SessionSubject{}, "", fmt.Errorf("check revocation: %w", err)
+		return ValidatedSession{}, fmt.Errorf("check revocation: %w", err)
 	}
 	if revoked {
-		return urn.SessionSubject{}, "", errors.New("token is revoked")
+		return ValidatedSession{}, errors.New("token is revoked")
 	}
 	subject, err := urn.ParseSessionSubject(claims.Subject)
 	if err != nil {
-		return urn.SessionSubject{}, "", fmt.Errorf("parse session subject: %w", err)
+		return ValidatedSession{}, fmt.Errorf("parse session subject: %w", err)
 	}
-	return subject, claims.ID, nil
+	return ValidatedSession{Subject: subject, JTI: claims.ID, ClientID: claims.ClientID}, nil
 }
 
 // ParseUnverifiedJTI extracts the `jti` claim from a token without verifying
@@ -165,7 +216,7 @@ func (s *Signer) ParseUnverifiedJTI(token string) (string, error) {
 		NotBefore: nil,
 		IssuedAt:  nil,
 		ID:        "",
-	}}
+	}, ClientID: ""}
 	if _, _, err := parser.ParseUnverified(token, &claims); err != nil {
 		return "", fmt.Errorf("parse unverified token: %w", err)
 	}

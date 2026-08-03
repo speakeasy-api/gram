@@ -83,7 +83,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 		logger.Error("fetch unanalyzed messages failed", "error", err.Error())
 	}
 
-	if len(fetchResult.MessageIDs) > 0 && len(fetchResult.Policies) > 0 {
+	if (len(fetchResult.MessageIDs) > 0 || len(fetchResult.ContentPartIDs) > 0) && len(fetchResult.Policies) > 0 {
 		// Fan-out: one activity per (policy, batch).
 		var futures []workflow.Future
 		for _, policy := range fetchResult.Policies {
@@ -94,6 +94,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					RiskPolicyID:     policy.ID,
 					PolicyVersion:    policy.Version,
 					MessageIDs:       batch,
+					ContentPartIDs:   nil,
 					Sources:          policy.Sources,
 					MessageTypes:     policy.MessageTypes,
 					PresidioEntities: policy.PresidioEntities,
@@ -110,6 +111,25 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 				})
 				futures = append(futures, f)
 			}
+			for _, batch := range chunkUUIDs(fetchResult.ContentPartIDs, riskCoordinatorBatchSize) {
+				f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
+					ProjectID:              params.ProjectID,
+					OrganizationID:         policy.OrganizationID,
+					RiskPolicyID:           policy.ID,
+					PolicyVersion:          policy.Version,
+					MessageIDs:             nil,
+					ContentPartIDs:         batch,
+					Sources:                policy.Sources,
+					MessageTypes:           policy.MessageTypes,
+					PresidioEntities:       policy.PresidioEntities,
+					PresidioScoreThreshold: 0,
+					ApprovedEmailDomains:   nil,
+					CustomRuleIds:          policy.CustomRuleIds,
+					BuiltinPresetsEnabled:  false,
+					DetectionScopes:        nil,
+				})
+				futures = append(futures, f)
+			}
 		}
 
 		// Fan-in: collect results; log errors but do not abort.
@@ -119,10 +139,13 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 			}
 		}
 
-		// Mark all fetched messages analyzed (best-effort).
+		// Mark all fetched units analyzed (best-effort), matching how chat
+		// messages have always been marked. Retry semantics are deliberately
+		// identical for both so one cannot silently diverge from the other.
 		if err := workflow.ExecuteActivity(ctx, a.MarkMessagesAnalyzed, risk_analysis.MarkMessagesAnalyzedArgs{
-			ProjectID:  params.ProjectID,
-			MessageIDs: fetchResult.MessageIDs,
+			ProjectID:      params.ProjectID,
+			MessageIDs:     fetchResult.MessageIDs,
+			ContentPartIDs: fetchResult.ContentPartIDs,
 		}).Get(ctx, nil); err != nil {
 			logger.Error("mark messages analyzed failed", "error", err.Error())
 		}
