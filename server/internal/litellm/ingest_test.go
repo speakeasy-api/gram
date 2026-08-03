@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -18,8 +21,10 @@ import (
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -30,14 +35,52 @@ type capturedHookCall struct {
 }
 
 type captureIngester struct {
-	result *hooksgen.IngestHookResult
+	result *hooks.AuthenticatedIngestResult
 	err    error
 	calls  []capturedHookCall
 }
 
-func (c *captureIngester) IngestAuthenticatedWithOptions(_ context.Context, authCtx *contextvalues.AuthContext, payload *hooksgen.IngestPayload, options hooks.AuthenticatedIngestOptions) (*hooksgen.IngestHookResult, error) {
+func (c *captureIngester) IngestAuthenticatedDetailed(_ context.Context, authCtx *contextvalues.AuthContext, payload *hooksgen.IngestPayload, options hooks.AuthenticatedIngestOptions) (*hooks.AuthenticatedIngestResult, error) {
 	c.calls = append(c.calls, capturedHookCall{auth: authCtx, payload: payload, options: options})
 	return c.result, c.err
+}
+
+type memoryCache struct {
+	cache.Cache
+	entries map[string][]byte
+	ttls    []time.Duration
+}
+
+func newMemoryCache() *memoryCache {
+	return &memoryCache{Cache: cache.NoopCache, entries: map[string][]byte{}, ttls: nil}
+}
+
+func (c *memoryCache) Get(_ context.Context, key string, value any) error {
+	raw, ok := c.entries[key]
+	if !ok {
+		return redisCache.ErrCacheMiss
+	}
+	if err := json.Unmarshal(raw, value); err != nil {
+		return fmt.Errorf("unmarshal cache value: %w", err)
+	}
+	return nil
+}
+
+func (c *memoryCache) Set(_ context.Context, key string, value any, ttl time.Duration) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal cache value: %w", err)
+	}
+	c.entries[key] = raw
+	c.ttls = append(c.ttls, ttl)
+	return nil
+}
+
+func allowResult(actor hooks.ResolvedActor) *hooks.AuthenticatedIngestResult {
+	return &hooks.AuthenticatedIngestResult{
+		Result: &hooksgen.IngestHookResult{Decision: "allow", Reason: nil, Message: nil, Effects: nil},
+		Actor:  actor,
+	}
 }
 
 type fixedAuthorizer struct {
@@ -107,13 +150,14 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 		logger: testenv.NewLogger(t),
 		auth:   fixedAuthorizer{authCtx: authCtx},
 		hooks:  ingester,
+		calls:  callcache.New(newMemoryCache()),
 	}
 }
 
 func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	t.Parallel()
 	authCtx := testAuthContext()
-	ingester := &captureIngester{result: &hooksgen.IngestHookResult{Decision: "allow", Reason: nil, Message: nil, Effects: nil}, err: nil, calls: nil}
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "resolved-user", Email: "member@example.test"}), err: nil, calls: nil}
 	service := unitService(t, ingester, authCtx)
 	payload := testPayload()
 	payload.StructuredMessages = []*gen.LiteLLMStructuredMessage{
@@ -163,6 +207,7 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	require.Equal(t, authCtx.APIKeyID, call.auth.APIKeyID)
 	require.False(t, call.options.AllowWarnAcknowledgement)
 	require.False(t, call.options.AllowSessionIdentityFallback)
+	require.Nil(t, call.options.OutputToolCalls)
 	require.Equal(t, "call-1", call.options.SourceAttributes[attr.LiteLLMCallIDKey])
 	require.Equal(t, "trace-1", call.options.SourceAttributes[attr.LiteLLMTraceIDKey])
 	require.Equal(t, "virtual-key-user", call.options.SourceAttributes[attr.LiteLLMUserIDKey])
@@ -171,12 +216,22 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	require.Equal(t, "caller-controlled-end-user", call.options.SourceAttributes[attr.LiteLLMEndUserIDKey])
 	require.Equal(t, "external-org", call.options.SourceAttributes[attr.LiteLLMOrganizationIDKey])
 	require.Equal(t, "integration-key-owner", authCtx.UserID)
+	cached, err := service.calls.Get(t.Context(), *authCtx.ProjectID, "call-1")
+	require.NoError(t, err)
+	require.Equal(t, callcache.Record{
+		ProjectID: *authCtx.ProjectID,
+		CallID:    "call-1",
+		TraceID:   "trace-1",
+		SessionID: "session-from-header",
+		UserID:    "resolved-user",
+		Email:     "member@example.test",
+	}, cached)
 }
 
 func TestIngestUsesTextsAndSessionFallbacks(t *testing.T) {
 	t.Parallel()
 	authCtx := testAuthContext()
-	ingester := &captureIngester{result: &hooksgen.IngestHookResult{Decision: "allow", Reason: nil, Message: nil, Effects: nil}, err: nil, calls: nil}
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: ""}), err: nil, calls: nil}
 	service := unitService(t, ingester, authCtx)
 
 	headerPayload := testPayload()
@@ -211,15 +266,81 @@ func TestIngestUsesTextsAndSessionFallbacks(t *testing.T) {
 	require.Equal(t, "call-3", *ingester.calls[2].payload.Session.ID)
 }
 
+func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {
+	t.Parallel()
+	authCtx := testAuthContext()
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "cached-user", Email: "cached@example.test"}), err: nil, calls: nil}
+	service := unitService(t, ingester, authCtx)
+	require.NoError(t, service.calls.Store(t.Context(), callcache.Record{
+		ProjectID: *authCtx.ProjectID,
+		CallID:    "call-1",
+		TraceID:   "request-trace",
+		SessionID: "request-session",
+		UserID:    "cached-user",
+		Email:     "cached@example.test",
+	}))
+
+	payload := testPayload()
+	payload.InputType = "response"
+	payload.Texts = []string{" first segment ", "", "  second segment  "}
+	payload.StructuredMessages = []*gen.LiteLLMStructuredMessage{{Role: "user", Content: "request history must be ignored"}}
+	payload.ToolCalls = []any{map[string]any{"id": "tool-1", "type": "function"}}
+	payload.RequestHeaders = map[string]string{"x-gram-session-id": "conflicting-response-session"}
+	payload.LitellmTraceID = new("conflicting-response-trace")
+	payload.RequestData.UserAPIKeyUserEmail = new("conflicting@example.test")
+
+	result, err := service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), payload)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	require.Len(t, ingester.calls, 1)
+	call := ingester.calls[0]
+	require.Equal(t, "assistant.responded", call.payload.Event.Type)
+	require.Equal(t, "first segment\nsecond segment", *call.payload.Data.Message.Text)
+	require.Equal(t, "assistant", *call.payload.Data.Message.Role)
+	require.Equal(t, "request-session", *call.payload.Session.ID)
+	require.Equal(t, "call-1", *call.payload.Session.TurnID)
+	require.Equal(t, "litellm:call-1:response", *call.payload.IdempotencyKey)
+	require.Equal(t, "cached-user", call.auth.UserID)
+	require.Equal(t, "cached@example.test", *call.auth.Email)
+	require.False(t, call.auth.OrgWidePluginHooksKey)
+	require.Equal(t, "cached@example.test", *call.payload.Source.UserEmail)
+	require.Equal(t, payload.ToolCalls, call.options.OutputToolCalls)
+}
+
+func TestIngestResponseCacheMissUsesTrustedEmailWithoutKeyOwner(t *testing.T) {
+	t.Parallel()
+	authCtx := testAuthContext()
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: "member@example.test"}), err: nil, calls: nil}
+	service := unitService(t, ingester, authCtx)
+	payload := testPayload()
+	payload.InputType = "response"
+	payload.Texts = []string{"response"}
+	payload.LitellmCallID = new("response-miss")
+	payload.LitellmTraceID = new("response-trace")
+	payload.RequestData.UserAPIKeyUserEmail = new(" Member@Example.Test ")
+
+	result, err := service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), payload)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	require.Len(t, ingester.calls, 1)
+	call := ingester.calls[0]
+	require.Empty(t, call.auth.UserID)
+	require.Nil(t, call.auth.Email)
+	require.Empty(t, call.auth.ExternalUserID)
+	require.False(t, call.auth.OrgWidePluginHooksKey)
+	require.Equal(t, "member@example.test", *call.payload.Source.UserEmail)
+	require.Equal(t, "response-trace", *call.payload.Session.ID)
+}
+
 func TestIngestValidatesAndSkipsEmptyPrompt(t *testing.T) {
 	t.Parallel()
 	authCtx := testAuthContext()
-	ingester := &captureIngester{result: &hooksgen.IngestHookResult{Decision: "allow", Reason: nil, Message: nil, Effects: nil}, err: nil, calls: nil}
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: ""}), err: nil, calls: nil}
 	service := unitService(t, ingester, authCtx)
 
-	responsePayload := testPayload()
-	responsePayload.InputType = "response"
-	result, err := service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), responsePayload)
+	invalidPayload := testPayload()
+	invalidPayload.InputType = "invalid"
+	result, err := service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), invalidPayload)
 	require.Error(t, err)
 	require.Nil(t, result)
 
@@ -244,13 +365,16 @@ func TestIngestMapsDenyAndErrors(t *testing.T) {
 	payload := testPayload()
 	payload.Texts = []string{"prompt"}
 
-	deny := &captureIngester{result: &hooksgen.IngestHookResult{Decision: "deny", Reason: nil, Message: &message, Effects: nil}, err: nil, calls: nil}
+	deny := &captureIngester{result: &hooks.AuthenticatedIngestResult{
+		Result: &hooksgen.IngestHookResult{Decision: "deny", Reason: nil, Message: &message, Effects: nil},
+		Actor:  hooks.ResolvedActor{UserID: "", Email: ""},
+	}, err: nil, calls: nil}
 	result, err := unitService(t, deny, authCtx).Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), payload)
 	require.NoError(t, err)
 	require.Equal(t, gen.LiteLLMGuardrailAction("BLOCKED"), result.Action)
 	require.Equal(t, message, *result.BlockedReason)
 
-	deny.result.Message = nil
+	deny.result.Result.Message = nil
 	result, err = unitService(t, deny, authCtx).Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), payload)
 	require.NoError(t, err)
 	require.Equal(t, genericBlockedReason, *result.BlockedReason)
@@ -265,7 +389,7 @@ func TestIngestMapsDenyAndErrors(t *testing.T) {
 func TestHTTPRouteRequiresKeyAndExplicitProject(t *testing.T) {
 	t.Parallel()
 	authCtx := testAuthContext()
-	ingester := &captureIngester{result: &hooksgen.IngestHookResult{Decision: "allow", Reason: nil, Message: nil, Effects: nil}, err: nil, calls: nil}
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: ""}), err: nil, calls: nil}
 	service := unitService(t, ingester, authCtx)
 	mux := goahttp.NewMuxer()
 	Attach(mux, service)

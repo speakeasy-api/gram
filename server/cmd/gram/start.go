@@ -77,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
+	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
@@ -1132,7 +1133,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService))
+			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, callcache.New(cache.NewRedisCacheAdapter(redisClient))))
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))

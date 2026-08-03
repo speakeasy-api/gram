@@ -2,6 +2,7 @@ package litellm
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -10,16 +11,29 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/testsuite"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
+	riskanalysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -28,6 +42,12 @@ type recordingScanner struct {
 	seenUserIDs        []string
 	acknowledgementHit bool
 	challenges         int
+}
+
+type noMCPProvenance struct{}
+
+func (noMCPProvenance) LookupMCPProvenanceByToolCallID(_ context.Context, _ uuid.UUID, _ []string, _ time.Time) (map[string]telemetryrepo.MCPProvenance, error) {
+	return map[string]telemetryrepo.MCPProvenance{}, nil
 }
 
 func requireChatMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, params chatrepo.ListChatMessagesParams, count int) []chatrepo.ChatMessage {
@@ -106,6 +126,293 @@ func TestRealHooksPersistsMixedCaseMemberAndDedupesRetry(t *testing.T) {
 	require.Equal(t, "litellm", messages[0].Source.String)
 	require.Equal(t, userID, messages[0].UserID.String)
 	require.Equal(t, conv.NormalizeEmail(storedEmail), messages[0].ExternalUserID.String)
+}
+
+func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	userID := "user_" + uuid.NewString()
+	storedEmail := "Member." + uuid.NewString() + "@Example.Test"
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       storedEmail,
+		DisplayName: "Response Member",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+
+	callID := "response-" + uuid.NewString()
+	sessionID := "session-" + uuid.NewString()
+	request := testPayload()
+	request.LitellmCallID = &callID
+	request.Texts = []string{"safe prompt"}
+	request.RequestHeaders = map[string]string{"x-gram-session-id": sessionID}
+	request.RequestData.UserAPIKeyUserEmail = &storedEmail
+	result, err := ti.service.Ingest(ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+
+	toolCalls := []any{map[string]any{
+		"id":   "call_1",
+		"type": "function",
+		"function": map[string]any{
+			"name":      "lookup",
+			"arguments": `{"query":"test"}`,
+		},
+	}}
+	response := testPayload()
+	response.InputType = "response"
+	response.LitellmCallID = &callID
+	response.Texts = []string{" first response segment ", " ", "second response segment"}
+	response.ToolCalls = toolCalls
+	response.StructuredMessages = []*gen.LiteLLMStructuredMessage{{Role: "user", Content: "request history"}}
+	response.RequestHeaders = map[string]string{"x-gram-session-id": "conflicting-session"}
+	response.RequestData.UserAPIKeyUserEmail = new("conflicting@example.test")
+	result, err = ti.service.Ingest(ctx, response)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	result, err = ti.service.Ingest(ctx, response)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, "safe prompt", messages[0].Content)
+	require.Equal(t, "assistant", messages[1].Role)
+	require.Equal(t, "first response segment\nsecond response segment", messages[1].Content)
+	require.Equal(t, userID, messages[0].UserID.String)
+	require.Equal(t, userID, messages[1].UserID.String)
+	require.Equal(t, conv.NormalizeEmail(storedEmail), messages[0].ExternalUserID.String)
+	require.Equal(t, conv.NormalizeEmail(storedEmail), messages[1].ExternalUserID.String)
+	expectedToolCalls, err := json.Marshal(toolCalls)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expectedToolCalls), string(messages[1].ToolCalls))
+	require.Empty(t, messages[1].ToolCallID.String)
+	require.Empty(t, messages[1].ToolUrn.Kind)
+	require.Empty(t, messages[1].ToolUrn.Source)
+	require.Empty(t, messages[1].ToolUrn.Name)
+	require.False(t, messages[1].ToolOutcome.Valid)
+	for _, msg := range messages {
+		require.NotEqual(t, "tool", msg.Role)
+	}
+	require.Eventually(t, func() bool {
+		return ti.observer.count(*authCtx.ProjectID) >= 2
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestRealHooksPersistsToolCallOnlyResponse(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	callID := "tool-only-" + uuid.NewString()
+
+	request := testPayload()
+	request.LitellmCallID = &callID
+	request.Texts = []string{"prompt"}
+	_, err := ti.service.Ingest(ctx, request)
+	require.NoError(t, err)
+
+	response := testPayload()
+	response.InputType = "response"
+	response.LitellmCallID = &callID
+	response.Texts = []string{"", "  "}
+	response.ToolCalls = []any{map[string]any{"id": "call_only", "type": "function"}}
+	_, err = ti.service.Ingest(ctx, response)
+	require.NoError(t, err)
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(callID),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	require.Equal(t, "assistant", messages[1].Role)
+	require.Empty(t, messages[1].Content)
+	require.NotEmpty(t, messages[1].ToolCalls)
+}
+
+func TestRealHooksResponseCacheMissDoesNotUseIntegrationKeyOwner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	callID := "response-miss-" + uuid.NewString()
+	reportedEmail := "Missing." + uuid.NewString() + "@Example.Test"
+
+	response := testPayload()
+	response.InputType = "response"
+	response.LitellmCallID = &callID
+	response.Texts = []string{"uncached response"}
+	response.RequestData.UserAPIKeyUserEmail = &reportedEmail
+	result, err := ti.service.Ingest(ctx, response)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(callID),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "assistant", messages[0].Role)
+	require.False(t, messages[0].UserID.Valid)
+	require.NotEqual(t, authCtx.UserID, messages[0].UserID.String)
+	require.Equal(t, conv.NormalizeEmail(reportedEmail), messages[0].ExternalUserID.String)
+}
+
+func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	analyzerConfig, err := riskanalysis.WithDetectionScopes(nil, []riskanalysis.DetectionScopeConfig{{
+		Category:     string(categories.CategorySecrets),
+		ScopeInclude: `kind == "assistant_message"`,
+		ScopeExempt:  "",
+	}})
+	require.NoError(t, err)
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   policyID,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "assistant response secrets",
+		PolicyType:           nil,
+		Sources:              []string{riskanalysis.SourceGitleaks},
+		PresidioEntities:     nil,
+		AnalyzerConfig:       analyzerConfig,
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        nil,
+		MessageTypes:         []string{message.Assistant},
+		ScopeInclude:         pgtype.Text{},
+		ScopeExempt:          pgtype.Text{},
+		Enabled:              true,
+		Action:               "flag",
+		AudienceType:         "everyone",
+		ShadowMcpDisposition: pgtype.Text{},
+		AutoName:             false,
+		UserMessage:          pgtype.Text{},
+		Prompt:               pgtype.Text{},
+		ModelConfig:          nil,
+		Score:                pgtype.Float8{},
+	})
+	require.NoError(t, err)
+
+	callID := "assistant-policy-" + uuid.NewString()
+	response := testPayload()
+	response.InputType = "response"
+	response.LitellmCallID = &callID
+	response.Texts = []string{"AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd"}
+	response.ToolCalls = nil
+	result, err := ti.service.Ingest(ctx, response)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	require.Eventually(t, func() bool {
+		return ti.observer.count(*authCtx.ProjectID) >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(callID),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "assistant", messages[0].Role)
+	require.Nil(t, messages[0].ToolCalls)
+
+	fetch := riskanalysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn)
+	fetched, err := fetch.Do(ctx, riskanalysis.FetchUnanalyzedArgs{
+		ProjectID:    *authCtx.ProjectID,
+		IDLowerBound: uuid.Nil,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{messages[0].ID}, fetched.MessageIDs)
+	require.Len(t, fetched.Policies, 1)
+	require.Equal(t, []string{message.Assistant}, fetched.Policies[0].MessageTypes)
+
+	customRules, err := customruleanalyzer.NewScanner(ti.conn)
+	require.NoError(t, err)
+	celEngine, err := riskcelenv.New()
+	require.NoError(t, err)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagRiskRecommendedScopes, authCtx.ActiveOrganizationID, true)
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, cache.NoopCache, nil)
+	analyze, err := riskanalysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		nil,
+		&riskanalysis.StubPIIScanner{},
+		nil,
+		shadowMCPClient,
+		noMCPProvenance{},
+		nil,
+		flags,
+		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.Finding](),
+		customRules,
+		celEngine,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(analyze.Do)
+	activityResult, err := env.ExecuteActivity(analyze.Do, riskanalysis.AnalyzeBatchArgs{
+		ProjectID:              *authCtx.ProjectID,
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		RiskPolicyID:           policy.ID,
+		PolicyVersion:          policy.Version,
+		MessageIDs:             fetched.MessageIDs,
+		ContentPartIDs:         nil,
+		Sources:                policy.Sources,
+		MessageTypes:           policy.MessageTypes,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		BuiltinPresetsEnabled:  false,
+		DetectionScopes:        nil,
+	})
+	require.NoError(t, err)
+	var analyzed riskanalysis.AnalyzeBatchResult
+	require.NoError(t, activityResult.Get(&analyzed))
+	require.Equal(t, 1, analyzed.Processed)
+	require.Positive(t, analyzed.Findings)
+
+	findings, err := riskrepo.New(ti.conn).ListRiskResultsByProjectAndPolicy(ctx, riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:              *authCtx.ProjectID,
+		RiskPolicyID:           policy.ID,
+		CursorMessageCreatedAt: pgtype.Timestamptz{},
+		CursorID:               uuid.NullUUID{},
+		PageLimit:              10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, findings)
+	require.Equal(t, riskanalysis.SourceGitleaks, findings[0].Source)
+	require.True(t, findings[0].Found)
+	require.Equal(t, messages[0].ID, findings[0].ChatMessageID.UUID)
 }
 
 func TestRealHooksBlocksAndCapturesPolicyMessage(t *testing.T) {
