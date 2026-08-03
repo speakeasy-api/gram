@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+
+	"golang.org/x/net/publicsuffix"
 	"slices"
 	"strings"
 
@@ -255,12 +257,16 @@ func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logg
 		return
 	}
 
-	faviconURL := fmt.Sprintf(
-		"https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=%s&size=128",
-		url.QueryEscape(vendorURL.Scheme+"://"+vendorURL.Host),
-	)
-
-	asset, err := s.assets.FetchImageFromURL(ctx, faviconURL)
+	asset, err := s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, vendorURL.Host))
+	if err != nil {
+		// Some vendors only register a favicon against their registrable
+		// domain, not the specific subdomain hosting the MCP endpoint (e.g.
+		// mcp.figma.com has none, figma.com does) -- retry once against that
+		// before giving up.
+		if registrable, rErr := publicsuffix.EffectiveTLDPlusOne(vendorURL.Hostname()); rErr == nil && registrable != vendorURL.Host {
+			asset, err = s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, registrable))
+		}
+	}
 	if err != nil {
 		logger.WarnContext(ctx, "fetch default favicon for unproxied mcp server", attr.SlogError(err))
 		return
@@ -288,6 +294,13 @@ func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logg
 	}); err != nil {
 		logger.ErrorContext(ctx, "save default favicon for unproxied mcp server", attr.SlogError(err))
 	}
+}
+
+func unproxiedFaviconURL(scheme, host string) string {
+	return fmt.Sprintf(
+		"https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=%s&size=128",
+		url.QueryEscape(scheme+"://"+host),
+	)
 }
 
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
