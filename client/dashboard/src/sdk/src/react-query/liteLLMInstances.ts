@@ -59,7 +59,7 @@ export type LiteLLMInstancesQueryError =
  * listInstances litellm
  *
  * @remarks
- * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.
+ * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.
  */
 export function useLiteLLMInstances(
   request?: ListLiteLLMInstancesRequest | undefined,
@@ -85,7 +85,7 @@ export function useLiteLLMInstances(
  * listInstances litellm
  *
  * @remarks
- * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.
+ * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.
  */
 export function useLiteLLMInstancesSuspense(
   request?: ListLiteLLMInstancesRequest | undefined,

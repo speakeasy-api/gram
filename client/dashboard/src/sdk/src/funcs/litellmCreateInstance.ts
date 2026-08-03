@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * createInstance litellm
  *
  * @remarks
- * Provision a LiteLLM integration for a project and return its plaintext ingestion key once.
+ * Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
  */
 export function litellmCreateInstance(
   client: GramCore,

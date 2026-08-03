@@ -11,15 +11,10 @@ import (
 
 type LiteLLMInstance struct {
 	ID uuid.UUID
-
-	checked bool
-	err     error
 }
 
 func NewLiteLLMInstance(id uuid.UUID) LiteLLMInstance {
-	u := LiteLLMInstance{ID: id, checked: false, err: nil}
-	_ = u.validate()
-	return u
+	return LiteLLMInstance{ID: id}
 }
 
 func ParseLiteLLMInstance(value string) (LiteLLMInstance, error) {
@@ -112,13 +107,9 @@ func (u *LiteLLMInstance) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *LiteLLMInstance) validate() error {
-	if u.checked {
-		return u.err
-	}
-	u.checked = true
+func (u LiteLLMInstance) validate() error {
 	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
+		return fmt.Errorf("%w: empty id", ErrInvalid)
 	}
-	return u.err
+	return nil
 }

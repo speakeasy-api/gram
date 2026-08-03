@@ -54,7 +54,7 @@ export type CreateLiteLLMInstanceMutationError =
  * createInstance litellm
  *
  * @remarks
- * Provision a LiteLLM integration for a project and return its plaintext ingestion key once.
+ * Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
  */
 export function useCreateLiteLLMInstanceMutation(
   options?: MutationHookOptions<

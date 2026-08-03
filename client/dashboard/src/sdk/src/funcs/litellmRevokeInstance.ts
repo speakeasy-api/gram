@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * revokeInstance litellm
  *
  * @remarks
- * Revoke a LiteLLM integration and immediately invalidate its active key.
+ * Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.
  */
 export function litellmRevokeInstance(
   client: GramCore,

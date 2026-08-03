@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -25,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
-	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -104,32 +102,6 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.A
 	ctx, err := s.auth.Authorize(ctx, key, scheme)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize LiteLLM request: %w", err)
-	}
-	if scheme.Name == constants.ProjectSlugSecuritySchema {
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		if ok && authCtx != nil && authCtx.APIKeyID != "" && auth.IsLiteLLMAPIKeyName(authCtx.APIKeyName) {
-			keyID, parseErr := uuid.Parse(authCtx.APIKeyID)
-			if parseErr != nil {
-				s.logger.WarnContext(ctx, "failed to parse LiteLLM API key ID",
-					attr.SlogError(parseErr),
-					attr.SlogAPIKeyID(authCtx.APIKeyID),
-				)
-			} else if managed, ownershipErr := keysrepo.New(s.db).IsAPIKeyManagedByActiveLiteLLMInstance(ctx, keysrepo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{ID: keyID, OrganizationID: authCtx.ActiveOrganizationID}); ownershipErr != nil {
-				s.logger.WarnContext(ctx, "failed to check LiteLLM API key ownership",
-					attr.SlogError(ownershipErr),
-					attr.SlogAPIKeyID(authCtx.APIKeyID),
-					attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-				)
-			} else if managed {
-				if touchErr := keysrepo.New(s.db).UpdateAPIKeyLastAccessedAt(ctx, keyID); touchErr != nil {
-					s.logger.WarnContext(ctx, "failed to update LiteLLM API key last accessed at",
-						attr.SlogError(touchErr),
-						attr.SlogAPIKeyID(authCtx.APIKeyID),
-						attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-					)
-				}
-			}
-		}
 	}
 	return ctx, nil
 }

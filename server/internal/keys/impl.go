@@ -2,8 +2,6 @@ package keys
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -138,16 +136,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		}
 	}
 
-	token, err := s.generateToken()
+	fullKey, keyHash, displayPrefix, err := auth.GenerateAPIKeyMaterial(s.keyPrefix)
 	if err != nil {
-		return nil, err
-	}
-
-	fullKey := s.keyPrefix + token
-
-	keyHash, err := auth.GetAPIKeyHash(fullKey)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error hashing api key").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error generating api key").LogError(ctx, s.logger)
 	}
 
 	var projectID uuid.NullUUID
@@ -169,7 +160,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            payload.Name,
 		KeyHash:         keyHash,
-		KeyPrefix:       s.keyPrefix + token[:5],
+		KeyPrefix:       displayPrefix,
 		Scopes:          finalScopes,
 		CreatedByUserID: authCtx.UserID,
 		ProjectID:       projectID,
@@ -362,14 +353,4 @@ func parseProjects(rawProjects []project_repo.Project) []*gen.ValidateKeyProject
 	}
 
 	return projects
-}
-
-func (s *Service) generateToken() (string, error) {
-	const randomKeyLength = 64
-	randomBytes := make([]byte, randomKeyLength/2) // there are 2 hex chars per byte, we can guarantee output of 64 chars this way
-	_, err := rand.Read(randomBytes)
-	if err != nil {
-		return "", fmt.Errorf("generate random token bytes: %w", err)
-	}
-	return hex.EncodeToString(randomBytes), nil
 }

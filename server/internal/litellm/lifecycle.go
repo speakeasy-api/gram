@@ -2,8 +2,6 @@ package litellm
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -252,20 +250,14 @@ func (s *Service) requireInstanceAdmin(ctx context.Context) (*contextvalues.Auth
 }
 
 func (s *Service) mintInstanceKey(ctx context.Context, queries *keysrepo.Queries, organizationID string, projectID uuid.UUID, userID string) (keysrepo.ApiKey, string, error) {
-	randomBytes := make([]byte, 32)
-	if _, err := rand.Read(randomBytes); err != nil {
-		return keysrepo.ApiKey{}, "", oops.E(oops.CodeUnexpected, err, "generate LiteLLM API key").LogError(ctx, s.logger)
-	}
-	token := hex.EncodeToString(randomBytes)
-	plaintext := s.keyPrefix + token
-	hash, err := auth.GetAPIKeyHash(plaintext)
+	plaintext, hash, displayPrefix, err := auth.GenerateAPIKeyMaterial(s.keyPrefix)
 	if err != nil {
-		return keysrepo.ApiKey{}, "", oops.E(oops.CodeUnexpected, err, "hash LiteLLM API key").LogError(ctx, s.logger)
+		return keysrepo.ApiKey{}, "", oops.E(oops.CodeUnexpected, err, "generate LiteLLM API key").LogError(ctx, s.logger)
 	}
 	key, err := queries.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID: organizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, CreatedByUserID: userID,
 		Name:      fmt.Sprintf("%s%d-%s", auth.LiteLLMAPIKeyNamePrefix, time.Now().UTC().UnixMilli(), uuid.NewString()[:8]),
-		KeyPrefix: s.keyPrefix + token[:5], KeyHash: hash, Scopes: []string{auth.APIKeyScopeHooks.String()},
+		KeyPrefix: displayPrefix, KeyHash: hash, Scopes: []string{auth.APIKeyScopeHooks.String()},
 	})
 	if err != nil {
 		return keysrepo.ApiKey{}, "", oops.E(oops.CodeUnexpected, err, "create LiteLLM API key").LogError(ctx, s.logger)

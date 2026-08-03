@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listInstances litellm
  *
  * @remarks
- * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned.
+ * List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.
  */
 export function litellmListInstances(
   client: GramCore,

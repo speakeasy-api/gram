@@ -54,7 +54,7 @@ export type RotateLiteLLMInstanceKeyMutationError =
  * rotateInstanceKey litellm
  *
  * @remarks
- * Atomically replace a LiteLLM integration key and return the new plaintext value once.
+ * Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.
  */
 export function useRotateLiteLLMInstanceKeyMutation(
   options?: MutationHookOptions<
