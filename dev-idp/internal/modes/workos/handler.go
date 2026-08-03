@@ -113,20 +113,33 @@ func NewHandler(cfg Config, emulator http.Handler, client *gramworkos.Client, lo
 func (h *Handler) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// Dashboard inspection, namespaced away from the real API surface.
-	mux.HandleFunc("GET /_inspect/currentUser", h.handleGetCurrentUser)
-	mux.HandleFunc("GET /_inspect/users/{id_or_email}", h.handleGetUser)
-	mux.HandleFunc("GET /_inspect/organizations/{id}", h.handleGetOrganization)
-
+	// Dashboard inspection, namespaced away from the real API surface. These
+	// read the live WorkOS API, so they only exist when there is one; under
+	// BackendLocal they answer with an explanation rather than a bare 404,
+	// which would read as a wrong URL.
 	if h.cfg.Backend == BackendLocal {
+		mux.HandleFunc("GET /_inspect/", handleInspectUnavailable)
 		// The emulator already implements authenticate against local state.
 		mux.Handle("/", h.emulator)
 		return mux
 	}
 
+	mux.HandleFunc("GET /_inspect/currentUser", h.handleGetCurrentUser)
+	mux.HandleFunc("GET /_inspect/users/{id_or_email}", h.handleGetUser)
+	mux.HandleFunc("GET /_inspect/organizations/{id}", h.handleGetOrganization)
+
 	mux.HandleFunc("POST /user_management/authenticate", h.handleAuthenticate)
 	mux.Handle("/", h.proxy)
 	return mux
+}
+
+// handleInspectUnavailable answers the inspection routes under BackendLocal,
+// where there is no live WorkOS to read. The dashboard reads local identity
+// through the Goa management API instead.
+func handleInspectUnavailable(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusConflict, map[string]string{
+		"error": "WorkOS inspection requires GRAM_DEVIDP_BACKEND=workos; this dev-idp is running the local backend",
+	})
 }
 
 // =============================================================================
