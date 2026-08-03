@@ -55,6 +55,20 @@ vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
     mocks.resolveInventoryRequestMutation,
 }));
 
+vi.mock("@gram/client/react-query/blockShadowMCPInventoryServer.js", () => ({
+  useBlockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
+vi.mock("@gram/client/react-query/unblockShadowMCPInventoryServer.js", () => ({
+  useUnblockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
 vi.mock("@/components/page-layout", () => {
   const Toolbar = Object.assign(
     ({ children }: { children: ReactNode }) => (
