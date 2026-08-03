@@ -51,6 +51,45 @@ func TestInstanceResolverForgetWinsOverInflightResolution(t *testing.T) {
 	require.Equal(t, uuid.Nil, cached)
 }
 
+func TestInstanceResolverForgetLeavesOtherKeysInflight(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
+	projectID := uuid.New()
+	apiKeyID := uuid.New().String()
+	otherKeyID := uuid.New().String()
+	instanceID := uuid.New()
+	cacheKey := instanceResolverCacheKey("org-test", projectID.String(), apiKeyID)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	resolver.lookup = func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+		close(started)
+		<-release
+		return instanceID, nil
+	}
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	result := make(chan uuid.UUID, 1)
+	go func() {
+		resolvedID, _ := resolver.Resolve(t.Context(), "org-test", projectID.String(), apiKeyID)
+		result <- resolvedID
+	}()
+	<-started
+
+	resolver.Forget("org-test", projectID, otherKeyID)
+	close(release)
+
+	require.Equal(t, instanceID, <-result)
+	cached, ok := resolver.cache.Get(cacheKey)
+	require.True(t, ok)
+	require.Equal(t, instanceID, cached)
+}
+
 func TestInstanceAttributionStopsAfterDeadline(t *testing.T) {
 	t.Parallel()
 

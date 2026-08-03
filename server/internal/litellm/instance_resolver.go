@@ -27,22 +27,24 @@ const (
 // InstanceResolver maps managed ingestion keys to stable LiteLLM instance IDs
 // outside the request path. Nil UUIDs negatively cache unmanaged hooks keys.
 type InstanceResolver struct {
-	logger     *slog.Logger
-	cache      *lru.LRU[string, uuid.UUID]
-	group      singleflight.Group
-	mu         sync.Mutex
-	generation uint64
-	lookup     func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error)
+	logger *slog.Logger
+	cache  *lru.LRU[string, uuid.UUID]
+	group  singleflight.Group
+	mu     sync.Mutex
+	// generations invalidates in-flight fills per cache key, so forgetting one
+	// key never discards concurrent resolutions for unrelated keys.
+	generations map[string]uint64
+	lookup      func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error)
 }
 
 func NewInstanceResolver(logger *slog.Logger, db *pgxpool.Pool) *InstanceResolver {
 	resolver := &InstanceResolver{
-		logger:     logger.With(attr.SlogComponent("litellm.instance-resolver")),
-		cache:      lru.NewLRU[string, uuid.UUID](instanceResolverCacheSize, nil, instanceResolverCacheTTL),
-		group:      singleflight.Group{},
-		mu:         sync.Mutex{},
-		generation: 0,
-		lookup:     nil,
+		logger:      logger.With(attr.SlogComponent("litellm.instance-resolver")),
+		cache:       lru.NewLRU[string, uuid.UUID](instanceResolverCacheSize, nil, instanceResolverCacheTTL),
+		group:       singleflight.Group{},
+		mu:          sync.Mutex{},
+		generations: make(map[string]uint64),
+		lookup:      nil,
 	}
 	resolver.lookup = func(ctx context.Context, params repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
 		return repo.New(db).GetActiveLiteLLMInstanceIDByAPIKey(ctx, params)
@@ -68,7 +70,7 @@ func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectI
 			return instanceID, nil
 		}
 		r.mu.Lock()
-		generation := r.generation
+		generation := r.generations[cacheKey]
 		r.mu.Unlock()
 		instanceID, queryErr := r.lookup(ctx, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams{
 			OrganizationID: organizationID,
@@ -85,7 +87,7 @@ func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectI
 		if cached, ok := r.cache.Get(cacheKey); ok {
 			return cached, nil
 		}
-		if generation != r.generation {
+		if generation != r.generations[cacheKey] {
 			return uuid.Nil, nil
 		}
 		r.cache.Add(cacheKey, instanceID)
@@ -112,7 +114,7 @@ func (r *InstanceResolver) Forget(organizationID string, projectID uuid.UUID, ap
 	cacheKey := instanceResolverCacheKey(organizationID, projectID.String(), apiKeyID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.generation++
+	r.generations[cacheKey]++
 	r.cache.Add(cacheKey, uuid.Nil)
 }
 
