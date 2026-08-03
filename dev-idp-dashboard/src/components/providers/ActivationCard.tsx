@@ -1,18 +1,17 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Check, CircleCheck, Copy } from "lucide-react";
-import { match } from "ts-pattern";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { useGramMode } from "@/hooks/use-gram-mode";
-import type { ActivatableMode } from "@/lib/provider-info";
+import type { Backend } from "@/lib/devidp";
 
 const WORKOS_API_KEYS_URL =
   "https://dashboard.workos.com/environment_01J5C09A9KMAHSZ0T9WBK3TXHJ/api-keys";
 
-export function ActivationCard({ mode }: { mode: ActivatableMode }) {
+export function ActivationCard({ backend }: { backend: Backend }) {
   const { data, isLoading } = useGramMode();
-  const isActive = data?.mode === mode;
+  const isActive = data?.backend === backend;
 
   return (
     <Card size="sm" className={cn("!rounded-md w-80 shrink-0")}>
@@ -22,7 +21,7 @@ export function ActivationCard({ mode }: { mode: ActivatableMode }) {
         ) : isActive ? (
           <ActiveState />
         ) : (
-          <InactiveState mode={mode} />
+          <InactiveState backend={backend} />
         )}
       </CardContent>
     </Card>
@@ -39,14 +38,14 @@ function ActiveState() {
       <div className="min-w-0">
         <div className="font-semibold text-sm">Active</div>
         <div className="text-xs text-muted-foreground">
-          Gram is currently using this provider.
+          dev-idp is currently running this backend.
         </div>
       </div>
     </div>
   );
 }
 
-function InactiveState({ mode }: { mode: ActivatableMode }) {
+function InactiveState({ backend }: { backend: Backend }) {
   const { data } = useGramMode();
   const workosKeySet =
     data?.meta.env.find((v) => v.name === "GRAM_IDP_CLIENT_SECRET")?.is_set ??
@@ -55,33 +54,26 @@ function InactiveState({ mode }: { mode: ActivatableMode }) {
   return (
     <div className="space-y-3">
       <Header />
-      {match(mode)
-        .with("mock-workos", () => (
-          <CopyableCommand command="mise set --file mise.local.toml WORKOS_API_URL={{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos" />
-        ))
-        .with("workos", () => (
-          <>
-            <CopyableCommand command="mise set --file mise.local.toml WORKOS_API_URL=https://api.workos.com" />
-            {!workosKeySet && (
-              <div className="space-y-2 pt-3 border-t border-border">
-                <CopyableCommand command="mise set --file mise.local.toml GRAM_IDP_CLIENT_SECRET=<paste-key>" />
-                <p className="text-xs text-muted-foreground">
-                  Grab a fresh API key from{" "}
-                  <a
-                    href={WORKOS_API_KEYS_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2 hover:text-[var(--retro-orange)]"
-                  >
-                    the WorkOS dashboard
-                  </a>{" "}
-                  and substitute it into the command.
-                </p>
-              </div>
-            )}
-          </>
-        ))
-        .exhaustive()}
+      <CopyableCommand
+        command={`mise set --file mise.local.toml GRAM_DEVIDP_BACKEND=${backend}`}
+      />
+      {backend === "workos" && !workosKeySet && (
+        <div className="space-y-2 pt-3 border-t border-border">
+          <CopyableCommand command="mise set --file mise.local.toml GRAM_IDP_CLIENT_SECRET=<paste-key>" />
+          <p className="text-xs text-muted-foreground">
+            Grab a fresh API key from{" "}
+            <a
+              href={WORKOS_API_KEYS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-[var(--retro-orange)]"
+            >
+              the WorkOS dashboard
+            </a>{" "}
+            and substitute it into the command.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -91,7 +83,7 @@ function Header() {
     <div>
       <div className="font-semibold text-sm">Activate</div>
       <div className="text-xs text-muted-foreground">
-        Set the env vars below, then restart Gram.
+        Set the env vars below, then restart pitchfork.
       </div>
     </div>
   );

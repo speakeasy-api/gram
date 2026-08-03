@@ -1,11 +1,14 @@
-export type Mode = "mock-workos" | "oauth2-1" | "oauth2" | "workos";
+/**
+ * The identity slots dev-idp keeps a currentUser for. "oauth2-1" holds a
+ * local users-table row; "workos" holds a real WorkOS subject. Which one is
+ * authoritative follows GRAM_DEVIDP_BACKEND.
+ */
+export type Mode = "oauth2-1" | "workos";
 
-export const MODES: readonly Mode[] = [
-  "mock-workos",
-  "oauth2-1",
-  "oauth2",
-  "workos",
-] as const;
+export const MODES: readonly Mode[] = ["oauth2-1", "workos"] as const;
+
+/** The identity backend dev-idp is running against. */
+export type Backend = "local" | "workos";
 
 export interface User {
   id: string;

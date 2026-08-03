@@ -1,35 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import type { Mode } from "@/lib/devidp";
+import type { Backend, Mode } from "@/lib/devidp";
 import { ENV_DOCS } from "@/lib/env-docs";
 
 /**
- * Detect which dev-idp mode the Gram server is currently configured against by
- * looking at the URLs Gram is told to call.
- *
- * Heuristic: if `WORKOS_API_URL` or `GRAM_IDP_BASE_URL` starts with
- * `${GRAM_DEVIDP_EXTERNAL_URL}/<mode>`, that mode is active. If neither
- * points back at the dev-idp, Gram is running against an external upstream
- * and we report `null`.
- *
- * `oauth2-1` is checked before `oauth2` so the longer prefix wins.
+ * Report the identity backend dev-idp is running. This is read straight from
+ * GRAM_DEVIDP_BACKEND rather than inferred from URLs: both backends now mount
+ * at the same prefixes, so there is nothing to sniff — and the old
+ * prefix-matching heuristic silently reported the wrong backend once
+ * WORKOS_API_URL stopped changing between them.
  */
-function detectMode(): Mode | null {
-  const dev = process.env["GRAM_DEVIDP_EXTERNAL_URL"];
-  if (!dev) return null;
-  const candidates = [
-    process.env["WORKOS_API_URL"],
-    process.env["GRAM_IDP_BASE_URL"],
-  ];
-  const prefix = `${dev.replace(/\/$/, "")}/`;
-  for (const url of candidates) {
-    if (!url || !url.startsWith(prefix)) continue;
-    const rest = url.slice(prefix.length);
-    if (rest.startsWith("mock-workos")) return "mock-workos";
-    if (rest.startsWith("oauth2-1")) return "oauth2-1";
-    if (rest.startsWith("oauth2")) return "oauth2";
-    if (rest.startsWith("workos")) return "workos";
-  }
-  return null;
+function detectBackend(): Backend {
+  return process.env["GRAM_DEVIDP_BACKEND"] === "workos" ? "workos" : "local";
+}
+
+/** The currentUser slot that is authoritative for a given backend. */
+function slotForBackend(backend: Backend): Mode {
+  return backend === "workos" ? "workos" : "oauth2-1";
 }
 
 function buildEnvReadout() {
@@ -52,12 +38,13 @@ export const Route = createFileRoute("/api/gram-mode")({
   server: {
     handlers: {
       GET: async () => {
-        const mode = detectMode();
+        const backend = detectBackend();
+        const mode = slotForBackend(backend);
         const meta = { env: buildEnvReadout() };
-        if (!mode) {
-          return Response.json({ mode: null, currentUser: null, meta });
+        const dev = process.env["GRAM_DEVIDP_EXTERNAL_URL"];
+        if (!dev) {
+          return Response.json({ backend, mode, currentUser: null, meta });
         }
-        const dev = process.env["GRAM_DEVIDP_EXTERNAL_URL"]!;
         let currentUser: unknown = null;
         try {
           const res = await fetch(`${dev}/rpc/devIdp.getCurrentUser`, {
@@ -67,9 +54,9 @@ export const Route = createFileRoute("/api/gram-mode")({
           });
           if (res.ok) currentUser = await res.json();
         } catch {
-          // Treat fetch failure as "no current user" — surface mode regardless.
+          // Treat fetch failure as "no current user" — surface backend regardless.
         }
-        return Response.json({ mode, currentUser, meta });
+        return Response.json({ backend, mode, currentUser, meta });
       },
     },
   },
