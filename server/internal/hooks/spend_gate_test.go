@@ -504,6 +504,9 @@ func TestCursor_PreToolUse_SpendGateDeniesNativeToolWithBlockURL(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
+	scanner := &recordingRiskScanner{}
+	ti.service.riskScanner = scanner
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -531,6 +534,163 @@ func TestCursor_PreToolUse_SpendGateDeniesNativeToolWithBlockURL(t *testing.T) {
 	assert.Contains(t, *result.UserMessage, "Intern hard limit")
 	assert.Contains(t, *result.UserMessage, "/blocks/",
 		"tool-call spend denies must carry a durable block page link")
+
+	assert.Zero(t, scanner.scans, "spend gate must deny before any risk-policy scan runs")
+}
+
+func TestCursor_BeforeMCPExecution_SpendGateDenies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_cursor_mcp"
+	userEmail := "spend-cursor-mcp@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	toolName := "MCP:github_search"
+	toolUseID := "toolu_spend_cursor_mcp_1"
+	conversationID := "conv-spend-mcp-" + uuid.NewString()
+	result, err := ti.service.Cursor(ctx, &gen.CursorPayload{
+		HookEventName:  "beforeMCPExecution",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		UserEmail:      &userEmail,
+		ConversationID: &conversationID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
+	require.NotNil(t, result.UserMessage)
+	assert.Contains(t, *result.UserMessage, "Intern hard limit")
+	assert.Contains(t, *result.UserMessage, "/blocks/")
+}
+
+func TestCursor_PreToolUse_SpendGateSkipsMCPTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_cursor_mcp_skip"
+	userEmail := "spend-cursor-mcp-skip@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	// MCP-routed calls are spend-gated exactly once, at beforeMCPExecution;
+	// preToolUse must keep allowing them so one denied call cannot mint two
+	// block rows across the paired events.
+	toolName := "MCP:github_search"
+	toolUseID := "toolu_spend_cursor_mcp_skip_1"
+	result, err := ti.service.Cursor(ctx, &gen.CursorPayload{
+		HookEventName: "preToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		UserEmail:     &userEmail,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "allow", *result.Permission)
+}
+
+func TestCodex_SpendGateRedeliveryDoesNotRemintBlockPage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_codex_retry"
+	userEmail := "spend-codex-retry@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	sessionID := "codex-spend-retry-" + uuid.NewString()
+	toolName := "shell"
+	idempotencyKey := "idem-spend-" + uuid.NewString()
+	payload := &gen.CodexPayload{
+		HookEventName:  "PreToolUse",
+		SessionID:      &sessionID,
+		UserEmail:      &userEmail,
+		ToolName:       &toolName,
+		IdempotencyKey: &idempotencyKey,
+	}
+
+	first, err := ti.service.Codex(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, first.Decision)
+	assert.Equal(t, "deny", *first.Decision)
+	require.NotNil(t, first.Reason)
+	assert.Contains(t, *first.Reason, "/blocks/")
+
+	// The redelivery keeps the deny but must not mint a second block row, so
+	// its reason carries no fresh block link.
+	second, err := ti.service.Codex(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, second.Decision)
+	assert.Equal(t, "deny", *second.Decision)
+	require.NotNil(t, second.Reason)
+	assert.NotContains(t, *second.Reason, "/blocks/",
+		"idempotent redelivery must not mint another block page")
+}
+
+func TestIngest_SpendGateDeniesCursorToolCallWithBlockURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	payload := canonicalIngestPayload("cursor", "tool.requested", "spend-gate-ingest-cursor-tool")
+	toolName := "Edit"
+	toolCallID := "call-spend-cursor-1"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"path": "main.go"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
+	assert.Contains(t, *result.Message, "/blocks/")
+}
+
+func TestIngest_SpendGateDeniesCodexPromptAndNormalizesAdapterCase(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	// A case-variant adapter slug must not dodge the gate.
+	payload := canonicalIngestPayload("Codex", "prompt.submitted", "spend-gate-ingest-codex-prompt")
+	text := "hello"
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &text},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
 }
 
 func TestCursor_BeforeSubmitPrompt_SpendGateDenies(t *testing.T) {

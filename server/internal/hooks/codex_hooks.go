@@ -258,8 +258,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	}
 
 	// Tool-call blocks get a durable block page; mint its URL and attach it to
-	// the agent-facing reason, persisting the row off the hot path.
-	if isToolCallBlock && blockReason != "" {
+	// the agent-facing reason, persisting the row off the hot path. Idempotent
+	// redeliveries keep the deny but must not mint a second row (matching the
+	// Claude and ingest paths), so the retried delivery's reason carries no
+	// link.
+	if isToolCallBlock && blockReason != "" && !s.isHookDuplicate(ctx) {
 		if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 			Provider:       "codex",
 			OrganizationID: orgID,

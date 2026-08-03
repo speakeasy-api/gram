@@ -105,7 +105,11 @@ function BlockBody({ id }: { id: string | undefined }) {
             Tool call blocked
           </Text>
           <Text muted small className="text-center">
-            Blocked by policy “{block.policyName}”
+            {/* Spend-rule blocks carry no risk policy; the rule name lives in
+                the reason text below, so avoid a `policy ""` headline. */}
+            {block.policyName
+              ? `Blocked by policy “${block.policyName}”`
+              : "Blocked by a Speakeasy spend rule"}
             {block.toolName ? ` · tool ${block.toolName}` : ""}
           </Text>
         </Stack>

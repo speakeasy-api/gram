@@ -124,13 +124,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	switch ev := hookEvent.(type) {
 	case *hookevents.BeforeMCPExecution:
 		// Spend gate runs before any risk-policy evaluation: an over-budget
-		// user gets MCP tool calls denied even mid-turn.
+		// user gets MCP tool calls denied even mid-turn. This event is the
+		// sole spend gate for MCP calls — preToolUse skips them below.
 		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
-			reason := s.cursorSpendDenyReason(ctx, block, ev.ToolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
-			blockReason = spendBlockReason("tool call", block)
+			auditReason, userReason := s.cursorSpendDenyReason(ctx, block, ev.ToolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
+			blockReason = auditReason
 			result.Permission = new("deny")
-			result.UserMessage = &reason
-			result.AgentMessage = &reason
+			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 			break
 		}
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
@@ -231,19 +232,19 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// (read_file, edit_file, ...) only have this single event and still
 		// get scanned.
 		toolName := ev.ToolName
-		// Spend gate runs before any risk-policy evaluation and before the
-		// MCP-dedup skip: an over-budget user is denied for native and MCP
-		// tools alike.
-		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
-			reason := s.cursorSpendDenyReason(ctx, block, toolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
-			blockReason = spendBlockReason("tool call", block)
-			result.Permission = new("deny")
-			result.UserMessage = &reason
-			result.AgentMessage = &reason
-			break
-		}
 		if strings.HasPrefix(toolName, "MCP:") {
 			result.Permission = new("allow")
+			break
+		}
+		// Spend gate runs before any risk-policy evaluation. It sits below
+		// the MCP: skip so each MCP call is spend-gated exactly once, at
+		// beforeMCPExecution — the same dedup contract the risk scan follows.
+		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			auditReason, userReason := s.cursorSpendDenyReason(ctx, block, toolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
+			blockReason = auditReason
+			result.Permission = new("deny")
+			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 			break
 		}
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
