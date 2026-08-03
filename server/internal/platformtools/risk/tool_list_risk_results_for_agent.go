@@ -88,12 +88,14 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 	}
 
 	// The service defaults an omitted limit to its own (larger) page size, so
-	// the agent's default is applied here rather than left unset.
-	limit := input.Limit
-	if limit == nil {
-		defaultLimit := agentResultsDefaultLimit
-		limit = &defaultLimit
+	// the agent's default is applied here rather than left unset. The schema
+	// range is advisory — DecodeInput is a plain unmarshal — so the bound is
+	// enforced here too.
+	limitValue := agentResultsDefaultLimit
+	if input.Limit != nil {
+		limitValue = min(max(*input.Limit, 1), agentResultsMaxLimit)
 	}
+	limit := &limitValue
 
 	result, err := s.risk.ListRiskResultsForAgent(ctx, &risk.ListRiskResultsForAgentPayload{
 		ApikeyToken:      nil,

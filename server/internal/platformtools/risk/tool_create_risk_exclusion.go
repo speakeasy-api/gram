@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -35,7 +36,7 @@ func (s *CreateRiskExclusion) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "risk",
 		HandlerName: "create_risk_exclusion",
 		Name:        "platform_create_risk_exclusion",
-		Description: "Create a risk exclusion so matching findings stop being flagged, now and in future scans. Use this for a whole class of findings; use platform_mark_risk_false_positive to dismiss specific findings without changing future detection.",
+		Description: "Create a risk exclusion so matching findings stop being flagged, now and in future scans. Use this for a whole class of findings; use platform_mark_risk_false_positive to dismiss specific findings without changing future detection. If an equivalent exclusion already exists it is returned unchanged rather than duplicated.",
 		InputSchema: core.BuildInputSchema[createRiskExclusionInput](
 			core.WithPropertyFormat("risk_policy_id", "uuid"),
 			core.WithPropertyEnum("match_type", "exact", "regex", "rule_id", "source", "entity_type"),
@@ -46,6 +47,46 @@ func (s *CreateRiskExclusion) Descriptor() core.ToolDescriptor {
 		OwnerKind:   nil,
 		OwnerID:     nil,
 	}
+}
+
+// findEquivalent returns an existing exclusion identical to the one described by
+// input, or nil if there is none. Enabled is deliberately not compared: a
+// disabled exclusion is the same rule, and re-creating it would leave two rows
+// disagreeing about whether it applies.
+func (s *CreateRiskExclusion) findEquivalent(ctx context.Context, input createRiskExclusionInput, ruleIDFilter, sourceFilter string) (*types.RiskExclusion, error) {
+	// Listed unfiltered: a nil risk_policy_id means "global", not "any policy",
+	// so the policy binding has to be compared here rather than pushed down.
+	listed, err := s.risk.ListRiskExclusions(ctx, &risk.ListRiskExclusionsPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		RiskPolicyID:     nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list risk exclusions: %w", err)
+	}
+
+	for _, exclusion := range listed.Exclusions {
+		if exclusion.MatchType != input.MatchType || exclusion.MatchValue != input.MatchValue {
+			continue
+		}
+		if exclusion.RuleIDFilter != ruleIDFilter || exclusion.SourceFilter != sourceFilter {
+			continue
+		}
+		if !samePolicyBinding(exclusion.RiskPolicyID, input.RiskPolicyID) {
+			continue
+		}
+		return exclusion, nil
+	}
+
+	return nil, nil
+}
+
+func samePolicyBinding(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
@@ -84,6 +125,19 @@ func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 	sourceFilter := ""
 	if input.SourceFilter != nil {
 		sourceFilter = *input.SourceFilter
+	}
+
+	// platform_list_risk_exclusions fingerprints exact/regex match values, so the
+	// model cannot tell from that listing whether the exclusion it is about to
+	// create already exists. Dedupe here instead: this call has the raw proposed
+	// value and the raw existing ones, so the comparison happens without either
+	// pattern reaching the model.
+	existing, err := s.findEquivalent(ctx, input, ruleIDFilter, sourceFilter)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		return core.EncodeResult(wr, toExclusionView(existing))
 	}
 
 	result, err := s.risk.CreateRiskExclusion(ctx, &risk.CreateRiskExclusionPayload{
