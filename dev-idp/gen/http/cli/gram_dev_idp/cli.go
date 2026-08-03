@@ -39,7 +39,7 @@ func UsageCommands() []string {
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + " " + "dev-idp get-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'" + "\n" +
+	return os.Args[0] + " " + "dev-idp get-current-user --body '{\n      \"mode\": \"workos\"\n   }'" + "\n" +
 		os.Args[0] + " " + "organizations create --body '{\n      \"account_type\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"workos_id\": \"abc123\"\n   }'" + "\n" +
 		os.Args[0] + " " + "organization-roles create --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"abc123\"\n   }'" + "\n" +
 		os.Args[0] + " " + "invitations create --body '{\n      \"email\": \"abc123\",\n      \"inviter_user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'" + "\n" +
@@ -462,7 +462,7 @@ func ParseEndpoint(
 
 // devIdpUsage displays the usage of the dev-idp command and its subcommands.
 func devIdpUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Dev-only RPCs for the dev-idp itself. Per-slot currentUser get/set. Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] dev-idp COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-current-user: Read the per-mode currentUser. 404s when no row exists yet for that mode.`)
@@ -487,7 +487,7 @@ func devIdpGetCurrentUserUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp get-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp get-current-user --body '{\n      \"mode\": \"workos\"\n   }'")
 }
 
 func devIdpSetCurrentUserUsage() {
@@ -505,7 +505,7 @@ func devIdpSetCurrentUserUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp set-current-user --body '{\n      \"mode\": \"oauth2-1\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workos_sub\": \"abc123\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp set-current-user --body '{\n      \"mode\": \"workos\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workos_sub\": \"abc123\"\n   }'")
 }
 
 func devIdpClearCurrentUserUsage() {
@@ -523,7 +523,7 @@ func devIdpClearCurrentUserUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp clear-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp clear-current-user --body '{\n      \"mode\": \"workos\"\n   }'")
 }
 
 // organizationsUsage displays the usage of the organizations command and its
