@@ -60,7 +60,7 @@ import {
   ReasoningGroup,
 } from "@/elements/components/assistant-ui/reasoning";
 import { ThinkingIndicator } from "@/elements/components/assistant-ui/thinking-indicator";
-import { ToolActivityPendingProvider } from "@/elements/hooks/useToolActivityPending";
+import { ToolActivityPendingProvider } from "@/elements/components/assistant-ui/tool-activity-pending-provider";
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
 import { UserMessageText } from "@/elements/components/assistant-ui/user-message-text";
 import { ToolMentionAutocomplete } from "@/elements/components/assistant-ui/tool-mention-autocomplete";
