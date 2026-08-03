@@ -3,12 +3,12 @@ package litellm
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -23,31 +23,29 @@ func TestInstanceResolverForgetWinsOverInflightResolution(t *testing.T) {
 	cacheKey := instanceResolverCacheKey("org-test", projectID.String(), apiKeyID)
 	started := make(chan struct{})
 	release := make(chan struct{})
-	resolved := make(chan struct{})
+	resolver.lookup = func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+		close(started)
+		<-release
+		return instanceID, nil
+	}
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	result := make(chan uuid.UUID, 1)
 	go func() {
-		defer close(resolved)
-		_, _, _ = resolver.group.Do(cacheKey, func() (any, error) {
-			close(started)
-			<-release
-			resolver.cache.Add(cacheKey, instanceID)
-			return instanceID, nil
-		})
+		resolvedID, _ := resolver.Resolve(t.Context(), "org-test", projectID.String(), apiKeyID)
+		result <- resolvedID
 	}()
 	<-started
 
-	forgotten := make(chan struct{})
-	go func() {
-		defer close(forgotten)
-		resolver.Forget("org-test", projectID, apiKeyID)
-	}()
-	require.Eventually(t, func() bool {
-		cached, ok := resolver.cache.Get(cacheKey)
-		return ok && cached == uuid.Nil
-	}, time.Second, 10*time.Millisecond)
+	resolver.Forget("org-test", projectID, apiKeyID)
 	close(release)
-	<-resolved
-	<-forgotten
 
+	require.Equal(t, uuid.Nil, <-result)
 	cached, ok := resolver.cache.Get(cacheKey)
 	require.True(t, ok)
 	require.Equal(t, uuid.Nil, cached)
@@ -69,4 +67,44 @@ func TestInstanceAttributionStopsAfterDeadline(t *testing.T) {
 	enrichLiteLLMInstanceAttribution(ctx, NewInstanceResolver(testenv.NewLogger(t), nil), rows)
 
 	require.NotContains(t, rows[0].Attributes, attr.LiteLLMInstanceIDKey)
+}
+
+func TestInstanceAttributionKeepsResolvedRowsAfterDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
+	projectID := uuid.New().String()
+	firstKeyID := uuid.New().String()
+	secondKeyID := uuid.New().String()
+	instanceID := uuid.New()
+	resolver.lookup = func(_ context.Context, params repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+		if params.ApiKeyID.String() == firstKeyID {
+			cancel()
+			return instanceID, nil
+		}
+		t.Fatal("resolution continued after deadline")
+		return uuid.Nil, nil
+	}
+	rows := []telemetry.LogParams{
+		liteLLMAttributionRow(projectID, firstKeyID),
+		liteLLMAttributionRow(projectID, secondKeyID),
+		liteLLMAttributionRow(projectID, firstKeyID),
+	}
+
+	enrichLiteLLMInstanceAttribution(ctx, resolver, rows)
+
+	require.Equal(t, instanceID.String(), rows[0].Attributes[attr.LiteLLMInstanceIDKey])
+	require.NotContains(t, rows[1].Attributes, attr.LiteLLMInstanceIDKey)
+	require.Equal(t, instanceID.String(), rows[2].Attributes[attr.LiteLLMInstanceIDKey])
+}
+
+func liteLLMAttributionRow(projectID, apiKeyID string) telemetry.LogParams {
+	return telemetry.LogParams{
+		ToolInfo: telemetry.ToolInfo{
+			OrganizationID: "org-test",
+			ProjectID:      projectID,
+		},
+		Attributes: map[attr.Key]any{attr.APIKeyIDKey: apiKeyID},
+	}
 }
