@@ -12,9 +12,17 @@ import {
   SkillFeedbackCounts,
   SkillFeedbackCounts$inboundSchema,
 } from "./skillfeedbackcounts.js";
+import {
+  SkillFeedbackMetrics,
+  SkillFeedbackMetrics$inboundSchema,
+} from "./skillfeedbackmetrics.js";
+import {
+  SkillFeedbackTimelinePoint,
+  SkillFeedbackTimelinePoint$inboundSchema,
+} from "./skillfeedbacktimelinepoint.js";
 
 /**
- * All-time outcome counts and a newest-first page of feedback for a skill.
+ * Outcome counts, collection metrics, a 30-day timeline, and a newest-first page of feedback for a skill.
  */
 export type ListSkillFeedbackResult = {
   /**
@@ -23,9 +31,14 @@ export type ListSkillFeedbackResult = {
   counts: SkillFeedbackCounts;
   feedback: Array<SkillFeedback>;
   /**
+   * Feedback collection and suggestion conversion metrics for a skill.
+   */
+  metrics: SkillFeedbackMetrics;
+  /**
    * Cursor for the next page; absent when exhausted.
    */
   nextCursor?: string | undefined;
+  timeline: Array<SkillFeedbackTimelinePoint>;
 };
 
 /** @internal */
@@ -36,7 +49,9 @@ export const ListSkillFeedbackResult$inboundSchema: z.ZodMiniType<
   z.object({
     counts: SkillFeedbackCounts$inboundSchema,
     feedback: z.array(SkillFeedback$inboundSchema),
+    metrics: SkillFeedbackMetrics$inboundSchema,
     next_cursor: z.optional(z.string()),
+    timeline: z.array(SkillFeedbackTimelinePoint$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

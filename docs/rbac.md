@@ -82,6 +82,7 @@ const (
 	ScopeSkillWrite         Scope = "skill:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
+	ScopeRiskPolicyBlock    Scope = "risk_policy:block"
 	ScopeChatRead           Scope = "chat:read"
 )
 ```
@@ -261,6 +262,13 @@ Read that as:
 
 The most important rule: **exclusion grants do not create access by themselves**.
 They only subtract from something that the base side already proved.
+
+`risk_policy:block` is the inverse rule store for allow-by-default (allow_all)
+shadow MCP blocking policies: each grant names a policy and a `server_url`
+selector and is always held by the all-users principal (`user:all`), meaning
+"this server is blocked for everyone in the project". The shadow MCP hook path
+reads these grants directly; they are never evaluated through `Require` and do
+not participate in grant expressions.
 
 ### Risk Policy Example
 
@@ -523,6 +531,7 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Open Catalog                                                                                          | `project:read` OR `mcp:write`                                                                                | Project ID or MCP selector, depending on entry point                  | Browsing from the main nav can be available to project readers. Adding a catalog server to a project is a write action and is gated at the add flow.                                                                                                                                                                                                                                                                                                                                                                        |
 | Open Playground                                                                                       | `mcp:connect` OR `mcp:read` OR `mcp:write`                                                                   | MCP server or toolset ID                                              | Runtime calls should use `mcp:connect`; editing saved playground/server configuration requires `mcp:write`.                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Open MCP server/toolset pages                                                                         | `mcp:read` OR `mcp:write`                                                                                    | MCP server or toolset ID                                              | Creating, editing, deleting, publishing, authentication, team-access, prompt/resource, OAuth, tool filtering, and settings actions generally require `mcp:write`; collection publishing can require `org:admin`.                                                                                                                                                                                                                                                                                                            |
+| View MCP team access                                                                                  | `mcp:read` AND `org:read`                                                                                    | MCP server or toolset ID; active organization                         | Team access reads the organization member and role lists in addition to the MCP resource.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Create a custom remote MCP server                                                                     | `mcp:write`                                                                                                  | MCP selector, usually unrestricted or target server ID after creation | The create route is page-gated on `mcp:write`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Open Deployments                                                                                      | `project:read` OR `project:write`                                                                            | Project ID                                                            | Deployment-triggering and failed-source retry actions require `project:write`.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Open Assistants                                                                                       | `project:read`                                                                                               | Project ID                                                            | Creating or editing assistants is gated by `project:write` OR `mcp:write`; admin-only assistant management sections are `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -545,11 +554,11 @@ Handlers do not query grants directly. Their job is to describe the access they 
 
 ### When RBAC is enforced
 
-`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. Today, RBAC is enforced for authenticated enterprise requests when the RBAC feature flag is enabled for the active organization, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
+`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. RBAC is enforced for authenticated requests when the RBAC feature flag is enabled for the active organization, regardless of account tier, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
 
 Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only platform admins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
 
-That means RBAC is not currently enforced for API key requests, non-enterprise accounts, or organizations where the RBAC feature flag is disabled. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
+That means RBAC is not currently enforced for API key requests or organizations where the RBAC feature flag is disabled. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
 
 ### Add checks at the handler boundary
 

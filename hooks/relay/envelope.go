@@ -337,6 +337,15 @@ func permissionTypeOf(base *agenthooks.Event) string {
 			return s
 		}
 	}
+	// OpenCode's permission frame carries the kind under "type".
+	if base.Provider == agenthooks.ProviderOpenCode {
+		if raw := base.RawField("input.type"); len(raw) > 0 {
+			var s string
+			if json.Unmarshal(raw, &s) == nil {
+				return s
+			}
+		}
+	}
 	return ""
 }
 

@@ -1,6 +1,8 @@
 package deviceintegrations
 
 import (
+	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -248,6 +250,36 @@ func TestCredentialRotationResetsSyncState(t *testing.T) {
 	require.False(t, digests[0].Valid, "rotation clears last_push_digest so a repointed sink gets its first push")
 }
 
+func TestSettingsRepointResetsSyncState(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+
+	// Simulate a previously pushed snapshot digest.
+	require.NoError(t, testrepo.New(conn).FailDeviceIntegrationSyncsFixture(ctx, testrepo.FailDeviceIntegrationSyncsFixtureParams{
+		ErrorMessage:              conv.ToPGText("unauthorized"),
+		LastPushDigest:            conv.ToPGText("stale-digest"),
+		DeviceIntegrationConfigID: created.Config.ID,
+	}))
+
+	// A settings change without credentials is how the dashboard repoints a
+	// push destination (secrets are write-only and not resupplied). The
+	// coverage digest hashes only the fleet, so the stored digest MUST clear
+	// or the newly pointed-at account receives nothing until the fleet
+	// changes.
+	repointed := mustUpsert(t, ctx, conn, store, orgID, nil, providers.Settings{"instance_url": "https://repointed.test"}, true)
+	require.True(t, repointed.SyncsMadeDue, "a repoint resets sync state, so the caller must kick a sync rather than wait out the interval")
+	digests, err := testrepo.New(conn).GetDeviceIntegrationSyncPushDigests(ctx, created.Config.ID)
+	require.NoError(t, err)
+	require.Len(t, digests, 1)
+	require.False(t, digests[0].Valid, "a settings repoint clears last_push_digest so the new destination gets its first push")
+	rows, err := store.repo.ListSchedulesWithSync(ctx, created.Config.ID)
+	require.NoError(t, err)
+	require.False(t, rows[0].LastPollFailedAt.Valid, "a repoint is a fresh start like a rotation")
+}
+
 func TestUpsertReturnsTransactionObservedBefore(t *testing.T) {
 	t.Parallel()
 
@@ -297,4 +329,42 @@ func TestCredentialRotationMergesSavedSecrets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "original-id", creds["client_id"], "blank supplied secret keeps the stored value")
 	require.Equal(t, "rotated-again!", creds["client_secret"])
+}
+
+// TestProvisionRunsOnMergedConfig covers the P1: provisioning must see the
+// fully-merged effective config, not the sparse client payload, so a partial
+// update (a stored secret/setting the client omitted) still provisions.
+func TestProvisionRunsOnMergedConfig(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+
+	desc, ok := providers.Lookup(testProviderID)
+	require.True(t, ok)
+
+	var seenCreds providers.Credentials
+	var seenSettings providers.Settings
+	provision := func(_ context.Context, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+		seenCreds = maps.Clone(creds)
+		seenSettings = maps.Clone(settings)
+		out := maps.Clone(settings)
+		out["note"] = "provisioned"
+		return out, nil
+	}
+
+	// Partial update: settings-only, no credentials — the client relies on the
+	// stored api_key surviving the merge.
+	err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		_, err := store.upsertWithTx(ctx, tx, desc, orgID, nil, providers.Settings{"instance_url": "https://example.test"}, true, provision)
+		return err
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "secret-token", seenCreds["api_key"], "provision runs on the merged credentials, not the sparse payload")
+	require.Equal(t, "https://example.test", seenSettings["instance_url"])
+
+	cfg, err := store.LoadConfig(ctx, orgID, testProviderID)
+	require.NoError(t, err)
+	require.Equal(t, "provisioned", cfg.Settings["note"], "settings the provision step returns are persisted")
 }

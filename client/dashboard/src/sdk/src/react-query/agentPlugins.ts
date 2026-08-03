@@ -106,7 +106,14 @@ export function useAgentPluginsSuspense(
 
 export function setAgentPluginsData(
   client: QueryClient,
-  queryKeyBase: [parameters: { email: string; gramKey?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      email: string;
+      gramKey?: string | undefined;
+      gramDeviceSerial?: string | undefined;
+      gramDeviceHostname?: string | undefined;
+    },
+  ],
   data: AgentPluginsQueryData,
 ): AgentPluginsQueryData | undefined {
   const key = queryKeyAgentPlugins(...queryKeyBase);
@@ -117,7 +124,12 @@ export function setAgentPluginsData(
 export function invalidateAgentPlugins(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { email: string; gramKey?: string | undefined }]
+    [parameters: {
+      email: string;
+      gramKey?: string | undefined;
+      gramDeviceSerial?: string | undefined;
+      gramDeviceHostname?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

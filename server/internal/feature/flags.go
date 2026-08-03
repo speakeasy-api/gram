@@ -23,12 +23,36 @@ const (
 	// per-category detection scopes. Default off during rollout.
 	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 
+	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
+	// device's assigned-user email against user-keyed heartbeats to matching
+	// its hardware serial against device-keyed ones, falling back to email
+	// when no serial match exists. Gated because the flip is visible: an org
+	// whose agents predate hardware reporting sees the same numbers, but one
+	// mid-upgrade sees devices move between buckets as serials arrive.
+	// Targeted by PostHog organization group (org slug), like FlagBudgets.
+	// Removed once device-level matching is GA.
+	FlagDeviceLevelCoverage Flag = "device-level-coverage"
+
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
+
+	// FlagUserSessionCIMD gates inbound OAuth Client ID Metadata Document
+	// (CIMD) support on the user-session authorization server: URL-shaped
+	// client_id values on /mcp/{slug}/authorize are resolved by fetching the
+	// metadata document instead of requiring RFC 7591 DCR. Evaluated
+	// server-side per organization with distinctID = the issuer's org ID and
+	// no groups.
+	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.
 	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
+	// FlagRiskListFromClickHouse serves the project-wide risk events listing
+	// (ListRiskResults without a chat_id) from ClickHouse risk_findings
+	// instead of Postgres risk_results. The chat-scoped listing stays on
+	// Postgres, which is the only store holding raw match content. Per-org
+	// rollout gate; removed once the ClickHouse read path is GA.
+	FlagRiskListFromClickHouse Flag = "risk-list-from-clickhouse"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

@@ -35,7 +35,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -51,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
@@ -94,6 +94,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
+	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -174,6 +175,16 @@ func newStartCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-k8s-namespace",
+			Usage:   "Kubernetes namespace for custom domain ingresses (defaults to gram-<environment>)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_K8S_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-backend-service",
+			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
 		},
 		&cli.StringFlag{
 			Name:     "ssl-key-file",
@@ -434,15 +445,15 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, redisFlags...)
-	flags = append(flags, clickHouseFlags...)
-	flags = append(flags, functionsFlags...)
-	flags = append(flags, pluginsFlags...)
-	flags = append(flags, assistantRuntimeFlags...)
-	flags = append(flags, pulseMCPFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, svixFlags...)
-	flags = append(flags, gcpFlags...)
+	flags = append(flags, redisFlags()...)
+	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, functionsFlags()...)
+	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, pulseMCPFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -598,7 +609,7 @@ func newStartCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.String("custom-domain-k8s-namespace"), c.String("custom-domain-backend-service"))
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
@@ -786,9 +797,8 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore, serverURL)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, slackClient)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
@@ -827,6 +837,7 @@ func newStartCommand() *cli.Command {
 				serverURL,
 			)
 
+			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			remoteProxyManager := remotemcp.NewProxyManager(
 				logger,
 				tracerProvider,
@@ -837,6 +848,7 @@ func newStartCommand() *cli.Command {
 				telemLogger,
 				billingRepo,
 				billingTracker,
+				toolDispositionCache,
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
@@ -858,7 +870,9 @@ func newStartCommand() *cli.Command {
 				chatSessionsManager,
 				env,
 				posthogClient,
+				posthogClient,
 				serverURL,
+				siteURL,
 				encryptionClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
@@ -1073,7 +1087,7 @@ func newStartCommand() *cli.Command {
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger, c.String("jwt-signing-key"), accessStore, emailService, *siteURL))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger))
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL.String()))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
@@ -1083,6 +1097,14 @@ func newStartCommand() *cli.Command {
 				sessionManager,
 				authzEngine,
 				memorySvc,
+			))
+			businessmemory.Attach(mux, businessmemory.NewService(
+				logger,
+				tracerProvider,
+				db,
+				sessionManager,
+				authzEngine,
+				completionsClient,
 			))
 			hooks.Attach(mux, hooks.NewService(
 				logger,
@@ -1109,7 +1131,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			))
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
-			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
+			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -1161,7 +1183,8 @@ func newStartCommand() *cli.Command {
 			// not coalesced into the chat-write cooldown.
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
-			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger)
+			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
+				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
 			skills.Attach(mux, skillsService)
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil)
 			toolsets.Attach(mux, toolsetsSvc)
@@ -1171,12 +1194,16 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
-			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, gcpauth.NewResolver()))
+			// Hoisted so services that authenticate as a customer's GCP identity
+			// share one resolver instead of each constructing their own. Only the
+			// credentials service consumes it today.
+			gcpIdentityResolver := gcpauth.NewResolver()
+			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentityResolver))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
+			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, cache.NewRedisCacheAdapter(redisClient))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
@@ -1246,6 +1273,7 @@ func newStartCommand() *cli.Command {
 					return urls, nil
 				},
 				riskchrepo.New(chDB),
+				publishers.RiskFindings,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
@@ -1287,10 +1315,14 @@ func newStartCommand() *cli.Command {
 			// One-off fetches on a cold cache; a pooled client would only hold
 			// idle connections to the marketing site. Bound the whole request
 			// so a stalled marketing-site response can't hang the fetch; the
-			// client is dedicated to this tool, so a per-client timeout is safe.
-			changelogClient := guardianPolicy.Client()
-			changelogClient.Timeout = platformchangelog.FetchTimeout
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(changelogClient)...)
+			// client is dedicated to these speakeasy.com tools, which share the
+			// same bound, so a per-client timeout is safe.
+			marketingSiteClient := guardianPolicy.Client()
+			// Take the larger bound so the shared client stays correct if either
+			// tool's timeout is tuned independently later.
+			marketingSiteClient.Timeout = max(platformchangelog.FetchTimeout, platformdocs.FetchTimeout)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(marketingSiteClient)...)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDocsTools(marketingSiteClient)...)
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 				AssistantMemoryTools:          memoryTools,
 				AssistantSkillTools:           skillTools,

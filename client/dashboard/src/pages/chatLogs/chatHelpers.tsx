@@ -10,6 +10,8 @@ import {
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
+  isJudgeSource,
+  JUDGE_SOURCES,
 } from "@/pages/security/risk-utils";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 
@@ -34,8 +36,14 @@ export function getRiskBadgeLabel(result: RiskResult): string {
   );
 }
 
+/** Judge findings carry one rule per category, so their rule id only restates
+ * the badge beside it ("prompt_injection" under PROMPT_INJECTION). */
 export function shouldShowRiskRuleId(result: RiskResult): boolean {
-  return Boolean(result.ruleId) && result.ruleId !== "llm_judge";
+  return Boolean(result.ruleId) && !isJudgeSource(result.source);
+}
+
+export function riskResultAnchorId(result: RiskResult): string | undefined {
+  return result.chatContentPartId ?? result.chatMessageId;
 }
 
 /** A finding from gitleaks/presidio carries a literal secret; its match is
@@ -64,9 +72,10 @@ export function distinctRiskCount(results: RiskResult[]): number {
  * match is a span lifted from the message the reviewer is reading, so the UI
  * highlights it inline (or surfaces it as an out-of-text "flagged value" when it
  * was stripped for display) and repeats it as a reveal-gated chip in the
- * findings popover. Some policy types instead match on session/account metadata
- * that isn't message content and is already stated in the finding description,
- * making those renderings pure redundancy.
+ * findings popover. Some policy types instead match on something that isn't a
+ * span of the message and is already stated in the finding description, making
+ * those renderings pure redundancy: session/account metadata, or the whole
+ * rendered event a judge evaluated.
  *
  * To adjust a policy type's match rendering, add its source here — the two flags
  * are independent, so a future type opts into only what applies to it.
@@ -80,6 +89,16 @@ type MatchDisplayOverride = {
   shownInDescription?: boolean;
 };
 
+// A judge finding's match is the whole rendered event the judge read, a JSON
+// envelope whose `body` field holds the message itself, not a span within it. It
+// therefore never appears in the displayed text, and rendering it verbatim
+// reprints the message the reviewer is already looking at, wrapped in JSON. The
+// judge's rationale (the description) is what actually explains the finding.
+const JUDGE_MATCH_DISPLAY: MatchDisplayOverride = {
+  notMessageContent: true,
+  shownInDescription: true,
+};
+
 const MATCH_DISPLAY_OVERRIDES: Record<
   string,
   MatchDisplayOverride | undefined
@@ -87,6 +106,7 @@ const MATCH_DISPLAY_OVERRIDES: Record<
   // The account the session authenticated as (an email): stated in the
   // description and shown on the message author chip, never message content.
   account_identity: { notMessageContent: true, shownInDescription: true },
+  ...Object.fromEntries(JUDGE_SOURCES.map((s) => [s, JUDGE_MATCH_DISPLAY])),
 };
 
 /** Whether a finding's match is a span of the message text — highlighted inline

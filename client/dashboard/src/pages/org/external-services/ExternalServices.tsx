@@ -1,8 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
@@ -13,15 +13,15 @@ import {
   useListPlatformExternalCredentials,
 } from "@gram/client/react-query/listPlatformExternalCredentials";
 import { useVerifyGcpIamPlatformCredentialMutation } from "@gram/client/react-query/verifyGcpIamPlatformCredential";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
@@ -45,9 +45,9 @@ export function ExternalServicesPage(): JSX.Element {
         {isAdmin ? (
           <ExternalServicesOverview />
         ) : (
-          <Type muted className="py-8 text-center">
+          <Text muted className="py-8 text-center">
             External Services is available to platform admins only.
-          </Type>
+          </Text>
         )}
       </Page.Body>
     </Page>
@@ -158,7 +158,7 @@ function CredentialTable({
   if (isError) {
     return (
       <Stack gap={3} className="py-8" align="center" justify="center">
-        <Type muted>Failed to load external credentials.</Type>
+        <Text muted>Failed to load external credentials.</Text>
         <Button size="sm" variant="secondary" onClick={onRetry}>
           <Button.Text>Retry</Button.Text>
         </Button>
@@ -167,9 +167,9 @@ function CredentialTable({
   }
   if (!isLoading && credentials.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         No external credentials yet
-      </Type>
+      </Text>
     );
   }
 
@@ -190,23 +190,23 @@ function CredentialTable({
           ariaLabel={`View external credential ${credential.name}`}
         >
           <td className="px-3 py-3">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
             >
               {credential.name}
-            </Type>
+            </Text>
           </td>
           <td className="px-3 py-3">
-            <Type small muted>
+            <Text small muted>
               {providerLabel(credential.provider)}
-            </Type>
+            </Text>
           </td>
           <td className="px-3 py-3">
-            <Type small muted as="div">
+            <Text small muted as="div">
               <HumanizeDateTime date={credential.createdAt} />
-            </Type>
+            </Text>
           </td>
           <td className="px-3 py-3 text-right">
             <RowActions credential={credential} onVerify={onVerify} />
@@ -287,11 +287,11 @@ export function DeleteCredentialDialog({
           <Dialog.Title>Delete external credential</Dialog.Title>
         </Dialog.Header>
         <div className="space-y-4 py-4">
-          <Type variant="body">
+          <Text variant="body">
             Are you sure you want to delete{" "}
             <span className="font-bold italic">{credentialName}</span>? This
             action cannot be undone.
-          </Type>
+          </Text>
           <div className="flex justify-end space-x-2">
             <Button variant="secondary" onClick={onClose}>
               <Button.Text>Cancel</Button.Text>

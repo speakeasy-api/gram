@@ -107,6 +107,7 @@ var InsightsResult = Type("SkillEfficacyInsightsResult", func() {
 	Attribute("scores_available", Boolean)
 	Attribute("insights", ArrayOf(SkillInsight))
 	Attribute("scored_sessions", ArrayOf(ScoredSession))
+	Attribute("next_cursor", String, "Cursor for the next page of scored sessions; absent when exhausted.")
 })
 
 var _ = Service("skillEfficacy", func() {
@@ -183,7 +184,13 @@ var _ = Service("skillEfficacy", func() {
 			Attribute("from", String, "RFC3339 window start; defaults to 30 days before to.", func() { Format(FormatDateTime) })
 			Attribute("to", String, "RFC3339 window end; defaults to now.", func() { Format(FormatDateTime) })
 			Attribute("include_versions", Boolean, "Include per-version daily trends.")
-			Attribute("include_scored_sessions", Boolean, "Include up to 100 recent scored sessions. Intended for one skill detail view.")
+			Attribute("include_scored_sessions", Boolean, "Include a newest-first page of scored sessions. Intended for one skill detail view.")
+			Attribute("cursor", String, "Cursor for the next page of scored sessions.")
+			Attribute("limit", Int, "The number of scored sessions to return per page.", func() {
+				Default(20)
+				Minimum(1)
+				Maximum(100)
+			})
 		})
 		Result(InsightsResult)
 		HTTP(func() {
@@ -195,8 +202,11 @@ var _ = Service("skillEfficacy", func() {
 			Param("to")
 			Param("include_versions")
 			Param("include_scored_sessions")
+			Param("cursor")
+			Param("limit")
 			Response(StatusOK)
 		})
+		shared.CursorPagination()
 		Meta("openapi:operationId", "querySkillEfficacyInsights")
 		Meta("openapi:extension:x-speakeasy-name-override", "queryInsights")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillEfficacyInsights", "type": "query"}`)

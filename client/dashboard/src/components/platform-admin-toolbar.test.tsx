@@ -25,7 +25,7 @@ vi.mock("./platform-admin-panel", () => ({
   PlatformAdminOnboardingPanel: () => <div>Onboarding panel</div>,
 }));
 
-vi.mock("./ui/switch", () => ({
+vi.mock("@/components/ui/Switch", () => ({
   Switch: () => <button type="button">Switch</button>,
 }));
 

@@ -30,10 +30,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,6 +44,14 @@ const (
 	// hostile or broken target cannot hang the management API (same budget as
 	// remotemcp's URL verification).
 	testConnectionTimeout = 10 * time.Second
+
+	// provisionTimeout bounds the synchronous connect-time provisioning call
+	// (creating a vendor-side connection/resource). It runs inside the config
+	// upsert while the per-config advisory lock is held, so it is deliberately
+	// tight: a hung vendor must not pin that lock (and the Postgres transaction)
+	// for long. It still allows the list-then-create round trips that a
+	// find-or-create provisioner makes.
+	provisionTimeout = 10 * time.Second
 
 	// activeWindow is the freshness window for the coverage buckets: an
 	// assigned user counts as agent-active when their heartbeat is within
@@ -69,6 +79,72 @@ type Service struct {
 	repo        *repo.Queries
 	guardian    *guardian.Policy
 	syncTrigger SyncTrigger
+	features    feature.Provider
+}
+
+// deviceLevelCoverage reports whether an org matches coverage on hardware
+// serials rather than assigned-user emails. Shared by the management API and
+// the sync runner so a pushed snapshot and the dashboard an admin is looking
+// at can never disagree about the mode.
+//
+// Resolve it ONCE per request or run and pass the result to every coverage
+// query in it: the counts, the device list, and its bucket filter must all
+// report the same mode.
+//
+// Degrades to user-level on any error. The weaker claim is always safe to
+// show or publish; failing an org's coverage page, or publishing an
+// unprovable claim, is not.
+func deviceLevelCoverage(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, features feature.Provider, orgID string) bool {
+	if features == nil {
+		return false
+	}
+	// Targeted by PostHog organization group (org slug), matching how the
+	// dashboard evaluates it and how FlagBudgets is rolled out.
+	// Evaluating the flag without the org group would silently change the
+	// question asked: a rollout targeted by organization group cannot match,
+	// yet a user- or global-level rule could still answer true and hand back
+	// the STRONGER claim off the back of an error. Degrade instead — the
+	// documented contract, and the safe direction.
+	org, err := orgRepo.New(db).GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve organization slug for device-level coverage flag, falling back to user-level",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return false
+	}
+	groups := feature.OrgProjectGroups(org.Slug, "")
+
+	enabled, flagErr := features.IsFlagEnabled(ctx, feature.FlagDeviceLevelCoverage, orgID, groups)
+	if flagErr != nil {
+		logger.WarnContext(ctx, "device-level coverage flag lookup failed, falling back to user-level",
+			attr.SlogError(flagErr),
+			attr.SlogOrganizationID(orgID),
+		)
+		return false
+	}
+	return enabled
+}
+
+func (s *Service) deviceLevelCoverage(ctx context.Context, orgID string) bool {
+	return deviceLevelCoverage(ctx, s.logger, s.db, s.features, orgID)
+}
+
+// coverageAttestation names the strongest claim that holds for EVERY active
+// device in a response — deliberately not just the org's matching mode.
+//
+// agent_active is reachable through the email fallback even under device-level
+// matching (an agent that predates hardware reporting, or hardware with no
+// readable serial), so reporting "device" purely because the mode is on would
+// tell the dashboard to print "N devices are running the agent" while some of
+// that N is only "their assigned user is running it somewhere". One
+// email-matched device downgrades the whole set, which is the same rule the
+// evidence path applies per record.
+func coverageAttestation(deviceLevel bool, active, deviceAttested int64) string {
+	if deviceLevel && active > 0 && deviceAttested == active {
+		return string(providers.AttestationDevice)
+	}
+	return string(providers.AttestationUser)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -84,6 +160,7 @@ func NewService(
 	encryptionClient *encryption.Client,
 	guardianPolicy *guardian.Policy,
 	syncTrigger SyncTrigger,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deviceintegrations.api"))
 	return &Service{
@@ -97,6 +174,7 @@ func NewService(
 		repo:        repo.New(db),
 		guardian:    guardianPolicy,
 		syncTrigger: syncTrigger,
+		features:    features,
 	}
 }
 
@@ -218,7 +296,16 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, desc, authCtx.ActiveOrganizationID, creds, settings, payload.Enabled)
+	// Provisioning (creating the provider's vendor-side object, e.g. a Drata
+	// Custom Connection) is handed to the store so it runs on the merged
+	// effective config and inside the (org, provider) advisory lock — a partial
+	// update provisions correctly, and concurrent first-time connects can't
+	// double-create. Nil for providers with nothing to provision.
+	provision := func(ctx context.Context, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+		return s.provisionIfSupported(ctx, authCtx.ActiveOrganizationID, desc, creds, settings)
+	}
+
+	result, err := s.store.upsertWithTx(ctx, dbtx, desc, authCtx.ActiveOrganizationID, creds, settings, payload.Enabled, provision)
 	if err != nil {
 		return nil, err
 	}
@@ -368,6 +455,42 @@ func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, 
 	default:
 		return oops.E(oops.CodeUnexpected, nil, "provider %s has no testable capability", desc.ID)
 	}
+}
+
+// provisionIfSupported lets a provider that implements providers.Provisioner
+// create its vendor-side object (e.g. a Drata Custom Connection) during
+// connect, returning settings to persist. It is invoked by the store's upsert
+// on the merged effective config and under the (org, provider) advisory lock,
+// so a partial update provisions correctly and concurrent first-time connects
+// cannot double-create; the provider itself no-ops when nothing needs
+// provisioning, so the common re-save makes no vendor call while holding the
+// lock. A no-op passthrough for providers that don't provision. A provisioning
+// failure surfaces as an actionable bad-request so the customer fixes the
+// credentials/workspace instead of saving a config that can never sync.
+func (s *Service) provisionIfSupported(ctx context.Context, orgID string, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	var prov providers.Provisioner
+	switch {
+	case desc.NewEvidenceSink != nil:
+		if p, ok := desc.NewEvidenceSink(deps).(providers.Provisioner); ok {
+			prov = p
+		}
+	case desc.NewInventorySource != nil:
+		if p, ok := desc.NewInventorySource(deps).(providers.Provisioner); ok {
+			prov = p
+		}
+	}
+	if prov == nil {
+		return settings, nil
+	}
+
+	provCtx, cancel := context.WithTimeout(ctx, provisionTimeout)
+	defer cancel()
+	out, err := prov.Provision(provCtx, orgID, creds, settings)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "provision %s connection", desc.ID)
+	}
+	return out, nil
 }
 
 func (s *Service) ListSchedules(ctx context.Context, payload *gen.ListSchedulesPayload) (*gen.ListDeviceIntegrationSchedulesResult, error) {
@@ -605,6 +728,7 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 
 	rows, err := s.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
+		DeviceLevel:    s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID),
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 		CursorID:       cursor,
@@ -639,8 +763,14 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 		return nil, err
 	}
 
+	// Resolved once and shared: the bucket counts and the unmanaged-users tile
+	// sit side by side on the same page, so evaluating the flag twice could
+	// render a device as covered next to a tile calling its user unmanaged.
+	deviceLevel := s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID)
+
 	counts, err := s.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
+		DeviceLevel:    deviceLevel,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 	})
@@ -648,6 +778,7 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "compute device integration coverage")
 	}
 	unmanaged, err := s.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
+		DeviceLevel:    deviceLevel,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 	})
@@ -656,16 +787,19 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	}
 
 	return &gen.DeviceIntegrationCoverage{
-		OrganizationID:      authCtx.ActiveOrganizationID,
-		ActiveWindowMinutes: int(activeWindow / time.Minute),
-		AgentActive:         counts.AgentActive,
-		AgentStale:          counts.AgentStale,
-		NoAgent:             counts.NoAgent,
-		NoEmail:             counts.NoEmail,
-		UnresolvedEmail:     counts.UnresolvedEmail,
-		Missing:             counts.Missing,
-		TotalDevices:        counts.Total,
-		UnmanagedAgentUsers: unmanaged,
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ActiveWindowMinutes:       int(activeWindow / time.Minute),
+		Attestation:               coverageAttestation(deviceLevel, counts.AgentActive, counts.AgentActiveDeviceAttested),
+		AgentActive:               counts.AgentActive,
+		AgentActiveDeviceAttested: counts.AgentActiveDeviceAttested,
+		AgentStale:                counts.AgentStale,
+		AgentOtherDevice:          counts.AgentOtherDevice,
+		NoAgent:                   counts.NoAgent,
+		NoEmail:                   counts.NoEmail,
+		UnresolvedEmail:           counts.UnresolvedEmail,
+		Missing:                   counts.Missing,
+		TotalDevices:              counts.Total,
+		UnmanagedAgentUsers:       unmanaged,
 	}, nil
 }
 

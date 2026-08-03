@@ -73,6 +73,8 @@ type QueryInsightsResponseBody struct {
 	ScoresAvailable *bool                                     `form:"scores_available,omitempty" json:"scores_available,omitempty" xml:"scores_available,omitempty"`
 	Insights        []*SkillEfficacyInsightResponseBody       `form:"insights,omitempty" json:"insights,omitempty" xml:"insights,omitempty"`
 	ScoredSessions  []*SkillEfficacyScoredSessionResponseBody `form:"scored_sessions,omitempty" json:"scored_sessions,omitempty" xml:"scored_sessions,omitempty"`
+	// Cursor for the next page of scored sessions; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetSettingsUnauthorizedResponseBody is the type of the "skillEfficacy"
@@ -1074,6 +1076,7 @@ func NewQueryInsightsSkillEfficacyInsightsResultOK(body *QueryInsightsResponseBo
 		To:              *body.To,
 		IntervalSeconds: *body.IntervalSeconds,
 		ScoresAvailable: *body.ScoresAvailable,
+		NextCursor:      body.NextCursor,
 	}
 	v.Insights = make([]*skillefficacy.SkillEfficacyInsight, len(body.Insights))
 	for i, val := range body.Insights {

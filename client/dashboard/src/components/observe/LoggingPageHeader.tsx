@@ -1,5 +1,6 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Alert, Icon } from "@speakeasy-api/moonshine";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Alert } from "@/components/ui/Alert";
+import { Icon } from "@/components/ui/Icon";
 import { useState } from "react";
 
 export const LOG_DATA_RETENTION_MESSAGE =

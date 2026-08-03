@@ -4,8 +4,8 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "@/components/ui/field";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Field";
+import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
@@ -74,8 +74,10 @@ export function AuthenticationSection({
  */
 export function AuthenticationSectionBody({
   target,
+  additionalSetupAction,
 }: {
   target: AuthTarget;
+  additionalSetupAction?: ReactNode;
 }): JSX.Element {
   const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
@@ -179,6 +181,7 @@ export function AuthenticationSectionBody({
           openSheet(authorizationServer, protectedResourceScopes)
         }
         onStartManual={() => openSheet(undefined)}
+        additionalAction={additionalSetupAction}
       />
     );
   } else if (isLoadingUserSessionIssuer) {
@@ -242,11 +245,13 @@ function IdentityProviderSetupField({
   hasDiscoveredAuthorizationServer,
   onUseDiscovered,
   onStartManual,
+  additionalAction,
 }: {
   probeStatus: ProtectedResourceProbeStatus;
   hasDiscoveredAuthorizationServer: boolean;
   onUseDiscovered: () => void;
   onStartManual: () => void;
+  additionalAction?: ReactNode;
 }) {
   return (
     <Field>
@@ -260,6 +265,7 @@ function IdentityProviderSetupField({
             hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
             onUseDiscovered={onUseDiscovered}
             onStartManual={onStartManual}
+            additionalAction={additionalAction}
           />
         }
       />
@@ -275,9 +281,9 @@ function AuthenticationLoadingField() {
   return (
     <Field>
       <FieldLabel>Authentication</FieldLabel>
-      <Type muted small>
+      <Text muted small>
         Loading authentication configuration...
-      </Type>
+      </Text>
     </Field>
   );
 }

@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
 
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -17,9 +20,33 @@ const syncErrorMaxLen = 500
 // boundedProviderClient is the SSRF-hardened guardian client with a
 // redirect cap layered on: a hostile vendor must not chase arbitrary
 // redirect chains (mirrors remotemcp's probe bounds; response-size limits
-// are each provider implementation's job).
+// are each provider implementation's job). A tight Retry-After-aware retry
+// smooths transient vendor throttling (429) and blips (5xx): without it a
+// single throttled request aborts a whole sync run, and for evidence pushes
+// the schedule-level retry restarts the entire multi-request push from
+// scratch — inflating the very rate-limit pressure that caused the failure.
+// The caps stay small because every vendor call already runs under the sync
+// runner's per-call deadline.
 func boundedProviderClient(policy *guardian.Policy) *guardian.HTTPClient {
-	client := policy.Client()
+	client := policy.Client(guardian.WithRetryConfig(&guardian.RetryConfig{
+		WaitMin:     1 * time.Second,
+		WaitMax:     10 * time.Second,
+		MaxAttempts: 3,
+		CheckRetry:  retryablehttp.DefaultRetryPolicy,
+		// DefaultBackoff honors a 429/503 Retry-After header VERBATIM,
+		// ignoring WaitMax — a vendor asking for minutes would stall the
+		// sync run inside one attempt. Clamp it: a wait beyond the cap
+		// means giving up and letting the schedule's own backoff handle it.
+		Backoff: func(minWait, maxWait time.Duration, attemptNum int, resp *http.Response) time.Duration {
+			delay := retryablehttp.DefaultBackoff(minWait, maxWait, attemptNum, resp)
+			if delay > maxWait {
+				return maxWait
+			}
+			return delay
+		},
+		ErrorHandler: nil,
+		PrepareRetry: nil,
+	}))
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 3 {
 			return fmt.Errorf("stopped after 3 redirects")

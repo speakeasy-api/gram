@@ -5,12 +5,15 @@
 import { domainsCheckHealth } from "../funcs/domainsCheckHealth.js";
 import { domainsDeleteDomain } from "../funcs/domainsDeleteDomain.js";
 import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
+import { domainsListDomains } from "../funcs/domainsListDomains.js";
 import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
+import { domainsSetRootMcpEndpoint } from "../funcs/domainsSetRootMcpEndpoint.js";
 import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CustomDomain } from "../models/components/customdomain.js";
 import { ListCustomDomainMcpEndpointsResult } from "../models/components/listcustomdomainmcpendpointsresult.js";
+import { ListCustomDomainsResult } from "../models/components/listcustomdomainsresult.js";
 import {
   CheckDomainHealthRequest,
   CheckDomainHealthSecurity,
@@ -28,9 +31,17 @@ import {
   ListCustomDomainMcpEndpointsSecurity,
 } from "../models/operations/listcustomdomainmcpendpoints.js";
 import {
+  ListDomainsRequest,
+  ListDomainsSecurity,
+} from "../models/operations/listdomains.js";
+import {
   RegisterDomainRequest,
   RegisterDomainSecurity,
 } from "../models/operations/registerdomain.js";
+import {
+  SetRootMcpEndpointRequest,
+  SetRootMcpEndpointSecurity,
+} from "../models/operations/setrootmcpendpoint.js";
 import {
   UpdateDomainRequest,
   UpdateDomainSecurity,
@@ -96,6 +107,25 @@ export class Domains extends ClientSDK {
   }
 
   /**
+   * listDomains domains
+   *
+   * @remarks
+   * List the custom domains for an organization. The result is empty when no custom domain has been configured.
+   */
+  async listDomains(
+    request?: ListDomainsRequest | undefined,
+    security?: ListDomainsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListCustomDomainsResult> {
+    return unwrapAsync(domainsListDomains(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listMcpEndpoints domains
    *
    * @remarks
@@ -134,10 +164,29 @@ export class Domains extends ClientSDK {
   }
 
   /**
+   * setRootMcpEndpoint domains
+   *
+   * @remarks
+   * Set or clear the MCP endpoint mapped to a custom domain's root
+   */
+  async setRootMcpEndpoint(
+    request: SetRootMcpEndpointRequest,
+    security?: SetRootMcpEndpointSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CustomDomain> {
+    return unwrapAsync(domainsSetRootMcpEndpoint(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * updateDomain domains
    *
    * @remarks
-   * Update the IP allowlist for the organization's custom domain
+   * Update settings for the organization's custom domain
    */
   async updateDomain(
     request: UpdateDomainRequest,

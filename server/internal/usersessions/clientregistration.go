@@ -76,7 +76,7 @@ func (r *RegistrationRequest) Validate() error {
 		return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
 	}
 	for _, u := range r.RedirectURIs {
-		if err := validateRedirectURI(u); err != nil {
+		if err := ValidateRedirectURI(u); err != nil {
 			return err
 		}
 	}
@@ -113,7 +113,7 @@ func (r *RegistrationRequest) Validate() error {
 	return nil
 }
 
-// validateRedirectURI enforces the OAuth 2.1 / RFC 8252 redirect-URI scheme
+// ValidateRedirectURI enforces the OAuth 2.1 / RFC 8252 redirect-URI scheme
 // rules:
 //
 //   - https://... for web + confidential clients.
@@ -126,7 +126,9 @@ func (r *RegistrationRequest) Validate() error {
 // Dangerous schemes (javascript:, data:, vbscript:, file:, blob:, etc.)
 // are rejected unconditionally — they would let a registered redirect_uri
 // turn the AS's 302 Location into an XSS or local-file fetch vector.
-func validateRedirectURI(raw string) error {
+// Exported for reuse by the cimd subpackage, which applies the same scheme
+// rules to redirect_uris found in Client ID Metadata Documents.
+func ValidateRedirectURI(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme == "" {
 		return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}

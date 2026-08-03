@@ -12,6 +12,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearDeletedCustomDomainResourceNames = `-- name: ClearDeletedCustomDomainResourceNames :exec
+UPDATE custom_domains
+SET
+    ingress_name = NULL,
+    cert_secret_name = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS TRUE
+`
+
+func (q *Queries) ClearDeletedCustomDomainResourceNames(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearDeletedCustomDomainResourceNames, id)
+	return err
+}
+
+const clearRootMcpEndpoint = `-- name: ClearRootMcpEndpoint :exec
+UPDATE mcp_endpoints
+SET
+    is_domain_root = NULL,
+    updated_at = clock_timestamp()
+WHERE custom_domain_id = $1::uuid
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE
+`
+
+func (q *Queries) ClearRootMcpEndpoint(ctx context.Context, customDomainID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearRootMcpEndpoint, customDomainID)
+	return err
+}
+
 const createCustomDomain = `-- name: CreateCustomDomain :one
 INSERT INTO custom_domains (
     organization_id,
@@ -28,7 +58,7 @@ INSERT INTO custom_domains (
     $5,
     $6
 )
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCustomDomainParams struct {
@@ -60,6 +90,7 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,
@@ -86,8 +117,70 @@ func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string)
 	return err
 }
 
+const disableCustomDomainForHealth = `-- name: DisableCustomDomainForHealth :one
+UPDATE custom_domains
+SET
+    verified = FALSE,
+    activated = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+RETURNING id
+`
+
+type DisableCustomDomainForHealthParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Clearing activated drops the domain from health sweeps; clearing verified
+// puts it back into the dashboard reverify flow. Caller tears down k8s.
+func (q *Queries) DisableCustomDomainForHealth(ctx context.Context, arg DisableCustomDomainForHealthParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, disableCustomDomainForHealth, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const ensureCustomDomainResourceNames = `-- name: EnsureCustomDomainResourceNames :execrows
+UPDATE custom_domains
+SET
+    ingress_name = COALESCE(NULLIF(ingress_name, ''), $1),
+    cert_secret_name = COALESCE(NULLIF(cert_secret_name, ''), $2),
+    updated_at = clock_timestamp()
+WHERE id = $3
+  AND organization_id = $4
+  AND deleted IS FALSE
+`
+
+type EnsureCustomDomainResourceNamesParams struct {
+	IngressName    pgtype.Text
+	CertSecretName pgtype.Text
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Deletion checkpoint: fill derived resource identity when Apply never
+// persisted one, so the tombstone stays discoverable for cleanup retries.
+// COALESCE keeps identity persisted by a real Apply. Active rows only — a
+// cleaned tombstone must never be repopulated (its derived names may belong
+// to a successor domain reusing the hostname).
+func (q *Queries) EnsureCustomDomainResourceNames(ctx context.Context, arg EnsureCustomDomainResourceNamesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, ensureCustomDomainResourceNames,
+		arg.IngressName,
+		arg.CertSecretName,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getCustomDomainByDomain = `-- name: GetCustomDomainByDomain :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE domain = $1
   AND deleted IS FALSE
@@ -106,6 +199,7 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,
@@ -121,7 +215,7 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 }
 
 const getCustomDomainByID = `-- name: GetCustomDomainByID :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
   AND deleted IS FALSE
@@ -140,6 +234,7 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,
@@ -155,7 +250,7 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 }
 
 const getCustomDomainByIDAndOrganization = `-- name: GetCustomDomainByIDAndOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
   AND organization_id = $2
@@ -184,47 +279,7 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
-		&i.HealthStatus,
-		&i.HealthIssue,
-		&i.HealthCheckedAt,
-		&i.UnhealthySince,
-		&i.CertificateExpiresAt,
-		&i.ConsecutiveFailures,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const getCustomDomainByIDAndOrganizationForHealthUpdate = `-- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
-FROM custom_domains
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-FOR UPDATE
-`
-
-type GetCustomDomainByIDAndOrganizationForHealthUpdateParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx context.Context, arg GetCustomDomainByIDAndOrganizationForHealthUpdateParams) (CustomDomain, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainByIDAndOrganizationForHealthUpdate, arg.ID, arg.OrganizationID)
-	var i CustomDomain
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Domain,
-		&i.Verified,
-		&i.Activated,
-		&i.IngressName,
-		&i.CertSecretName,
-		&i.ProvisionerKind,
-		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,
@@ -240,7 +295,7 @@ func (q *Queries) GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx context.
 }
 
 const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -260,12 +315,124 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,
 		&i.UnhealthySince,
 		&i.CertificateExpiresAt,
 		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getCustomDomainRouteConfig = `-- name: GetCustomDomainRouteConfig :one
+SELECT
+    d.id,
+    d.organization_id,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.ingress_name,
+    d.cert_secret_name,
+    d.provisioner_kind,
+    d.ip_allowlist,
+    d.deleted,
+    COALESCE(root_endpoint.id, '00000000-0000-0000-0000-000000000000'::uuid) AS root_mcp_endpoint_id,
+    COALESCE(root_endpoint.slug, '')::text AS root_slug
+FROM custom_domains AS d
+LEFT JOIN LATERAL (
+    SELECT e.id, e.slug
+    FROM mcp_endpoints AS e
+    JOIN projects AS p
+      ON p.id = e.project_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = e.mcp_server_id
+     AND s.deleted IS FALSE
+     AND s.visibility <> 'disabled'
+    WHERE e.custom_domain_id = d.id
+      AND e.is_domain_root IS TRUE
+      AND e.deleted IS FALSE
+    LIMIT 1
+) AS root_endpoint ON TRUE
+WHERE d.id = $1
+`
+
+type GetCustomDomainRouteConfigRow struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	Domain            string
+	Verified          bool
+	Activated         bool
+	IngressName       pgtype.Text
+	CertSecretName    pgtype.Text
+	ProvisionerKind   string
+	IpAllowlist       []string
+	Deleted           bool
+	RootMcpEndpointID uuid.UUID
+	RootSlug          string
+}
+
+// Canonical desired-state read for reconciliation and health. Keep root
+// eligibility here so both paths agree on whether the secondary route exists.
+func (q *Queries) GetCustomDomainRouteConfig(ctx context.Context, id uuid.UUID) (GetCustomDomainRouteConfigRow, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainRouteConfig, id)
+	var i GetCustomDomainRouteConfigRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.Deleted,
+		&i.RootMcpEndpointID,
+		&i.RootSlug,
+	)
+	return i, err
+}
+
+const getEligibleRootMcpEndpoint = `-- name: GetEligibleRootMcpEndpoint :one
+SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted
+FROM mcp_endpoints AS e
+JOIN projects AS p
+  ON p.id = e.project_id
+ AND p.deleted IS FALSE
+JOIN mcp_servers AS s
+  ON s.id = e.mcp_server_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+WHERE e.id = $1::uuid
+  AND e.custom_domain_id = $2::uuid
+  AND e.deleted IS FALSE
+  AND p.organization_id = $3
+FOR SHARE OF s
+`
+
+type GetEligibleRootMcpEndpointParams struct {
+	McpEndpointID  uuid.UUID
+	CustomDomainID uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetEligibleRootMcpEndpoint(ctx context.Context, arg GetEligibleRootMcpEndpointParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, getEligibleRootMcpEndpoint, arg.McpEndpointID, arg.CustomDomainID, arg.OrganizationID)
+	var i McpEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CustomDomainID,
+		&i.McpServerID,
+		&i.Slug,
+		&i.IsDomainRoot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -287,23 +454,82 @@ func (q *Queries) GetOrganizationSlugForHealthNotification(ctx context.Context, 
 	return slug, err
 }
 
+const getPendingDeletedCustomDomainByOrganization = `-- name: GetPendingDeletedCustomDomainByOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE organization_id = $1
+  AND deleted IS TRUE
+  AND ingress_name IS NOT NULL
+  AND ingress_name <> ''
+ORDER BY deleted_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetPendingDeletedCustomDomainByOrganization(ctx context.Context, organizationID string) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getPendingDeletedCustomDomainByOrganization, organizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listActivatedCustomDomainResources = `-- name: ListActivatedCustomDomainResources :many
 SELECT
-    domain,
-    provisioner_kind,
-    COALESCE(ingress_name, '')::text AS resource_name
-FROM custom_domains
-WHERE activated IS TRUE
-  AND ingress_name IS NOT NULL
-  AND deleted IS FALSE
+    d.id,
+    d.domain,
+    d.provisioner_kind,
+    COALESCE(d.ingress_name, '')::text AS resource_name,
+    EXISTS (
+        SELECT 1
+        FROM mcp_endpoints AS e
+        JOIN projects AS p
+          ON p.id = e.project_id
+         AND p.deleted IS FALSE
+        JOIN mcp_servers AS s
+          ON s.id = e.mcp_server_id
+         AND s.deleted IS FALSE
+         AND s.visibility <> 'disabled'
+        WHERE e.custom_domain_id = d.id
+          AND e.is_domain_root IS TRUE
+          AND e.deleted IS FALSE
+    ) AS has_root_mapping
+FROM custom_domains AS d
+WHERE d.activated IS TRUE
+  AND d.ingress_name IS NOT NULL
+  AND d.deleted IS FALSE
 `
 
 type ListActivatedCustomDomainResourcesRow struct {
+	ID              uuid.UUID
 	Domain          string
 	ProvisionerKind string
 	ResourceName    string
+	HasRootMapping  bool
 }
 
+// Internal system-wide orphan sweep. Intentionally spans all organizations;
+// not reachable from user-facing handlers. Keep the root-mapping predicate in
+// sync with GetCustomDomainRouteConfig so sweep and reconciler agree.
 func (q *Queries) ListActivatedCustomDomainResources(ctx context.Context) ([]ListActivatedCustomDomainResourcesRow, error) {
 	rows, err := q.db.Query(ctx, listActivatedCustomDomainResources)
 	if err != nil {
@@ -313,7 +539,13 @@ func (q *Queries) ListActivatedCustomDomainResources(ctx context.Context) ([]Lis
 	var items []ListActivatedCustomDomainResourcesRow
 	for rows.Next() {
 		var i ListActivatedCustomDomainResourcesRow
-		if err := rows.Scan(&i.Domain, &i.ProvisionerKind, &i.ResourceName); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Domain,
+			&i.ProvisionerKind,
+			&i.ResourceName,
+			&i.HasRootMapping,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -402,6 +634,164 @@ func (q *Queries) ListOrganizationUsersForHealthNotification(ctx context.Context
 	return items, nil
 }
 
+const lockCustomDomainByID = `-- name: LockCustomDomainByID :one
+SELECT id
+FROM custom_domains
+WHERE id = $1
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+// Mutations acquire the domain lock before endpoint/server rows.
+func (q *Queries) LockCustomDomainByID(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockCustomDomainByID, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const lockCustomDomainByIDAndOrganization = `-- name: LockCustomDomainByIDAndOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockCustomDomainByIDAndOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Org-scoped row lock for mutations that target one custom domain by id
+// (root-mapping updates, health writes). Domain lock comes before any
+// endpoint/server locks.
+func (q *Queries) LockCustomDomainByIDAndOrganization(ctx context.Context, arg LockCustomDomainByIDAndOrganizationParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, lockCustomDomainByIDAndOrganization, arg.ID, arg.OrganizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockCustomDomainByOrganization = `-- name: LockCustomDomainByOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE organization_id = $1
+  AND deleted IS FALSE
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) LockCustomDomainByOrganization(ctx context.Context, organizationID string) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, lockCustomDomainByOrganization, organizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockRootMcpEndpointSelection = `-- name: LockRootMcpEndpointSelection :many
+SELECT id
+FROM mcp_endpoints
+WHERE custom_domain_id = $1::uuid
+  AND deleted IS FALSE
+  AND (
+    is_domain_root IS TRUE
+    OR id = $2::uuid
+  )
+ORDER BY id
+FOR UPDATE
+`
+
+type LockRootMcpEndpointSelectionParams struct {
+	CustomDomainID uuid.UUID
+	McpEndpointID  uuid.NullUUID
+}
+
+// The caller locks the parent custom-domain row first. Sort endpoint locks to
+// keep replacement and lifecycle mutations on one global lock order.
+func (q *Queries) LockRootMcpEndpointSelection(ctx context.Context, arg LockRootMcpEndpointSelectionParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockRootMcpEndpointSelection, arg.CustomDomainID, arg.McpEndpointID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setRootMcpEndpoint = `-- name: SetRootMcpEndpoint :exec
+UPDATE mcp_endpoints
+SET
+    is_domain_root = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = $1::uuid
+  AND custom_domain_id = $2::uuid
+  AND deleted IS FALSE
+`
+
+type SetRootMcpEndpointParams struct {
+	McpEndpointID  uuid.UUID
+	CustomDomainID uuid.UUID
+}
+
+func (q *Queries) SetRootMcpEndpoint(ctx context.Context, arg SetRootMcpEndpointParams) error {
+	_, err := q.db.Exec(ctx, setRootMcpEndpoint, arg.McpEndpointID, arg.CustomDomainID)
+	return err
+}
+
 const updateCustomDomain = `-- name: UpdateCustomDomain :one
 UPDATE custom_domains
 SET
@@ -413,7 +803,7 @@ SET
     updated_at = clock_timestamp()
 WHERE id = $6
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainParams struct {
@@ -445,6 +835,7 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,
@@ -472,7 +863,7 @@ SET
 WHERE id = $7
   AND organization_id = $8
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainHealthParams struct {
@@ -508,6 +899,7 @@ func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustom
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,
@@ -529,7 +921,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainIPAllowlistParams struct {
@@ -550,6 +942,119 @@ func (q *Queries) UpdateCustomDomainIPAllowlist(ctx context.Context, arg UpdateC
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateCustomDomainResourceNames = `-- name: UpdateCustomDomainResourceNames :one
+UPDATE custom_domains
+SET
+    ingress_name = $1,
+    cert_secret_name = $2,
+    provisioner_kind = $3,
+    updated_at = clock_timestamp()
+WHERE id = $4
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateCustomDomainResourceNamesParams struct {
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	ID              uuid.UUID
+}
+
+// Resource identity must survive a concurrent soft delete so the reconciler
+// can remove an Apply that completed after deletion began.
+func (q *Queries) UpdateCustomDomainResourceNames(ctx context.Context, arg UpdateCustomDomainResourceNamesParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, updateCustomDomainResourceNames,
+		arg.IngressName,
+		arg.CertSecretName,
+		arg.ProvisionerKind,
+		arg.ID,
+	)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateCustomDomainSettings = `-- name: UpdateCustomDomainSettings :one
+UPDATE custom_domains
+SET
+    ip_allowlist = CASE
+        WHEN $1::boolean THEN $2::text[]
+        ELSE ip_allowlist
+    END,
+    openai_apps_challenge_token = CASE
+        WHEN $3::boolean THEN $4::text
+        ELSE openai_apps_challenge_token
+    END,
+    updated_at = clock_timestamp()
+WHERE organization_id = $5
+  AND deleted IS FALSE
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateCustomDomainSettingsParams struct {
+	UpdateIpAllowlist              bool
+	IpAllowlist                    []string
+	UpdateOpenaiAppsChallengeToken bool
+	OpenaiAppsChallengeToken       pgtype.Text
+	OrganizationID                 string
+}
+
+func (q *Queries) UpdateCustomDomainSettings(ctx context.Context, arg UpdateCustomDomainSettingsParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, updateCustomDomainSettings,
+		arg.UpdateIpAllowlist,
+		arg.IpAllowlist,
+		arg.UpdateOpenaiAppsChallengeToken,
+		arg.OpenaiAppsChallengeToken,
+		arg.OrganizationID,
+	)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
 		&i.HealthStatus,
 		&i.HealthIssue,
 		&i.HealthCheckedAt,

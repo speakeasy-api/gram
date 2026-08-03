@@ -3,11 +3,12 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-} from "@/components/ui/select";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { type Action, MoreActions } from "@/components/ui/more-actions";
+} from "@/components/ui/Select";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { type Action, MoreActions } from "@/components/ui/MoreActions";
 import { cn } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Eye, EyeOff, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import {

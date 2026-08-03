@@ -1,17 +1,18 @@
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query/deploymentLogs.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import React, {
   useCallback,
   useDeferredValue,
@@ -73,6 +74,9 @@ const TIMESTAMP_PATTERNS = [
 ];
 
 const LEVEL_PATTERN = /^\[?(WARN|WARNING|INFO|DEBUG|ERROR|OK)\]?\s+(.*)$/i;
+
+/** Marks the log line targeted by j/k keyboard navigation. */
+const HIGHLIGHTED_LOG_CLASS = "ring-foreground/40 ring-1 ring-inset";
 
 function formatLogTimestamp(createdAt: string): string {
   const date = new Date(createdAt);
@@ -611,9 +615,9 @@ export const LogsTabContent = ({
       {!embeddedMode && sourceOptions.length > 0 && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
-            <Type small muted>
+            <Text small muted>
               Source
-            </Type>
+            </Text>
             <Select value={selectedSource} onValueChange={setSelectedSource}>
               <SelectTrigger size="sm" className="bg-background min-w-[180px]">
                 <SelectValue placeholder="All sources" />
@@ -701,7 +705,7 @@ export const LogsTabContent = ({
                 type="text"
                 placeholder="Search logs"
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={handleSearchChange}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
                 className="w-48 rounded-sm py-1 pr-16 pl-7 text-xs"
@@ -802,8 +806,7 @@ export const LogsTabContent = ({
                           isError && "bg-destructive/10 text-destructive",
                           isWarn && "bg-warning/10 text-warning",
                           isSkipped && "bg-muted/50 text-muted-foreground",
-                          isHighlighted &&
-                            "border-l-foreground border-l-4 pl-2",
+                          isHighlighted && HIGHLIGHTED_LOG_CLASS,
                         )}
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
@@ -866,7 +869,7 @@ export const LogsTabContent = ({
                     isError && "bg-destructive/10 text-destructive",
                     isWarn && "bg-warning/10 text-warning",
                     isSkipped && "bg-muted/50 text-muted-foreground",
-                    isHighlighted && "border-l-foreground border-l-4 pl-2",
+                    isHighlighted && HIGHLIGHTED_LOG_CLASS,
                   )}
                 >
                   <div className="flex min-w-0 items-center gap-2.5">

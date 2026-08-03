@@ -1,15 +1,15 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { Checkbox } from "@/components/ui/checkbox";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Icon } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Select";
+import { Icon } from "@/components/ui/Icon";
 import {
   allLabelFor,
   flattenOptions,
@@ -56,6 +56,7 @@ export function FilterControl({
                   label: o.label,
                   value: o.value,
                   icon: o.icon,
+                  description: o.description,
                 }))
           }
           defaultValue={value as string[]}
@@ -91,7 +92,11 @@ export function FilterControl({
           <SelectContent>
             <SelectItem value={SELECT_ALL_VALUE}>{allLabelFor(dim)}</SelectItem>
             {flattenOptions(options).map((o) => (
-              <SelectItem key={o.value} value={o.value}>
+              <SelectItem
+                key={o.value}
+                value={o.value}
+                description={o.description}
+              >
                 {o.label}
               </SelectItem>
             ))}

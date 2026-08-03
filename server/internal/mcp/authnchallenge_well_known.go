@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -69,6 +70,11 @@ type oauthAuthorizationServerMetadata struct {
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
+	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
+	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true
+	// only when the issuer organization's gram-user-session-cimd flag is
+	// on; omitted otherwise.
+	ClientIDMetadataDocumentSupported *bool `json:"client_id_metadata_document_supported,omitempty"`
 }
 
 // HandleGetProtectedResource serves RFC 9728 protected-resource metadata at
@@ -403,6 +409,12 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
+	// The response is served with cache headers (writeJSONMetadata), so a
+	// flag flip propagates to clients only after their cached copy expires.
+	var cimdSupported *bool
+	if s.userSessionCIMDEnabled(ctx, s.logger, endpoint) {
+		cimdSupported = conv.PtrEmpty(true)
+	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
 		Issuer:                            urls.Issuer,
 		AuthorizationEndpoint:             urls.Authorize,
@@ -414,6 +426,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		GrantTypesSupported:               usersessions.SupportedGrantTypes,
 		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
 		CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
+		ClientIDMetadataDocumentSupported: cimdSupported,
 	})
 }
 

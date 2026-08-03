@@ -1,12 +1,15 @@
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Type } from "@/components/ui/type";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Label } from "@/components/ui/Label";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
-import { Button, Dialog, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
 import {
   AlertCircle,
   ArrowRight,
@@ -344,7 +347,7 @@ export function AddServerDialog({
           </Dialog.Header>
           <div className="flex items-center justify-center gap-2 py-8">
             <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-            <Type muted>Loading server configuration...</Type>
+            <Text muted>Loading server configuration...</Text>
           </div>
         </Dialog.Content>
       </Dialog>
@@ -365,9 +368,9 @@ export function AddServerDialog({
           <div className="py-4">
             <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 rounded-lg border p-3">
               <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
-              <Type small className="text-destructive/80">
+              <Text small className="text-destructive/80">
                 {detailsError}
-              </Type>
+              </Text>
             </div>
           </div>
           <Dialog.Footer>
@@ -534,9 +537,9 @@ function SelectRemotesPhaseContent({
       <Stack gap={4} className="py-2">
         {/* Progress indicator */}
         {totalServers > 1 && (
-          <Type small muted>
+          <Text small muted>
             Server {currentNumber} of {totalServers}
-          </Type>
+          </Text>
         )}
 
         {/* Server icon and info */}
@@ -553,13 +556,13 @@ function SelectRemotesPhaseContent({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <Type className="truncate font-medium">
+            <Text className="truncate font-medium">
               {currentConfig.server.title ??
                 currentConfig.server.registrySpecifier}
-            </Type>
-            <Type small muted className="truncate">
+            </Text>
+            <Text small muted className="truncate">
               {currentConfig.remotes.length} endpoints available
-            </Type>
+            </Text>
           </div>
         </div>
 
@@ -572,9 +575,9 @@ function SelectRemotesPhaseContent({
               currentConfig.server.registrySpecifier
             }
             value={currentConfig.name}
-            onChange={(e) =>
+            onChange={(value) =>
               releaseState.updateCurrentConfig({
-                name: e.target.value,
+                name: value,
               })
             }
           />
@@ -632,12 +635,12 @@ function SelectRemotesPhaseContent({
                     className="mt-0.5"
                   />
                   <div className="min-w-0 flex-1">
-                    <Type small className="font-medium">
+                    <Text small className="font-medium">
                       {name}
-                    </Type>
-                    <Type small muted>
+                    </Text>
+                    <Text small muted>
                       {description}
-                    </Type>
+                    </Text>
                   </div>
                 </label>
               );
@@ -718,9 +721,9 @@ function ConfigurePhaseContent({
     return (
       <div className="flex items-center justify-center gap-2 py-4">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <Type small muted>
+        <Text small muted>
           Starting install...
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -793,9 +796,9 @@ function AlreadyInstalledHint({
 }) {
   if (!releaseState.isServerAlreadyInstalled(config.server)) return null;
   return (
-    <Type small muted>
+    <Text small muted>
       Already in this project — adding it again creates another server.
-    </Type>
+    </Text>
   );
 }
 
@@ -817,9 +820,9 @@ function SingleServerConfig({
       <Input
         placeholder={config.server.title || config.server.registrySpecifier}
         value={config.name}
-        onChange={(e) =>
+        onChange={(value) =>
           releaseState.updateServerConfig(originalIndex, {
-            name: e.target.value,
+            name: value,
           })
         }
       />
@@ -863,9 +866,9 @@ function BatchServerConfig({
                     config.server.title || config.server.registrySpecifier
                   }
                   value={config.name}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     releaseState.updateServerConfig(originalIndex, {
-                      name: e.target.value,
+                      name: value,
                     })
                   }
                   className="text-sm"
@@ -885,10 +888,10 @@ function NoRemoteWarning() {
   return (
     <div className="border-destructive/30 bg-destructive/5 flex items-start gap-2 rounded-md border p-2">
       <AlertCircle className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
-      <Type small className="text-destructive/80">
+      <Text small className="text-destructive/80">
         This server does not expose a compatible remote endpoint and cannot be
         added.
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -910,20 +913,20 @@ function BulkInstallSummary({
           <ServerIcon className="text-muted-foreground h-5 w-5" />
         </div>
         <div>
-          <Type className="font-medium">
+          <Text className="font-medium">
             Installing {totalServers}{" "}
             {totalServers === 1 ? "server" : "servers"}
-          </Type>
-          <Type small muted>
+          </Text>
+          <Text small muted>
             All servers will use their default names.
-          </Type>
+          </Text>
         </div>
       </div>
       {alreadyInstalledCount > 0 && (
-        <Type small muted>
+        <Text small muted>
           {alreadyInstalledCount} already in this project (a new server is
           created for each).
-        </Type>
+        </Text>
       )}
     </div>
   );
@@ -972,11 +975,11 @@ function HeaderValueSections({
     <div className="flex flex-col gap-3">
       <div>
         <Label>Upstream headers</Label>
-        <Type small muted className="block">
+        <Text small muted className="block">
           Values are stored on the server and sent with every upstream request.
           You can skip this step — headers can always be configured later in the
           server's Settings tab.
-        </Type>
+        </Text>
       </div>
       <div className="max-h-64 space-y-3 overflow-y-auto">
         {configsWithHeaders.map((config) => (
@@ -1010,16 +1013,16 @@ function HeaderValueConfig({
   return (
     <div className="flex flex-col gap-3">
       {showServerName && (
-        <Type small className="font-medium">
+        <Text small className="font-medium">
           {config.name || config.server.registrySpecifier}
-        </Type>
+        </Text>
       )}
       {remotesWithHeaders.map((remote) => (
         <div key={remote.url} className="flex flex-col gap-2">
           {showRemoteName && (
-            <Type small muted>
+            <Text small muted>
               {getRemoteDisplayInfo(remote.url).name}
-            </Type>
+            </Text>
           )}
           {collectibleHeaders(remote).map((header) => (
             <HeaderValueField
@@ -1069,25 +1072,25 @@ function HeaderValueField({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline gap-2">
-        <Type small className="font-mono">
+        <Text small className="font-mono">
           {label}
-        </Type>
+        </Text>
         {required && (
-          <Type small muted>
+          <Text small muted>
             required
-          </Type>
+          </Text>
         )}
       </div>
       <Input
         type={secret ? "password" : "text"}
         placeholder={placeholder ?? description ?? ""}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
       />
       {description && (
-        <Type small muted>
+        <Text small muted>
           {description}
-        </Type>
+        </Text>
       )}
     </div>
   );
@@ -1104,9 +1107,9 @@ function InstallStatusList({ statuses }: { statuses: ServerInstallStatus[] }) {
           className="flex items-center gap-3 rounded-lg border p-2"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Type small className="truncate">
+            <Text small className="truncate">
               {status.name}
-            </Type>
+            </Text>
           </div>
           <InstallStatusIcon status={status.status} />
         </div>
@@ -1142,11 +1145,11 @@ function CompletePhaseContent({
             <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
-            <Type className="font-medium text-emerald-700 dark:text-emerald-300">
+            <Text className="font-medium text-emerald-700 dark:text-emerald-300">
               {successCount === 1
                 ? "Server added successfully"
                 : `${successCount} servers added successfully`}
-            </Type>
+            </Text>
           </div>
         </div>
       )}
@@ -1154,9 +1157,9 @@ function CompletePhaseContent({
       {/* Per-server results — only shown if something failed */}
       {!allSucceeded && (
         <div>
-          <Type small muted className="mb-2">
+          <Text small muted className="mb-2">
             Results
-          </Type>
+          </Text>
           <div className="space-y-1.5">
             {releaseState.statuses.map((status) => (
               <InstallStatusRow
@@ -1195,13 +1198,13 @@ function InstallStatusRow({
   const content = (
     <div className="flex items-center gap-3 rounded-lg border p-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <Type small className="truncate">
+        <Text small className="truncate">
           {status.name}
-        </Type>
+        </Text>
         {status.error && (
-          <Type small className="text-destructive/80 truncate">
+          <Text small className="text-destructive/80 truncate">
             {status.error}
-          </Type>
+          </Text>
         )}
       </div>
       <div className="flex items-center gap-2">
@@ -1257,7 +1260,7 @@ function NextSteps({
 
   return (
     <div>
-      <Type className="mb-2 font-medium">Next steps</Type>
+      <Text className="mb-2 font-medium">Next steps</Text>
       <div className="grid grid-cols-2 gap-2">
         <routes.sources.Link className="no-underline hover:no-underline">
           <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
@@ -1265,9 +1268,9 @@ function NextSteps({
               <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
+              <Text className="text-sm font-medium no-underline">
                 Add more sources
-              </Type>
+              </Text>
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
@@ -1284,9 +1287,9 @@ function NextSteps({
                 <Plug className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="flex-1">
-                <Type className="text-sm font-medium no-underline">
-                  Connect via Claude, Cursor, Codex
-                </Type>
+                <Text className="text-sm font-medium no-underline">
+                  Connect via coding agents
+                </Text>
               </div>
               <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
             </div>
@@ -1301,9 +1304,9 @@ function NextSteps({
               <Settings className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             </div>
             <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
+              <Text className="text-sm font-medium no-underline">
                 Configure MCP settings
-              </Type>
+              </Text>
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>

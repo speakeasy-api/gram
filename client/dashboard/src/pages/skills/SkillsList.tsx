@@ -2,20 +2,30 @@ import { defineFilters, useFilterState } from "@/components/filters";
 import type { FilterValue } from "@/components/filters/filter-schema";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
+import type {
+  Classifications,
+  SourceKinds,
+} from "@gram/client/models/operations/listskills.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
-import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
-import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import {
+  useSkills,
+  useSkillsInfinite,
+} from "@gram/client/react-query/skills.js";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, Table } from "@/components/ui/Table";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { ApproveAllSkillSuggestions } from "./ApproveAllSkillSuggestions";
@@ -26,12 +36,7 @@ import {
   SKILL_SOURCE_OPTIONS,
 } from "./skill-badge-options";
 import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
-import {
-  filterSkills,
-  skillCountLabel,
-  type SkillSort,
-  sortSkills,
-} from "./skills-list-helpers";
+import { type SkillSort, sortSkills } from "./skills-list-helpers";
 import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 import { useOpenSkillSuggestions } from "./use-open-skill-suggestions";
@@ -47,11 +52,32 @@ const SKILL_FILTERS = defineFilters([
 ]);
 
 const FILTER_OPTIONS = {
-  sourceKind: SKILL_SOURCE_OPTIONS,
-  classification: SKILL_CLASSIFICATION_OPTIONS,
+  sourceKind: [...SKILL_SOURCE_OPTIONS],
+  classification: [...SKILL_CLASSIFICATION_OPTIONS],
 };
 
-const RESULT_PAGE_SIZE = 200;
+function ColumnHeaderTooltip({
+  label,
+  tooltip,
+}: {
+  label: string;
+  tooltip: string;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <span
+        tabIndex={0}
+        className="cursor-help underline decoration-dotted underline-offset-2"
+      >
+        {label}
+      </span>
+    </SimpleTooltip>
+  );
+}
+
+const RESULT_PAGE_SIZE = 50;
+const METRIC_SORT_BATCH_SIZE = 200;
+const EMPTY_SKILLS: Skill[] = [];
 const INSIGHT_SORT_OPTIONS = [
   { value: "updated", label: "Recently updated" },
   { value: "activations", label: "Most activated" },
@@ -68,12 +94,7 @@ function formatSavings(minutes: number): string {
   return `${(minutes / 60).toFixed(1)} hr`;
 }
 
-function noResultsMessage(
-  draining: boolean,
-  active: boolean,
-  incomplete: boolean,
-): string {
-  if (draining) return "Loading remaining skills...";
+function noResultsMessage(active: boolean, incomplete: boolean): string {
   if (incomplete) return "Search incomplete. Retry to check remaining skills.";
   if (active) return "No matching skills.";
   return "No skills yet.";
@@ -90,68 +111,135 @@ export default function SkillsList(): JSX.Element {
   // Legacy deep links opened the skill as a sheet via ?skill=<id>; redirect
   // them to the dedicated detail page.
   const [legacySkillId] = useQueryState("skill");
-  const [displayCount, setDisplayCount] = useState(RESULT_PAGE_SIZE);
-  const query = useSkillsInfinite({ limit: 200 }, undefined, {
-    throwOnError: false,
-  });
-  const skills = useMemo(
-    () => query.data?.pages.flatMap((page) => page.result.skills) ?? [],
-    [query.data?.pages],
+  const [page, setPage] = useState(0);
+  const [pageCursors, setPageCursors] = useState<(string | undefined)[]>([
+    undefined,
+  ]);
+  const metricSort = sort !== "updated";
+  const searchQuery = deferredSearch.trim() || undefined;
+  const sourceKinds = filters.values.sourceKind as SourceKinds[];
+  const classifications = filters.values.classification as Classifications[];
+  const pageQuery = useSkills(
+    {
+      cursor: pageCursors[page],
+      limit: RESULT_PAGE_SIZE,
+      search: searchQuery,
+      sourceKinds,
+      classifications,
+      sort: "updated",
+    },
+    undefined,
+    { throwOnError: false, enabled: !metricSort },
   );
-  const insightsQuery = useSkillEfficacyInsights({}, undefined, {
-    throwOnError: false,
-    enabled: skills.length > 0,
-  });
+  const metricQuery = useSkillsInfinite(
+    {
+      limit: METRIC_SORT_BATCH_SIZE,
+      search: searchQuery,
+      sourceKinds,
+      classifications,
+    },
+    undefined,
+    {
+      throwOnError: false,
+      enabled: metricSort,
+    },
+  );
+  const metricSkills = useMemo(
+    () =>
+      metricQuery.data?.pages.flatMap((skillPage) => skillPage.result.skills) ??
+      [],
+    [metricQuery.data?.pages],
+  );
+  const insightSkills = metricSort
+    ? metricSkills
+    : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
+  const insightsQuery = useSkillEfficacyInsights(
+    metricSort ? {} : { skillIds: insightSkills.map((skill) => skill.id) },
+    undefined,
+    {
+      throwOnError: false,
+      enabled: insightSkills.length > 0,
+    },
+  );
   const openSuggestions = useOpenSkillSuggestions();
   const metricsBySkill = useMemo(
     () =>
       new Map(
-        insightsQuery.data?.insights.map((insight) => [
+        insightsQuery.data?.result.insights.map((insight) => [
           insight.skillId,
           insight.metrics,
         ]) ?? [],
       ),
-    [insightsQuery.data?.insights],
+    [insightsQuery.data?.result.insights],
   );
   const active =
     deferredSearch.trim().length > 0 ||
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0;
   const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
+  const effectiveMetricSort = metricSort && !insightsUnavailable;
   const effectiveSort = insightsUnavailable ? "updated" : sort;
+  const skills = effectiveMetricSort
+    ? metricSkills
+    : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
   const visibleSkills = useMemo(
     () =>
-      sortSkills(
-        filterSkills(
-          skills,
-          deferredSearch,
-          filters.values.sourceKind,
-          filters.values.classification,
-        ),
-        metricsBySkill,
-        effectiveSort,
-      ),
-    [
-      deferredSearch,
-      filters.values.classification,
-      filters.values.sourceKind,
-      metricsBySkill,
-      skills,
-      effectiveSort,
-    ],
+      effectiveMetricSort
+        ? sortSkills(skills, metricsBySkill, effectiveSort)
+        : skills,
+    [effectiveMetricSort, effectiveSort, metricsBySkill, skills],
   );
 
+  useEffect(() => {
+    if (!insightsUnavailable || sort === "updated") return;
+    setSort("updated");
+    setPage(0);
+    setPageCursors([undefined]);
+  }, [insightsUnavailable, sort]);
+
   useDrainSkillPages({
-    active: true,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    isFetchNextPageError: query.isFetchNextPageError,
-    fetchNextPage: query.fetchNextPage,
+    active: effectiveMetricSort,
+    hasNextPage: metricQuery.hasNextPage,
+    isFetchingNextPage: metricQuery.isFetchingNextPage,
+    isFetchNextPageError: metricQuery.isFetchNextPageError,
+    fetchNextPage: metricQuery.fetchNextPage,
   });
 
-  const displayedSkills = visibleSkills.slice(0, displayCount);
+  const displayedSkills = effectiveMetricSort
+    ? visibleSkills.slice(
+        page * RESULT_PAGE_SIZE,
+        (page + 1) * RESULT_PAGE_SIZE,
+      )
+    : visibleSkills;
+  const totalCount = effectiveMetricSort
+    ? (metricQuery.data?.pages[0]?.result.totalCount ?? 0)
+    : (pageQuery.data?.result.totalCount ?? 0);
+  const paginationCount =
+    effectiveMetricSort && metricQuery.isFetchNextPageError
+      ? visibleSkills.length
+      : totalCount;
+  const totalPages = Math.ceil(paginationCount / RESULT_PAGE_SIZE);
+  const query = effectiveMetricSort ? metricQuery : pageQuery;
   const isEmptyProject =
-    !!query.data && skills.length === 0 && !active && !query.hasNextPage;
+    !!query.data && totalCount === 0 && !active && !query.isFetching;
+  const draining =
+    effectiveMetricSort &&
+    metricQuery.hasNextPage &&
+    !metricQuery.isFetchNextPageError;
+  const resetPage = () => {
+    setPage(0);
+    setPageCursors([undefined]);
+  };
+  const nextPage = () => {
+    if (effectiveMetricSort) {
+      setPage((current) => current + 1);
+      return;
+    }
+    const nextCursor = pageQuery.data?.result.nextCursor;
+    if (!nextCursor) return;
+    setPageCursors((current) => [...current.slice(0, page + 1), nextCursor]);
+    setPage((current) => current + 1);
+  };
 
   const columns: Column<Skill>[] = [
     {
@@ -172,9 +260,9 @@ export default function SkillsList(): JSX.Element {
               Suggested edit
             </Badge>
           )}
-          <Type small muted className="truncate font-mono">
+          <Text small muted className="truncate font-mono">
             {skill.name}
-          </Type>
+          </Text>
         </div>
       ),
     },
@@ -183,20 +271,30 @@ export default function SkillsList(): JSX.Element {
       header: "Summary",
       width: "2fr",
       render: (skill) => (
-        <Type small muted className="line-clamp-2">
+        <Text small muted className="line-clamp-2">
           {skill.summary || "No summary"}
-        </Type>
+        </Text>
       ),
     },
     {
       key: "source",
-      header: "Source",
+      header: (
+        <ColumnHeaderTooltip
+          label="Source"
+          tooltip="How the skill entered the registry: added manually, or captured from agent use."
+        />
+      ),
       width: "120px",
       render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
     },
     {
       key: "classification",
-      header: "Classification",
+      header: (
+        <ColumnHeaderTooltip
+          label="Classification"
+          tooltip="Custom skills belong to your organization; built-in skills come from plugins or platform defaults."
+        />
+      ),
       width: "130px",
       render: (skill) => (
         <SkillClassificationBadge value={skill.classification} />
@@ -206,27 +304,32 @@ export default function SkillsList(): JSX.Element {
       key: "versions",
       header: "Versions",
       width: "90px",
-      render: (skill) => <Type small>{skill.versionCount}</Type>,
+      render: (skill) => <Text small>{skill.versionCount}</Text>,
     },
     {
       key: "activations",
       header: "Activations (30d)",
       width: "130px",
       render: (skill) => (
-        <Type small className="tabular-nums">
+        <Text small className="tabular-nums">
           {metricsBySkill.get(skill.id)?.activations.toLocaleString() ??
             (insightsQuery.data ? "0" : "-")}
-        </Type>
+        </Text>
       ),
     },
     {
       key: "efficacy",
-      header: "Efficacy",
+      header: (
+        <ColumnHeaderTooltip
+          label="Efficacy"
+          tooltip="Average usefulness score from sampled sessions that used this skill."
+        />
+      ),
       width: "110px",
       render: (skill) => {
         const efficacy = metricsBySkill.get(skill.id)?.efficacy;
         return (
-          <Type
+          <Text
             small
             className="tabular-nums"
             title={
@@ -236,22 +339,27 @@ export default function SkillsList(): JSX.Element {
             }
           >
             {efficacy ? formatEfficacy(efficacy.averageScore) : "-"}
-          </Type>
+          </Text>
         );
       },
     },
     {
       key: "estimatedSavings",
-      header: "Estimated savings",
+      header: (
+        <ColumnHeaderTooltip
+          label="Estimated savings"
+          tooltip="Estimated time saved across scored sessions that used this skill."
+        />
+      ),
       width: "150px",
       render: (skill) => {
         const efficacy = metricsBySkill.get(skill.id)?.efficacy;
         return (
-          <Type small className="tabular-nums">
+          <Text small className="tabular-nums">
             {efficacy
               ? formatSavings(efficacy.estimatedMinutesSavedTotal)
               : "-"}
-          </Type>
+          </Text>
         );
       },
     },
@@ -260,13 +368,13 @@ export default function SkillsList(): JSX.Element {
       header: "Updated",
       width: "150px",
       render: (skill) => (
-        <Type
+        <Text
           small
           muted
           title={dateTimeFormatters.full.format(skill.updatedAt)}
         >
           <HumanizeDateTime date={skill.updatedAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -276,7 +384,7 @@ export default function SkillsList(): JSX.Element {
       render: (skill) =>
         skill.shareToken ? (
           <CopyButton
-            size="icon-sm"
+            size="sm"
             text={skillShareUrl(skill.shareToken)}
             tooltip="Copy public link"
             onCopy={() => {
@@ -299,14 +407,7 @@ export default function SkillsList(): JSX.Element {
     },
   ];
 
-  const countLabel = skillCountLabel({
-    active,
-    hasNextPage: query.hasNextPage,
-    incomplete: query.isFetchNextPageError,
-    loadedCount: skills.length,
-    resultCount: visibleSkills.length,
-  });
-  const draining = query.hasNextPage && !query.isFetchNextPageError;
+  const countLabel = `${totalCount} skill${totalCount === 1 ? "" : "s"}`;
 
   if (legacySkillId) {
     return <Navigate to={routes.skills.detail.href(legacySkillId)} replace />;
@@ -334,7 +435,7 @@ export default function SkillsList(): JSX.Element {
                     value={search}
                     onChange={(value) => {
                       setSearch(value);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     debounceMs={150}
                     placeholder="Search skills"
@@ -350,15 +451,15 @@ export default function SkillsList(): JSX.Element {
                           value: FilterValue,
                         ) => void
                       )(id, value);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     onClear={(id) => {
                       (filters.clearValue as (id: string) => void)(id);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     onClearAll={() => {
                       filters.clearAll();
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                   />
                   <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
@@ -366,7 +467,7 @@ export default function SkillsList(): JSX.Element {
                     value={effectiveSort}
                     onChange={(value) => {
                       setSort(value as SkillSort);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     options={INSIGHT_SORT_OPTIONS}
                   />
@@ -380,13 +481,16 @@ export default function SkillsList(): JSX.Element {
                   <Page.Toolbar.Refresh
                     onRefresh={() => {
                       void Promise.all([
-                        query.refetch(),
+                        effectiveMetricSort
+                          ? metricQuery.refetch()
+                          : pageQuery.refetch(),
                         insightsQuery.refetch(),
                         openSuggestions.query.refetch(),
                       ]);
                     }}
                     isRefreshing={
-                      (query.isFetching && !query.isFetchingNextPage) ||
+                      pageQuery.isFetching ||
+                      metricQuery.isFetching ||
                       insightsQuery.isFetching ||
                       openSuggestions.query.isFetching
                     }
@@ -395,9 +499,9 @@ export default function SkillsList(): JSX.Element {
               )}
 
               {draining && (
-                <Type small muted role="status" aria-live="polite">
+                <Text small muted role="status" aria-live="polite">
                   Loading all skills to finish this view...
-                </Type>
+                </Text>
               )}
 
               {openSuggestions.query.error && (
@@ -408,7 +512,7 @@ export default function SkillsList(): JSX.Element {
                   />
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => void openSuggestions.query.refetch()}
                   >
                     Retry suggested edits
@@ -419,9 +523,9 @@ export default function SkillsList(): JSX.Element {
               {openSuggestions.total > 0 &&
                 !openSuggestions.fullyLoaded &&
                 !openSuggestions.query.error && (
-                  <Type small muted role="status" aria-live="polite">
+                  <Text small muted role="status" aria-live="polite">
                     Loading all suggested edits...
-                  </Type>
+                  </Text>
                 )}
 
               {insightsUnavailable && (
@@ -432,7 +536,7 @@ export default function SkillsList(): JSX.Element {
                   />
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => void insightsQuery.refetch()}
                   >
                     Retry insights
@@ -463,28 +567,44 @@ export default function SkillsList(): JSX.Element {
                     }
                     className="min-w-[1100px]"
                     noResultsMessage={noResultsMessage(
-                      draining,
                       active,
-                      query.isFetchNextPageError,
+                      effectiveMetricSort && metricQuery.isFetchNextPageError,
                     )}
                   />
                 </div>
               )}
 
-              {query.isFetchNextPageError && (
-                <LoadMoreError onRetry={() => void query.fetchNextPage()} />
+              {effectiveMetricSort && metricQuery.isFetchNextPageError && (
+                <LoadMoreError
+                  onRetry={() => void metricQuery.fetchNextPage()}
+                />
               )}
 
-              {!draining && displayedSkills.length < visibleSkills.length && (
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      setDisplayCount((count) => count + RESULT_PAGE_SIZE)
-                    }
-                  >
-                    Show more results
-                  </Button>
+              {!draining && totalPages > 1 && (
+                <div className="flex items-center justify-between border-t px-4 py-3">
+                  <Text small muted>
+                    {page * RESULT_PAGE_SIZE + 1}-
+                    {Math.min((page + 1) * RESULT_PAGE_SIZE, totalCount)} of{" "}
+                    {totalCount}
+                  </Text>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setPage((current) => current - 1)}
+                      disabled={page === 0}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={nextPage}
+                      disabled={page >= totalPages - 1}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -525,13 +645,13 @@ function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No skills yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Skills are reusable instructions your agents can load on demand. Add
         your first skill to start versioning it here.
-      </Type>
+      </Text>
       <AddSkillButton onClick={onAdd} />
     </div>
   );
@@ -540,10 +660,10 @@ function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
     <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-      <Type small className="text-destructive">
+      <Text small className="text-destructive">
         Unable to load more skills.
-      </Type>
-      <Button size="sm" variant="outline" onClick={onRetry}>
+      </Text>
+      <Button size="sm" variant="secondary" onClick={onRetry}>
         Retry
       </Button>
     </div>

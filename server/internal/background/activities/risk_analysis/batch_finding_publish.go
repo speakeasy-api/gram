@@ -3,8 +3,6 @@ package risk_analysis
 import (
 	"context"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
@@ -58,9 +56,13 @@ var batchOnlyFindingSources = map[string]struct{}{
 // first and the acks drained through drainPublishAcks, which caps each ack,
 // survives activity cancellation, and heartbeats between acks — the same
 // discipline every other publish in this activity uses.
-func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, ids []uuid.UUID, findings [][]scanners.Finding) {
+// anchors carries one entry per findings slot, so the two stay index aligned.
+// An anchor is either a chat message or a content part, so exactly one of the
+// two published ids is set per finding.
+func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, anchors []batchMessage, findings [][]scanners.Finding) {
 	var results []gcp.PublishResult
-	for i, id := range ids {
+	for i, anchor := range anchors {
+		chatMessageID, contentPartID := anchor.anchorIDStrings()
 		var toPublish []scanners.Finding
 		for _, f := range findings[i] {
 			if _, ok := batchOnlyFindingSources[f.Source]; !ok || f.DeadLetterReason != "" {
@@ -74,7 +76,8 @@ func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args Analyz
 
 		meta := scanners.FindingMetadata{
 			RequestID:         "",
-			ChatMessageID:     id.String(),
+			ChatMessageID:     derefOrEmpty(chatMessageID),
+			ContentPartID:     derefOrEmpty(contentPartID),
 			ProjectID:         args.ProjectID.String(),
 			OrganizationID:    args.OrganizationID,
 			RiskPolicyID:      args.RiskPolicyID.String(),
@@ -85,4 +88,11 @@ func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args Analyz
 	}
 
 	drainPublishAcks(ctx, a.logger, "failed to publish batch-only finding", results)
+}
+
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

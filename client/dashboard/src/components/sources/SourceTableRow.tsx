@@ -1,7 +1,7 @@
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { DotRow } from "@/components/ui/dot-row";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpDisplay,
@@ -9,7 +9,7 @@ import {
   sourceTypeToUrnKind,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
 import type { NamedAsset } from "./SourceCard";
 
@@ -134,14 +134,14 @@ export function SourceTableRow({
       >
         {/* Name */}
         <td className="px-3 py-3">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="group-hover:text-primary truncate text-sm transition-colors"
             title={displayName}
           >
             {displayName}
-          </Type>
+          </Text>
         </td>
 
         {/* Type */}
@@ -151,23 +151,23 @@ export function SourceTableRow({
 
         {/* Tools */}
         <td className="px-3 py-3">
-          <Type small muted>
+          <Text small muted>
             {toolCount}
-          </Type>
+          </Text>
         </td>
 
         {/* Created */}
         <td className="px-3 py-3">
-          <Type small muted>
+          <Text small muted>
             {formatDate(createdAt)}
-          </Type>
+          </Text>
         </td>
 
         {/* Updated */}
         <td className="px-3 py-3">
-          <Type small muted>
+          <Text small muted>
             {formatDate(updatedAt)}
-          </Type>
+          </Text>
         </td>
 
         {/* Health */}
@@ -175,9 +175,9 @@ export function SourceTableRow({
           {causingFailure && (
             <div className="text-destructive flex items-center gap-1.5">
               <CircleAlertIcon className="size-3.5" />
-              <Type small className="text-destructive">
+              <Text small className="text-destructive">
                 Error
-              </Type>
+              </Text>
             </div>
           )}
         </td>

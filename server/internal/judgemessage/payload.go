@@ -115,6 +115,8 @@ func payloadDescriptors(messageType message.Type) (producedBy, bodyKind string) 
 		return "ai_assistant_tool_call", "arguments"
 	case message.ToolResponse:
 		return "tool_result", "output"
+	case message.PromptAttachment:
+		return "prompt_attachment", "content"
 	default:
 		return "unknown", "content"
 	}

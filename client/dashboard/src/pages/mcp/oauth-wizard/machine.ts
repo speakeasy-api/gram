@@ -38,7 +38,14 @@ function initialProxy(): Context["proxy"] {
 function initialContext(input: Input): Context {
   return {
     discovered: input.discovered,
-    external: { slug: "", metadataJson: "", jsonError: null, prefilled: false },
+    initialPath: input.initialPath,
+    external: {
+      issuerUrl: "",
+      slug: "",
+      metadataJson: "",
+      jsonError: null,
+      prefilled: false,
+    },
     proxy: initialProxy(),
     envSlug: null,
     error: null,
@@ -54,9 +61,10 @@ function externalFromDiscovered(
   d: DiscoveredOAuth,
 ): Pick<
   Context["external"],
-  "slug" | "metadataJson" | "jsonError" | "prefilled"
+  "issuerUrl" | "slug" | "metadataJson" | "jsonError" | "prefilled"
 > {
   return {
+    issuerUrl: typeof d.metadata.issuer === "string" ? d.metadata.issuer : "",
     slug: d.slug,
     metadataJson: JSON.stringify(d.metadata, null, 2),
     jsonError: null,
@@ -159,8 +167,24 @@ export const oauthWizardMachine = setup({
 }).createMachine({
   id: "oauthWizard",
   context: ({ input }) => initialContext(input),
-  initial: "pathSelection",
+  initial: "initializing",
   states: {
+    initializing: {
+      always: [
+        {
+          guard: ({ context }) => context.initialPath === "external",
+          target: "external.editing",
+          actions: assign({
+            external: ({ context }) =>
+              context.discovered && context.discovered.version === "2.1"
+                ? externalFromDiscovered(context.discovered)
+                : context.external,
+          }),
+        },
+        { target: "pathSelection" },
+      ],
+    },
+
     pathSelection: {
       meta: { title: "Connect OAuth" },
       on: {

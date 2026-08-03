@@ -167,6 +167,30 @@ async def test_publishes_a_finding_per_detection():
     assert entry["delivery_attempt"] == 2
 
 
+async def test_publishes_content_part_anchor():
+    scanner = FakeScanner(
+        [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)]
+    )
+    publisher = FakePublisher()
+    handler = _handler(scanner, publisher)
+    msg = _message(
+        "a@b.com",
+        request_id="req-1",
+        chat_message_id="",
+        content_part_id="part-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    await handler.handle(msg, _meta())
+
+    (finding,) = publisher.published
+    assert finding.chat_message_id == ""
+    assert finding.content_part_id == "part-1"
+
+
 async def test_publishes_one_finding_per_hit_and_dedupes_log_types():
     scanner = FakeScanner(
         [

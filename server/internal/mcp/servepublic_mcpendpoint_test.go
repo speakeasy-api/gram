@@ -35,7 +35,6 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -633,7 +632,7 @@ func decodeMCPResult(t *testing.T, body []byte) map[string]any {
 // Before the fix, serveRemoteBackend only called authz.PrepareContext on the
 // non-issuer-gated path. For issuer-gated callers the proxy still attached
 // the tools/list mcp:connect filter and the tools/call authz interceptor;
-// with an enterprise org + session principal + RBAC enabled, those ran
+// with a session principal + RBAC enabled, those ran
 // FindMatched / Require against a context with no prepared grants, returned
 // ErrMissingGrants (mapped to CodeUnexpected), and the proxy substituted a
 // JSON-RPC error event — yielding zero tools and a broken tools/call even
@@ -651,15 +650,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	// Mark the caller's org enterprise so authz.ShouldEnforce returns true
-	// (enterprise + session principal + the test engine's always-on RBAC
-	// flag). Without this the missing-grants path is dead — RBAC never
-	// enforces and the bug cannot reproduce.
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
 
 	const toolName = "ping"
 	upstream := newStatelessRemoteMCPUpstream(t, toolName)
@@ -680,12 +670,12 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	// the issuer URN (remote-backed endpoints bind the audience to the
 	// issuer, not the backend id). Subject is the dev user, an active member
 	// of the org, so PrepareContext can resolve principals.
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
-		urn.NewUserSubject(mockidp.MockUserID),
-		urn.NewUserSessionIssuer(issuerID).String(),
-		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
-		time.Hour,
-	)
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  urn.NewUserSubject(mockidp.MockUserID),
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Lifetime: time.Hour,
+	})
 	require.NoError(t, err)
 
 	// A plain context (no session auth) so the only credential is the bearer
@@ -732,11 +722,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
-
 	upstreamHit := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		upstreamHit <- struct{}{}
@@ -749,12 +734,12 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
 
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
-		urn.NewUserSubject(mockidp.MockUserID),
-		urn.NewUserSessionIssuer(issuerID).String(),
-		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
-		time.Hour,
-	)
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  urn.NewUserSubject(mockidp.MockUserID),
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Lifetime: time.Hour,
+	})
 	require.NoError(t, err)
 
 	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), token, nil)
@@ -762,7 +747,8 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage, oopsErr.Error())
+	requestAccessURL := mcpaccess.AuthorizationChallengesURL(ti.siteURL, authCtx.OrganizationSlug)
+	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n"+requestAccessURL, oopsErr.Error())
 
 	select {
 	case <-upstreamHit:

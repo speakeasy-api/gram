@@ -20,15 +20,16 @@ workinit = "mise run git:workinit"
 # Background: brings the worktree's stack up on the ports workinit just
 # assigned — compose infra, migrations, dev-idp, the pitchfork daemons, then
 # seed. Non-blocking, so worktree creation returns without waiting on it;
-# `wt config state logs` has the output.
+# `wt config state logs` has the output. The task also publishes a pid marker
+# while it runs, which is what lets `wt status` say "booting" rather than
+# "down". Keep the hook key `stack` — the log file is named after it.
 #
-# INFRA_READINESS_TIMEOUT is raised from its 30s default because a new worktree
-# always starts from a cold volume: Postgres has to finish initdb before it
-# accepts queries, and several worktree stacks may be booting at once. At 30s
-# infra:start gives up mid-initdb and zero aborts before migrations run,
-# leaving the daemons pointed at an empty database.
+# Set GRAM_WT_NO_BOOT=1 to skip the stack for branches that don't need it (a
+# README tweak, a config change). `new-branch <branch> --no-boot` sets it.
+# workinit still runs, so the worktree is complete — boot it later with
+# `./zero --agent`.
 [post-start]
-stack = "INFRA_READINESS_TIMEOUT=300 ./zero --agent"
+stack = "mise run git:workboot"
 
 # Runs inside the worktree before deletion — nuke needs this worktree's
 # COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right

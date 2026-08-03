@@ -323,9 +323,10 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	// Route rows by product surface so the codex metric only counts Codex:
 	// ChatGPT/Work (and any unknown surface) land under the parked chatgpt
 	// URN instead of polluting codex:usage aggregates.
+	isCodex := strings.EqualFold(strings.TrimSpace(event.Payload.Product), codexComplianceProductCodex)
 	urn := codexUsageMetricsURN
 	hookSource := codexHookSource
-	if !strings.EqualFold(strings.TrimSpace(event.Payload.Product), codexComplianceProductCodex) {
+	if !isCodex {
 		urn = chatgptUsageMetricsURN
 		hookSource = chatgptHookSource
 	}
@@ -356,17 +357,41 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	if cfg.ExternalOrganizationID != nil {
 		addStringAttr(attrs, attr.ExternalOrgIDKey, *cfg.ExternalOrganizationID)
 	}
-	if usage.TextInputTokens > 0 {
-		attrs[attr.GenAIUsageInputTokensKey] = usage.TextInputTokens
-	}
-	if usage.TextCachedInputTokens > 0 {
-		attrs[attr.GenAIUsageCacheReadInputTokensKey] = usage.TextCachedInputTokens
-	}
-	if usage.TextOutputTokens > 0 {
-		attrs[attr.GenAIUsageOutputTokensKey] = usage.TextOutputTokens
-	}
-	if totalTokens > 0 {
-		attrs[attr.GenAIUsageTotalTokensKey] = totalTokens
+	// Codex rows meter cost only: the codex:usage URN is admitted by the
+	// ClickHouse agent-usage predicates, so gen_ai.usage token counts here
+	// would double count metering for orgs that also export the Codex OTEL
+	// stream — the token source of truth for Codex. The raw counts are still
+	// preserved under codex.compliance.* keys (which nothing sums) because the
+	// feed also covers surfaces OTEL never sees (cloud-delegated tasks, GitHub
+	// code review); a later surface-partitioned metering pass can promote
+	// them. Parked non-Codex rows keep gen_ai.usage token counts because the
+	// compliance feed is ChatGPT/Work's only usage source.
+	if isCodex {
+		if usage.TextInputTokens > 0 {
+			attrs[attr.CodexComplianceInputTokensKey] = usage.TextInputTokens
+		}
+		if usage.TextCachedInputTokens > 0 {
+			attrs[attr.CodexComplianceCachedInputTokensKey] = usage.TextCachedInputTokens
+		}
+		if usage.TextOutputTokens > 0 {
+			attrs[attr.CodexComplianceOutputTokensKey] = usage.TextOutputTokens
+		}
+		if totalTokens > 0 {
+			attrs[attr.CodexComplianceTotalTokensKey] = totalTokens
+		}
+	} else {
+		if usage.TextInputTokens > 0 {
+			attrs[attr.GenAIUsageInputTokensKey] = usage.TextInputTokens
+		}
+		if usage.TextCachedInputTokens > 0 {
+			attrs[attr.GenAIUsageCacheReadInputTokensKey] = usage.TextCachedInputTokens
+		}
+		if usage.TextOutputTokens > 0 {
+			attrs[attr.GenAIUsageOutputTokensKey] = usage.TextOutputTokens
+		}
+		if totalTokens > 0 {
+			attrs[attr.GenAIUsageTotalTokensKey] = totalTokens
+		}
 	}
 	if totalCostUSD > 0 {
 		attrs[attr.GenAIUsageCostKey] = totalCostUSD

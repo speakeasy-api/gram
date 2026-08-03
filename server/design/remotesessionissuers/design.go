@@ -149,13 +149,14 @@ var _ = Service("remoteSessionIssuers", func() {
 	})
 
 	Method("getRemoteSessionIssuer", func() {
-		Description("Get a remote_session_issuer by id or by slug. Provide exactly one.")
+		Description("Get a remote_session_issuer by id, by slug, or by upstream issuer URL. Provide exactly one.\n\nLooking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.\n\nThe issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("slug", String, "The remote_session_issuer slug.")
+			Attribute("issuer", String, "The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -167,6 +168,7 @@ var _ = Service("remoteSessionIssuers", func() {
 			GET("/rpc/remoteSessionIssuers.get")
 			Param("id")
 			Param("slug")
+			Param("issuer")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

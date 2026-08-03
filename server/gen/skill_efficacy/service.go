@@ -69,8 +69,13 @@ type QueryInsightsPayload struct {
 	To *string
 	// Include per-version daily trends.
 	IncludeVersions *bool
-	// Include up to 100 recent scored sessions. Intended for one skill detail view.
+	// Include a newest-first page of scored sessions. Intended for one skill
+	// detail view.
 	IncludeScoredSessions *bool
+	// Cursor for the next page of scored sessions.
+	Cursor *string
+	// The number of scored sessions to return per page.
+	Limit int
 }
 
 type SkillEfficacyInsight struct {
@@ -90,6 +95,8 @@ type SkillEfficacyInsightsResult struct {
 	ScoresAvailable bool
 	Insights        []*SkillEfficacyInsight
 	ScoredSessions  []*SkillEfficacyScoredSession
+	// Cursor for the next page of scored sessions; absent when exhausted.
+	NextCursor *string
 }
 
 type SkillEfficacyMetrics struct {

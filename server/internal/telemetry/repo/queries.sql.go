@@ -16,6 +16,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -351,6 +352,10 @@ type ShadowMCPInventoryURLRow struct {
 	FirstSeen          time.Time `ch:"first_seen"`
 	LastSeen           time.Time `ch:"last_seen"`
 	LastCalledUnixNano int64     `ch:"last_called_unix_nano"`
+	// UpdatedAt is aliased max_updated_at in queries: an alias equal to the
+	// base column name is substituted into sibling argMax aggregates and
+	// trips ILLEGAL_AGGREGATION.
+	UpdatedAt time.Time `ch:"max_updated_at"`
 }
 
 type ListShadowMCPInventoryUsageParams struct {
@@ -605,6 +610,11 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 			if existing.LastSeen.After(upsert.LastSeen) {
 				upsert.LastSeen = existing.LastSeen
 			}
+			// The merged row must dominate the state read above or the
+			// argMax(_, updated_at) reads resolve names against a stale row.
+			if !upsert.UpdatedAt.After(existing.UpdatedAt) {
+				upsert.UpdatedAt = existing.UpdatedAt.Add(time.Nanosecond)
+			}
 		}
 	}
 
@@ -612,9 +622,6 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 	for _, upsert := range upserts {
 		rows = append(rows, upsert)
 	}
-	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"async_insert": 0,
-	}))
 	if err := q.insertShadowMCPInventoryURLRows(ctx, rows); err != nil {
 		return fmt.Errorf("upserting shadow mcp inventory urls: %w", err)
 	}
@@ -622,7 +629,18 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 	return nil
 }
 
+// insertShadowMCPInventoryURLRows writes inventory rows synchronously
+// (async_insert=0): every caller is a read-merge-write cycle whose next read
+// must see the rows written here. Timestamps are sent as
+// fromUnixTimestamp64Nano expressions because clickhouse-go's positional
+// binder truncates time.Time arguments to whole seconds, which collapses
+// distinct updated_at versions written within the same second and makes the
+// argMax(_, updated_at) reads nondeterministic.
 func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*shadowMCPInventoryURLUpsert) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert": 0,
+	}))
+
 	builder := sq.Insert("shadow_mcp_inventory_urls").
 		Columns(
 			"gram_project_id",
@@ -642,9 +660,9 @@ func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*s
 			row.URLHost,
 			row.ServerName,
 			row.ServerNameOverride,
-			row.FirstSeen.UTC(),
-			row.LastSeen.UTC(),
-			row.UpdatedAt.UTC(),
+			squirrel.Expr("fromUnixTimestamp64Nano(?)", row.FirstSeen.UTC().UnixNano()),
+			squirrel.Expr("fromUnixTimestamp64Nano(?)", row.LastSeen.UTC().UnixNano()),
+			squirrel.Expr("fromUnixTimestamp64Nano(?)", row.UpdatedAt.UTC().UnixNano()),
 		)
 	}
 
@@ -719,6 +737,11 @@ func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(
 	updatedAt := arg.UpdatedAt
 	if updatedAt.IsZero() {
 		updatedAt = time.Now()
+	}
+	// The new row must dominate the state read above or the argMax(_,
+	// updated_at) reads resolve the override against a stale row.
+	if !updatedAt.After(existing.UpdatedAt) {
+		updatedAt = existing.UpdatedAt.Add(time.Nanosecond)
 	}
 
 	err = q.insertShadowMCPInventoryURLRows(ctx, []*shadowMCPInventoryURLUpsert{{
@@ -795,6 +818,7 @@ func (q *Queries) listShadowMCPInventoryURLRowsByURLs(ctx context.Context, proje
 		"argMax(server_name_override, updated_at) AS server_name_override",
 		"min(first_seen) AS first_seen",
 		"max(last_seen) AS last_seen",
+		"max(updated_at) AS max_updated_at",
 	).
 		From("shadow_mcp_inventory_urls").
 		Where("gram_project_id = ?", projectID).
@@ -835,6 +859,7 @@ func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string
 		"argMax(server_name_override, updated_at) AS server_name_override",
 		"min(first_seen) AS first_seen",
 		"max(last_seen) AS last_seen",
+		"max(updated_at) AS max_updated_at",
 	).
 		From("shadow_mcp_inventory_urls").
 		Where("gram_project_id = ?", projectID).
@@ -943,15 +968,18 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 		Limit(limit)
 
 	if arg.Cursor != "" {
-		lastSeen := time.Unix(0, cursor.LastSeenUnixNano).UTC()
+		// last_seen comparisons are bound as fromUnixTimestamp64Nano
+		// expressions: binding a time.Time positionally truncates it to whole
+		// seconds, which breaks the equality tie-break against DateTime64(9)
+		// values.
 		sb = sb.Where(squirrel.Or{
 			squirrel.Expr("last_called_unix_nano < ?", cursor.LastCalledUnixNano),
 			squirrel.And{
 				squirrel.Expr("last_called_unix_nano = ?", cursor.LastCalledUnixNano),
 				squirrel.Or{
-					squirrel.Expr("last_seen < ?", lastSeen),
+					squirrel.Expr("last_seen < fromUnixTimestamp64Nano(?)", cursor.LastSeenUnixNano),
 					squirrel.And{
-						squirrel.Expr("last_seen = ?", lastSeen),
+						squirrel.Expr("last_seen = fromUnixTimestamp64Nano(?)", cursor.LastSeenUnixNano),
 						squirrel.Expr("canonical_server_url > ?", cursor.CanonicalServerURL),
 					},
 				},
@@ -6249,13 +6277,18 @@ type GetTokensUnderManagementParams struct {
 }
 
 // tumMeasureExpr is the tokens-under-management measure over
-// attribute_metrics_summaries: input + output + cache WRITES. Cache reads
-// are deliberately excluded — a cache read re-observes prompt content that
-// was already counted when it entered the cache (and dwarfs everything else:
-// agent sessions re-read their whole cached prefix on every turn) — while a
-// cache write is new prompt content being observed for the first time, so it
-// counts.
-const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens))"
+// attribute_metrics_summaries: the sum of every component in the
+// billing.TumComponents registry (input + output + cache writes; see the
+// registry for why cache reads are excluded). Built from the registry so the
+// billed total and every component-level report share one definition.
+var tumMeasureExpr = func() string {
+	components := billing.TumComponents()
+	terms := make([]string, len(components))
+	for i, c := range components {
+		terms[i] = "sumIfMerge(" + c.Column + ")"
+	}
+	return "toInt64(" + strings.Join(terms, " + ") + ")"
+}()
 
 // tumObservedBase applies the shared window and observed-population scoping
 // for tokens-under-management reads over attribute_metrics_summaries. The
@@ -6335,6 +6368,45 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 	}
 
 	return buckets, nil
+}
+
+// GetTumWindowTotal sums the tokens-under-management measure over the
+// window, scoped identically to the billed totals: the measure expression
+// derives from the billing.TumComponents registry (see tumMeasureExpr) and
+// the population from ExcludedHookSources, so the total automatically
+// tracks additions to and removals from the TUM definition. Windows with no
+// usage return zero.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTumWindowTotal(ctx context.Context, arg GetTokensUnderManagementParams) (int64, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return 0, nil
+	}
+
+	sb := tumObservedBase(sq.Select(tumMeasureExpr+" AS tokens"), arg)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building tum window total query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var total int64
+	if rows.Next() {
+		if err := rows.Scan(&total); err != nil {
+			return 0, fmt.Errorf("scanning tum window total row: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return total, nil
 }
 
 // TumBreakdownDayBucket is one UTC day of tokens under management split by

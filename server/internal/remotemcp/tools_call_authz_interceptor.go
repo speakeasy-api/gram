@@ -20,11 +20,13 @@ import (
 // visibility. Public servers bypass server-level RBAC by design, so per-tool
 // RBAC is also skipped — see the conditional attach in [Service.buildProxy].
 //
-// Only the tool-name dimension is checked here. Disposition awareness depends
-// on the per-session tools/list response cache tracked separately, and is
-// added when that cache lands.
+// The check carries both the tool-name and `disposition` dimensions. The
+// disposition is resolved from admin-authored tool metadata via the injected
+// [ToolDispositionResolver]; a tool with no recorded metadata resolves to the
+// empty disposition, leaving the check as a pure tool-name match.
 type ToolsCallAuthzInterceptor struct {
 	authz       *authz.Engine
+	resolver    ToolDispositionResolver
 	mcpServerID string
 	projectID   string
 	logger      *slog.Logger
@@ -41,9 +43,10 @@ var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallAuthzInterceptor)(nil)
 // keeping per-tool and server-level authorization consistent. projectID is
 // the owning project for the mcp_endpoint and is forwarded as a dimension so
 // project-scoped grants can match.
-func NewToolsCallAuthzInterceptor(authzEngine *authz.Engine, mcpServerID, projectID string, logger *slog.Logger) *ToolsCallAuthzInterceptor {
+func NewToolsCallAuthzInterceptor(authzEngine *authz.Engine, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsCallAuthzInterceptor {
 	return &ToolsCallAuthzInterceptor{
 		authz:       authzEngine,
+		resolver:    resolver,
 		mcpServerID: mcpServerID,
 		projectID:   projectID,
 		logger:      logger,
@@ -78,9 +81,19 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 		return nil
 	}
 
-	err := i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
+	// Fail closed: a resolution failure rejects the call rather than falling
+	// back to the empty disposition, which would relax an annotation-scoped
+	// grant exactly when the metadata store is unavailable. This is an internal
+	// failure, not a permission denial, so it surfaces as-is (any interceptor
+	// error aborts the call) rather than through the "you lack access" message.
+	dispositions, err := i.resolver.Dispositions(ctx, i.mcpServerID, i.projectID)
+	if err != nil {
+		return fmt.Errorf("resolve remote MCP tool disposition: %w", err)
+	}
+
+	err = i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
 		Tool:        call.Params.Name,
-		Disposition: "",
+		Disposition: dispositions[call.Params.Name],
 		ProjectID:   i.projectID,
 	}))
 	if err != nil {

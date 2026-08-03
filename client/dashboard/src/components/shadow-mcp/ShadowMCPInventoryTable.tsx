@@ -1,5 +1,5 @@
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { Page } from "@/components/page-layout";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -11,14 +11,10 @@ import {
   useShadowMCPInventory,
 } from "@gram/client/react-query/shadowMCPInventory.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
-import {
-  Badge,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -70,9 +66,9 @@ function InventoryStatusCell({
       <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
         <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
       </Badge>
-      <Type variant="small" className="text-muted-foreground text-xs">
+      <Text variant="small" className="text-muted-foreground text-xs">
         {shadowMCPInventoryStatusDescription(server, policyState)}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -83,13 +79,13 @@ function InventoryEmptyState() {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No Shadow MCP servers
-      </Type>
-      <Type small muted className="mb-4 max-w-md">
+      </Text>
+      <Text small muted className="mb-4 max-w-md">
         Inventory URLs will appear here after hook startup captures configured
         Shadow MCP servers.
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -331,7 +327,7 @@ export function ShadowMCPInventoryTable({
       sortValue: (server) => server.lastCalled?.getTime() ?? 0,
       width: "0.7fr",
       render: (server) => (
-        <Type variant="small">{formatShortDate(server.lastCalled)}</Type>
+        <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
       ),
     },
     {
@@ -341,7 +337,7 @@ export function ShadowMCPInventoryTable({
       sortValue: (server) => server.lastSeen.getTime(),
       width: "0.7fr",
       render: (server) => (
-        <Type variant="small">{formatShortDate(server.lastSeen)}</Type>
+        <Text variant="small">{formatShortDate(server.lastSeen)}</Text>
       ),
     },
     {
@@ -396,12 +392,12 @@ export function ShadowMCPInventoryTable({
   if (isInitialError) {
     return (
       <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-        <Type variant="body" className="font-medium">
+        <Text variant="body" className="font-medium">
           Shadow MCP inventory could not be loaded
-        </Type>
-        <Type muted small className="max-w-md">
+        </Text>
+        <Text muted small className="max-w-md">
           Refresh the page or try again later.
-        </Type>
+        </Text>
       </div>
     );
   }

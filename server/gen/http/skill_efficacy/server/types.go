@@ -73,6 +73,8 @@ type QueryInsightsResponseBody struct {
 	ScoresAvailable bool                                      `form:"scores_available" json:"scores_available" xml:"scores_available"`
 	Insights        []*SkillEfficacyInsightResponseBody       `form:"insights" json:"insights" xml:"insights"`
 	ScoredSessions  []*SkillEfficacyScoredSessionResponseBody `form:"scored_sessions" json:"scored_sessions" xml:"scored_sessions"`
+	// Cursor for the next page of scored sessions; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetSettingsUnauthorizedResponseBody is the type of the "skillEfficacy"
@@ -760,6 +762,7 @@ func NewQueryInsightsResponseBody(res *skillefficacy.SkillEfficacyInsightsResult
 		To:              res.To,
 		IntervalSeconds: res.IntervalSeconds,
 		ScoresAvailable: res.ScoresAvailable,
+		NextCursor:      res.NextCursor,
 	}
 	if res.Insights != nil {
 		body.Insights = make([]*SkillEfficacyInsightResponseBody, len(res.Insights))
@@ -1239,13 +1242,15 @@ func NewUpsertSettingsPayload(body *UpsertSettingsRequestBody, apikeyToken *stri
 
 // NewQueryInsightsPayload builds a skillEfficacy service queryInsights
 // endpoint payload.
-func NewQueryInsightsPayload(skillIds []string, from *string, to *string, includeVersions *bool, includeScoredSessions *bool, sessionToken *string, projectSlugInput *string) *skillefficacy.QueryInsightsPayload {
+func NewQueryInsightsPayload(skillIds []string, from *string, to *string, includeVersions *bool, includeScoredSessions *bool, cursor *string, limit int, sessionToken *string, projectSlugInput *string) *skillefficacy.QueryInsightsPayload {
 	v := &skillefficacy.QueryInsightsPayload{}
 	v.SkillIds = skillIds
 	v.From = from
 	v.To = to
 	v.IncludeVersions = includeVersions
 	v.IncludeScoredSessions = includeScoredSessions
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

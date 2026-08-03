@@ -23,6 +23,7 @@ type Client struct {
 	ListEndpoint                   goa.Endpoint
 	ListSuggestionsEndpoint        goa.Endpoint
 	ListFeedbackEndpoint           goa.Endpoint
+	TriggerSuggestionEndpoint      goa.Endpoint
 	ApproveSuggestionEndpoint      goa.Endpoint
 	DismissSuggestionEndpoint      goa.Endpoint
 	ListSuggestionFeedbackEndpoint goa.Endpoint
@@ -40,7 +41,7 @@ type Client struct {
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, restoreVersion, update, list, listSuggestions, listFeedback, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions goa.Endpoint) *Client {
+func NewClient(create, addVersion, restoreVersion, update, list, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:                 create,
 		AddVersionEndpoint:             addVersion,
@@ -49,6 +50,7 @@ func NewClient(create, addVersion, restoreVersion, update, list, listSuggestions
 		ListEndpoint:                   list,
 		ListSuggestionsEndpoint:        listSuggestions,
 		ListFeedbackEndpoint:           listFeedback,
+		TriggerSuggestionEndpoint:      triggerSuggestion,
 		ApproveSuggestionEndpoint:      approveSuggestion,
 		DismissSuggestionEndpoint:      dismissSuggestion,
 		ListSuggestionFeedbackEndpoint: listSuggestionFeedback,
@@ -218,6 +220,25 @@ func (c *Client) ListFeedback(ctx context.Context, p *ListFeedbackPayload) (res 
 		return
 	}
 	return ires.(*ListSkillFeedbackResult), nil
+}
+
+// TriggerSuggestion calls the "triggerSuggestion" endpoint of the "skills"
+// service.
+// TriggerSuggestion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TriggerSuggestion(ctx context.Context, p *TriggerSuggestionPayload) (err error) {
+	_, err = c.TriggerSuggestionEndpoint(ctx, p)
+	return
 }
 
 // ApproveSuggestion calls the "approveSuggestion" endpoint of the "skills"

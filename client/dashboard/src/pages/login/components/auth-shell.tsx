@@ -110,7 +110,14 @@ export function AuthShell({
       <div className="grid flex-1 xl:grid-cols-2">
         <AgentSessionShowcase />
 
-        <section className="relative flex flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8 pt-16 pb-28 xl:border-l">
+        {/* The deep bottom padding only exists to clear the absolutely
+            positioned terms footer; without it that space is dead. */}
+        <section
+          className={cn(
+            "relative flex flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8 pt-16 xl:border-l",
+            showTerms ? "pb-28" : "pb-12",
+          )}
+        >
           <div
             className={cn(
               "flex w-full max-w-[380px] flex-col items-center gap-6",

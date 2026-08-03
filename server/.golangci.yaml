@@ -84,6 +84,13 @@ linters:
         linters:
           - exhaustruct
           - gosec
+      # gosec stays on for testenv; exempt only G306 (the Temporal dev server
+      # shim has to carry the exec bit, and it is written 0700 into a 0700
+      # MkdirTemp directory).
+      - path: internal/testenv/temporal\.go
+        linters:
+          - gosec
+        text: G306
       # False positives that scope constants are somehow hardcoded credentials.
       - path: internal/access/scopes\.go
         linters:

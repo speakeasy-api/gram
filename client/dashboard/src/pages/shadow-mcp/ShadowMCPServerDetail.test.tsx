@@ -140,7 +140,7 @@ vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
     mocks.useResolveShadowMCPInventoryRequestMutation,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
@@ -150,6 +150,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -178,6 +181,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -209,9 +215,15 @@ vi.mock("@speakeasy-api/moonshine", () => ({
 
     return <>{children}</>;
   },
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ className }: { className?: string; name: string }) => (
     <span className={className} />
   ),
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: Object.assign(
     ({ children }: { children: ReactNode }) => <table>{children}</table>,
     {
@@ -265,7 +277,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/checkbox", () => ({
+vi.mock("@/components/ui/Checkbox", () => ({
   Checkbox: ({
     checked,
     disabled,
@@ -284,7 +296,7 @@ vi.mock("@/components/ui/checkbox", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/radio-group", () => ({
+vi.mock("@/components/ui/RadioGroup", () => ({
   RadioGroup: ({
     children,
     onValueChange,
@@ -306,7 +318,7 @@ vi.mock("@/components/ui/radio-group", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/sheet", () => ({
+vi.mock("@/components/ui/Sheet", () => ({
   Sheet: ({
     children,
     onOpenChange,
@@ -333,7 +345,7 @@ vi.mock("@/components/ui/sheet", () => ({
   SheetTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 
-vi.mock("@/components/ui/skeleton", () => ({
+vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
@@ -350,6 +362,7 @@ function inventoryServer(
   return {
     access: "allowed",
     allowedPolicyIds: ["policy-1"],
+    blockedPolicyIds: [],
     canonicalServerUrl: "https://github.example.com/mcp",
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: new Date("2026-01-04T10:00:00Z"),
