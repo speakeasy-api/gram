@@ -20,8 +20,6 @@ const SECTIONS = [
 
 export type PluginSection = (typeof SECTIONS)[number];
 
-export const PLUGIN_SECTION_IDS: readonly string[] = SECTIONS;
-
 function isPluginSection(value: string | undefined): value is PluginSection {
   return !!value && (SECTIONS as readonly string[]).includes(value);
 }
