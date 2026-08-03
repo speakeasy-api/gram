@@ -1240,10 +1240,12 @@ function ToolUIGroup({
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          // Capped rather than full-column: a call is a short label, and a card
-          // as wide as the message strands its chevron at the far edge.
+          // Capped by the container, not by the cards' own content: ToolUI's
+          // root is a size container (`@container`), and inline-size
+          // containment makes it size as if empty — any shrink-to-fit box
+          // around it collapses to nothing.
           !headerless &&
-            "border-border mt-2 ml-2 max-w-md space-y-2 border-l pl-4",
+            "border-border mt-2 ml-2 max-w-xs space-y-2 border-l pl-4",
           !showChildren && "hidden",
         )}
       >
