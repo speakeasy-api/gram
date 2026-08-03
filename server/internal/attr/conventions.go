@@ -278,6 +278,10 @@ const (
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey         = attribute.Key("gram.openrouter.response.body")
+	OpenRouterRateLimitLimitKey       = attribute.Key("gram.openrouter.ratelimit.limit")
+	OpenRouterRateLimitRemainingKey   = attribute.Key("gram.openrouter.ratelimit.remaining")
+	OpenRouterRateLimitResetKey       = attribute.Key("gram.openrouter.ratelimit.reset")
+	OpenRouterRetryAfterKey           = attribute.Key("gram.openrouter.retry_after")
 	OrganizationAccountTypeKey        = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey           = attribute.Key("gram.org.invite.id")
 	OrganizationInviteEmailKey        = attribute.Key("gram.org.invite.email")
@@ -1243,6 +1247,20 @@ func OpenRouterResponseBody(v string) attribute.KeyValue { return OpenRouterResp
 func SlogOpenRouterResponseBody(v string) slog.Attr {
 	return slog.String(string(OpenRouterResponseBodyKey), v)
 }
+
+func OpenRouterRateLimitLimit(v string) attribute.KeyValue {
+	return OpenRouterRateLimitLimitKey.String(v)
+}
+
+func OpenRouterRateLimitRemaining(v string) attribute.KeyValue {
+	return OpenRouterRateLimitRemainingKey.String(v)
+}
+
+func OpenRouterRateLimitReset(v string) attribute.KeyValue {
+	return OpenRouterRateLimitResetKey.String(v)
+}
+
+func OpenRouterRetryAfter(v string) attribute.KeyValue { return OpenRouterRetryAfterKey.String(v) }
 
 func AccessMemberID(v string) attribute.KeyValue { return AccessMemberIDKey.String(v) }
 func SlogAccessMemberID(v string) slog.Attr      { return slog.String(string(AccessMemberIDKey), v) }
