@@ -5449,3 +5449,354 @@ WHERE missing_since IS NULL;
 CREATE INDEX IF NOT EXISTS mdm_devices_user_id_idx
 ON mdm_devices (user_id)
 WHERE user_id IS NOT NULL;
+
+-- Admin MCP persistence begins below. Its organization-bound OAuth lifecycle is
+-- intentionally separate from project-bound hosted MCP user_session_* records.
+-- Client registration occurs before a user selects an organization, so client
+-- rows are resource-level and must not become an authorization boundary.
+CREATE TABLE IF NOT EXISTS admin_mcp_oauth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  client_id TEXT NOT NULL CHECK (client_id <> '' AND CHAR_LENGTH(client_id) <= 512),
+  client_secret_hash TEXT,
+  client_name TEXT NOT NULL CHECK (client_name <> '' AND CHAR_LENGTH(client_name) <= 256),
+  redirect_uris TEXT[] NOT NULL,
+  client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  client_secret_expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT admin_mcp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_oauth_clients_redirect_uris_check CHECK (
+    CARDINALITY(redirect_uris) BETWEEN 1 AND 20
+    AND ARRAY_POSITION(redirect_uris, NULL) IS NULL
+    AND ARRAY_POSITION(redirect_uris, '') IS NULL
+    AND OCTET_LENGTH(ARRAY_TO_STRING(redirect_uris, '')) <= 8192
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_oauth_clients_client_id_key
+ON admin_mcp_oauth_clients (client_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_oauth_clients_client_secret_expires_at_idx
+ON admin_mcp_oauth_clients (client_secret_expires_at)
+WHERE client_secret_expires_at IS NOT NULL AND deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS admin_mcp_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+
+  -- Replaced on reauthorization, revocation, or security rollback. Tokens and
+  -- mutable readiness state are bound to this opaque generation.
+  active_generation uuid NOT NULL DEFAULT generate_uuidv7(),
+  status TEXT NOT NULL DEFAULT 'active',
+  authorized_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  reauthorized_at timestamptz,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT admin_mcp_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_connections_oauth_client_id_fkey FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE RESTRICT,
+  CONSTRAINT admin_mcp_connections_status_check CHECK (status <> '' AND CHAR_LENGTH(status) <= 64)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_org_user_client_key
+ON admin_mcp_connections (organization_id, user_id, oauth_client_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_idx
+ON admin_mcp_connections (organization_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_connections_oauth_client_id_idx
+ON admin_mcp_connections (oauth_client_id);
+
+CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  jti TEXT NOT NULL CHECK (jti <> '' AND CHAR_LENGTH(jti) <= 512),
+  refresh_token_hash TEXT NOT NULL CHECK (refresh_token_hash <> '' AND CHAR_LENGTH(refresh_token_hash) <= 512),
+  refresh_expires_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT admin_mcp_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_sessions_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES admin_mcp_connections (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_jti_key
+ON admin_mcp_sessions (jti);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_refresh_token_hash_key
+ON admin_mcp_sessions (refresh_token_hash);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_sessions_connection_id_idx
+ON admin_mcp_sessions (connection_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_sessions_connection_generation_idx
+ON admin_mcp_sessions (connection_id, connection_generation)
+WHERE deleted IS FALSE;
+
+-- One row describes the desired catalog registration for a project. Component
+-- references are populated as the narrow registration command creates or reuses
+-- the remote source/server/issuer/endpoint stack; no component is a plugin
+-- distribution or an Admin MCP runtime record.
+CREATE TABLE IF NOT EXISTS admin_mcp_catalog_registrations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  source_kind TEXT NOT NULL CHECK (source_kind <> '' AND CHAR_LENGTH(source_kind) <= 64),
+  catalog_reference TEXT NOT NULL CHECK (catalog_reference <> '' AND CHAR_LENGTH(catalog_reference) <= 2048),
+  status TEXT NOT NULL DEFAULT 'pending',
+
+  remote_mcp_server_id uuid,
+  mcp_server_id uuid,
+  mcp_endpoint_id uuid,
+  user_session_issuer_id uuid,
+  remote_session_issuer_id uuid,
+  remote_session_client_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT admin_mcp_catalog_registrations_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_catalog_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_catalog_registrations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_catalog_registrations_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_catalog_registrations_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_catalog_registrations_mcp_endpoint_id_fkey FOREIGN KEY (mcp_endpoint_id) REFERENCES mcp_endpoints (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_catalog_registrations_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_catalog_registrations_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_catalog_registrations_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_catalog_registrations_status_check CHECK (status <> '' AND CHAR_LENGTH(status) <= 64)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_desired_state_key
+ON admin_mcp_catalog_registrations (organization_id, project_id, source_kind, catalog_reference)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_project_id_idx
+ON admin_mcp_catalog_registrations (project_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_organization_id_idx
+ON admin_mcp_catalog_registrations (organization_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_remote_mcp_server_id_idx
+ON admin_mcp_catalog_registrations (remote_mcp_server_id)
+WHERE remote_mcp_server_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_mcp_server_id_idx
+ON admin_mcp_catalog_registrations (mcp_server_id)
+WHERE mcp_server_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_mcp_endpoint_id_idx
+ON admin_mcp_catalog_registrations (mcp_endpoint_id)
+WHERE mcp_endpoint_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_user_session_issuer_id_idx
+ON admin_mcp_catalog_registrations (user_session_issuer_id)
+WHERE user_session_issuer_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_remote_session_issuer_id_idx
+ON admin_mcp_catalog_registrations (remote_session_issuer_id)
+WHERE remote_session_issuer_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_catalog_registrations_remote_session_client_id_idx
+ON admin_mcp_catalog_registrations (remote_session_client_id)
+WHERE remote_session_client_id IS NOT NULL;
+
+-- Receipts make Admin MCP mutations idempotent across token rotation and
+-- reauthorization without retaining raw tool arguments or results.
+CREATE TABLE IF NOT EXISTS admin_mcp_operation_receipts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  project_id uuid,
+  operation TEXT NOT NULL CHECK (operation <> '' AND CHAR_LENGTH(operation) <= 128),
+  target_key TEXT NOT NULL CHECK (target_key <> '' AND CHAR_LENGTH(target_key) <= 2048),
+  idempotency_key TEXT NOT NULL CHECK (idempotency_key <> '' AND CHAR_LENGTH(idempotency_key) <= 128),
+  input_hash TEXT NOT NULL CHECK (input_hash <> '' AND CHAR_LENGTH(input_hash) <= 128),
+  result JSONB NOT NULL DEFAULT '{}'::JSONB,
+  audit_log_id uuid,
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT admin_mcp_operation_receipts_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_operation_receipts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_operation_receipts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_operation_receipts_idempotency_key
+ON admin_mcp_operation_receipts (organization_id, user_id, operation, target_key, idempotency_key)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_operation_receipts_expires_at_idx
+ON admin_mcp_operation_receipts (expires_at)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_operation_receipts_organization_id_idx
+ON admin_mcp_operation_receipts (organization_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_operation_receipts_project_id_idx
+ON admin_mcp_operation_receipts (project_id)
+WHERE project_id IS NOT NULL;
+
+-- Dashboard-only provider setup references are single-use, session-bound, and
+-- stored as hashes. They are not bearer capabilities and their plaintext never
+-- reaches an MCP tool argument or result.
+CREATE TABLE IF NOT EXISTS admin_mcp_setup_handoffs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  project_id uuid NOT NULL,
+  mcp_server_id uuid,
+  intent TEXT NOT NULL CHECK (intent <> '' AND CHAR_LENGTH(intent) <= 128),
+  reference_hash TEXT NOT NULL CHECK (reference_hash <> '' AND CHAR_LENGTH(reference_hash) <= 512),
+  expires_at timestamptz NOT NULL,
+  redeemed_at timestamptz,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT admin_mcp_setup_handoffs_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_setup_handoffs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_setup_handoffs_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES admin_mcp_connections (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_setup_handoffs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_setup_handoffs_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_setup_handoffs_reference_hash_key
+ON admin_mcp_setup_handoffs (reference_hash)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_setup_handoffs_expires_at_idx
+ON admin_mcp_setup_handoffs (expires_at)
+WHERE deleted IS FALSE AND redeemed_at IS NULL AND revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_setup_handoffs_organization_id_idx
+ON admin_mcp_setup_handoffs (organization_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_setup_handoffs_connection_id_idx
+ON admin_mcp_setup_handoffs (connection_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_setup_handoffs_project_id_idx
+ON admin_mcp_setup_handoffs (project_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_setup_handoffs_mcp_server_id_idx
+ON admin_mcp_setup_handoffs (mcp_server_id)
+WHERE mcp_server_id IS NOT NULL;
+
+-- Current readiness is mutable. Monotonic product milestones are stored in the
+-- separate table below so a later provider regression never erases first value.
+CREATE TABLE IF NOT EXISTS admin_mcp_readiness (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  project_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  status TEXT NOT NULL,
+  evidence_category TEXT,
+  repair_state JSONB NOT NULL DEFAULT '{}'::JSONB,
+  checked_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT admin_mcp_readiness_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_readiness_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_readiness_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES admin_mcp_connections (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_readiness_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_readiness_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_readiness_status_check CHECK (status <> '' AND CHAR_LENGTH(status) <= 64),
+  CONSTRAINT admin_mcp_readiness_evidence_category_check CHECK (evidence_category IS NULL OR (evidence_category <> '' AND CHAR_LENGTH(evidence_category) <= 64))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_readiness_connection_generation_target_key
+ON admin_mcp_readiness (connection_id, connection_generation, project_id, mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_readiness_connection_id_idx
+ON admin_mcp_readiness (connection_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_readiness_project_id_mcp_server_id_idx
+ON admin_mcp_readiness (project_id, mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_readiness_mcp_server_id_idx
+ON admin_mcp_readiness (mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_readiness_organization_id_idx
+ON admin_mcp_readiness (organization_id);
+
+-- Product milestones are append-only first-occurrence evidence. Their nullable
+-- references remain useful for proof/debugging while preserving the milestone
+-- when a connection, project, or MCP server is later retired.
+CREATE TABLE IF NOT EXISTS admin_mcp_milestones (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  milestone TEXT NOT NULL CHECK (milestone <> '' AND CHAR_LENGTH(milestone) <= 128),
+  connection_id uuid,
+  connection_generation uuid,
+  project_id uuid,
+  mcp_server_id uuid,
+  failure_category TEXT,
+  proof JSONB NOT NULL DEFAULT '{}'::JSONB,
+  achieved_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_milestones_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_milestones_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_milestones_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES admin_mcp_connections (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_milestones_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_milestones_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_milestones_failure_category_check CHECK (failure_category IS NULL OR (failure_category <> '' AND CHAR_LENGTH(failure_category) <= 64))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_milestones_organization_id_milestone_key
+ON admin_mcp_milestones (organization_id, milestone);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_milestones_organization_id_achieved_at_idx
+ON admin_mcp_milestones (organization_id, achieved_at DESC);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_milestones_connection_id_idx
+ON admin_mcp_milestones (connection_id)
+WHERE connection_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_milestones_project_id_idx
+ON admin_mcp_milestones (project_id)
+WHERE project_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_milestones_mcp_server_id_idx
+ON admin_mcp_milestones (mcp_server_id)
+WHERE mcp_server_id IS NOT NULL;
