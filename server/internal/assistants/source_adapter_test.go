@@ -131,8 +131,14 @@ func TestComposeInstructions_DashboardAsksForToolCallHeadings(t *testing.T) {
 		"## HARD RULE — text sent with tool calls is a heading, not speech",
 	)
 	require.Contains(t, instructions, "verb ending in -ing")
-	// The counter-examples are the part that actually lands, so keep one pinned.
-	require.Contains(t, instructions, `"Odd — the loop broke. Let me redo it properly"`)
+	// A heading is always a doing-phrase. Pin one wrong → right pair whole, so a
+	// future edit can't leave the bad half looking like the recommendation.
+	require.Contains(
+		t,
+		instructions,
+		`"Odd — the loop broke. Let me redo it properly" → "Gathering the remaining error data"`,
+	)
+	require.Contains(t, instructions, "is WRONG")
 }
 
 func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {
