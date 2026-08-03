@@ -1170,6 +1170,12 @@ interface ToolUIGroupProps {
    * themselves have finished. Defaults to `status === "running"`.
    */
   titleShimmer?: boolean;
+  /**
+   * Hide the header row while keeping the group (and its children) mounted.
+   * Used when the title isn't worth showing yet — a placeholder next to the
+   * thread's own "working" indicator says the same thing twice.
+   */
+  headerHidden?: boolean;
   /** Child tool UI components */
   children: React.ReactNode;
   /** Additional class names */
@@ -1183,6 +1189,7 @@ function ToolUIGroup({
   defaultExpanded = false,
   headerless = false,
   titleShimmer,
+  headerHidden = false,
   children,
   className,
 }: ToolUIGroupProps): React.JSX.Element {
@@ -1211,7 +1218,7 @@ function ToolUIGroup({
       className={cn("w-fit max-w-full min-w-56", className)}
     >
       {/* Group header */}
-      {!headerless && (
+      {!headerless && !headerHidden && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           aria-expanded={isExpanded}

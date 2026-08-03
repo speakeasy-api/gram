@@ -129,14 +129,11 @@ export const ToolGroup: FC<
         // thread's indicator takes the wait over, so a second spinner here would
         // double it.
         status={anyMessagePartsAreRunning ? "running" : "complete"}
-        // Tools done but the label still settling: no check yet — the line is
-        // about to change, and a completion mark on a phrase that then rewrites
-        // itself reads as a glitch. The shimmer carries "not final".
-        icon={
-          !anyMessagePartsAreRunning && pending ? (
-            <span className="size-4 shrink-0" aria-hidden />
-          ) : undefined
-        }
+        // Tools done and the label still settling: show nothing at all. The
+        // thread's indicator already says the assistant is working, and a
+        // shimmering "Working on it…" beside it says the same thing twice —
+        // then rewrites itself once the real summary lands.
+        headerHidden={!anyMessagePartsAreRunning && pending}
         // Shimmer while the tools run and while the label is still settling (an
         // enriched summary in flight after completion / on a material change).
         titleShimmer={running}
