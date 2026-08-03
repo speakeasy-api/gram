@@ -17,6 +17,22 @@ import (
 
 // Client lists the litellm service endpoint HTTP clients.
 type Client struct {
+	// CreateInstance Doer is the HTTP client used to make requests to the
+	// createInstance endpoint.
+	CreateInstanceDoer goahttp.Doer
+
+	// ListInstances Doer is the HTTP client used to make requests to the
+	// listInstances endpoint.
+	ListInstancesDoer goahttp.Doer
+
+	// RotateInstanceKey Doer is the HTTP client used to make requests to the
+	// rotateInstanceKey endpoint.
+	RotateInstanceKeyDoer goahttp.Doer
+
+	// RevokeInstance Doer is the HTTP client used to make requests to the
+	// revokeInstance endpoint.
+	RevokeInstanceDoer goahttp.Doer
+
 	// Ingest Doer is the HTTP client used to make requests to the ingest endpoint.
 	IngestDoer goahttp.Doer
 
@@ -47,14 +63,114 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		IngestDoer:          doer,
-		TracesDoer:          doer,
-		MetricsDoer:         doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateInstanceDoer:    doer,
+		ListInstancesDoer:     doer,
+		RotateInstanceKeyDoer: doer,
+		RevokeInstanceDoer:    doer,
+		IngestDoer:            doer,
+		TracesDoer:            doer,
+		MetricsDoer:           doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
+	}
+}
+
+// CreateInstance returns an endpoint that makes HTTP requests to the litellm
+// service createInstance server.
+func (c *Client) CreateInstance() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateInstanceRequest(c.encoder)
+		decodeResponse = DecodeCreateInstanceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateInstanceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateInstanceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("litellm", "createInstance", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListInstances returns an endpoint that makes HTTP requests to the litellm
+// service listInstances server.
+func (c *Client) ListInstances() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListInstancesRequest(c.encoder)
+		decodeResponse = DecodeListInstancesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListInstancesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListInstancesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("litellm", "listInstances", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RotateInstanceKey returns an endpoint that makes HTTP requests to the
+// litellm service rotateInstanceKey server.
+func (c *Client) RotateInstanceKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRotateInstanceKeyRequest(c.encoder)
+		decodeResponse = DecodeRotateInstanceKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRotateInstanceKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RotateInstanceKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("litellm", "rotateInstanceKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeInstance returns an endpoint that makes HTTP requests to the litellm
+// service revokeInstance server.
+func (c *Client) RevokeInstance() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeInstanceRequest(c.encoder)
+		decodeResponse = DecodeRevokeInstanceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeInstanceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeInstanceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("litellm", "revokeInstance", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -16,6 +17,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/litellm/server"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -23,9 +25,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 const (
@@ -41,28 +45,42 @@ type authorizer interface {
 	Authorize(context.Context, string, *security.APIKeyScheme) (context.Context, error)
 }
 
+type featureChecker interface {
+	IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error)
+}
+
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	auth    authorizer
-	hooks   HookIngester
-	calls   *callcache.Cache
-	traces  *TraceProcessor
-	metrics *MetricProcessor
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	auth      authorizer
+	hooks     HookIngester
+	calls     *callcache.Cache
+	traces    *TraceProcessor
+	metrics   *MetricProcessor
+	db        *pgxpool.Pool
+	authz     *authz.Engine
+	features  featureChecker
+	audit     *audit.Logger
+	keyPrefix string
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger:  logger.With(attr.SlogComponent("litellm")),
-		auth:    auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:   hookIngester,
-		calls:   calls,
-		traces:  traces,
-		metrics: metrics,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:    logger.With(attr.SlogComponent("litellm")),
+		auth:      auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:     hookIngester,
+		calls:     calls,
+		traces:    traces,
+		metrics:   metrics,
+		db:        db,
+		authz:     authzEngine,
+		features:  features,
+		audit:     auditLogger,
+		keyPrefix: auth.APIKeyPrefix(environment),
 	}
 }
 
@@ -86,6 +104,32 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.A
 	ctx, err := s.auth.Authorize(ctx, key, scheme)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize LiteLLM request: %w", err)
+	}
+	if scheme.Name == constants.ProjectSlugSecuritySchema {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if ok && authCtx != nil && authCtx.APIKeyID != "" && auth.IsLiteLLMAPIKeyName(authCtx.APIKeyName) {
+			keyID, parseErr := uuid.Parse(authCtx.APIKeyID)
+			if parseErr != nil {
+				s.logger.WarnContext(ctx, "failed to parse LiteLLM API key ID",
+					attr.SlogError(parseErr),
+					attr.SlogAPIKeyID(authCtx.APIKeyID),
+				)
+			} else if managed, ownershipErr := keysrepo.New(s.db).IsAPIKeyManagedByActiveLiteLLMInstance(ctx, keysrepo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{ID: keyID, OrganizationID: authCtx.ActiveOrganizationID}); ownershipErr != nil {
+				s.logger.WarnContext(ctx, "failed to check LiteLLM API key ownership",
+					attr.SlogError(ownershipErr),
+					attr.SlogAPIKeyID(authCtx.APIKeyID),
+					attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+				)
+			} else if managed {
+				if touchErr := keysrepo.New(s.db).UpdateAPIKeyLastAccessedAt(ctx, keyID); touchErr != nil {
+					s.logger.WarnContext(ctx, "failed to update LiteLLM API key last accessed at",
+						attr.SlogError(touchErr),
+						attr.SlogAPIKeyID(authCtx.APIKeyID),
+						attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+					)
+				}
+			}
+		}
 	}
 	return ctx, nil
 }

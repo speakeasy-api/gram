@@ -271,6 +271,17 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
 	}
 
+	managed, err := kr.IsAPIKeyManagedByActiveLiteLLMInstance(ctx, repo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{
+		ID:             keyID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check API key ownership").LogError(ctx, s.logger)
+	}
+	if managed {
+		return oops.E(oops.CodeConflict, nil, "API key is managed by an active LiteLLM instance; revoke the instance instead")
+	}
+
 	deleted, err := kr.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
 		ID:             keyID,
 		OrganizationID: authCtx.ActiveOrganizationID,

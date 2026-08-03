@@ -15,12 +15,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -38,6 +40,14 @@ type captureEnabledFeatures struct{}
 
 func (captureEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
 	return feature == productfeatures.FeatureSessionCapture, nil
+}
+
+type testProductFeatures struct {
+	enabled bool
+}
+
+func (f *testProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	return feature == productfeatures.FeatureAIPlatformPushIntegrations && f.enabled, nil
 }
 
 func TestMain(m *testing.M) {
@@ -60,6 +70,8 @@ type realTestInstance struct {
 	chConn    clickhouse.Conn
 	telemetry *telemetry.Logger
 	observer  *recordingMessageObserver
+	features  *testProductFeatures
+	keys      *keysservice.Service
 }
 
 type recordingMessageObserver struct {
@@ -167,7 +179,9 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		require.NoError(t, traceProcessor.Shutdown(shutdownCtx))
 		require.NoError(t, metricProcessor.Shutdown(shutdownCtx))
 	})
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor)
+	features := &testProductFeatures{enabled: false}
+	auditLogger := audit.NewLogger()
+	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, features, auditLogger, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
@@ -175,5 +189,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		chConn:    chConn,
 		telemetry: telemetryLogger,
 		observer:  observer,
+		features:  features,
+		keys:      keysservice.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger),
 	}
 }
