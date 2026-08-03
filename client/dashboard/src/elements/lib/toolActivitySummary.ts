@@ -64,9 +64,6 @@ const REQUEST_LEAD_INS = [
   "get",
 ];
 
-/** Words kept from the request; enough to be specific, short enough to fit. */
-const REQUEST_PHRASE_WORDS = 7;
-
 /**
  * describeRequest turns the user's prompt into the object of an activity label
  * — "Scan recent agent conversations for leaked secrets" → "recent agent
@@ -88,9 +85,11 @@ export function describeRequest(userMessage: string | undefined): string {
     }
   }
 
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "";
-  const phrase = words.slice(0, REQUEST_PHRASE_WORDS).join(" ");
+  // The whole sentence, not a word-capped slice: cutting mid-phrase produced
+  // labels that trailed off ("…the heaviest end users this…") and read as a
+  // rendering bug rather than a summary.
+  const phrase = text.trim().replace(/\s+/g, " ");
+  if (phrase === "") return "";
   // Lowercase a leading capital that only exists because it started a sentence,
   // but leave acronyms and proper nouns ("MCP", "Slack") alone.
   const head = phrase.split(" ")[0] ?? "";

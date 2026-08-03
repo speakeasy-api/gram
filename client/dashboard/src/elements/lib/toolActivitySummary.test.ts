@@ -40,6 +40,14 @@ describe("describeToolActivity", () => {
         "Show me token spend over the last 30 days. Break it down by model.",
       ),
     ).toBe("Investigating token spend over the last 30 days…");
+    // The whole sentence survives — no mid-phrase cut.
+    expect(
+      describeToolActivity(
+        [{ name: "compose" }],
+        true,
+        "Who are the heaviest end users this week?",
+      ),
+    ).toBe("Investigating who are the heaviest end users this week…");
     expect(
       describeToolActivity(
         [{ name: "compose" }],
