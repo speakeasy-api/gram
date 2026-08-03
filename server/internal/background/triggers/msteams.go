@@ -276,6 +276,19 @@ func (b *botFrameworkAuthenticator) remoteKeySet() (oidc.KeySet, error) {
 	// network round-trip; singleflight collapses a concurrent burst into one
 	// request whose result (or failure) they all share.
 	keySet, err, _ := b.fetchGroup.Do("keyset", func() (any, error) {
+		// Re-check under the flight: a caller that read the empty cache
+		// before a flight completed enters here after it, and without this it
+		// would start a redundant fetch — or bypass the failure backoff.
+		b.mu.Lock()
+		cached, retryAfter := b.keySet, b.retryAfter
+		b.mu.Unlock()
+		if cached != nil {
+			return cached, nil
+		}
+		if time.Now().Before(retryAfter) {
+			return nil, fmt.Errorf("openid metadata unavailable, retrying later")
+		}
+
 		client := b.clientFn()
 		jwksURI, err := b.fetchJWKSURI(client)
 		if err != nil {
