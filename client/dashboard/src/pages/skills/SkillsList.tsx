@@ -22,6 +22,7 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { type Column, Table } from "@/components/ui/Table";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
@@ -51,9 +52,28 @@ const SKILL_FILTERS = defineFilters([
 ]);
 
 const FILTER_OPTIONS = {
-  sourceKind: SKILL_SOURCE_OPTIONS,
-  classification: SKILL_CLASSIFICATION_OPTIONS,
+  sourceKind: [...SKILL_SOURCE_OPTIONS],
+  classification: [...SKILL_CLASSIFICATION_OPTIONS],
 };
+
+function ColumnHeaderTooltip({
+  label,
+  tooltip,
+}: {
+  label: string;
+  tooltip: string;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <span
+        tabIndex={0}
+        className="cursor-help underline decoration-dotted underline-offset-2"
+      >
+        {label}
+      </span>
+    </SimpleTooltip>
+  );
+}
 
 const RESULT_PAGE_SIZE = 50;
 const METRIC_SORT_BATCH_SIZE = 200;
@@ -258,13 +278,23 @@ export default function SkillsList(): JSX.Element {
     },
     {
       key: "source",
-      header: "Source",
+      header: (
+        <ColumnHeaderTooltip
+          label="Source"
+          tooltip="How the skill entered the registry: added manually, or captured from agent use."
+        />
+      ),
       width: "120px",
       render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
     },
     {
       key: "classification",
-      header: "Classification",
+      header: (
+        <ColumnHeaderTooltip
+          label="Classification"
+          tooltip="Custom skills belong to your organization; built-in skills come from plugins or platform defaults."
+        />
+      ),
       width: "130px",
       render: (skill) => (
         <SkillClassificationBadge value={skill.classification} />
@@ -289,7 +319,12 @@ export default function SkillsList(): JSX.Element {
     },
     {
       key: "efficacy",
-      header: "Efficacy",
+      header: (
+        <ColumnHeaderTooltip
+          label="Efficacy"
+          tooltip="Average usefulness score from sampled sessions that used this skill."
+        />
+      ),
       width: "110px",
       render: (skill) => {
         const efficacy = metricsBySkill.get(skill.id)?.efficacy;
@@ -310,7 +345,12 @@ export default function SkillsList(): JSX.Element {
     },
     {
       key: "estimatedSavings",
-      header: "Estimated savings",
+      header: (
+        <ColumnHeaderTooltip
+          label="Estimated savings"
+          tooltip="Estimated time saved across scored sessions that used this skill."
+        />
+      ),
       width: "150px",
       render: (skill) => {
         const efficacy = metricsBySkill.get(skill.id)?.efficacy;

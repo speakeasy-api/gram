@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
@@ -93,6 +94,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
+	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -444,15 +446,15 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, redisFlags...)
-	flags = append(flags, clickHouseFlags...)
-	flags = append(flags, functionsFlags...)
-	flags = append(flags, pluginsFlags...)
-	flags = append(flags, assistantRuntimeFlags...)
-	flags = append(flags, pulseMCPFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, svixFlags...)
-	flags = append(flags, gcpFlags...)
+	flags = append(flags, redisFlags()...)
+	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, functionsFlags()...)
+	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, pulseMCPFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -1097,6 +1099,14 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				memorySvc,
 			))
+			businessmemory.Attach(mux, businessmemory.NewService(
+				logger,
+				tracerProvider,
+				db,
+				sessionManager,
+				authzEngine,
+				completionsClient,
+			))
 			hooks.Attach(mux, hooks.NewService(
 				logger,
 				db,
@@ -1308,10 +1318,14 @@ func newStartCommand() *cli.Command {
 			// One-off fetches on a cold cache; a pooled client would only hold
 			// idle connections to the marketing site. Bound the whole request
 			// so a stalled marketing-site response can't hang the fetch; the
-			// client is dedicated to this tool, so a per-client timeout is safe.
-			changelogClient := guardianPolicy.Client()
-			changelogClient.Timeout = platformchangelog.FetchTimeout
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(changelogClient)...)
+			// client is dedicated to these speakeasy.com tools, which share the
+			// same bound, so a per-client timeout is safe.
+			marketingSiteClient := guardianPolicy.Client()
+			// Take the larger bound so the shared client stays correct if either
+			// tool's timeout is tuned independently later.
+			marketingSiteClient.Timeout = max(platformchangelog.FetchTimeout, platformdocs.FetchTimeout)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(marketingSiteClient)...)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDocsTools(marketingSiteClient)...)
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 				AssistantMemoryTools:          memoryTools,
 				AssistantSkillTools:           skillTools,

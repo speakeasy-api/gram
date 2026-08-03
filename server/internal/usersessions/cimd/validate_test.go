@@ -38,6 +38,15 @@ func requireOAuthError(t *testing.T, err error, code string) {
 	require.Equal(t, code, oauthErr.Code)
 }
 
+// requireValidationError asserts both halves of a validation rejection: the
+// client-facing OAuth error code reachable through errors.As, and the metric
+// reason label extracted by validationReasonOf.
+func requireValidationError(t *testing.T, err error, code string, reason validationReason) {
+	t.Helper()
+	requireOAuthError(t, err, code)
+	require.Equal(t, reason, validationReasonOf(err))
+}
+
 func TestValidateClientIDURL_Valid(t *testing.T) {
 	t.Parallel()
 
@@ -58,42 +67,42 @@ func TestValidateClientIDURL_MissingPathRejected(t *testing.T) {
 	t.Parallel()
 
 	_, err := validateClientIDURL("https://client.example.com")
-	requireOAuthError(t, err, "invalid_request")
+	requireValidationError(t, err, "invalid_request", reasonClientIDMissingPath)
 }
 
 func TestValidateClientIDURL_UserinfoRejected(t *testing.T) {
 	t.Parallel()
 
 	_, err := validateClientIDURL("https://user@client.example.com/client.json")
-	requireOAuthError(t, err, "invalid_request")
+	requireValidationError(t, err, "invalid_request", reasonClientIDUserinfo)
 }
 
 func TestValidateClientIDURL_FragmentRejected(t *testing.T) {
 	t.Parallel()
 
 	_, err := validateClientIDURL("https://client.example.com/client.json#frag")
-	requireOAuthError(t, err, "invalid_request")
+	requireValidationError(t, err, "invalid_request", reasonClientIDFragment)
 }
 
 func TestValidateClientIDURL_DotDotSegmentRejected(t *testing.T) {
 	t.Parallel()
 
 	_, err := validateClientIDURL("https://client.example.com/oauth/../client.json")
-	requireOAuthError(t, err, "invalid_request")
+	requireValidationError(t, err, "invalid_request", reasonClientIDDotSegments)
 }
 
 func TestValidateClientIDURL_DotSegmentRejected(t *testing.T) {
 	t.Parallel()
 
 	_, err := validateClientIDURL("https://client.example.com/./client.json")
-	requireOAuthError(t, err, "invalid_request")
+	requireValidationError(t, err, "invalid_request", reasonClientIDDotSegments)
 }
 
 func TestValidateClientIDURL_NonHTTPSRejected(t *testing.T) {
 	t.Parallel()
 
 	_, err := validateClientIDURL("http://client.example.com/client.json")
-	requireOAuthError(t, err, "invalid_request")
+	requireValidationError(t, err, "invalid_request", reasonClientIDScheme)
 }
 
 func TestValidateClientIDURL_OversizedRejected(t *testing.T) {
@@ -101,7 +110,7 @@ func TestValidateClientIDURL_OversizedRejected(t *testing.T) {
 
 	long := "https://client.example.com/" + strings.Repeat("a", maxClientIDLength)
 	_, err := validateClientIDURL(long)
-	requireOAuthError(t, err, "invalid_request")
+	requireValidationError(t, err, "invalid_request", reasonClientIDTooLong)
 }
 
 func TestValidateDocument_Valid(t *testing.T) {
@@ -120,7 +129,7 @@ func TestValidateDocument_ClientIDMismatchRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.ClientID = "https://client.example.com/oauth/other.json"
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonClientIDMismatch)
 }
 
 func TestValidateDocument_MissingClientNameRejected(t *testing.T) {
@@ -131,7 +140,7 @@ func TestValidateDocument_MissingClientNameRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.ClientName = ""
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonMissingClientName)
 }
 
 func TestValidateDocument_MissingAuthMethodRejected(t *testing.T) {
@@ -144,7 +153,7 @@ func TestValidateDocument_MissingAuthMethodRejected(t *testing.T) {
 	// RFC 7591 — a symmetric method CIMD forbids, so it must be rejected.
 	doc := testDocument(testClientID)
 	doc.TokenEndpointAuthMethod = ""
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonInvalidAuthMethod)
 }
 
 func TestValidateDocument_SymmetricAuthMethodRejected(t *testing.T) {
@@ -155,7 +164,7 @@ func TestValidateDocument_SymmetricAuthMethodRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.TokenEndpointAuthMethod = "client_secret_basic"
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonInvalidAuthMethod)
 }
 
 func TestValidateDocument_ClientSecretRejected(t *testing.T) {
@@ -166,7 +175,7 @@ func TestValidateDocument_ClientSecretRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.ClientSecret = json.RawMessage(`"s3cret"`)
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonContainsSecret)
 }
 
 func TestValidateDocument_ClientSecretExpiresAtRejected(t *testing.T) {
@@ -177,7 +186,18 @@ func TestValidateDocument_ClientSecretExpiresAtRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.ClientSecretExpiresAt = json.RawMessage(`0`)
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonContainsSecret)
+}
+
+func TestValidateDocument_JWKSNotAJWKSetRejected(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := validateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	doc := testDocument(testClientID)
+	doc.JWKS = json.RawMessage(`[]`)
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonJWKSInvalid)
 }
 
 func TestValidateDocument_JWKSPrivateKeyRejected(t *testing.T) {
@@ -188,7 +208,7 @@ func TestValidateDocument_JWKSPrivateKeyRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.JWKS = json.RawMessage(`{"keys":[{"kty":"EC","crv":"P-256","x":"a","y":"b","d":"private"}]}`)
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonJWKSPrivateKey)
 }
 
 func TestValidateDocument_JWKSSymmetricKeyRejected(t *testing.T) {
@@ -199,7 +219,7 @@ func TestValidateDocument_JWKSSymmetricKeyRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.JWKS = json.RawMessage(`{"keys":[{"kty":"oct","k":"c2VjcmV0"}]}`)
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonJWKSSymmetricKey)
 }
 
 func TestValidateDocument_JWKSPublicKeyAccepted(t *testing.T) {
@@ -221,7 +241,7 @@ func TestValidateDocument_OversizedClientNameRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.ClientName = strings.Repeat("a", maxClientNameLength+1)
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonClientNameTooLong)
 }
 
 func TestValidateDocument_TooManyRedirectURIsRejected(t *testing.T) {
@@ -235,7 +255,7 @@ func TestValidateDocument_TooManyRedirectURIsRejected(t *testing.T) {
 	for range maxRedirectURIs + 1 {
 		doc.RedirectURIs = append(doc.RedirectURIs, "https://client.example.com/callback")
 	}
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri", reasonTooManyRedirectURIs)
 }
 
 func TestValidateDocument_OversizedRedirectURIRejected(t *testing.T) {
@@ -246,7 +266,7 @@ func TestValidateDocument_OversizedRedirectURIRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.RedirectURIs = []string{"https://client.example.com/" + strings.Repeat("a", maxRedirectURILength)}
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri", reasonRedirectURITooLong)
 }
 
 func TestValidateDocument_MissingRedirectURIsRejected(t *testing.T) {
@@ -257,7 +277,25 @@ func TestValidateDocument_MissingRedirectURIsRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.RedirectURIs = nil
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri", reasonMissingRedirectURIs)
+}
+
+// TestValidateDocument_NonLoopbackHTTPRedirectURIRejected exercises the
+// usersessions.ValidateRedirectURI rejection path — the one site whose
+// wrapping shape differs (a fmt.Errorf layer between the validationError and
+// the OAuthError), so both the reason extraction and the errors.As traversal
+// through the extra layer are pinned here.
+func TestValidateDocument_NonLoopbackHTTPRedirectURIRejected(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := validateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	// An http redirect on a non-loopback host fails ValidateRedirectURI's
+	// RFC 8252 §7.3 rule before origin binding is consulted.
+	doc := testDocument(testClientID)
+	doc.RedirectURIs = []string{"http://client.example.com/callback"}
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri", reasonRedirectURIInvalid)
 }
 
 func TestValidateDocument_CrossOriginHostRejected(t *testing.T) {
@@ -268,7 +306,7 @@ func TestValidateDocument_CrossOriginHostRejected(t *testing.T) {
 
 	doc := testDocument(testClientID)
 	doc.RedirectURIs = []string{"https://evil.example.com/callback"}
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri", reasonRedirectOriginMismatch)
 }
 
 func TestValidateDocument_CrossOriginPortRejected(t *testing.T) {
@@ -281,7 +319,7 @@ func TestValidateDocument_CrossOriginPortRejected(t *testing.T) {
 	// the client_id URL's implicit port.
 	doc := testDocument(testClientID)
 	doc.RedirectURIs = []string{"https://client.example.com:443/callback"}
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri", reasonRedirectOriginMismatch)
 }
 
 func TestValidateDocument_CustomSchemeRejectedByOriginBinding(t *testing.T) {
@@ -294,7 +332,7 @@ func TestValidateDocument_CustomSchemeRejectedByOriginBinding(t *testing.T) {
 	// https client_id, so Gram's origin binding rejects it.
 	doc := testDocument(testClientID)
 	doc.RedirectURIs = []string{"com.example.app://callback"}
-	requireOAuthError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri")
+	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_redirect_uri", reasonRedirectOriginMismatch)
 }
 
 func TestValidateDocument_LoopbackAnyPortAccepted(t *testing.T) {

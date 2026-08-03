@@ -18,14 +18,15 @@ const DefaultSinkBatchSize = 5000
 
 // insertStatement lists the columns explicitly (omitting inserted_at so its
 // DEFAULT now64(9) applies). AppendStruct binds FindingRow fields to these
-// columns by their ch tags.
+// columns by their ch tags; every listed column must have a tagged field.
 const insertStatement = `INSERT INTO risk_findings (
 	id, created_at, organization_id, project_id, request_id, chat_message_id,
-	chat_id, user_id, external_user_id,
+	content_part_id, chat_id, user_id, external_user_id,
 	risk_policy_id, risk_policy_version, rule_id, description, source, confidence,
 	category, tags, start_pos, end_pos, dead_letter_reason, match_len, match_redacted,
 	fingerprint_pepper_version, fingerprint_global_hs256, fingerprint_tenant_hs256,
-	excluded_at, exclusion_id, false_positive_at
+	excluded_at, exclusion_id, false_positive_at,
+	message_created_at, assistant_id, surface, field, path, tool_call_id
 )`
 
 // Sink batches FindingRow values and inserts them into the ClickHouse

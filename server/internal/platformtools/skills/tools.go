@@ -6,9 +6,59 @@ import (
 	"io"
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
+
+type Create struct{ skills SkillsService }
+
+type createInput struct {
+	Content string `json:"content" jsonschema:"The complete SKILL.md content, including YAML frontmatter and instructions."`
+}
+
+func NewCreateTool(svc SkillsService) *Create { return &Create{skills: svc} }
+
+func (t *Create) Descriptor() core.ToolDescriptor {
+	return core.ToolDescriptor{
+		SourceSlug:  "skills",
+		HandlerName: "create_skill",
+		Name:        "platform_create_skill",
+		Description: "Create a project skill from complete SKILL.md content. If an active skill with the same normalized name exists, this records a new immutable version unless the canonical content already exists, in which case the existing version is returned as a no-op. Returns the saved skill, version, validation status, and whether either was newly created.",
+		InputSchema: core.BuildInputSchema[createInput](),
+		Variables:   nil,
+		Annotations: skillMutationAnnotations(),
+		Managed:     true,
+		OwnerKind:   nil,
+		OwnerID:     nil,
+	}
+}
+
+func (t *Create) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+	if t.skills == nil {
+		return fmt.Errorf("skills service not configured")
+	}
+
+	input := createInput{Content: ""}
+	if err := core.DecodeInput(payload, &input); err != nil {
+		return err
+	}
+	if input.Content == "" {
+		return fmt.Errorf("content is required")
+	}
+
+	result, err := t.skills.Create(ctx, &genskills.CreatePayload{
+		Content:          input.Content,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return fmt.Errorf("create skill: %w", err)
+	}
+
+	return core.EncodeResult(wr, result)
+}
 
 type List struct{ skills SkillsService }
 
@@ -241,4 +291,18 @@ func (t *ListDistributions) Call(ctx context.Context, _ toolconfig.ToolCallEnv, 
 	}
 
 	return core.EncodeResult(wr, result)
+}
+
+func skillMutationAnnotations() *types.ToolAnnotations {
+	readOnly := false
+	destructive := false
+	idempotent := true
+	openWorld := false
+	return &types.ToolAnnotations{
+		Title:           nil,
+		ReadOnlyHint:    &readOnly,
+		DestructiveHint: &destructive,
+		IdempotentHint:  &idempotent,
+		OpenWorldHint:   &openWorld,
+	}
 }

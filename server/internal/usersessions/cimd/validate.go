@@ -2,12 +2,40 @@ package cimd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
+
+// validationError pairs a validation rejection with the machine-readable
+// reason label recorded on cimd.validation.failures. Unwrap keeps the
+// *usersessions.OAuthError (or wrapped equivalent) reachable via errors.As,
+// so callers' wire-format mapping is unaffected by the annotation.
+type validationError struct {
+	reason validationReason
+	err    error
+}
+
+func (e *validationError) Error() string { return e.err.Error() }
+func (e *validationError) Unwrap() error { return e.err }
+
+// oauthValidationError builds the standard rejection shape: a client-safe
+// OAuth error annotated with its metric reason.
+func oauthValidationError(reason validationReason, code string, description string) error {
+	return &validationError{reason: reason, err: &usersessions.OAuthError{Code: code, Description: description}}
+}
+
+// validationReasonOf extracts the reason label from a validation rejection,
+// or "" when the error did not come from a validate function.
+func validationReasonOf(err error) validationReason {
+	if ve, ok := errors.AsType[*validationError](err); ok {
+		return ve.reason
+	}
+	return ""
+}
 
 // validateClientIDURL enforces the -02 §3 Client Identifier URL syntax rules
 // on the presented client_id and returns the parsed URL:
@@ -25,33 +53,33 @@ import (
 // https://example.com:443/c are different client identifiers.
 func validateClientIDURL(clientID string) (*url.URL, error) {
 	if len(clientID) > maxClientIDLength {
-		return nil, &usersessions.OAuthError{Code: "invalid_request", Description: fmt.Sprintf("client_id exceeds the %d byte limit", maxClientIDLength)}
+		return nil, oauthValidationError(reasonClientIDTooLong, "invalid_request", fmt.Sprintf("client_id exceeds the %d byte limit", maxClientIDLength))
 	}
 	if !strings.HasPrefix(clientID, "https://") {
-		return nil, &usersessions.OAuthError{Code: "invalid_request", Description: "client_id URL must use the https scheme"}
+		return nil, oauthValidationError(reasonClientIDScheme, "invalid_request", "client_id URL must use the https scheme")
 	}
 	// url.Parse tolerates fragments by splitting them off; detect them on
 	// the raw string so an empty "#" is caught too.
 	if strings.Contains(clientID, "#") {
-		return nil, &usersessions.OAuthError{Code: "invalid_request", Description: "client_id URL must not contain a fragment"}
+		return nil, oauthValidationError(reasonClientIDFragment, "invalid_request", "client_id URL must not contain a fragment")
 	}
 
 	parsed, err := url.Parse(clientID)
 	if err != nil {
-		return nil, &usersessions.OAuthError{Code: "invalid_request", Description: "client_id is not a valid URL"}
+		return nil, oauthValidationError(reasonClientIDUnparseable, "invalid_request", "client_id is not a valid URL")
 	}
 	if parsed.User != nil {
-		return nil, &usersessions.OAuthError{Code: "invalid_request", Description: "client_id URL must not contain a userinfo component"}
+		return nil, oauthValidationError(reasonClientIDUserinfo, "invalid_request", "client_id URL must not contain a userinfo component")
 	}
 	if parsed.Host == "" {
-		return nil, &usersessions.OAuthError{Code: "invalid_request", Description: "client_id URL must include a host"}
+		return nil, oauthValidationError(reasonClientIDMissingHost, "invalid_request", "client_id URL must include a host")
 	}
 	if parsed.Path == "" {
-		return nil, &usersessions.OAuthError{Code: "invalid_request", Description: "client_id URL must include a path component"}
+		return nil, oauthValidationError(reasonClientIDMissingPath, "invalid_request", "client_id URL must include a path component")
 	}
 	for segment := range strings.SplitSeq(parsed.Path, "/") {
 		if segment == "." || segment == ".." {
-			return nil, &usersessions.OAuthError{Code: "invalid_request", Description: `client_id URL must not contain "." or ".." path segments`}
+			return nil, oauthValidationError(reasonClientIDDotSegments, "invalid_request", `client_id URL must not contain "." or ".." path segments`)
 		}
 	}
 
@@ -64,15 +92,15 @@ func validateClientIDURL(clientID string) (*url.URL, error) {
 // single equality check here completes the §4 triple equality requirement.
 func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) error {
 	if doc.ClientID != clientID {
-		return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: "document client_id does not match the client identifier URL"}
+		return oauthValidationError(reasonClientIDMismatch, "invalid_client_metadata", "document client_id does not match the client identifier URL")
 	}
 	// MCP requires client_name, and the user_session_clients.client_name
 	// column is NOT NULL — requiring it here avoids fallback logic.
 	if doc.ClientName == "" {
-		return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: "client_name is required"}
+		return oauthValidationError(reasonMissingClientName, "invalid_client_metadata", "client_name is required")
 	}
 	if len(doc.ClientName) > maxClientNameLength {
-		return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: fmt.Sprintf("client_name exceeds the %d byte limit", maxClientNameLength)}
+		return oauthValidationError(reasonClientNameTooLong, "invalid_client_metadata", fmt.Sprintf("client_name exceeds the %d byte limit", maxClientNameLength))
 	}
 	// Only public clients are accepted. -02 §8.2's direction of travel is that
 	// capable clients SHOULD authenticate (MCP clients MAY use
@@ -81,29 +109,32 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) erro
 	// come with it. An absent value is rejected too: the RFC 7591 default
 	// is client_secret_basic, a symmetric method the spec bans for CIMD.
 	if doc.TokenEndpointAuthMethod != "none" {
-		return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: `token_endpoint_auth_method must be "none"`}
+		return oauthValidationError(reasonInvalidAuthMethod, "invalid_client_metadata", `token_endpoint_auth_method must be "none"`)
 	}
 	// -02 §4.1: a metadata document is public, so it must never carry a
 	// client secret in any form. Presence alone invalidates the document.
 	if doc.ClientSecret != nil || doc.ClientSecretExpiresAt != nil {
-		return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: "document must not contain client_secret or client_secret_expires_at"}
+		return oauthValidationError(reasonContainsSecret, "invalid_client_metadata", "document must not contain client_secret or client_secret_expires_at")
 	}
 	if err := validateJWKSPublicOnly(doc.JWKS); err != nil {
 		return err
 	}
 
 	if len(doc.RedirectURIs) == 0 {
-		return &usersessions.OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
+		return oauthValidationError(reasonMissingRedirectURIs, "invalid_redirect_uri", "redirect_uris is required")
 	}
 	if len(doc.RedirectURIs) > maxRedirectURIs {
-		return &usersessions.OAuthError{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uris exceeds the limit of %d entries", maxRedirectURIs)}
+		return oauthValidationError(reasonTooManyRedirectURIs, "invalid_redirect_uri", fmt.Sprintf("redirect_uris exceeds the limit of %d entries", maxRedirectURIs))
 	}
 	for _, uri := range doc.RedirectURIs {
 		if len(uri) > maxRedirectURILength {
-			return &usersessions.OAuthError{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri exceeds the %d byte limit", maxRedirectURILength)}
+			return oauthValidationError(reasonRedirectURITooLong, "invalid_redirect_uri", fmt.Sprintf("redirect_uri exceeds the %d byte limit", maxRedirectURILength))
 		}
+		// ValidateRedirectURI returns *usersessions.OAuthError values of its
+		// own, so the wrap preserves the client-safe wire mapping while the
+		// annotation adds the shared metric reason.
 		if err := usersessions.ValidateRedirectURI(uri); err != nil {
-			return fmt.Errorf("validate redirect_uri: %w", err)
+			return &validationError{reason: reasonRedirectURIInvalid, err: fmt.Errorf("validate redirect_uri: %w", err)}
 		}
 		if err := validateOriginBinding(clientIDURL, uri); err != nil {
 			return err
@@ -126,13 +157,13 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) erro
 func validateOriginBinding(clientIDURL *url.URL, redirectURI string) error {
 	parsed, err := url.Parse(redirectURI)
 	if err != nil {
-		return &usersessions.OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}
+		return oauthValidationError(reasonRedirectURIInvalid, "invalid_redirect_uri", "redirect_uri must be an absolute URL")
 	}
 	if IsLoopbackRedirectURI(parsed) {
 		return nil
 	}
 	if parsed.Scheme != clientIDURL.Scheme || parsed.Host != clientIDURL.Host {
-		return &usersessions.OAuthError{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri %q is not same-origin with the client_id URL", redirectURI)}
+		return oauthValidationError(reasonRedirectOriginMismatch, "invalid_redirect_uri", fmt.Sprintf("redirect_uri %q is not same-origin with the client_id URL", redirectURI))
 	}
 	return nil
 }
@@ -169,14 +200,14 @@ func validateJWKSPublicOnly(raw json.RawMessage) error {
 		Keys []map[string]json.RawMessage `json:"keys"`
 	}
 	if err := json.Unmarshal(raw, &jwks); err != nil {
-		return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: "jwks is not a valid JWK Set"}
+		return oauthValidationError(reasonJWKSInvalid, "invalid_client_metadata", "jwks is not a valid JWK Set")
 	}
 	for _, key := range jwks.Keys {
 		if _, ok := key["d"]; ok {
-			return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: "jwks must not contain private key material"}
+			return oauthValidationError(reasonJWKSPrivateKey, "invalid_client_metadata", "jwks must not contain private key material")
 		}
 		if _, ok := key["k"]; ok {
-			return &usersessions.OAuthError{Code: "invalid_client_metadata", Description: "jwks must not contain symmetric key material"}
+			return oauthValidationError(reasonJWKSSymmetricKey, "invalid_client_metadata", "jwks must not contain symmetric key material")
 		}
 	}
 	return nil

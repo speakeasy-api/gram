@@ -21,6 +21,7 @@ import (
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
 	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
+	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
@@ -173,13 +174,20 @@ func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []pla
 
 // ManagedAssistantRiskTools returns risk/policy tools for the project's
 // managed assistant. listRiskResultsForAgent redacts matches so raw secret
-// content never reaches the model context.
+// content never reaches the model context. The exclusion and false-positive
+// tools mutate project state; the risk service gates them on org admin and
+// audits the invoking user as the actor.
 func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewMarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewUnmarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
 	}
 }
 
@@ -201,10 +209,25 @@ func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformt
 	}
 }
 
-// ManagedAssistantSkillsTools returns read-only skill management tools for the
-// project's managed assistant.
+// ManagedAssistantDocsTools returns the public product-documentation tools for
+// the project's managed assistant so it can answer product questions from
+// speakeasy.com/docs/ai-control-plane instead of its own priors. The HTTP
+// client must come from a guardian policy so the outbound fetch stays within
+// the egress rules. Both tools share one client so the page index is fetched
+// and cached once rather than per tool.
+func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
+	client := platformdocs.NewClient(httpClient, platformdocs.DefaultSiteURL)
+	return []platformtools.ExternalTool{
+		{Executor: platformdocs.NewListDocsTool(client), RequiredFeature: ""},
+		{Executor: platformdocs.NewGetDocTool(client), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantSkillsTools returns skill management tools for the project's
+// managed assistant.
 func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insights platformskills.SkillInsightsReader) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewCreateTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},

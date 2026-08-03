@@ -1176,31 +1176,17 @@ function ToolUIGroup({
 }: ToolUIGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  // A headerless group shows its children unconditionally; when it gains a
-  // header mid-stream, start expanded — collapsing would hide content the
-  // user was already looking at.
-  const [prevHeaderless, setPrevHeaderless] = useState(headerless);
-  if (prevHeaderless !== headerless) {
-    setPrevHeaderless(headerless);
-    if (prevHeaderless) setIsExpanded(true);
-  }
-
   const showChildren = headerless || isExpanded;
 
   return (
-    <div
-      data-slot="tool-ui-group"
-      className={cn(
-        "overflow-hidden rounded-lg border border-border bg-card",
-        className,
-      )}
-    >
-      {/* Group header */}
+    <div data-slot="tool-ui-group" className={className}>
+      {/* Group header — a bare annotation line; the chrome lives on the
+          expanded content below. */}
       {!headerless && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           aria-expanded={isExpanded}
-          className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
+          className="flex w-fit cursor-pointer items-center gap-1.5 py-1 text-left"
         >
           {icon || (
             <StatusIndicator
@@ -1209,27 +1195,29 @@ function ToolUIGroup({
           )}
           <span
             className={cn(
-              "flex-1 text-sm font-medium",
+              "text-sm font-medium text-muted-foreground",
               status === "running" && "shimmer",
             )}
           >
             {title}
           </span>
-          <ChevronDownIcon
+          <ChevronRightIcon
             className={cn(
               "size-4 text-muted-foreground transition-transform duration-200",
-              isExpanded && "rotate-180",
+              isExpanded && "rotate-90",
             )}
           />
         </button>
       )}
 
       {/* Collapsed children are hidden, not unmounted — unmounting would
-          reset their state (expansion, async syntax highlighting). */}
+          reset their state (expansion, async syntax highlighting). The border
+          wraps all tools; the cards inside render borderless. */}
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          !headerless && "border-t border-border",
+          "overflow-hidden rounded-lg border border-border bg-card",
+          !headerless && "mt-2",
           !showChildren && "hidden",
         )}
       >

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -271,6 +273,27 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		Meta:                                nil,
 		Tools:                               details.Tools,
 		Remotes:                             details.Remotes,
+	}, nil
+}
+
+func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPayload) (*gen.GetSetupDocsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, fmt.Errorf("require project read: %w", err)
+	}
+
+	registrySpecifier := strings.TrimSpace(conv.PtrValOr(payload.RegistrySpecifier, ""))
+	serverURL := strings.TrimSpace(conv.PtrValOr(payload.ServerURL, ""))
+	if registrySpecifier == "" && serverURL == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of server_url or registry_specifier must be provided").LogError(ctx, s.logger)
+	}
+
+	return &gen.GetSetupDocsResult{
+		Guides: resolveSetupGuides(registrySpecifier, serverURL),
 	}, nil
 }
 

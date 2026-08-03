@@ -8,9 +8,10 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
-// SkillsService is the read-only subset of the skills management service used
-// by the project's managed assistant.
+// SkillsService is the subset of the skills management service used by the
+// project's managed assistant.
 type SkillsService interface {
+	Create(context.Context, *genskills.CreatePayload) (*genskills.RecordSkillResult, error)
 	List(context.Context, *genskills.ListPayload) (*genskills.ListSkillsResult, error)
 	Get(context.Context, *genskills.GetPayload) (*genskills.GetSkillResult, error)
 	ListVersions(context.Context, *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error)

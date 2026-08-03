@@ -7,6 +7,7 @@ import {
   McpServerReadinessBar,
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
+import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import {
@@ -349,7 +350,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       topTitle="Readiness"
       topContent={
         readinessChecks.length > 0 ? (
-          <McpServerReadinessBar checks={readinessChecks} />
+          <div className="flex flex-col gap-3">
+            {/* The upstream endpoint is what the guide catalog indexes; a
+                server with no upstream has no guide to point at. */}
+            <SetupGuideCard serverUrl={upstreamUrl} />
+            <McpServerReadinessBar checks={readinessChecks} />
+          </div>
         ) : undefined
       }
       cardContent={cardContent}

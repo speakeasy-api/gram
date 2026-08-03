@@ -25,6 +25,10 @@ type Client struct {
 	// upsertWorkUnitsSettings endpoint.
 	UpsertWorkUnitsSettingsDoer goahttp.Doer
 
+	// UpsertBusinessMemorySettings Doer is the HTTP client used to make requests
+	// to the upsertBusinessMemorySettings endpoint.
+	UpsertBusinessMemorySettingsDoer goahttp.Doer
+
 	// TriggerAnalysis Doer is the HTTP client used to make requests to the
 	// triggerAnalysis endpoint.
 	TriggerAnalysisDoer goahttp.Doer
@@ -50,14 +54,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetSettingsDoer:             doer,
-		UpsertWorkUnitsSettingsDoer: doer,
-		TriggerAnalysisDoer:         doer,
-		RestoreResponseBody:         restoreBody,
-		scheme:                      scheme,
-		host:                        host,
-		decoder:                     dec,
-		encoder:                     enc,
+		GetSettingsDoer:                  doer,
+		UpsertWorkUnitsSettingsDoer:      doer,
+		UpsertBusinessMemorySettingsDoer: doer,
+		TriggerAnalysisDoer:              doer,
+		RestoreResponseBody:              restoreBody,
+		scheme:                           scheme,
+		host:                             host,
+		decoder:                          dec,
+		encoder:                          enc,
 	}
 }
 
@@ -104,6 +109,30 @@ func (c *Client) UpsertWorkUnitsSettings() goa.Endpoint {
 		resp, err := c.UpsertWorkUnitsSettingsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("adminChatAnalysis", "upsertWorkUnitsSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpsertBusinessMemorySettings returns an endpoint that makes HTTP requests to
+// the adminChatAnalysis service upsertBusinessMemorySettings server.
+func (c *Client) UpsertBusinessMemorySettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpsertBusinessMemorySettingsRequest(c.encoder)
+		decodeResponse = DecodeUpsertBusinessMemorySettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpsertBusinessMemorySettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpsertBusinessMemorySettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
 		}
 		return decodeResponse(resp)
 	}

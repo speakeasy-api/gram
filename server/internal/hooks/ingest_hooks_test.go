@@ -213,6 +213,51 @@ func TestIngest_RejectedCredentialsUnauthorized(t *testing.T) {
 	require.Contains(t, strings.ToLower(err.Error()), "unauthorized")
 }
 
+func TestIngestAuthenticated_UsesSuppliedIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "authenticated-ingest-" + uuid.NewString()
+	idempotencyKey := "authenticated-ingest-" + uuid.NewString()
+	prompt := "authenticated ingestion prompt " + uuid.NewString()
+	untrustedAPIKey := "must-not-override-authenticated-context"
+	untrustedProjectSlug := "must-not-override-authenticated-project"
+	payload := canonicalIngestPayload("litellm", "prompt.submitted", sessionID)
+	payload.ApikeyToken = &untrustedAPIKey
+	payload.ProjectSlugInput = &untrustedProjectSlug
+	payload.IdempotencyKey = &idempotencyKey
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:      "block",
+		PolicyID:    uuid.NewString(),
+		PolicyName:  "authenticated boundary policy",
+		Description: "blocked by deterministic test scanner",
+	}}
+
+	result, err := ti.service.IngestAuthenticated(t.Context(), authCtx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.True(t, messages[0].ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, messages[0].ProjectID.UUID)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, prompt, messages[0].Content)
+}
+
 // A shared plugins-* key carries no usable identity of its own, but the
 // session may already be attributed through the OTEL/device-bridge metadata
 // cache. User-scoped shadow-MCP policies must see that cached identity during
