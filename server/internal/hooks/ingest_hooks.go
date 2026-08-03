@@ -514,9 +514,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	// Spend gate runs before any risk-policy evaluation. v1 enforcement
-	// surface is Claude only; other adapters pass through untouched.
-	if strings.TrimSpace(payload.Source.Adapter) == "claude" && (eventType == "prompt.submitted" || eventType == "tool.requested") {
+	// Spend gate runs before any risk-policy evaluation, for every adapter
+	// with a per-provider enforcement surface (Claude, Codex, Cursor) — the
+	// risk scans below already run adapter-agnostically, and an over-budget
+	// actor is over budget regardless of which agent carries the event.
+	// opencode still passes through untouched pending a product decision on
+	// its enforcement surface.
+	spendGatedAdapters := map[string]bool{"claude": true, "codex": true, "cursor": true}
+	if spendGatedAdapters[strings.TrimSpace(payload.Source.Adapter)] && (eventType == "prompt.submitted" || eventType == "tool.requested") {
 		if block := s.checkSpendGate(ctx, event); block != nil {
 			if eventType == "tool.requested" {
 				auditReason := spendBlockReason("tool call", block)

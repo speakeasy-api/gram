@@ -102,6 +102,16 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	if hookEvent != nil {
 		switch ev := hookEvent.(type) {
 		case *hookevents.BeforeToolUse:
+			// Spend gate runs before any risk-policy evaluation: an over-budget
+			// user gets tool calls denied even mid-turn, for native and MCP
+			// tools alike.
+			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+				blockReason = spendBlockReason("tool call", block)
+				userReason = blockReason
+				isToolCallBlock = true
+				blockToolName = ev.ToolName
+				break
+			}
 			// Acknowledged warn is excluded from the enforcement block so it
 			// falls through to the shadow-MCP guard below: an ack clears the
 			// risk challenge but must never bypass unapproved-toolset validation.
@@ -205,6 +215,13 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				}
 			}
 		case *hookevents.PermissionRequest:
+			// Over-budget users are denied here too: a permission request is a
+			// tool call awaiting approval, so it must not slip past the gate.
+			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+				blockReason = spendBlockReason("permission request", block)
+				userReason = blockReason
+				break
+			}
 			// Acknowledged warn is excluded so it clears without a block; an
 			// unacknowledged warn is challenged (deny + ack link), not
 			// hard-blocked with the raw user_message — consistent with tool calls.
@@ -222,6 +239,13 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
 		case *hookevents.UserPromptSubmit:
+			// Spend gate runs before any risk-policy evaluation: an over-budget
+			// user is denied outright.
+			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+				blockReason = spendBlockReason("prompt", block)
+				userReason = blockReason
+				break
+			}
 			// warn never hard-blocks at prompt submit (no confirmation primitive
 			// here); it defers to the follow-on tool call. Matches Claude/Cursor.
 			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {

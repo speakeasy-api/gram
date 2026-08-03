@@ -123,6 +123,16 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 
 	switch ev := hookEvent.(type) {
 	case *hookevents.BeforeMCPExecution:
+		// Spend gate runs before any risk-policy evaluation: an over-budget
+		// user gets MCP tool calls denied even mid-turn.
+		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			reason := s.cursorSpendDenyReason(ctx, block, ev.ToolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
+			blockReason = spendBlockReason("tool call", block)
+			result.Permission = new("deny")
+			result.UserMessage = &reason
+			result.AgentMessage = &reason
+			break
+		}
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
@@ -221,6 +231,17 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// (read_file, edit_file, ...) only have this single event and still
 		// get scanned.
 		toolName := ev.ToolName
+		// Spend gate runs before any risk-policy evaluation and before the
+		// MCP-dedup skip: an over-budget user is denied for native and MCP
+		// tools alike.
+		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			reason := s.cursorSpendDenyReason(ctx, block, toolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
+			blockReason = spendBlockReason("tool call", block)
+			result.Permission = new("deny")
+			result.UserMessage = &reason
+			result.AgentMessage = &reason
+			break
+		}
 		if strings.HasPrefix(toolName, "MCP:") {
 			result.Permission = new("allow")
 			break
@@ -264,6 +285,16 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			result.Permission = new("allow")
 		}
 	case *hookevents.UserPromptSubmit:
+		// Spend gate runs before any risk-policy evaluation: an over-budget
+		// user is denied outright.
+		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			reason := spendBlockReason("prompt", block)
+			blockReason = reason
+			result.Permission = new("deny")
+			result.UserMessage = &reason
+			result.AgentMessage = &reason
+			break
+		}
 		// A warn (challenge) is never hard-denied at prompt submit: there is no
 		// confirmation primitive here, and denying would diverge from the
 		// Claude/Codex prompt paths. Let it through — the follow-on tool call

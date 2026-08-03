@@ -304,6 +304,58 @@ func TestIngest_SpendGateDeniesClaudeToolCallWithBlockURL(t *testing.T) {
 	assert.Contains(t, *result.Message, "/blocks/")
 }
 
+func TestIngest_SpendGateDeniesCodexToolCallWithBlockURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	payload := canonicalIngestPayload("codex", "tool.requested", "spend-gate-ingest-codex")
+	toolName := "shell"
+	toolCallID := "call-spend-codex-1"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"command": "ls"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
+	assert.Contains(t, *result.Message, "/blocks/")
+}
+
+func TestIngest_SpendGateDeniesCursorPrompt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	payload := canonicalIngestPayload("cursor", "prompt.submitted", "spend-gate-ingest-cursor")
+	text := "hello"
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &text},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
+}
+
 func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -313,7 +365,7 @@ func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 	require.NotNil(t, authCtx.Email)
 	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
 
-	payload := canonicalIngestPayload("cursor", "prompt.submitted", "spend-gate-cursor")
+	payload := canonicalIngestPayload("opencode", "prompt.submitted", "spend-gate-opencode")
 	text := "hello"
 	payload.Data = &gen.HookIngestData{
 		Prompt: &gen.HookPromptData{Text: &text},
@@ -323,5 +375,189 @@ func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "allow", result.Decision,
-		"v1 spend enforcement is Claude-only; other adapters pass through")
+		"spend enforcement covers claude/codex/cursor; opencode passes through pending a product decision")
+}
+
+func TestCodex_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	scanner := &recordingRiskScanner{}
+	ti.service.riskScanner = scanner
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_codex_prompt"
+	userEmail := "spend-codex-prompt@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	sessionID := "codex-spend-prompt-" + uuid.NewString()
+	prompt := "please write some code"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		Prompt:        &prompt,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.NotNil(t, result.Decision)
+	assert.Equal(t, "deny", *result.Decision)
+	require.NotNil(t, result.Reason)
+	assert.Contains(t, *result.Reason, "Intern hard limit")
+	assert.Contains(t, *result.Reason, "budget resets")
+
+	assert.Zero(t, scanner.scans, "spend gate must deny before any risk-policy scan runs")
+}
+
+func TestCodex_PreToolUse_SpendGateDeniesToolCallWithBlockURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_codex_tool"
+	userEmail := "spend-codex-tool@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	sessionID := "codex-spend-tool-" + uuid.NewString()
+	toolName := "shell"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"command": "ls"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.NotNil(t, result.Decision)
+	assert.Equal(t, "deny", *result.Decision)
+	require.NotNil(t, result.Reason)
+	assert.Contains(t, *result.Reason, "Intern hard limit")
+	assert.Contains(t, *result.Reason, "/blocks/",
+		"tool-call spend denies must carry a durable block page link")
+}
+
+func TestCodex_PermissionRequest_SpendGateDenies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_codex_perm"
+	userEmail := "spend-codex-perm@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	sessionID := "codex-spend-perm-" + uuid.NewString()
+	toolName := "shell"
+	permissionType := "exec"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName:  "PermissionRequest",
+		SessionID:      &sessionID,
+		UserEmail:      &userEmail,
+		ToolName:       &toolName,
+		PermissionType: &permissionType,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.NotNil(t, result.Decision)
+	assert.Equal(t, "deny", *result.Decision)
+	require.NotNil(t, result.Reason)
+	assert.Contains(t, *result.Reason, "Intern hard limit")
+}
+
+func TestCodex_SpendGateAllowsUnblockedUser(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_codex_ok"
+	userEmail := "spend-codex-ok@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+
+	sessionID := "codex-spend-ok-" + uuid.NewString()
+	toolName := "shell"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Nil(t, result.Decision)
+}
+
+func TestCursor_PreToolUse_SpendGateDeniesNativeToolWithBlockURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_cursor_tool"
+	userEmail := "spend-cursor-tool@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	toolName := "Edit"
+	toolUseID := "toolu_spend_cursor_1"
+	conversationID := "conv-spend-" + uuid.NewString()
+	result, err := ti.service.Cursor(ctx, &gen.CursorPayload{
+		HookEventName:  "preToolUse",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		UserEmail:      &userEmail,
+		ConversationID: &conversationID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
+	require.NotNil(t, result.UserMessage)
+	assert.Contains(t, *result.UserMessage, "Intern hard limit")
+	assert.Contains(t, *result.UserMessage, "/blocks/",
+		"tool-call spend denies must carry a durable block page link")
+}
+
+func TestCursor_BeforeSubmitPrompt_SpendGateDenies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_cursor_prompt"
+	userEmail := "spend-cursor-prompt@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	prompt := "hello"
+	conversationID := "conv-spend-prompt-" + uuid.NewString()
+	result, err := ti.service.Cursor(ctx, &gen.CursorPayload{
+		HookEventName:  "beforeSubmitPrompt",
+		Prompt:         &prompt,
+		UserEmail:      &userEmail,
+		ConversationID: &conversationID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
+	require.NotNil(t, result.UserMessage)
+	assert.Contains(t, *result.UserMessage, "Intern hard limit")
 }
