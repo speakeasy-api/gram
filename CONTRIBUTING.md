@@ -53,7 +53,9 @@ Login stays non-interactive: dev-idp looks your git committer email up **through
 > [!NOTE]
 > Don't set `GRAM_IDP_CLIENT_ID` to a real `client_...` value. The server sends any `client_`-prefixed id to WorkOS's hosted AuthKit, which is an interactive login — the opposite of what dev-idp is for.
 
-After changing backends, restart pitchfork with `mise run start`. The backend also decides how `current_users` rows are interpreted, so if you have been running the other backend, `mise nuke` first.
+After changing backends, restart pitchfork with `mise run start`. Each backend keeps its own `current_users` row, so switching back and forth preserves whichever identity you had set on the other side.
+
+dev-idp brings its own SQLite database up to the current schema on start, so pulling a schema change does not require wiping it — existing users, organizations and memberships are kept. If a change ever needs more than SQLite can do in place, it says so on boot and names the column.
 
 <details>
 <summary>dev-idp protocol handlers (advanced)</summary>

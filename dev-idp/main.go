@@ -84,7 +84,7 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	db, err := bootstrap.Open(ctx, dbCfg)
+	db, err := bootstrap.Open(ctx, dbCfg, logger)
 	if err != nil {
 		return fmt.Errorf("open dev-idp database: %w", err)
 	}
