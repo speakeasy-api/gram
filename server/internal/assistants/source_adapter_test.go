@@ -125,8 +125,14 @@ func TestComposeInstructions_DashboardAsksForToolCallHeadings(t *testing.T) {
 	// assistant's own (user-editable) instructions.
 	instructions, err := composeInstructions("Base instructions.", thread, nil)
 	require.NoError(t, err)
-	require.Contains(t, instructions, "## Headings for tool calls")
+	require.Contains(
+		t,
+		instructions,
+		"## HARD RULE — text sent with tool calls is a heading, not speech",
+	)
 	require.Contains(t, instructions, "verb ending in -ing")
+	// The counter-examples are the part that actually lands, so keep one pinned.
+	require.Contains(t, instructions, `"Odd — the loop broke. Let me redo it properly"`)
 }
 
 func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {

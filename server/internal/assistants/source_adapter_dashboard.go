@@ -40,21 +40,34 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 }
 
 func (dashboardAdapter) OutputChannelGuidance() string {
-	return `## Dashboard output preferences
+	return `## HARD RULE — text sent with tool calls is a heading, not speech
 
-You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.
+Whenever a reply of yours contains tool calls, the dashboard renders that reply's text as the heading above those calls — the user sees it where "Calling 3 tools" would otherwise be. It is a UI label. It is never read as a message to the user.
 
-## Headings for tool calls
+So when you call tools, the text you send with them must be EXACTLY this and nothing else:
 
-When a reply of yours calls tools, its text is rendered as the heading for those calls, with the calls collapsed behind it — the user sees that text where "Calling 3 tools" would otherwise be. So the text accompanying tool calls must be the heading and nothing else: ONE fragment naming the goal of the batch, 3 to 8 words, starting with a verb ending in -ing, no first person, no trailing full stop, no Markdown, and never naming the tools or saying "tool", "function", or "API" — describe the intent, not the mechanics.
+- One noun-less fragment naming the goal of that batch, 3 to 8 words.
+- Starts with a verb ending in -ing: "Pulling", "Breaking down", "Checking", "Investigating".
+- No first person. The strings "I'll", "I will", "I'm", "Let me", "Now let me", "Let's" must not appear.
+- One fragment only — no second sentence, no full stop, no comma-spliced aside, no Markdown.
+- Never name a tool, and never use the words "tool", "function", "API", "query", "endpoint", "filter", "limit", "pagination". Describe what the user gets, not how you get it.
+- Never report a result, a surprise, or a failure here. Not "The overview shows zero failures", not "Odd — the loop broke", not "The status-code filter clearly isn't being applied". Those belong in your final reply, after the results.
 
-Write no preamble in front of it. "I'll pull the usage data across those dimensions. Breaking down token spend by tool, model, and client" is wrong — the first sentence is speech to the user and it ends up in the heading. Send only "Breaking down token spend by tool, model, and client". Nothing you say alongside tool calls is a message to the user; save what you want to tell them for the reply that follows the results.
+Every one of these was produced by an assistant on this surface and is WRONG. The fix is on the right:
 
-  "I'll pull the risk findings across detector families and roll them up by chat." → "Pulling risk findings by detector and chat"
-  "Now let me get per-model cost and client breakdowns from the logs." → "Breaking down cost by model and client"
-  "No policies and no findings. Let me check whether there is chat activity at all." → "Checking for any chat activity"
+  "I'll pull recent tool-call failures and slice them by tool, server, and caller. Analyzing recent tool-call failures across servers and clients" → "Analyzing recent tool-call failures"
+  "I'll pull the usage data across those dimensions. Breaking down token spend by tool, model, and client" → "Breaking down token spend by tool and model"
+  "The overview shows zero failures, but it may only count a narrow definition. Let me query logs directly for non-2xx statuses" → "Checking logs for failed calls"
+  "The status-code filter clearly isn't being applied (it returned everything). Let me count properly server-side" → "Counting failures by status"
+  "Odd — the loop broke. Let me redo it properly" → "Gathering the remaining error data"
 
-One clause only: if you are about to write two sentences, the first is a finding that belongs in your answer, not in a heading. Keep the heading on the user's question rather than your own plumbing — never narrate probing, retrying, or troubleshooting a call ("the filter didn't match, let me try different syntax"). Retry silently; the goal doesn't change because an attempt failed. If the data genuinely cannot be retrieved, say so in your answer once you are sure.
+Note what the last three have in common: the goal did not change because an attempt failed. Retry silently under the same heading. If you truly cannot retrieve the data, say so in your final reply once you are sure — never in a heading.
+
+If no such fragment fits, send no text with the tool calls at all. Silence is correct; a sentence of prose is not.
+
+## Dashboard output preferences
+
+You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app. All of the above applies only to text sent alongside tool calls; your final reply, once the results are in, is normal prose to the user.
 
 When relaying an "assistant_mcp_auth_required" AuthURL, render it as a clickable Markdown link in your reply (e.g. ` + "`[Authorize](<AuthURL>)`" + `) — the dashboard reader IS the owner, no tool call is needed.
 
