@@ -578,6 +578,33 @@ func (q *Queries) CreateChatMessageForTest(ctx context.Context, arg CreateChatMe
 	return id, err
 }
 
+const createChatMessageWithToolCallsForTest = `-- name: CreateChatMessageWithToolCallsForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type CreateChatMessageWithToolCallsForTestParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Role      string
+	Content   string
+	ToolCalls []byte
+}
+
+func (q *Queries) CreateChatMessageWithToolCallsForTest(ctx context.Context, arg CreateChatMessageWithToolCallsForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createChatMessageWithToolCallsForTest,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+		arg.ToolCalls,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createCustomDetectionRule = `-- name: CreateCustomDetectionRule :one
 INSERT INTO risk_custom_detection_rules (
     project_id
@@ -849,6 +876,25 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const createUserAccountForTest = `-- name: CreateUserAccountForTest :one
+INSERT INTO user_accounts (organization_id, external_account_uuid, email)
+VALUES ($1, $2, $3)
+RETURNING id
+`
+
+type CreateUserAccountForTestParams struct {
+	OrganizationID      string
+	ExternalAccountUuid string
+	Email               pgtype.Text
+}
+
+func (q *Queries) CreateUserAccountForTest(ctx context.Context, arg CreateUserAccountForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createUserAccountForTest, arg.OrganizationID, arg.ExternalAccountUuid, arg.Email)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteCustomDetectionRule = `-- name: DeleteCustomDetectionRule :exec
@@ -1311,6 +1357,35 @@ func (q *Queries) GetChatContentPartAttribution(ctx context.Context, arg GetChat
 	return items, nil
 }
 
+const getChatContentPartForUnmask = `-- name: GetChatContentPartForUnmask :one
+SELECT ccp.id, ccp.chat_id, ccp.content_asset_url
+FROM chat_content_parts ccp
+WHERE ccp.id = $1
+  AND ccp.project_id = $2
+  AND ccp.deleted IS FALSE
+`
+
+type GetChatContentPartForUnmaskParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type GetChatContentPartForUnmaskRow struct {
+	ID              uuid.UUID
+	ChatID          uuid.UUID
+	ContentAssetUrl string
+}
+
+// Content-part variant of GetChatMessageForUnmask: the part's content lives in
+// the assets blob store, so this returns the asset URL for the caller to read
+// (size-capped) plus the chat id for authorization.
+func (q *Queries) GetChatContentPartForUnmask(ctx context.Context, arg GetChatContentPartForUnmaskParams) (GetChatContentPartForUnmaskRow, error) {
+	row := q.db.QueryRow(ctx, getChatContentPartForUnmask, arg.ID, arg.ProjectID)
+	var i GetChatContentPartForUnmaskRow
+	err := row.Scan(&i.ID, &i.ChatID, &i.ContentAssetUrl)
+	return i, err
+}
+
 const getChatMessageAttribution = `-- name: GetChatMessageAttribution :many
 SELECT
     cm.id
@@ -1373,6 +1448,72 @@ func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID
 		return nil, err
 	}
 	return items, nil
+}
+
+const getChatMessageForUnmask = `-- name: GetChatMessageForUnmask :one
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at
+FROM chat_messages cm
+WHERE cm.id = $1
+  AND cm.project_id = $2
+`
+
+type GetChatMessageForUnmaskParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type GetChatMessageForUnmaskRow struct {
+	ID        uuid.UUID
+	ChatID    uuid.UUID
+	Role      string
+	Content   string
+	ToolCalls []byte
+	CreatedAt pgtype.Timestamptz
+}
+
+// Source material for the ClickHouse-backed reveal path: the anchored chat
+// message's recorded content and tool calls, which the reveal reconstructs the
+// raw match from (see unmask_ch.go). role gates the scan-surface composition
+// exactly like batch analysis (only assistant tool-request messages compose
+// tool-call arguments into the scanned text). chat_id backs the chat:read
+// authorization check when the ClickHouse row carries no denormalized chat id.
+func (q *Queries) GetChatMessageForUnmask(ctx context.Context, arg GetChatMessageForUnmaskParams) (GetChatMessageForUnmaskRow, error) {
+	row := q.db.QueryRow(ctx, getChatMessageForUnmask, arg.ID, arg.ProjectID)
+	var i GetChatMessageForUnmaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Role,
+		&i.Content,
+		&i.ToolCalls,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getChatUserAccountEmailForUnmask = `-- name: GetChatUserAccountEmailForUnmask :one
+SELECT ua.email
+FROM chats c
+JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
+WHERE c.id = $1
+  AND c.organization_id = $2
+  AND c.deleted IS FALSE
+`
+
+type GetChatUserAccountEmailForUnmaskParams struct {
+	ChatID         uuid.UUID
+	OrganizationID string
+}
+
+// Reveal candidate for derived account_identity findings: their match is the
+// chat's AI-account email (see scanners/accountidentity), resolved through the
+// same chats.user_account_id link the scanner used. Org-scoped so a forged
+// chat id cannot read another tenant's account email.
+func (q *Queries) GetChatUserAccountEmailForUnmask(ctx context.Context, arg GetChatUserAccountEmailForUnmaskParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getChatUserAccountEmailForUnmask, arg.ChatID, arg.OrganizationID)
+	var email pgtype.Text
+	err := row.Scan(&email)
+	return email, err
 }
 
 const getContentPartBatch = `-- name: GetContentPartBatch :many
@@ -2065,6 +2206,22 @@ type InsertRiskResultsParams struct {
 	Tags              []string
 	Spans             []byte
 	DeadLetterReason  pgtype.Text
+}
+
+const linkChatUserAccountForTest = `-- name: LinkChatUserAccountForTest :exec
+UPDATE chats
+SET user_account_id = $1
+WHERE id = $2
+`
+
+type LinkChatUserAccountForTestParams struct {
+	UserAccountID uuid.NullUUID
+	ChatID        uuid.UUID
+}
+
+func (q *Queries) LinkChatUserAccountForTest(ctx context.Context, arg LinkChatUserAccountForTestParams) error {
+	_, err := q.db.Exec(ctx, linkChatUserAccountForTest, arg.UserAccountID, arg.ChatID)
+	return err
 }
 
 const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many

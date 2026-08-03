@@ -31,6 +31,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -136,6 +137,10 @@ type Service struct {
 	// Optional: when nil the ClickHouse mirror is skipped; Postgres remains the
 	// source of truth either way.
 	findingsPub gcp.Publisher[*riskv1.Finding]
+	// assetStorage reads chat content part assets for the ClickHouse reveal
+	// path, the same store the batch analysis activity hydrates parts from.
+	// Optional: when nil, content-part findings are not reconstructible.
+	assetStorage blobio.Reader
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -177,6 +182,7 @@ func NewObserver(
 		promptJudge:                  nil,
 		findingsCH:                   nil,
 		findingsPub:                  nil,
+		assetStorage:                 nil,
 	}
 }
 
@@ -204,6 +210,7 @@ func NewService(
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 	findingsCH *chrepo.Queries,
 	findingsPub gcp.Publisher[*riskv1.Finding],
+	assetStorage blobio.Reader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -233,6 +240,7 @@ func NewService(
 		promptJudge:                  promptJudge,
 		findingsCH:                   findingsCH,
 		findingsPub:                  findingsPub,
+		assetStorage:                 assetStorage,
 	}
 }
 
@@ -1357,6 +1365,14 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
+	}
+
+	// When the listing serves from ClickHouse, listed ids may only exist there
+	// (Postgres result writes are being retired), so the reveal must resolve
+	// against the same store — reconstructing the raw match from the original
+	// chat data per the finding's stored surface metadata.
+	if s.listFromClickHouse(ctx, authCtx) {
+		return s.unmaskRiskResultFromClickHouse(ctx, authCtx, id)
 	}
 
 	row, err := s.repo.GetRiskResultByID(ctx, repo.GetRiskResultByIDParams{

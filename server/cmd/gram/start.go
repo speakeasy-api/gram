@@ -1274,6 +1274,7 @@ func newStartCommand() *cli.Command {
 				},
 				riskchrepo.New(chDB),
 				publishers.RiskFindings,
+				assetStorage,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
