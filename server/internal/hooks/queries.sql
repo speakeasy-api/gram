@@ -269,6 +269,23 @@ WHERE organization_id = @organization_id
 ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST
 LIMIT 1;
 
+-- name: GetProviderBillingModeAnyOrg :one
+-- Org-level billing mode for providers whose sessions never carry an external
+-- org id. Codex emits no org identity on any layer (hooks, OTEL), while the
+-- codex_compliance config always pins one, so the org-matched lookup above can
+-- never hit for those sessions. Only one live config per (org, provider) can
+-- exist today, so the provider-wide declaration is the applicable one; the
+-- ordering is defensive against historical duplicates.
+SELECT billing_mode
+FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND enabled = TRUE
+  AND deleted IS FALSE
+  AND billing_mode IS NOT NULL
+ORDER BY updated_at DESC
+LIMIT 1;
+
 -- name: GetDeviceOwner :one
 SELECT * FROM device_owners
 WHERE organization_id = @organization_id

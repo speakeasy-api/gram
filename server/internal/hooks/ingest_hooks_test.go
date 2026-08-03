@@ -1822,3 +1822,49 @@ func (r *recordingRiskFindingInserter) InsertRiskFindings(_ context.Context, row
 	r.rows = rows
 	return nil
 }
+
+// TestCanonicalSessionMetadata_AttributesCodexAdapter: a Codex session
+// delivered only through the relay (Ingest is its sole path) is attributed at
+// ingest — provider openai, email-based classification, and the org-level
+// billing mode from the codex_compliance config for team sessions (DNO-734).
+func TestCanonicalSessionMetadata_AttributesCodexAdapter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-ingest-attribution")
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "user-123", Email: "dev@example.com"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	require.Equal(t, "flat_rate", metadata.BillingMode)
+}
+
+// TestCanonicalSessionMetadata_CodexAdapterUnresolvedActorIsPersonal: an actor
+// whose email did not resolve to an org member classifies personal and does
+// not inherit the company's billing mode. Claude adapters remain untouched —
+// their attribution belongs to the OTEL path.
+func TestCanonicalSessionMetadata_CodexAdapterUnresolvedActorIsPersonal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	payload := canonicalIngestPayload("Codex", "prompt.submitted", "codex-ingest-personal")
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: "someone@personal.example"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+
+	claudeMetadata := ti.service.canonicalSessionMetadata(ctx, canonicalIngestPayload("claude-code", "prompt.submitted", "claude-ingest-untouched"), authCtx, canonicalActor{UserID: "", Email: ""})
+	require.Empty(t, claudeMetadata.Provider)
+	require.Empty(t, claudeMetadata.AccountType)
+}

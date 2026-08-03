@@ -416,3 +416,68 @@ func TestMetrics_CodexPayloadDoesNotWriteClaudeUsageRows(t *testing.T) {
 		return err == nil && len(logs) > 0
 	}, 300*time.Millisecond, 50*time.Millisecond)
 }
+
+// TestLogs_StampsCodexAccountAttribution: a Codex OTEL record whose user.email
+// resolves to an org member is classified team and stamped with the org-level
+// billing mode from the codex_compliance config (DNO-734) — the columns the
+// cost surfaces classify Codex spend by.
+func TestLogs_StampsCodexAccountAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	userID := uuid.NewString()
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, "codex-account-attr@example.com")
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	rec := &gen.OTELLogRecord{
+		TimeUnixNano: new(nanoString(timestamp)),
+		Body:         &gen.OTELLogBody{StringValue: new("codex.user_prompt")},
+		Attributes: []*gen.OTELAttribute{
+			strAttr("event.name", "codex.user_prompt"),
+			strAttr("conversation.id", "conv-account-attribution"),
+			strAttr("user.email", "codex-account-attr@example.com"),
+		},
+	}
+
+	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(rec)))
+
+	// Attributes are stored as nested JSON (dotted keys expand to objects), so
+	// assert on the serialized "gram" object's fields.
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
+	require.Contains(t, logs[0].Attributes, `"account_type":"team"`)
+	require.Contains(t, logs[0].Attributes, `"billing_mode":"flat_rate"`)
+	require.Contains(t, logs[0].Attributes, `"provider":"openai"`)
+}
+
+// TestLogs_ClassifiesUnresolvedCodexEmailPersonal: an email no org member owns
+// classifies personal, and the company's declared billing mode must not ride
+// on the row.
+func TestLogs_ClassifiesUnresolvedCodexEmailPersonal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	rec := &gen.OTELLogRecord{
+		TimeUnixNano: new(nanoString(timestamp)),
+		Body:         &gen.OTELLogBody{StringValue: new("codex.user_prompt")},
+		Attributes: []*gen.OTELAttribute{
+			strAttr("event.name", "codex.user_prompt"),
+			strAttr("conversation.id", "conv-personal-attribution"),
+			strAttr("user.email", "someone@personal.example"),
+		},
+	}
+
+	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(rec)))
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
+	require.Contains(t, logs[0].Attributes, `"account_type":"personal"`)
+	require.NotContains(t, logs[0].Attributes, "billing_mode")
+}

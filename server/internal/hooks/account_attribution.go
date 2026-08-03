@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -100,6 +101,19 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 	// account entity to persist — the account_type stamped above is the signal
 	// the cost surfaces consume. Stop here for these sessions.
 	if meta.ExternalAccountUUID == "" {
+		// Codex sessions NEVER carry an account UUID, so their billing mode
+		// must resolve here rather than after the entity upsert. Gate on team:
+		// the codex_compliance config describes the company's OpenAI org, and
+		// only a team-classified session (resolved work email) is presumed to
+		// run under it — a personal Codex session must not inherit the
+		// company's declared mode.
+		if meta.Provider == providerOpenAI && meta.AccountType == accountTypeTeam {
+			billingMode, err := s.resolveBillingMode(ctx, meta, "")
+			if err != nil {
+				return fmt.Errorf("resolve billing mode: %w", err)
+			}
+			meta.BillingMode = billingMode
+		}
 		return nil
 	}
 
@@ -131,12 +145,15 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 // identifier used on ai_integration_configs, where org-level billing modes are
 // declared. Claude sessions tag provider "anthropic", but its integration config
 // (the Compliance API integration that carries the external org) is stored under
-// "anthropic_compliance". Providers without a distinct config identifier map to
-// themselves.
+// "anthropic_compliance"; Codex sessions tag "openai" and their config lives
+// under "codex_compliance". Providers without a distinct config identifier map
+// to themselves.
 func providerBillingConfigProvider(provider string) string {
 	switch provider {
 	case providerAnthropic:
 		return "anthropic_compliance"
+	case providerOpenAI:
+		return "codex_compliance"
 	default:
 		return provider
 	}
@@ -153,18 +170,42 @@ func (s *Service) resolveBillingMode(ctx context.Context, meta *SessionMetadata,
 		return accountOverride, nil
 	}
 
-	orgMode, err := s.repo.GetProviderOrgBillingMode(ctx, repo.GetProviderOrgBillingModeParams{
+	orgMode, err := s.providerOrgBillingMode(ctx, meta)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return conv.FromPGTextOrEmpty[string](orgMode), nil
+}
+
+// providerOrgBillingMode dispatches the org-level tier of the cascade. Sessions
+// that carry an external org id (or whose provider's configs are org-scoped in
+// a way sessions can match) go through the org-matched lookup. Codex sessions
+// carry no org identity at any layer while codex_compliance configs always pin
+// one, so for openai with no session org the provider-wide declaration applies
+// instead.
+func (s *Service) providerOrgBillingMode(ctx context.Context, meta *SessionMetadata) (pgtype.Text, error) {
+	if meta.Provider == providerOpenAI && meta.ExternalOrgID == "" {
+		mode, err := s.repo.GetProviderBillingModeAnyOrg(ctx, repo.GetProviderBillingModeAnyOrgParams{
+			OrganizationID: meta.GramOrgID,
+			Provider:       providerBillingConfigProvider(meta.Provider),
+		})
+		if err != nil {
+			return pgtype.Text{}, fmt.Errorf("get provider billing mode: %w", err)
+		}
+		return mode, nil
+	}
+	mode, err := s.repo.GetProviderOrgBillingMode(ctx, repo.GetProviderOrgBillingModeParams{
 		OrganizationID: meta.GramOrgID,
 		Provider:       providerBillingConfigProvider(meta.Provider),
 		ExternalOrgID:  conv.ToPGTextEmpty(meta.ExternalOrgID),
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		return "", fmt.Errorf("get provider org billing mode: %w", err)
+		return pgtype.Text{}, fmt.Errorf("get provider org billing mode: %w", err)
 	}
-	return conv.FromPGTextOrEmpty[string](orgMode), nil
+	return mode, nil
 }
 
 // classifyAccount determines whether the session's account is team or personal.
@@ -212,7 +253,12 @@ func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (s
 	// Accepted: both slices are small and the prior behavior — an entire
 	// company-credential org parked under an unclassified account type — was the
 	// far larger distortion.
-	if meta.ExternalAccountUUID == "" {
+	//
+	// The signal is Anthropic-specific: Codex emits no account identity at any
+	// layer (no UUID, org id, or auth mode — DNO-734), so for other providers a
+	// missing UUID says nothing about how the session authenticated and
+	// classification falls through to email resolution below.
+	if meta.ExternalAccountUUID == "" && meta.Provider == providerAnthropic {
 		return accountTypeTeam, nil
 	}
 

@@ -892,6 +892,28 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 			}
 		}
 	}
+
+	// Codex sessions delivered only through the relay never pass the legacy
+	// hook or OTEL paths that normally attribute the account, so classify here
+	// when no cached attribution exists (email-based for openai — see
+	// classifyAccount; the Set in Ingest persists the result for later
+	// events). Claude adapters are untouched: their attribution belongs to the
+	// OTEL path, which carries the account identity this payload lacks.
+	if strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
+		metadata.Provider = providerOpenAI
+		if metadata.ObservedUserEmail == "" {
+			metadata.ObservedUserEmail = metadata.UserEmail
+		}
+		if metadata.AccountType == "" {
+			if err := s.attributeSession(ctx, &metadata); err != nil {
+				s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
+					attr.SlogEvent("account_attribution_failed"),
+					attr.SlogError(err),
+					attr.SlogGenAIConversationID(metadata.SessionID),
+				)
+			}
+		}
+	}
 	return metadata
 }
 

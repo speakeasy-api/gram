@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	aiintegrationsrepo "github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -765,14 +767,123 @@ func TestResolveBillingMode_EmptyWhenNoDeclaration(t *testing.T) {
 // TestProviderBillingConfigProvider verifies the mapping from a session provider
 // tag to the ai_integration_configs provider identifier where org-level billing
 // modes are declared. Claude sessions tag 'anthropic' but the config lives under
-// 'anthropic_compliance'; other providers map to themselves.
+// 'anthropic_compliance'; Codex sessions tag 'openai' and their config lives
+// under 'codex_compliance'; other providers map to themselves.
 func TestProviderBillingConfigProvider(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "anthropic_compliance", providerBillingConfigProvider(providerAnthropic))
 	require.Equal(t, providerCursor, providerBillingConfigProvider(providerCursor))
-	require.Equal(t, providerOpenAI, providerBillingConfigProvider(providerOpenAI))
+	require.Equal(t, "codex_compliance", providerBillingConfigProvider(providerOpenAI))
 	require.Empty(t, providerBillingConfigProvider(""))
+}
+
+// seedCodexBillingConfig inserts an enabled codex_compliance integration config
+// with an admin-declared billing mode. The external org id is always set (the
+// UI requires it), which is exactly why openai billing-mode resolution must be
+// provider-wide: Codex sessions carry no external org to match it with.
+func seedCodexBillingConfig(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, billingMode string) {
+	t.Helper()
+
+	_, err := aiintegrationsrepo.New(conn).InsertConfig(ctx, aiintegrationsrepo.InsertConfigParams{
+		OrganizationID:         organizationID,
+		Provider:               "codex_compliance",
+		ProjectID:              projectID,
+		ExternalOrganizationID: conv.ToPGTextEmpty("org-codex-billing"),
+		ApiKeyEncrypted:        "test-encrypted-key",
+		Enabled:                true,
+		BillingMode:            conv.ToPGTextEmpty(billingMode),
+	})
+	require.NoError(t, err)
+}
+
+// TestClassifyAccount_CodexTeamOnResolvedEmail: Codex sessions never carry an
+// account UUID, so the Claude company-credential rule (missing UUID → team)
+// must not apply; classification is email-based, and a resolved work email is
+// team.
+func TestClassifyAccount_CodexTeamOnResolvedEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	got, err := ti.service.classifyAccount(ctx, &SessionMetadata{
+		GramOrgID: authCtx.ActiveOrganizationID,
+		Provider:  providerOpenAI,
+		UserID:    "user-123",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, got)
+}
+
+// TestClassifyAccount_CodexPersonalOnUnresolvedEmail: an unresolved (or absent)
+// email on a Codex session classifies personal — under the Claude rule the
+// missing UUID would have forced team, which is wrong for a provider that
+// never emits one.
+func TestClassifyAccount_CodexPersonalOnUnresolvedEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	got, err := ti.service.classifyAccount(ctx, &SessionMetadata{
+		GramOrgID: authCtx.ActiveOrganizationID,
+		Provider:  providerOpenAI,
+		UserID:    "",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, got)
+}
+
+// TestAttributeSession_CodexTeamResolvesOrgWideBillingMode: a team-classified
+// Codex session resolves the org-level billing mode from the codex_compliance
+// config even though it carries no account UUID (no user_accounts entity) and
+// no external org id to match the config's scope with.
+func TestAttributeSession_CodexTeamResolvesOrgWideBillingMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	meta := &SessionMetadata{
+		SessionID:   "codex-billing-team",
+		ServiceName: "Codex",
+		Provider:    providerOpenAI,
+		UserEmail:   "dev@example.com",
+		UserID:      "user-123",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.attributeSession(ctx, meta))
+	require.Equal(t, accountTypeTeam, meta.AccountType)
+	require.Equal(t, "flat_rate", meta.BillingMode)
+	// No account UUID → no user_accounts entity is persisted.
+	require.Empty(t, meta.UserAccountID)
+}
+
+// TestAttributeSession_CodexPersonalDoesNotInheritOrgBillingMode: the org-level
+// declaration describes the company's OpenAI org; a personal Codex session
+// (unresolved email) must not inherit it.
+func TestAttributeSession_CodexPersonalDoesNotInheritOrgBillingMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	meta := &SessionMetadata{
+		SessionID:   "codex-billing-personal",
+		ServiceName: "Codex",
+		Provider:    providerOpenAI,
+		UserEmail:   "someone@personal.example",
+		UserID:      "",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.attributeSession(ctx, meta))
+	require.Equal(t, accountTypePersonal, meta.AccountType)
+	require.Empty(t, meta.BillingMode)
 }
 
 // TestStampAccountAttribution_SkipsEmptyFields verifies an unclassified or

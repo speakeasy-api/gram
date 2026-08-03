@@ -48,7 +48,12 @@ const (
 	codexComplianceProductCodex = "codex"
 	codexComplianceProductWork  = "work"
 	codexProviderOpenAI         = "openai"
-	codexCreditValueUSD         = 0.04
+	// codexAccountTypeTeam matches the hooks package's account_type "team"
+	// value. Every compliance COSTS row comes from the org's own enterprise
+	// feed, so the account behind it is the company's by construction — unlike
+	// session telemetry, which must classify from email resolution.
+	codexAccountTypeTeam = "team"
+	codexCreditValueUSD  = 0.04
 )
 
 type codexComplianceClient interface {
@@ -353,7 +358,13 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		attr.ProviderKey:              codexProviderOpenAI,
 		attr.GenAIProviderNameKey:     codexProviderOpenAI,
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
+		attr.AccountTypeKey:           codexAccountTypeTeam,
 	}
+	// The config's admin-declared billing mode applies to every row of its
+	// feed — this is the org-level tier of the billing-mode cascade, keyed
+	// here directly instead of via session attribution (compliance rows have
+	// no session).
+	addStringAttr(attrs, attr.BillingModeKey, cfg.BillingMode)
 	addStringAttr(attrs, attr.CodexComplianceEventIDKey, eventID)
 	addStringAttr(attrs, attr.CodexComplianceEventHashKey, generateCodexCostEventHash(eventID))
 	addStringAttr(attrs, attr.CodexComplianceLogIDKey, file.ID)
