@@ -703,6 +703,7 @@ func newStartCommand() *cli.Command {
 			var (
 				litellmTraceProcessor   *litellm.TraceProcessor
 				litellmMetricProcessor  *litellm.MetricProcessor
+				litellmService          *litellm.Service
 				telemetryLoggerShutdown func(context.Context) error
 				publishersShutdown      func(context.Context) error
 				pubsubShutdown          func(context.Context) error
@@ -1073,6 +1074,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 			mux.Use(otelforwarding.Middleware(logger, otelForwardClient, otelForwarder))
+			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))
 
 			// Reuse the same Presidio client the worker uses for offline analysis
 			// so the runtime hook scanner can flag/redact PII inputs too.
@@ -1162,7 +1164,8 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor))
+			litellmService = litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor)
+			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))

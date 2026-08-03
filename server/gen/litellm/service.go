@@ -29,7 +29,9 @@ type Service interface {
 	// ExportMetricsServiceRequest shape shown here with application/json, or the
 	// binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest
 	// with application/x-protobuf or application/protobuf. Content-Encoding may be
-	// gzip.
+	// gzip. The canonical endpoint is /rpc/hooks.otel/v1/metrics, shared with
+	// harness telemetry and dispatched by key provenance; the litellm.otel route
+	// below is the internally registered fallback.
 	Metrics(context.Context, *MetricsPayload) (err error)
 }
 

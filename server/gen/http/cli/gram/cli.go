@@ -12033,7 +12033,7 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    ingest: Evaluates and captures a LiteLLM model request before it reaches the provider.`)
 	fmt.Fprintln(os.Stderr, `    traces: Accepts LiteLLM OTLP trace exports. Send the standard OTLP JSON ExportTraceServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
-	fmt.Fprintln(os.Stderr, `    metrics: Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
+	fmt.Fprintln(os.Stderr, `    metrics: Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip. The canonical endpoint is /rpc/hooks.otel/v1/metrics, shared with harness telemetry and dispatched by key provenance; the litellm.otel route below is the internally registered fallback.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s litellm COMMAND --help\n", os.Args[0])
@@ -12092,7 +12092,7 @@ func litellmMetricsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
+	fmt.Fprintln(os.Stderr, `Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip. The canonical endpoint is /rpc/hooks.otel/v1/metrics, shared with harness telemetry and dispatched by key provenance; the litellm.otel route below is the internally registered fallback.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

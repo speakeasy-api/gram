@@ -124,7 +124,7 @@ var _ = Service("litellm", func() {
 
 	Method("metrics", func() {
 		Meta("openapi:generate", "false")
-		Description("Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.")
+		Description("Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip. The canonical endpoint is /rpc/hooks.otel/v1/metrics, shared with harness telemetry and dispatched by key provenance; the litellm.otel route below is the internally registered fallback.")
 		Error(string(oops.CodeRequestTooLarge), func() { Description(oops.CodeRequestTooLarge.UserMessage()) })
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")
