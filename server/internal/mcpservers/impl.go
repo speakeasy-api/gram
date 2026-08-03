@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -21,6 +23,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -33,6 +36,7 @@ import (
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -60,6 +64,7 @@ type Service struct {
 	temporalEnv          *tenv.Environment
 	dispositionCache     *ToolDispositionCache
 	pluginsGitHubEnabled bool
+	assets               *assets.Service
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -75,6 +80,7 @@ func NewService(
 	temporalEnv *tenv.Environment,
 	dispositionCache *ToolDispositionCache,
 	pluginsGitHubEnabled bool,
+	assetsService *assets.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
@@ -88,6 +94,7 @@ func NewService(
 		temporalEnv:          temporalEnv,
 		dispositionCache:     dispositionCache,
 		pluginsGitHubEnabled: pluginsGitHubEnabled,
+		assets:               assetsService,
 	}
 }
 
@@ -218,7 +225,69 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Best-effort: an unproxied server has no logo of its own to inherit, so
+	// give it the vendor's favicon as a starting icon rather than leaving it
+	// blank. Never fails server creation over this.
+	if ids.UnproxiedMcpServerID.Valid {
+		s.setDefaultUnproxiedIcon(ctx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)
+	}
+
 	return mv.BuildMcpServerView(server), nil
+}
+
+// setDefaultUnproxiedIcon fetches the vendor's favicon and sets it as the
+// newly-created server's icon. Best-effort: any failure is logged and
+// swallowed rather than surfaced, since a missing icon is cosmetic and must
+// never fail the create call it's attached to.
+func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, mcpServerID uuid.UUID, unproxiedMcpServerID uuid.UUID) {
+	source, err := unproxiedmcprepo.New(s.db).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
+		ID:        unproxiedMcpServerID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "load unproxied mcp server for default icon", attr.SlogError(err))
+		return
+	}
+
+	vendorURL, err := url.Parse(source.Url)
+	if err != nil {
+		logger.ErrorContext(ctx, "parse unproxied mcp server url for default icon", attr.SlogError(err))
+		return
+	}
+
+	faviconURL := fmt.Sprintf(
+		"https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=%s&size=128",
+		url.QueryEscape(vendorURL.Scheme+"://"+vendorURL.Host),
+	)
+
+	asset, err := s.assets.FetchImageFromURL(ctx, faviconURL)
+	if err != nil {
+		logger.WarnContext(ctx, "fetch default favicon for unproxied mcp server", attr.SlogError(err))
+		return
+	}
+
+	assetID, err := uuid.Parse(asset.ID)
+	if err != nil {
+		logger.ErrorContext(ctx, "parse default favicon asset id", attr.SlogError(err))
+		return
+	}
+
+	// Writes mcp_metadata directly rather than through the mcpMetadata
+	// service (which already imports this package, so importing it back here
+	// would cycle) and skips its audit trail accordingly: this is a system
+	// default, not a user-initiated edit.
+	if _, err := mcpmetadatarepo.New(s.db).UpsertMetadataByMcpServerID(ctx, mcpmetadatarepo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:               uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		ProjectID:                 projectID,
+		LogoID:                    uuid.NullUUID{UUID: assetID, Valid: true},
+		ExternalDocumentationUrl:  pgtype.Text{String: "", Valid: false},
+		ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
+		Instructions:              pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		InstallationOverrideUrl:   pgtype.Text{String: "", Valid: false},
+	}); err != nil {
+		logger.ErrorContext(ctx, "save default favicon for unproxied mcp server", attr.SlogError(err))
+	}
 }
 
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
