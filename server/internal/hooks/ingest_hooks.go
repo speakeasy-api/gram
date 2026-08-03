@@ -903,7 +903,20 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	// to the OTEL path, which carries the account identity this payload lacks.
 	if strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
 		metadata.Provider = providerOpenAI
-		if metadata.AccountType == "" || !sameCodexIdentity(metadata.ObservedUserEmail, metadata.UserEmail) {
+		identityChanged := !sameCodexIdentity(metadata.ObservedUserEmail, metadata.UserEmail)
+		if metadata.AccountType == "" || identityChanged {
+			if identityChanged {
+				// The identity fallback above fills UserID from the cache
+				// independently of the email, so on an identity change it can
+				// still hold the PRIOR actor's resolved id — and
+				// classifyAccount reads UserID as the resolution of the email
+				// being classified, which would label a new unresolved email
+				// team (and unlock the team-gated billing mode) off the old
+				// actor. Restore the resolved actor's own id: an identity
+				// change means UserEmail is the actor's email, whose
+				// resolution resolveCanonicalActor already computed.
+				metadata.UserID = actor.UserID
+			}
 			metadata.ObservedUserEmail = metadata.UserEmail
 			if err := s.attributeSession(ctx, &metadata); err != nil {
 				s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",

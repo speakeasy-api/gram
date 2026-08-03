@@ -1912,3 +1912,43 @@ func TestCanonicalSessionMetadata_CodexReattributesOnNewActorEmail(t *testing.T)
 	require.Empty(t, metadata.BillingMode)
 	require.Equal(t, newActorEmail, metadata.ObservedUserEmail)
 }
+
+// TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID: when
+// the actor email changes to one that resolves to no org member, the
+// re-classification must not run with the PRIOR actor's UserID (the session
+// identity fallback fills UserID from the cache independently of the email).
+// A stale id would classify the unresolved email team and unlock the
+// team-gated org billing mode; the fresh actor must come back personal with
+// no billing mode even though a flat_rate declaration exists.
+func TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	sessionID := "codex-ingest-stale-user-id"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:         sessionID,
+		ServiceName:       "codex",
+		UserEmail:         "teammate@example.com",
+		UserID:            "teammate-user-id",
+		Provider:          providerOpenAI,
+		AccountType:       accountTypeTeam,
+		BillingMode:       "flat_rate",
+		ObservedUserEmail: "teammate@example.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+	}, 0))
+
+	payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: "stranger@personal.example"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Empty(t, metadata.UserID, "cached teammate id must not survive the identity change")
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+	require.Equal(t, "stranger@personal.example", metadata.ObservedUserEmail)
+}
