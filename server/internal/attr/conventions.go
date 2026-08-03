@@ -494,6 +494,20 @@ const (
 	CodexComplianceProductKey     = attribute.Key("codex.compliance.product")
 	CodexComplianceBillingSKUsKey = attribute.Key("codex.compliance.billing_skus")
 
+	// CodexCompliance*TokensKey preserve the raw COSTS token counts on
+	// Codex-product rows WITHOUT entering token metering. Those rows must not
+	// carry gen_ai.usage.* token keys — their codex:usage URN is admitted by
+	// the ClickHouse agent-usage predicates, which would sum them on top of
+	// the codex:otel:logs stream (the Codex token source of truth) and double
+	// count orgs running both feeds. The compliance feed also covers surfaces
+	// OTEL never sees (cloud-delegated tasks, GitHub code review), so the
+	// counts are retained under these namespaced keys — summed by nothing —
+	// until metering can partition by codex.compliance.surface/client.
+	CodexComplianceInputTokensKey       = attribute.Key("codex.compliance.input_tokens")
+	CodexComplianceCachedInputTokensKey = attribute.Key("codex.compliance.cached_input_tokens")
+	CodexComplianceOutputTokensKey      = attribute.Key("codex.compliance.output_tokens")
+	CodexComplianceTotalTokensKey       = attribute.Key("codex.compliance.total_tokens")
+
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
