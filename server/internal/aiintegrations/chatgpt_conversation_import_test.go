@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -163,4 +164,174 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
 	require.NoError(t, err)
 	require.Equal(t, "Refund policy", chatRow.Title.String)
+}
+
+func chatgptConversationConfig() Config {
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	return Config{
+		ID:                     uuid.MustParse("44444444-4444-4444-4444-444444444444"),
+		SyncID:                 uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+		OrganizationID:         "org_gram",
+		Provider:               ProviderChatGPTCompliance,
+		ProjectID:              uuid.MustParse("66666666-6666-6666-6666-666666666666"),
+		ExternalOrganizationID: &workspaceID,
+		BillingMode:            "",
+		APIKey:                 "chatgpt-key",
+		Enabled:                true,
+		PollWatermarkAt:        time.Date(2026, 7, 27, 10, 0, 0, 0, time.UTC),
+		PollCheckpoint:         timewindowpoller.CompletedCheckpoint(time.Date(2026, 7, 27, 10, 0, 0, 0, time.UTC)),
+		NextPollAfter:          time.Time{},
+		LastPollError:          "",
+		LastPollFailedAt:       time.Time{},
+		LastPollSuccessAt:      time.Time{},
+		ConsecutiveFailures:    0,
+		LastCursor:             "",
+		CreatedAt:              time.Time{},
+		UpdatedAt:              time.Time{},
+	}
+}
+
+func newChatGPTTestSource(cfg Config, client codexComplianceClient) *chatgptConversationSource {
+	return &chatgptConversationSource{
+		client:     client,
+		svc:        &ChatGPTConversationImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
+		cfg:        cfg,
+		pageLimit:  chatgptCompliancePageLimit,
+		users:      nil,
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progress:   &ChatGPTConversationSyncProgress{},
+	}
+}
+
+// The pagination state machine is a deliberate copy of codexCostSource's
+// (see the file comment there); these tests pin the copy so a protocol fix
+// applied to one source cannot silently regress the other.
+func TestChatGPTConversationSourceUpperBoundReturnsStartWhenNoLogs(t *testing.T) {
+	t.Parallel()
+
+	cfg := chatgptConversationConfig()
+	cfg.PollWatermarkAt = time.Time{}
+	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(time.Time{})
+	endTime := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	start := endTime.Add(-chatgptComplianceInitialLookback)
+	client := &stubCodexComplianceClient{
+		listPages: []*codexapi.LogsPage{
+			{Data: nil, HasMore: false, LastEndTime: time.Time{}},
+		},
+		listParams: nil,
+		downloads:  nil,
+	}
+	source := newChatGPTTestSource(cfg, client)
+
+	upperBound, err := source.UpperBound(t.Context(), endTime)
+
+	require.NoError(t, err)
+	require.Equal(t, start, upperBound)
+	require.Len(t, client.listParams, 1)
+	require.Equal(t, chatgptConversationEventType, client.listParams[0].EventType)
+	require.Equal(t, start, client.listParams[0].After)
+}
+
+func TestChatGPTConversationSourceUpperBoundRejectsNonAdvancingLastEndTime(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 27, 10, 0, 0, 123456000, time.UTC)
+	cfg := chatgptConversationConfig()
+	cfg.PollWatermarkAt = start
+	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(start)
+	client := &stubCodexComplianceClient{
+		listPages: []*codexapi.LogsPage{
+			{Data: nil, HasMore: true, LastEndTime: start},
+		},
+		listParams: nil,
+		downloads:  nil,
+	}
+	source := newChatGPTTestSource(cfg, client)
+
+	_, err := source.UpperBound(t.Context(), start.Add(time.Hour))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "last_end_time did not advance")
+	require.Len(t, client.listParams, 1)
+}
+
+func TestChatGPTConversationSourceFetchPageStopsAtWindowEnd(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 27, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 7, 27, 11, 0, 0, 0, time.UTC)
+	inWindow := codexapi.LogFile{ID: "eclf_cm_1", EventType: chatgptConversationEventType, EndTime: start.Add(30 * time.Minute), FileName: "", FileSize: 0, FileSHA256: ""}
+	afterWindow := codexapi.LogFile{ID: "eclf_cm_2", EventType: chatgptConversationEventType, EndTime: end.Add(time.Minute), FileName: "", FileSize: 0, FileSHA256: ""}
+	foreign := codexapi.LogFile{ID: "eclf_costs", EventType: codexComplianceCostsEventType, EndTime: start.Add(20 * time.Minute), FileName: "", FileSize: 0, FileSHA256: ""}
+	client := &stubCodexComplianceClient{
+		listPages: []*codexapi.LogsPage{
+			{Data: []codexapi.LogFile{foreign, inWindow, afterWindow}, HasMore: true, LastEndTime: afterWindow.EndTime},
+		},
+		listParams: nil,
+		downloads:  nil,
+	}
+	source := newChatGPTTestSource(chatgptConversationConfig(), client)
+
+	page, err := source.FetchPage(t.Context(), start, end, "")
+
+	require.NoError(t, err)
+	require.False(t, page.HasMore)
+	require.Empty(t, page.NextPage)
+	// The foreign-type file is filtered and the window truncates before the
+	// out-of-window file.
+	require.Equal(t, []codexapi.LogFile{inWindow}, page.Payload)
+}
+
+func TestChatGPTConversationSourceFetchPageRejectsNonAdvancingLastEndTime(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 27, 10, 0, 0, 123456000, time.UTC)
+	end := start.Add(time.Hour)
+	client := &stubCodexComplianceClient{
+		listPages: []*codexapi.LogsPage{
+			{Data: nil, HasMore: true, LastEndTime: start},
+		},
+		listParams: nil,
+		downloads:  nil,
+	}
+	source := newChatGPTTestSource(chatgptConversationConfig(), client)
+
+	page, err := source.FetchPage(t.Context(), start, end, "")
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "last_end_time did not advance")
+	require.False(t, page.HasMore)
+	require.Nil(t, page.Payload)
+}
+
+func TestEventCreatedAtCountsOnlyImportTimeFallbacks(t *testing.T) {
+	t.Parallel()
+
+	source := newChatGPTTestSource(chatgptConversationConfig(), nil)
+	event := chatgptConversationEvent{}
+
+	// Valid message timestamp: used directly, no fallback counted.
+	event.Message.CreatedAt = "2026-07-27T10:00:00Z"
+	event.Timestamp = "2026-07-27T10:00:05Z"
+	require.Equal(t, time.Date(2026, 7, 27, 10, 0, 0, 0, time.UTC), source.eventCreatedAt(event))
+	require.Zero(t, source.progress.TimestampFallbacks)
+
+	// Malformed created_at rescued by a valid event timestamp: not a
+	// fallback — chronology is preserved.
+	event.Message.CreatedAt = "1753612800"
+	require.Equal(t, time.Date(2026, 7, 27, 10, 0, 5, 0, time.UTC), source.eventCreatedAt(event))
+	require.Zero(t, source.progress.TimestampFallbacks)
+
+	// Both timestamps unusable: import time is used and the canary counts it.
+	event.Timestamp = ""
+	got := source.eventCreatedAt(event)
+	require.WithinDuration(t, time.Now().UTC(), got, time.Minute)
+	require.Equal(t, 1, source.progress.TimestampFallbacks)
+
+	// Both absent entirely: also a counted import-time fallback.
+	event.Message.CreatedAt = ""
+	got = source.eventCreatedAt(event)
+	require.WithinDuration(t, time.Now().UTC(), got, time.Minute)
+	require.Equal(t, 2, source.progress.TimestampFallbacks)
 }
