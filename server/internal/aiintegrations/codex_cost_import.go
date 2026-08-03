@@ -27,19 +27,26 @@ const (
 	codexComplianceCostsEventType = "COSTS"
 	codexCompliancePageLimit      = 100
 	codexUsageMetricsURN          = "codex:usage:metrics"
-	// chatgptUsageMetricsURN parks non-Codex COSTS events. The compliance
+	// chatgptUsageMetricsURN carries non-Codex COSTS events. The compliance
 	// feed mixes product surfaces (observed values: "codex", "ChatGPT",
 	// "Work"), and only true Codex rows may carry the codex:usage URN — the
 	// codex.cost.usd stream and the ClickHouse agent-usage predicates match
-	// on that prefix. Non-Codex rows are still ingested for retention under
-	// this URN, which nothing reads yet; codex.compliance.product keeps the
-	// exact surface for a later per-product split.
+	// on those prefixes. The summary MVs admit this URN too, so the product
+	// split must survive summarization: hook_source is the persisted
+	// dimension (chatgpt vs chatgpt-work below — the summaries have no
+	// codex.compliance.product column and outlive the raw-row TTL).
 	chatgptUsageMetricsURN = "chatgpt:usage:metrics"
 	codexHookSource        = "codex"
-	chatgptHookSource      = "chatgpt"
-	// codexComplianceProductCodex is the payload.product value marking Codex
-	// rows in COSTS events.
+	// chatgptHookSource tags ChatGPT chat rows and any unknown non-Codex
+	// surface; chatgptWorkHookSource tags Work rows. Splitting at the
+	// hook_source dimension keeps ChatGPT and Work separable in every
+	// summary read without a schema change.
+	chatgptHookSource     = "chatgpt"
+	chatgptWorkHookSource = "chatgpt-work"
+	// codexComplianceProductCodex / codexComplianceProductWork are the
+	// payload.product values marking Codex and Work rows in COSTS events.
 	codexComplianceProductCodex = "codex"
+	codexComplianceProductWork  = "work"
 	codexProviderOpenAI         = "openai"
 	codexCreditValueUSD         = 0.04
 )
@@ -321,14 +328,19 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	totalCostUSD, costUnit, billingSKUs := codexBillingSummary(event.Payload.Measures.Billing)
 
 	// Route rows by product surface so the codex metric only counts Codex:
-	// ChatGPT/Work (and any unknown surface) land under the parked chatgpt
-	// URN instead of polluting codex:usage aggregates.
-	isCodex := strings.EqualFold(strings.TrimSpace(event.Payload.Product), codexComplianceProductCodex)
+	// ChatGPT/Work (and any unknown surface) land under the chatgpt URN
+	// instead of polluting codex:usage aggregates. Work additionally gets its
+	// own hook_source so the ChatGPT/Work split survives summarization.
+	product := strings.TrimSpace(event.Payload.Product)
+	isCodex := strings.EqualFold(product, codexComplianceProductCodex)
 	urn := codexUsageMetricsURN
 	hookSource := codexHookSource
 	if !isCodex {
 		urn = chatgptUsageMetricsURN
 		hookSource = chatgptHookSource
+		if strings.EqualFold(product, codexComplianceProductWork) {
+			hookSource = chatgptWorkHookSource
+		}
 	}
 
 	attrs := map[attr.Key]any{

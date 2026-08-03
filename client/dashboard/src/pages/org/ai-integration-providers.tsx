@@ -243,12 +243,14 @@ const ANTHROPIC_AI_INTEGRATION: AIIntegrationProvider = {
 const CODEX_AI_INTEGRATION: AIIntegrationProvider = {
   provider: "codex_compliance",
   name: "OpenAI Compliance Logs",
-  description: "Import Codex usage and spend from OpenAI Compliance Logs.",
+  description:
+    "Import Codex, ChatGPT, and Work usage and spend from OpenAI Compliance Logs.",
   schedules: [
     {
       schedule: "codex_compliance",
-      name: "Codex cost metrics",
-      description: "Imports Codex spend from Compliance Logs COSTS files.",
+      name: "Codex & ChatGPT cost metrics",
+      description:
+        "Imports Codex spend plus ChatGPT and Work usage from Compliance Logs COSTS files.",
       cadence: "Hourly",
       kind: "metrics",
       signal: "codex.cost.usd",
@@ -256,7 +258,7 @@ const CODEX_AI_INTEGRATION: AIIntegrationProvider = {
     },
   ],
   onboardingDescription:
-    "Connect OpenAI's Compliance Logs API so the platform can import Codex cost data for reporting.",
+    "Connect OpenAI's Compliance Logs API so the platform can import Codex, ChatGPT, and Work cost data for reporting.",
   setupGuide: {
     steps: [
       {
@@ -285,9 +287,10 @@ const CODEX_AI_INTEGRATION: AIIntegrationProvider = {
   organizationIdPlaceholder: "org-...",
   helpText: (
     <>
-      Codex cost import uses OpenAI Compliance Logs Platform{" "}
+      The cost import uses OpenAI Compliance Logs Platform{" "}
       <code className="text-foreground">COSTS</code> files for an OpenAI API
-      organization. Use an <code className="text-foreground">org-*</code> ID.
+      organization, covering Codex, ChatGPT, and Work spend. Use an{" "}
+      <code className="text-foreground">org-*</code> ID.
     </>
   ),
 };

@@ -337,7 +337,12 @@ export function HookSourceIcon({
   if (normalizedSource?.includes("cursor")) {
     return <CursorIcon className={className} />;
   }
-  if (normalizedSource?.includes("codex")) {
+  // ChatGPT shares the OpenAI monoblossom mark with Codex — it is the
+  // ChatGPT product logo; only the label distinguishes the surfaces.
+  if (
+    normalizedSource?.includes("codex") ||
+    normalizedSource?.includes("chatgpt")
+  ) {
     return <CodexIcon className={className} />;
   }
   if (normalizedSource?.includes("opencode")) {

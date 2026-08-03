@@ -21,6 +21,9 @@ var sourceAliases = map[string][]string{
 	"cowork":              {"cowork", "claude-cowork", "Claude Cowork"},
 	"cursor":              {"cursor", "Cursor"},
 	"codex":               {"codex", "Codex"},
+	// ChatGPT (web/desktop chat + Work mode) — rows arrive via the OpenAI
+	// compliance import pipelines under the chatgpt hook source.
+	"chatgpt": {"chatgpt", "ChatGPT"},
 }
 
 // rawToCanonicalSource is the reverse of sourceAliases: each known raw value
