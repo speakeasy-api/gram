@@ -66,8 +66,10 @@ type Service struct {
 	keyPrefix string
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
