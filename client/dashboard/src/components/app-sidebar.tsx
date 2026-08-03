@@ -15,6 +15,7 @@ import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarFooterAction } from "./sidebar-footer-action";
@@ -152,7 +153,8 @@ export function AppSidebar({
     routes.mcp.details.active ||
     routes.mcp.x.active ||
     routes.mcp.builtIn.active ||
-    routes.skills.detail.active;
+    routes.skills.detail.active ||
+    routes.plugins.detail.active;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
@@ -165,6 +167,8 @@ export function AppSidebar({
     sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
     sidebarContent = <SkillDetailSidebarNav />;
+  } else if (routes.plugins.detail.active) {
+    sidebarContent = <PluginDetailSidebarNav />;
   } else {
     sidebarContent = (
       <NavGroupProvider
