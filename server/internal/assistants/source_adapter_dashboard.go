@@ -56,6 +56,7 @@ Id values come from the tool results (their JSON field names are PascalCase). Us
 - User: [name or email](gram:risk_user/<ExternalUserID>) — chats expose ExternalUserID; the risk-result tools expose the same value under the name UserID
 - Deployment: [label](gram:deployment/<deployment id>)
 - Environment: [slug](gram:environment/<environment_slug>)
+- Skill: [DisplayName or Name](gram:skill/<ID>) — Skill.ID from the skill tools
 
 Only link an entity when you actually have its id from a tool result, and the link target must be a gram:<type>/<id> reference built from that id. Never write a link with an empty, partial, or guessed URL (e.g. [name]() or [name](gram:user/) ) — if you don't have a usable id, write the name as plain text, not a link. The organization-directory users from platform_list_organization_users have no detail page, so write those as plain text; only link a user when you have their ExternalUserID (from the chats or risk-result tools).` +
 		"\n\n## Elements visualizations\n\n" +
