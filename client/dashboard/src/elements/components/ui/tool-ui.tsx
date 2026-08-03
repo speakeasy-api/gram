@@ -959,7 +959,7 @@ function ToolUI({
         <StatusIndicator status={status} />
         <span
           className={cn(
-            "flex-1 text-sm",
+            "min-w-0 flex-1 text-sm",
             !provider && isApprovalPending && "shimmer",
           )}
         >
@@ -1240,7 +1240,10 @@ function ToolUIGroup({
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          !headerless && "border-border mt-2 ml-2 space-y-2 border-l pl-4",
+          // Capped rather than full-column: a call is a short label, and a card
+          // as wide as the message strands its chevron at the far edge.
+          !headerless &&
+            "border-border mt-2 ml-2 max-w-md space-y-2 border-l pl-4",
           !showChildren && "hidden",
         )}
       >

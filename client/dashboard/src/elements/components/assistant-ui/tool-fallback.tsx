@@ -77,10 +77,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   };
 
   return (
-    // Width follows the call's own content: a collapsed call is a short label,
-    // and stretching it to the message column leaves the chevron marooned at
-    // the far edge. Expanding (arguments, output) grows the card as needed.
-    <div className="aui-tool-fallback-root flex w-fit max-w-full flex-col">
+    <div className="aui-tool-fallback-root flex w-full flex-col">
       <ToolUI
         name={toolName}
         status={getToolStatus()}
