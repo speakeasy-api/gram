@@ -437,7 +437,7 @@ describe("SkillsList pagination surfaces", () => {
       "estimatedSavings",
       "updated",
       "share",
-      "actions",
+      "open",
     ]);
   });
 
