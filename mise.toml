@@ -178,26 +178,20 @@ GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PO
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
-## WorkOS API key. In mock-workos mode the mock endpoint accepts any value.
-## Override in mise.local.toml with a real sk_test_... key for workos mode.
+## WorkOS API key. The local backend accepts any value.
+## Override in mise.local.toml with a real sk_test_... key for the workos backend.
 GRAM_IDP_CLIENT_SECRET = "unset"
-## IDP mode: "mock-workos" (default) or "workos".
-##
-## mock-workos — fully local, zero config. dev-idp emulates the WorkOS API.
-##               No overrides needed.
-##
-## workos      — real WorkOS via dev-idp proxy. Add these to mise.local.toml:
-##                 GRAM_IDP_MODE = "workos"
-##                 GRAM_IDP_CLIENT_SECRET = "sk_test_..."
-##                 WORKOS_API_URL = "https://api.workos.com"
-##                 GRAM_IDP_CLIENT_ID = "<your WorkOS client ID>"
-##
+## Identity backend: "local" (default) or "workos". Login stays
+## non-interactive either way. For real WorkOS, set in mise.local.toml:
+##   GRAM_DEVIDP_BACKEND = "workos"
+##   GRAM_IDP_CLIENT_SECRET = "sk_test_..."
 ## See CONTRIBUTING.md "Local auth and identity" for details.
-GRAM_IDP_MODE = "mock-workos"
-## Points the Gram server and dev-idp at the WorkOS-compatible API.
-## In mock-workos mode this is the dev-idp emulator; override in
-## mise.local.toml for workos mode.
-WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos"
+GRAM_DEVIDP_BACKEND = "local"
+## Points the Gram server at the dev-idp's WorkOS surface. Constant across
+## backends — the backend flag decides what serves it.
+WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
+## Real WorkOS API the workos backend proxies to.
+# GRAM_DEVIDP_WORKOS_UPSTREAM_URL = "https://api.workos.com"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
 # GRAM_DEVIDP_RSA_PRIVATE_KEY = ""
 ## The following variables are only needed if you want to do one of the following:
