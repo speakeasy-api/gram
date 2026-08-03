@@ -191,7 +191,9 @@ export function PluginSkillsSection({
         <SettingsSection.Header>
           <div className="flex items-center gap-2">
             <SettingsSection.Title>Skills</SettingsSection.Title>
-            {distributions.length > 0 && (
+            {/* The query drains page by page, so a count shown mid-drain would
+                read as the total and then jump. Wait for the full membership. */}
+            {isMembershipLoaded && distributions.length > 0 && (
               <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
                 {distributions.length}
               </span>
