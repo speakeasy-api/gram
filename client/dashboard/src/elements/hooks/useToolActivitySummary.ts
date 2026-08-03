@@ -211,7 +211,11 @@ export function useToolActivitySummary({
       clearTimeout(debounceTimer);
       controller.abort();
     };
-  }, [key, summarizer]);
+    // `isLiveTurn` is a dependency, not just a render-time latch: a group can
+    // mount before its turn is marked live (tool parts arriving already
+    // complete), and without it the effect never re-runs for an unchanged key —
+    // leaving the group shimmering with no request ever sent.
+  }, [key, summarizer, isLiveTurn]);
 
   const current = enrichedByKey[key];
 

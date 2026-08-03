@@ -917,11 +917,12 @@ function ToolUI({
   return (
     <div
       data-slot="tool-ui"
-      // No `@container` here: nothing inside uses container queries, and
-      // inline-size containment made the card size as if it were empty, so it
-      // could never be sized from its own content.
+      // `@container` is what the approval controls' `@[320px]:` variants below
+      // resolve against. Note it applies inline-size containment, so this card
+      // measures as if it were empty — anything sizing a tool call from its
+      // content has to bound it from the outside instead.
       className={cn(
-        "border-border bg-card overflow-hidden rounded-lg border",
+        "@container border-border bg-card overflow-hidden rounded-lg border",
         className,
       )}
     >

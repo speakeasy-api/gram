@@ -50,9 +50,15 @@ export const ToolGroup: FC<
   // Whether this group belongs to the turn currently in flight. Part status is
   // not a reliable liveness signal here: tools executed server-side (the Project
   // Assistant) stream in already-complete, so a group can belong to a live turn
-  // without any part ever being observed `running`. The thread's own state is,
-  // and it is what decides whether summarizing is worth a model call.
-  const threadIsRunning = useAuiState(({ thread }) => thread.isRunning);
+  // without any part ever being observed `running`.
+  //
+  // Scoped to this group's own message, not `thread.isRunning`: the thread is
+  // running for every group on screen, so a thread-scoped signal would send
+  // every historical group back to the summarizer each time a new turn starts —
+  // model calls for browsing history, which enrichment is meant to avoid.
+  const isCurrentTurn = useAuiState(
+    ({ message }) => message.status?.type === "running",
+  );
 
   // Serialize the group's tool calls to a stable string so useAuiState only
   // triggers a re-render when they actually change, then parse once.
@@ -106,7 +112,7 @@ export const ToolGroup: FC<
   const { label, pending } = useToolActivitySummary({
     toolCalls,
     inProgress: anyMessagePartsAreRunning,
-    isLiveTurn: threadIsRunning,
+    isLiveTurn: isCurrentTurn,
     userMessage,
     enabled: !hasCustomComponent,
   });
