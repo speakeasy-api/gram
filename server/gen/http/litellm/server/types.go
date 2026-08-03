@@ -1402,17 +1402,18 @@ type MetricsGatewayErrorResponseBody struct {
 
 // LiteLLMInstanceResponseBody is used to define fields on response body types.
 type LiteLLMInstanceResponseBody struct {
-	ID              string                    `form:"id" json:"id" xml:"id"`
-	OrganizationID  string                    `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	Project         *ProjectEntryResponseBody `form:"project" json:"project" xml:"project"`
-	Name            string                    `form:"name" json:"name" xml:"name"`
-	FailurePosture  string                    `form:"failure_posture" json:"failure_posture" xml:"failure_posture"`
-	KeyPrefix       string                    `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
-	CreatedByUserID string                    `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
-	CreatedAt       string                    `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt       string                    `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	LastUsedAt      *string                   `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
-	Active          bool                      `form:"active" json:"active" xml:"active"`
+	ID              string                                  `form:"id" json:"id" xml:"id"`
+	OrganizationID  string                                  `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	Project         *ProjectEntryResponseBody               `form:"project" json:"project" xml:"project"`
+	Name            string                                  `form:"name" json:"name" xml:"name"`
+	FailurePosture  string                                  `form:"failure_posture" json:"failure_posture" xml:"failure_posture"`
+	KeyPrefix       string                                  `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	CreatedByUserID string                                  `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	CreatedAt       string                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt       string                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	LastUsedAt      *string                                 `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	Active          bool                                    `form:"active" json:"active" xml:"active"`
+	Diagnostics     *LiteLLMInstanceDiagnosticsResponseBody `form:"diagnostics" json:"diagnostics" xml:"diagnostics"`
 }
 
 // ProjectEntryResponseBody is used to define fields on response body types.
@@ -1423,6 +1424,23 @@ type ProjectEntryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the project
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
+// LiteLLMInstanceDiagnosticsResponseBody is used to define fields on response
+// body types.
+type LiteLLMInstanceDiagnosticsResponseBody struct {
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	LastGuardrailEventAt   *string `form:"last_guardrail_event_at,omitempty" json:"last_guardrail_event_at,omitempty" xml:"last_guardrail_event_at,omitempty"`
+	LastOtelEventAt        *string `form:"last_otel_event_at,omitempty" json:"last_otel_event_at,omitempty" xml:"last_otel_event_at,omitempty"`
+	LastErrorAt            *string `form:"last_error_at,omitempty" json:"last_error_at,omitempty" xml:"last_error_at,omitempty"`
+	LastErrorKind          *string `form:"last_error_kind,omitempty" json:"last_error_kind,omitempty" xml:"last_error_kind,omitempty"`
+	ReportedLitellmVersion *string `form:"reported_litellm_version,omitempty" json:"reported_litellm_version,omitempty" xml:"reported_litellm_version,omitempty"`
+	// Percentage of model requests in the last 24 hours that supplied a
+	// virtual-key email.
+	VirtualKeyEmailPct24h *float64 `form:"virtual_key_email_pct_24h,omitempty" json:"virtual_key_email_pct_24h,omitempty" xml:"virtual_key_email_pct_24h,omitempty"`
+	// Percentage of model requests in the last 24 hours that resolved to a Gram
+	// user.
+	PlatformUserPct24h *float64 `form:"platform_user_pct_24h,omitempty" json:"platform_user_pct_24h,omitempty" xml:"platform_user_pct_24h,omitempty"`
 }
 
 // LiteLLMRequestDataRequestBody is used to define fields on request body types.

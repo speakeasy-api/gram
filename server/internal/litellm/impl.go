@@ -2,11 +2,15 @@ package litellm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -25,9 +29,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
+	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 const (
@@ -48,40 +54,81 @@ type featureChecker interface {
 }
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	auth      authorizer
-	hooks     HookIngester
-	calls     *callcache.Cache
-	traces    *TraceProcessor
-	metrics   *MetricProcessor
-	health    *HealthProcessor
-	db        *pgxpool.Pool
-	authz     *authz.Engine
-	features  featureChecker
-	audit     *audit.Logger
-	keyPrefix string
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	auth        authorizer
+	hooks       HookIngester
+	calls       *callcache.Cache
+	traces      *TraceProcessor
+	metrics     *MetricProcessor
+	health      *HealthProcessor
+	db          *pgxpool.Pool
+	telemetry   telemetryrepo.CHTX
+	instanceIDs *sync.Map
+	authz       *authz.Engine
+	features    featureChecker
+	audit       *audit.Logger
+	keyPrefix   string
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger:    logger.With(attr.SlogComponent("litellm")),
-		auth:      auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:     hookIngester,
-		calls:     calls,
-		traces:    traces,
-		metrics:   metrics,
-		health:    health,
-		db:        db,
-		authz:     authzEngine,
-		features:  features,
-		audit:     auditLogger,
-		keyPrefix: auth.APIKeyPrefix(environment),
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:      logger.With(attr.SlogComponent("litellm")),
+		auth:        auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:       hookIngester,
+		calls:       calls,
+		traces:      traces,
+		metrics:     metrics,
+		health:      health,
+		db:          db,
+		telemetry:   telemetryDB,
+		instanceIDs: &sync.Map{},
+		authz:       authzEngine,
+		features:    features,
+		audit:       auditLogger,
+		keyPrefix:   auth.APIKeyPrefix(environment),
 	}
+}
+
+func (s *Service) instanceIDForRequest(ctx context.Context) (uuid.UUID, bool) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.APIKeyID == "" {
+		return uuid.Nil, false
+	}
+	if cached, ok := s.instanceIDs.Load(authCtx.APIKeyID); ok {
+		if instanceID, valid := cached.(uuid.UUID); valid {
+			return instanceID, instanceID != uuid.Nil
+		}
+		s.instanceIDs.Delete(authCtx.APIKeyID)
+	}
+	apiKeyID, err := uuid.Parse(authCtx.APIKeyID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	instanceID, err := repo.New(s.db).GetActiveLiteLLMInstanceIDByAPIKey(ctx, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ApiKeyID:       apiKeyID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		s.instanceIDs.Store(authCtx.APIKeyID, uuid.Nil)
+		return uuid.Nil, false
+	}
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve LiteLLM instance for telemetry",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+			attr.SlogAPIKeyID(authCtx.APIKeyID),
+		)
+		return uuid.Nil, false
+	}
+	s.instanceIDs.Store(authCtx.APIKeyID, instanceID)
+	return instanceID, true
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

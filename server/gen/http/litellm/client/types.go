@@ -1402,17 +1402,18 @@ type MetricsGatewayErrorResponseBody struct {
 
 // LiteLLMInstanceResponseBody is used to define fields on response body types.
 type LiteLLMInstanceResponseBody struct {
-	ID              *string                   `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID  *string                   `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	Project         *ProjectEntryResponseBody `form:"project,omitempty" json:"project,omitempty" xml:"project,omitempty"`
-	Name            *string                   `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	FailurePosture  *string                   `form:"failure_posture,omitempty" json:"failure_posture,omitempty" xml:"failure_posture,omitempty"`
-	KeyPrefix       *string                   `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
-	CreatedByUserID *string                   `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	CreatedAt       *string                   `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt       *string                   `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	LastUsedAt      *string                   `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
-	Active          *bool                     `form:"active,omitempty" json:"active,omitempty" xml:"active,omitempty"`
+	ID              *string                                 `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID  *string                                 `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Project         *ProjectEntryResponseBody               `form:"project,omitempty" json:"project,omitempty" xml:"project,omitempty"`
+	Name            *string                                 `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	FailurePosture  *string                                 `form:"failure_posture,omitempty" json:"failure_posture,omitempty" xml:"failure_posture,omitempty"`
+	KeyPrefix       *string                                 `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	CreatedByUserID *string                                 `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	CreatedAt       *string                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt       *string                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	LastUsedAt      *string                                 `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	Active          *bool                                   `form:"active,omitempty" json:"active,omitempty" xml:"active,omitempty"`
+	Diagnostics     *LiteLLMInstanceDiagnosticsResponseBody `form:"diagnostics,omitempty" json:"diagnostics,omitempty" xml:"diagnostics,omitempty"`
 }
 
 // ProjectEntryResponseBody is used to define fields on response body types.
@@ -1423,6 +1424,23 @@ type ProjectEntryResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The slug of the project
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
+// LiteLLMInstanceDiagnosticsResponseBody is used to define fields on response
+// body types.
+type LiteLLMInstanceDiagnosticsResponseBody struct {
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	LastGuardrailEventAt   *string `form:"last_guardrail_event_at,omitempty" json:"last_guardrail_event_at,omitempty" xml:"last_guardrail_event_at,omitempty"`
+	LastOtelEventAt        *string `form:"last_otel_event_at,omitempty" json:"last_otel_event_at,omitempty" xml:"last_otel_event_at,omitempty"`
+	LastErrorAt            *string `form:"last_error_at,omitempty" json:"last_error_at,omitempty" xml:"last_error_at,omitempty"`
+	LastErrorKind          *string `form:"last_error_kind,omitempty" json:"last_error_kind,omitempty" xml:"last_error_kind,omitempty"`
+	ReportedLitellmVersion *string `form:"reported_litellm_version,omitempty" json:"reported_litellm_version,omitempty" xml:"reported_litellm_version,omitempty"`
+	// Percentage of model requests in the last 24 hours that supplied a
+	// virtual-key email.
+	VirtualKeyEmailPct24h *float64 `form:"virtual_key_email_pct_24h,omitempty" json:"virtual_key_email_pct_24h,omitempty" xml:"virtual_key_email_pct_24h,omitempty"`
+	// Percentage of model requests in the last 24 hours that resolved to a Gram
+	// user.
+	PlatformUserPct24h *float64 `form:"platform_user_pct_24h,omitempty" json:"platform_user_pct_24h,omitempty" xml:"platform_user_pct_24h,omitempty"`
 }
 
 // LiteLLMRequestDataRequestBody is used to define fields on request body types.
@@ -4478,6 +4496,9 @@ func ValidateLiteLLMInstanceResponseBody(body *LiteLLMInstanceResponseBody) (err
 	if body.Active == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active", "body"))
 	}
+	if body.Diagnostics == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("diagnostics", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -4500,6 +4521,11 @@ func ValidateLiteLLMInstanceResponseBody(body *LiteLLMInstanceResponseBody) (err
 	if body.LastUsedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_used_at", *body.LastUsedAt, goa.FormatDateTime))
 	}
+	if body.Diagnostics != nil {
+		if err2 := ValidateLiteLLMInstanceDiagnosticsResponseBody(body.Diagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -4521,6 +4547,59 @@ func ValidateProjectEntryResponseBody(body *ProjectEntryResponseBody) (err error
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	return
+}
+
+// ValidateLiteLLMInstanceDiagnosticsResponseBody runs the validations defined
+// on LiteLLMInstanceDiagnosticsResponseBody
+func ValidateLiteLLMInstanceDiagnosticsResponseBody(body *LiteLLMInstanceDiagnosticsResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "success" || *body.Status == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "success", "failed"}))
+		}
+	}
+	if body.LastGuardrailEventAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_guardrail_event_at", *body.LastGuardrailEventAt, goa.FormatDateTime))
+	}
+	if body.LastOtelEventAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_otel_event_at", *body.LastOtelEventAt, goa.FormatDateTime))
+	}
+	if body.LastErrorAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_error_at", *body.LastErrorAt, goa.FormatDateTime))
+	}
+	if body.LastErrorKind != nil {
+		if !(*body.LastErrorKind == "auth_failure" || *body.LastErrorKind == "decode_failure" || *body.LastErrorKind == "limit_exceeded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.last_error_kind", *body.LastErrorKind, []any{"auth_failure", "decode_failure", "limit_exceeded"}))
+		}
+	}
+	if body.ReportedLitellmVersion != nil {
+		if utf8.RuneCountInString(*body.ReportedLitellmVersion) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reported_litellm_version", *body.ReportedLitellmVersion, utf8.RuneCountInString(*body.ReportedLitellmVersion), 128, false))
+		}
+	}
+	if body.VirtualKeyEmailPct24h != nil {
+		if *body.VirtualKeyEmailPct24h < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.virtual_key_email_pct_24h", *body.VirtualKeyEmailPct24h, 0, true))
+		}
+	}
+	if body.VirtualKeyEmailPct24h != nil {
+		if *body.VirtualKeyEmailPct24h > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.virtual_key_email_pct_24h", *body.VirtualKeyEmailPct24h, 100, false))
+		}
+	}
+	if body.PlatformUserPct24h != nil {
+		if *body.PlatformUserPct24h < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.platform_user_pct_24h", *body.PlatformUserPct24h, 0, true))
+		}
+	}
+	if body.PlatformUserPct24h != nil {
+		if *body.PlatformUserPct24h > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.platform_user_pct_24h", *body.PlatformUserPct24h, 100, false))
 		}
 	}
 	return

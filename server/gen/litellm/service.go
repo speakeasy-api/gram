@@ -128,7 +128,31 @@ type LiteLLMInstance struct {
 	UpdatedAt       string
 	LastUsedAt      *string
 	Active          bool
+	Diagnostics     *LiteLLMInstanceDiagnostics
 }
+
+// Health and identity-attribution diagnostics for a LiteLLM integration. No
+// prompt, credential, or identity values are returned.
+type LiteLLMInstanceDiagnostics struct {
+	Status                 LiteLLMInstanceHealthStatus
+	LastGuardrailEventAt   *string
+	LastOtelEventAt        *string
+	LastErrorAt            *string
+	LastErrorKind          *LiteLLMInstanceErrorKind
+	ReportedLitellmVersion *string
+	// Percentage of model requests in the last 24 hours that supplied a
+	// virtual-key email.
+	VirtualKeyEmailPct24h *float64
+	// Percentage of model requests in the last 24 hours that resolved to a Gram
+	// user.
+	PlatformUserPct24h *float64
+}
+
+// Safe category for the latest observed ingest error.
+type LiteLLMInstanceErrorKind string
+
+// Derived health of a LiteLLM integration's latest ingest activity.
+type LiteLLMInstanceHealthStatus string
 
 // Sanitized metadata bound to the LiteLLM virtual key and request.
 type LiteLLMRequestData struct {
@@ -410,6 +434,9 @@ func transformLitellmviewsLiteLLMInstanceViewToLiteLLMInstance(v *litellmviews.L
 	if v.Project != nil {
 		res.Project = transformLitellmviewsProjectEntryViewToProjectEntry(v.Project)
 	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = transformLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnostics(v.Diagnostics)
+	}
 
 	return res
 }
@@ -421,6 +448,27 @@ func transformLitellmviewsProjectEntryViewToProjectEntry(v *litellmviews.Project
 		ID:   *v.ID,
 		Name: *v.Name,
 		Slug: types.Slug(*v.Slug),
+	}
+
+	return res
+}
+
+// transformLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnostics
+// builds a value of type *LiteLLMInstanceDiagnostics from a value of type
+// *litellmviews.LiteLLMInstanceDiagnosticsView.
+func transformLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnostics(v *litellmviews.LiteLLMInstanceDiagnosticsView) *LiteLLMInstanceDiagnostics {
+	res := &LiteLLMInstanceDiagnostics{
+		Status:                 LiteLLMInstanceHealthStatus(*v.Status),
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	if v.LastErrorKind != nil {
+		lastErrorKind := LiteLLMInstanceErrorKind(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
 	}
 
 	return res
@@ -445,6 +493,9 @@ func transformLiteLLMInstanceToLitellmviewsLiteLLMInstanceView(v *LiteLLMInstanc
 	if v.Project != nil {
 		res.Project = transformProjectEntryToLitellmviewsProjectEntryView(v.Project)
 	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = transformLiteLLMInstanceDiagnosticsToLitellmviewsLiteLLMInstanceDiagnosticsView(v.Diagnostics)
+	}
 
 	return res
 }
@@ -458,6 +509,28 @@ func transformProjectEntryToLitellmviewsProjectEntryView(v *ProjectEntry) *litel
 	}
 	slug := litellmviews.SlugView(v.Slug)
 	res.Slug = &slug
+
+	return res
+}
+
+// transformLiteLLMInstanceDiagnosticsToLitellmviewsLiteLLMInstanceDiagnosticsView
+// builds a value of type *litellmviews.LiteLLMInstanceDiagnosticsView from a
+// value of type *LiteLLMInstanceDiagnostics.
+func transformLiteLLMInstanceDiagnosticsToLitellmviewsLiteLLMInstanceDiagnosticsView(v *LiteLLMInstanceDiagnostics) *litellmviews.LiteLLMInstanceDiagnosticsView {
+	res := &litellmviews.LiteLLMInstanceDiagnosticsView{
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	status := litellmviews.LiteLLMInstanceHealthStatusView(v.Status)
+	res.Status = &status
+	if v.LastErrorKind != nil {
+		lastErrorKind := litellmviews.LiteLLMInstanceErrorKindView(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
+	}
 
 	return res
 }
