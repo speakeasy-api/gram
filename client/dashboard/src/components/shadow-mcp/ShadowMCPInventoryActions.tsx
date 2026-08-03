@@ -465,11 +465,11 @@ export function ShadowMCPInventoryActionSheet({
           )}
 
           {isBlocklistAction && (
-            <Type muted small>
+            <Text muted small>
               {action.mode === "block"
                 ? "The block applies to everyone in the project immediately."
                 : "The server becomes available to everyone in the project immediately."}
-            </Type>
+            </Text>
           )}
         </div>
 
