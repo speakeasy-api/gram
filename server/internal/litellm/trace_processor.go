@@ -311,7 +311,7 @@ func enrichLiteLLMInstanceAttribution(ctx context.Context, resolver *InstanceRes
 		instance, ok := resolved[cacheKey]
 		if !ok {
 			if resolveCtx.Err() != nil {
-				return
+				continue
 			}
 			instanceID, found := resolver.Resolve(resolveCtx, organizationID, projectID, apiKeyID)
 			instance = resolvedLiteLLMInstance{id: instanceID.String(), found: found}

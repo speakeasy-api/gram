@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,19 +27,27 @@ const (
 // InstanceResolver maps managed ingestion keys to stable LiteLLM instance IDs
 // outside the request path. Nil UUIDs negatively cache unmanaged hooks keys.
 type InstanceResolver struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	cache  *lru.LRU[string, uuid.UUID]
-	group  singleflight.Group
+	logger     *slog.Logger
+	cache      *lru.LRU[string, uuid.UUID]
+	group      singleflight.Group
+	mu         sync.Mutex
+	generation uint64
+	lookup     func(context.Context, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error)
 }
 
 func NewInstanceResolver(logger *slog.Logger, db *pgxpool.Pool) *InstanceResolver {
-	return &InstanceResolver{
-		logger: logger.With(attr.SlogComponent("litellm.instance-resolver")),
-		db:     db,
-		cache:  lru.NewLRU[string, uuid.UUID](instanceResolverCacheSize, nil, instanceResolverCacheTTL),
-		group:  singleflight.Group{},
+	resolver := &InstanceResolver{
+		logger:     logger.With(attr.SlogComponent("litellm.instance-resolver")),
+		cache:      lru.NewLRU[string, uuid.UUID](instanceResolverCacheSize, nil, instanceResolverCacheTTL),
+		group:      singleflight.Group{},
+		mu:         sync.Mutex{},
+		generation: 0,
+		lookup:     nil,
 	}
+	resolver.lookup = func(ctx context.Context, params repo.GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+		return repo.New(db).GetActiveLiteLLMInstanceIDByAPIKey(ctx, params)
+	}
+	return resolver
 }
 
 func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectID, apiKeyID string) (uuid.UUID, bool) {
@@ -58,20 +67,26 @@ func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectI
 		if instanceID, ok := r.cache.Get(cacheKey); ok {
 			return instanceID, nil
 		}
-		instanceID, queryErr := repo.New(r.db).GetActiveLiteLLMInstanceIDByAPIKey(ctx, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams{
+		r.mu.Lock()
+		generation := r.generation
+		r.mu.Unlock()
+		instanceID, queryErr := r.lookup(ctx, repo.GetActiveLiteLLMInstanceIDByAPIKeyParams{
 			OrganizationID: organizationID,
 			ProjectID:      projectUUID,
 			ApiKeyID:       keyID,
 		})
 		if errors.Is(queryErr, pgx.ErrNoRows) {
-			r.cache.Add(cacheKey, uuid.Nil)
-			return uuid.Nil, nil
-		}
-		if queryErr != nil {
+			instanceID = uuid.Nil
+		} else if queryErr != nil {
 			return uuid.Nil, fmt.Errorf("get active LiteLLM instance by API key: %w", queryErr)
 		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
 		if cached, ok := r.cache.Get(cacheKey); ok {
 			return cached, nil
+		}
+		if generation != r.generation {
+			return uuid.Nil, nil
 		}
 		r.cache.Add(cacheKey, instanceID)
 		return instanceID, nil
@@ -95,11 +110,9 @@ func (r *InstanceResolver) Remember(organizationID string, projectID uuid.UUID, 
 
 func (r *InstanceResolver) Forget(organizationID string, projectID uuid.UUID, apiKeyID string) {
 	cacheKey := instanceResolverCacheKey(organizationID, projectID.String(), apiKeyID)
-	// Tombstone before and after waiting so an older in-flight fill cannot restore a revoked key.
-	r.cache.Add(cacheKey, uuid.Nil)
-	_, _, _ = r.group.Do(cacheKey, func() (any, error) {
-		return uuid.Nil, nil
-	})
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.generation++
 	r.cache.Add(cacheKey, uuid.Nil)
 }
 
