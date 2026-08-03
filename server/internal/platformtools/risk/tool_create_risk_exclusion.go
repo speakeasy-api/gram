@@ -50,10 +50,10 @@ func (s *CreateRiskExclusion) Descriptor() core.ToolDescriptor {
 }
 
 // findEquivalent returns an existing exclusion identical to the one described by
-// input, or nil if there is none. Enabled is deliberately not compared: a
-// disabled exclusion is the same rule, and re-creating it would leave two rows
-// disagreeing about whether it applies.
-func (s *CreateRiskExclusion) findEquivalent(ctx context.Context, input createRiskExclusionInput, ruleIDFilter, sourceFilter string) (*types.RiskExclusion, error) {
+// input, or nil if there is none. Enabled is part of the comparison: reusing a
+// disabled row for an enable request would report success while leaving the
+// findings flagged, which is the opposite of what the caller asked for.
+func (s *CreateRiskExclusion) findEquivalent(ctx context.Context, input createRiskExclusionInput, policyID *string, ruleIDFilter, sourceFilter string, enabled bool) (*types.RiskExclusion, error) {
 	// Listed unfiltered: a nil risk_policy_id means "global", not "any policy",
 	// so the policy binding has to be compared here rather than pushed down.
 	listed, err := s.risk.ListRiskExclusions(ctx, &risk.ListRiskExclusionsPayload{
@@ -73,7 +73,10 @@ func (s *CreateRiskExclusion) findEquivalent(ctx context.Context, input createRi
 		if exclusion.RuleIDFilter != ruleIDFilter || exclusion.SourceFilter != sourceFilter {
 			continue
 		}
-		if !samePolicyBinding(exclusion.RiskPolicyID, input.RiskPolicyID) {
+		if exclusion.Enabled != enabled {
+			continue
+		}
+		if !samePolicyBinding(exclusion.RiskPolicyID, policyID) {
 			continue
 		}
 		return exclusion, nil
@@ -126,13 +129,20 @@ func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 	if input.SourceFilter != nil {
 		sourceFilter = *input.SourceFilter
 	}
+	// The service reads an empty risk_policy_id as global, same as an omitted
+	// one, so they are collapsed here too — otherwise the two spellings look
+	// like distinct scopes to the equivalence check below.
+	policyID := input.RiskPolicyID
+	if policyID != nil && *policyID == "" {
+		policyID = nil
+	}
 
 	// platform_list_risk_exclusions fingerprints exact/regex match values, so the
 	// model cannot tell from that listing whether the exclusion it is about to
 	// create already exists. Dedupe here instead: this call has the raw proposed
 	// value and the raw existing ones, so the comparison happens without either
 	// pattern reaching the model.
-	existing, err := s.findEquivalent(ctx, input, ruleIDFilter, sourceFilter)
+	existing, err := s.findEquivalent(ctx, input, policyID, ruleIDFilter, sourceFilter, enabled)
 	if err != nil {
 		return err
 	}
@@ -144,7 +154,7 @@ func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		RiskPolicyID:     input.RiskPolicyID,
+		RiskPolicyID:     policyID,
 		MatchType:        input.MatchType,
 		MatchValue:       input.MatchValue,
 		RuleIDFilter:     ruleIDFilter,
