@@ -119,7 +119,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	logger := plog.NewLogger(io.Discard)
 	var tp trace.TracerProvider = tracenoop.NewTracerProvider()
 
-	db, err := bootstrap.Open(ctx, config.DB{Mode: config.DBModeMemory})
+	db, err := bootstrap.Open(ctx, config.DB{Mode: config.DBModeMemory}, logger)
 	require.NoError(t, err, "open dev-idp in-memory sqlite")
 
 	// httptest.Server.Close drains in-flight requests but does not block

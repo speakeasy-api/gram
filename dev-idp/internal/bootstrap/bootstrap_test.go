@@ -1,16 +1,21 @@
 package bootstrap_test
 
 import (
+	"io"
+	"log/slog"
 	"path/filepath"
 	"testing"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/bootstrap"
 	"github.com/speakeasy-api/gram/dev-idp/internal/config"
+	"github.com/speakeasy-api/gram/plog"
 )
+
+func testLogger() *slog.Logger { return plog.NewLogger(io.Discard) }
 
 func TestOpen_Memory(t *testing.T) {
 	t.Parallel()
-	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory})
+	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""}, testLogger())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -30,7 +35,7 @@ func TestOpen_FileIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	cfg := config.DB{Mode: config.DBModeFile, Path: filepath.Join(dir, "devidp.db")}
 
-	db1, err := bootstrap.Open(t.Context(), cfg)
+	db1, err := bootstrap.Open(t.Context(), cfg, testLogger())
 	if err != nil {
 		t.Fatalf("Open #1: %v", err)
 	}
@@ -41,7 +46,7 @@ func TestOpen_FileIdempotent(t *testing.T) {
 	}
 	_ = db1.Close()
 
-	db2, err := bootstrap.Open(t.Context(), cfg)
+	db2, err := bootstrap.Open(t.Context(), cfg, testLogger())
 	if err != nil {
 		t.Fatalf("Open #2 (re-apply schema): %v", err)
 	}
