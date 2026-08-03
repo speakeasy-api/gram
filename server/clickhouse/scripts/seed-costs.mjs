@@ -614,14 +614,18 @@ for (const p of people) {
       const cost = ((inputTokens * 2 + outputTokens * 8) / 1_000_000).toFixed(
         6,
       );
+      // hook_source mirrors the importer's product routing: Work rows carry
+      // chatgpt-work so the split survives summarization.
+      const chatgptProduct = rnd() < 0.75 ? "ChatGPT" : "Work";
       const a = {
         ...ua,
         "gram.project.id": projectId,
         "gram.event.source": "api",
-        "gram.hook.source": "chatgpt",
+        "gram.hook.source":
+          chatgptProduct === "Work" ? "chatgpt-work" : "chatgpt",
         "gram.provider": "openai",
         "gram.resource.urn": "chatgpt:usage:metrics",
-        "codex.compliance.product": rnd() < 0.75 ? "ChatGPT" : "Work",
+        "codex.compliance.product": chatgptProduct,
         "gen_ai.response.model": rnd() < 0.6 ? "gpt-5.6" : "gpt-5.4-mini",
         "gen_ai.usage.input_tokens": inputTokens,
         "gen_ai.usage.output_tokens": outputTokens,

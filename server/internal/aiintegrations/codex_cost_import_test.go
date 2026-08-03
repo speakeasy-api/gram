@@ -131,11 +131,15 @@ func TestBuildCodexCostLogParamsRoutesNonCodexProductsToChatGPTURN(t *testing.T)
 
 	workRow := logParams[2]
 	require.Equal(t, chatgptUsageMetricsURN, workRow.ToolInfo.URN)
-	require.Equal(t, chatgptHookSource, workRow.ToolInfo.Name)
+	// Work shares the chatgpt URN but gets its own hook_source: hook_source
+	// is a summary GROUP BY dimension, so this is what keeps ChatGPT and
+	// Work spend separable after the raw rows age out.
+	require.Equal(t, chatgptWorkHookSource, workRow.ToolInfo.Name)
+	require.Equal(t, chatgptWorkHookSource, workRow.Attributes[attr.HookSourceKey])
 	require.Equal(t, "Work", workRow.Attributes[attr.CodexComplianceProductKey])
 	require.Equal(t, int64(30), workRow.Attributes[attr.GenAIUsageInputTokensKey])
 	// Billing still prices non-Codex rows; the cost just lands under the
-	// parked URN instead of the codex stream.
+	// chatgpt URN instead of the codex stream.
 	require.InDelta(t, 0.04, workRow.Attributes[attr.GenAIUsageCostKey], 0.000001)
 }
 
