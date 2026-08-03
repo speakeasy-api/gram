@@ -728,3 +728,44 @@ func TestCursor_BeforeSubmitPrompt_SpendGateDenies(t *testing.T) {
 	require.NotNil(t, result.UserMessage)
 	assert.Contains(t, *result.UserMessage, "Intern hard limit")
 }
+
+func TestCursor_SpendGateRedeliveryDoesNotRemintBlockPage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "user_spend_cursor_retry"
+	userEmail := "spend-cursor-retry@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, userEmail)
+
+	toolName := "Edit"
+	toolUseID := "toolu_spend_cursor_retry_1"
+	idempotencyKey := "idem-spend-cursor-" + uuid.NewString()
+	payload := &gen.CursorPayload{
+		HookEventName:  "preToolUse",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		UserEmail:      &userEmail,
+		IdempotencyKey: &idempotencyKey,
+	}
+
+	first, err := ti.service.Cursor(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, first.Permission)
+	assert.Equal(t, "deny", *first.Permission)
+	require.NotNil(t, first.UserMessage)
+	assert.Contains(t, *first.UserMessage, "/blocks/")
+
+	// The redelivery keeps the deny but must not mint a second block row, so
+	// its reason carries no fresh block link.
+	second, err := ti.service.Cursor(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, second.Permission)
+	assert.Equal(t, "deny", *second.Permission)
+	require.NotNil(t, second.UserMessage)
+	assert.NotContains(t, *second.UserMessage, "/blocks/",
+		"idempotent redelivery must not mint another block page")
+}
