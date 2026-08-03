@@ -147,6 +147,32 @@ func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 	require.NotContains(t, view, "member@example.test")
 	require.NotContains(t, view, "unknown@example.test")
 	require.Equal(t, gen.LiteLLMInstanceHealthStatus("pending"), withoutTraffic.Instance.Diagnostics.Status)
+
+	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
+		GuardrailEvent:         true,
+		OtelEvent:              false,
+		ErrorKind:              "",
+		ReportedLitellmVersion: "",
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		ApiKeyID:               rotatedKey.ID,
+	}))
+	listedAfterRecovery, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMInstanceHealthStatus("success"), instanceByName(t, listedAfterRecovery, "with-traffic").Diagnostics.Status)
+
+	require.NoError(t, litellmrepo.New(ti.conn).RecordLiteLLMInstanceHealth(ctx, litellmrepo.RecordLiteLLMInstanceHealthParams{
+		GuardrailEvent:         false,
+		OtelEvent:              false,
+		ErrorKind:              "decode_failure",
+		ReportedLitellmVersion: "",
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		ApiKeyID:               rotatedKey.ID,
+	}))
+	listedAfterRelapse, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMInstanceHealthStatus("failed"), instanceByName(t, listedAfterRelapse, "with-traffic").Diagnostics.Status)
 }
 
 func liteLLMTrafficLog(t *testing.T, projectID, instanceID, apiKeyID uuid.UUID, observed time.Time, callID, email, userID, eventURN string) telemetryrepo.InsertTelemetryLogParams {

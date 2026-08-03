@@ -220,7 +220,10 @@ func (s *Service) RotateInstanceKey(ctx context.Context, payload *gen.RotateInst
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit LiteLLM instance key rotation").LogError(ctx, s.logger)
 	}
-	s.instances.Forget(instance.OrganizationID, instance.ProjectID, oldAPIKeyID.String())
+	// Requests accepted before rotation may still be queued for persistence.
+	// Authentication prevents new use of the revoked key, while retaining this
+	// mapping lets those accepted jobs keep stable instance attribution.
+	s.instances.Remember(instance.OrganizationID, instance.ProjectID, oldAPIKeyID.String(), instance.ID)
 	s.instances.Remember(instance.OrganizationID, instance.ProjectID, newKey.ID.String(), instance.ID)
 	return &gen.LitellmInstanceKeyResult{Instance: buildInstanceView(instanceView{
 		ID: instance.ID, OrganizationID: instance.OrganizationID, ProjectID: project.ID, ProjectName: project.Name, ProjectSlug: project.Slug,
@@ -272,7 +275,9 @@ func (s *Service) RevokeInstance(ctx context.Context, payload *gen.RevokeInstanc
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit LiteLLM instance revocation").LogError(ctx, s.logger)
 	}
-	s.instances.Forget(instance.OrganizationID, instance.ProjectID, instance.ApiKeyID.String())
+	// Keep attribution available for requests accepted before revocation. The
+	// revoked key can no longer authenticate new requests.
+	s.instances.Remember(instance.OrganizationID, instance.ProjectID, instance.ApiKeyID.String(), instance.ID)
 	return nil
 }
 

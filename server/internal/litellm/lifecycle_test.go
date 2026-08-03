@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"goa.design/goa/v3/security"
@@ -74,14 +75,22 @@ func TestInstanceLifecycle(t *testing.T) {
 	rotated, err := ti.service.RotateInstanceKey(ctx, &gen.RotateInstanceKeyPayload{ID: first.Instance.ID})
 	require.NoError(t, err)
 	require.NotEqual(t, first.Key, rotated.Key)
+	instanceID, err := uuid.Parse(first.Instance.ID)
+	require.NoError(t, err)
+	resolvedID, managed := ti.service.instances.Resolve(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), managedKey.ID.String())
+	require.True(t, managed)
+	require.Equal(t, instanceID, resolvedID)
 	_, err = keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, oldHash)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	newHash, err := auth.GetAPIKeyHash(rotated.Key)
 	require.NoError(t, err)
-	_, err = keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, newHash)
+	rotatedKey, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, newHash)
 	require.NoError(t, err)
 
 	require.NoError(t, ti.service.RevokeInstance(ctx, &gen.RevokeInstancePayload{ID: first.Instance.ID}))
+	resolvedID, managed = ti.service.instances.Resolve(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), rotatedKey.ID.String())
+	require.True(t, managed)
+	require.Equal(t, instanceID, resolvedID)
 	_, err = keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, newHash)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	listed, err = ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})

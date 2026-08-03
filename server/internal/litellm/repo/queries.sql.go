@@ -240,13 +240,21 @@ const recordLiteLLMInstanceHealth = `-- name: RecordLiteLLMInstanceHealth :exec
 UPDATE litellm_instances
 SET last_guardrail_event_at = CASE
       WHEN $1::boolean
-        AND (last_guardrail_event_at IS NULL OR last_guardrail_event_at < clock_timestamp() - interval '1 minute')
+        AND (
+          last_guardrail_event_at IS NULL
+          OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'
+          OR last_guardrail_event_at <= last_error_at
+        )
         THEN clock_timestamp()
       ELSE last_guardrail_event_at
     END
   , last_otel_event_at = CASE
       WHEN $2::boolean
-        AND (last_otel_event_at IS NULL OR last_otel_event_at < clock_timestamp() - interval '1 minute')
+        AND (
+          last_otel_event_at IS NULL
+          OR last_otel_event_at < clock_timestamp() - interval '1 minute'
+          OR last_otel_event_at <= last_error_at
+        )
         THEN clock_timestamp()
       ELSE last_otel_event_at
     END
@@ -256,6 +264,8 @@ SET last_guardrail_event_at = CASE
           last_error_kind IS DISTINCT FROM $3::text
           OR last_error_at IS NULL
           OR last_error_at < clock_timestamp() - interval '1 minute'
+          OR last_error_at <= last_guardrail_event_at
+          OR last_error_at <= last_otel_event_at
         )
         THEN clock_timestamp()
       ELSE last_error_at
@@ -266,6 +276,8 @@ SET last_guardrail_event_at = CASE
           last_error_kind IS DISTINCT FROM $3::text
           OR last_error_at IS NULL
           OR last_error_at < clock_timestamp() - interval '1 minute'
+          OR last_error_at <= last_guardrail_event_at
+          OR last_error_at <= last_otel_event_at
         )
         THEN $3::text
       ELSE last_error_kind
@@ -281,14 +293,30 @@ WHERE organization_id = $5
   AND api_key_id = $7
   AND deleted IS FALSE
   AND (
-    ($1::boolean AND (last_guardrail_event_at IS NULL OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'))
-    OR ($2::boolean AND (last_otel_event_at IS NULL OR last_otel_event_at < clock_timestamp() - interval '1 minute'))
+    (
+      $1::boolean
+      AND (
+        last_guardrail_event_at IS NULL
+        OR last_guardrail_event_at < clock_timestamp() - interval '1 minute'
+        OR last_guardrail_event_at <= last_error_at
+      )
+    )
+    OR (
+      $2::boolean
+      AND (
+        last_otel_event_at IS NULL
+        OR last_otel_event_at < clock_timestamp() - interval '1 minute'
+        OR last_otel_event_at <= last_error_at
+      )
+    )
     OR (
       $3::text <> ''
       AND (
         last_error_kind IS DISTINCT FROM $3::text
         OR last_error_at IS NULL
         OR last_error_at < clock_timestamp() - interval '1 minute'
+        OR last_error_at <= last_guardrail_event_at
+        OR last_error_at <= last_otel_event_at
       )
     )
     OR (

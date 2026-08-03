@@ -52,6 +52,7 @@ type healthUpdate struct {
 	otelEvent       bool
 	errorKind       healthErrorKind
 	reportedVersion string
+	latestFailed    bool
 }
 
 type healthWriteFunc func(context.Context, repo.RecordLiteLLMInstanceHealthParams) error
@@ -153,7 +154,9 @@ func (p *HealthProcessor) Record(ctx context.Context, signal healthSignal, versi
 		otelEvent:       signal == healthSignalOTEL,
 		errorKind:       classifyHealthError(observedErr),
 		reportedVersion: version,
+		latestFailed:    false,
 	}
+	update.latestFailed = update.errorKind != healthErrorNone
 	key := healthInstanceKey{
 		organizationID: authCtx.ActiveOrganizationID,
 		projectID:      *authCtx.ProjectID,
@@ -173,6 +176,9 @@ func (p *HealthProcessor) Record(ctx context.Context, signal healthSignal, versi
 	}
 	if update.reportedVersion != "" {
 		current.reportedVersion = update.reportedVersion
+	}
+	if update.guardrailEvent || update.otelEvent || update.errorKind != healthErrorNone {
+		current.latestFailed = update.latestFailed
 	}
 	p.pending[key] = current
 	p.mu.Unlock()
@@ -241,7 +247,7 @@ func (p *HealthProcessor) flush(ctx context.Context) {
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), healthWriteTimeout)
 	defer cancel()
 	for key, update := range pending {
-		err := p.write(writeCtx, repo.RecordLiteLLMInstanceHealthParams{
+		params := repo.RecordLiteLLMInstanceHealthParams{
 			GuardrailEvent:         update.guardrailEvent,
 			OtelEvent:              update.otelEvent,
 			ErrorKind:              string(update.errorKind),
@@ -249,14 +255,31 @@ func (p *HealthProcessor) flush(ctx context.Context) {
 			OrganizationID:         key.organizationID,
 			ProjectID:              key.projectID,
 			ApiKeyID:               key.apiKeyID,
-		})
-		if err != nil {
-			p.logger.WarnContext(writeCtx, "record LiteLLM instance health",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(key.organizationID),
-				attr.SlogProjectID(key.projectID.String()),
-				attr.SlogAPIKeyID(key.apiKeyID.String()),
-			)
 		}
+		write := func(params repo.RecordLiteLLMInstanceHealthParams) {
+			if err := p.write(writeCtx, params); err != nil {
+				p.logger.WarnContext(writeCtx, "record LiteLLM instance health",
+					attr.SlogError(err),
+					attr.SlogOrganizationID(key.organizationID),
+					attr.SlogProjectID(key.projectID.String()),
+					attr.SlogAPIKeyID(key.apiKeyID.String()),
+				)
+			}
+		}
+		if update.errorKind != healthErrorNone && (update.guardrailEvent || update.otelEvent) {
+			first := params
+			first.ReportedLitellmVersion = ""
+			if update.latestFailed {
+				first.ErrorKind = ""
+				params.GuardrailEvent = false
+				params.OtelEvent = false
+			} else {
+				first.GuardrailEvent = false
+				first.OtelEvent = false
+				params.ErrorKind = ""
+			}
+			write(first)
+		}
+		write(params)
 	}
 }
