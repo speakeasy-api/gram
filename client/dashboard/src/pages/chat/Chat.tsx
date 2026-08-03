@@ -856,7 +856,10 @@ function ChatHomeSuggestions({
               key={suggestion.title}
               type="button"
               onClick={(event) => launchChat(suggestion, event.currentTarget)}
-              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+              // Hover lifts the chip off the tinted home surface rather than
+              // tinting it: the card stays pure white and gains edge and
+              // shadow, so it reads as raised, not as selected.
+              className="border-border bg-card text-foreground hover:bg-card hover:border-foreground/20 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all hover:shadow-sm"
             >
               <SuggestionIcon className="size-4 shrink-0" />
               {suggestion.title}

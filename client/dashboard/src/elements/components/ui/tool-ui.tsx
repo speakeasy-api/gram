@@ -1194,49 +1194,49 @@ function ToolUIGroup({
 
   const showChildren = headerless || isExpanded;
 
+  // The group carries no chrome of its own: a bordered panel between message
+  // paragraphs reads as heavier than the activity it describes, so the header
+  // sits in the flow as a line of text and the chevron is the only affordance.
   return (
-    <div
-      data-slot="tool-ui-group"
-      className={cn(
-        "overflow-hidden rounded-lg border border-border bg-card",
-        className,
-      )}
-    >
+    <div data-slot="tool-ui-group" className={cn(className)}>
       {/* Group header */}
       {!headerless && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           aria-expanded={isExpanded}
-          className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
+          className="group flex items-center gap-1.5 text-left"
         >
           {icon || (
             <StatusIndicator
               status={status === "running" ? "running" : "complete"}
             />
           )}
+          {/* Smaller and muted against the message prose: with no border to
+              set it apart, type is what says "this is activity, not speech". */}
           <span
             className={cn(
-              "flex-1 text-sm font-medium",
+              "text-muted-foreground group-hover:text-foreground text-xs font-medium tracking-wide transition-colors",
               (titleShimmer ?? status === "running") && "shimmer",
             )}
           >
             {title}
           </span>
-          <ChevronDownIcon
+          <ChevronRightIcon
             className={cn(
-              "size-4 text-muted-foreground transition-transform duration-200",
-              isExpanded && "rotate-180",
+              "text-muted-foreground/70 group-hover:text-foreground size-3.5 transition-all duration-200",
+              isExpanded && "rotate-90",
             )}
           />
         </button>
       )}
 
       {/* Collapsed children are hidden, not unmounted — unmounting would
-          reset their state (expansion, async syntax highlighting). */}
+          reset their state (expansion, async syntax highlighting). The rail
+          ties the individual calls back to the header they expanded from. */}
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          !headerless && "border-t border-border",
+          !headerless && "border-border mt-2 ml-2 space-y-2 border-l pl-4",
           !showChildren && "hidden",
         )}
       >
