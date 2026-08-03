@@ -142,7 +142,7 @@ func UsageCommands() []string {
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|get-unproxied-mcp-server-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -2539,6 +2539,24 @@ func ParseEndpoint(
 		telemetryGetUnproxiedMcpServerUsageSessionTokenFlag     = telemetryGetUnproxiedMcpServerUsageFlags.String("session-token", "", "")
 		telemetryGetUnproxiedMcpServerUsageProjectSlugInputFlag = telemetryGetUnproxiedMcpServerUsageFlags.String("project-slug-input", "", "")
 
+		telemetryGetUnproxiedMcpServerToolUsageFlags                = flag.NewFlagSet("get-unproxied-mcp-server-tool-usage", flag.ExitOnError)
+		telemetryGetUnproxiedMcpServerToolUsageBodyFlag             = telemetryGetUnproxiedMcpServerToolUsageFlags.String("body", "REQUIRED", "")
+		telemetryGetUnproxiedMcpServerToolUsageApikeyTokenFlag      = telemetryGetUnproxiedMcpServerToolUsageFlags.String("apikey-token", "", "")
+		telemetryGetUnproxiedMcpServerToolUsageSessionTokenFlag     = telemetryGetUnproxiedMcpServerToolUsageFlags.String("session-token", "", "")
+		telemetryGetUnproxiedMcpServerToolUsageProjectSlugInputFlag = telemetryGetUnproxiedMcpServerToolUsageFlags.String("project-slug-input", "", "")
+
+		telemetryGetUnproxiedMcpServerUserUsageFlags                = flag.NewFlagSet("get-unproxied-mcp-server-user-usage", flag.ExitOnError)
+		telemetryGetUnproxiedMcpServerUserUsageBodyFlag             = telemetryGetUnproxiedMcpServerUserUsageFlags.String("body", "REQUIRED", "")
+		telemetryGetUnproxiedMcpServerUserUsageApikeyTokenFlag      = telemetryGetUnproxiedMcpServerUserUsageFlags.String("apikey-token", "", "")
+		telemetryGetUnproxiedMcpServerUserUsageSessionTokenFlag     = telemetryGetUnproxiedMcpServerUserUsageFlags.String("session-token", "", "")
+		telemetryGetUnproxiedMcpServerUserUsageProjectSlugInputFlag = telemetryGetUnproxiedMcpServerUserUsageFlags.String("project-slug-input", "", "")
+
+		telemetryGetUnproxiedMcpServerClientUsageFlags                = flag.NewFlagSet("get-unproxied-mcp-server-client-usage", flag.ExitOnError)
+		telemetryGetUnproxiedMcpServerClientUsageBodyFlag             = telemetryGetUnproxiedMcpServerClientUsageFlags.String("body", "REQUIRED", "")
+		telemetryGetUnproxiedMcpServerClientUsageApikeyTokenFlag      = telemetryGetUnproxiedMcpServerClientUsageFlags.String("apikey-token", "", "")
+		telemetryGetUnproxiedMcpServerClientUsageSessionTokenFlag     = telemetryGetUnproxiedMcpServerClientUsageFlags.String("session-token", "", "")
+		telemetryGetUnproxiedMcpServerClientUsageProjectSlugInputFlag = telemetryGetUnproxiedMcpServerClientUsageFlags.String("project-slug-input", "", "")
+
 		telemetryQueryFlags            = flag.NewFlagSet("query", flag.ExitOnError)
 		telemetryQueryBodyFlag         = telemetryQueryFlags.String("body", "REQUIRED", "")
 		telemetryQuerySessionTokenFlag = telemetryQueryFlags.String("session-token", "", "")
@@ -3597,6 +3615,9 @@ func ParseEndpoint(
 	telemetryGetObservabilityOverviewFlags.Usage = telemetryGetObservabilityOverviewUsage
 	telemetryGetProjectOverviewFlags.Usage = telemetryGetProjectOverviewUsage
 	telemetryGetUnproxiedMcpServerUsageFlags.Usage = telemetryGetUnproxiedMcpServerUsageUsage
+	telemetryGetUnproxiedMcpServerToolUsageFlags.Usage = telemetryGetUnproxiedMcpServerToolUsageUsage
+	telemetryGetUnproxiedMcpServerUserUsageFlags.Usage = telemetryGetUnproxiedMcpServerUserUsageUsage
+	telemetryGetUnproxiedMcpServerClientUsageFlags.Usage = telemetryGetUnproxiedMcpServerClientUsageUsage
 	telemetryQueryFlags.Usage = telemetryQueryUsage
 	telemetryQueryTumDetailsFlags.Usage = telemetryQueryTumDetailsUsage
 	telemetryListSessionsFlags.Usage = telemetryListSessionsUsage
@@ -5335,6 +5356,15 @@ func ParseEndpoint(
 
 			case "get-unproxied-mcp-server-usage":
 				epf = telemetryGetUnproxiedMcpServerUsageFlags
+
+			case "get-unproxied-mcp-server-tool-usage":
+				epf = telemetryGetUnproxiedMcpServerToolUsageFlags
+
+			case "get-unproxied-mcp-server-user-usage":
+				epf = telemetryGetUnproxiedMcpServerUserUsageFlags
+
+			case "get-unproxied-mcp-server-client-usage":
+				epf = telemetryGetUnproxiedMcpServerClientUsageFlags
 
 			case "query":
 				epf = telemetryQueryFlags
@@ -7151,6 +7181,15 @@ func ParseEndpoint(
 			case "get-unproxied-mcp-server-usage":
 				endpoint = c.GetUnproxiedMcpServerUsage()
 				data, err = telemetryc.BuildGetUnproxiedMcpServerUsagePayload(*telemetryGetUnproxiedMcpServerUsageBodyFlag, *telemetryGetUnproxiedMcpServerUsageApikeyTokenFlag, *telemetryGetUnproxiedMcpServerUsageSessionTokenFlag, *telemetryGetUnproxiedMcpServerUsageProjectSlugInputFlag)
+			case "get-unproxied-mcp-server-tool-usage":
+				endpoint = c.GetUnproxiedMcpServerToolUsage()
+				data, err = telemetryc.BuildGetUnproxiedMcpServerToolUsagePayload(*telemetryGetUnproxiedMcpServerToolUsageBodyFlag, *telemetryGetUnproxiedMcpServerToolUsageApikeyTokenFlag, *telemetryGetUnproxiedMcpServerToolUsageSessionTokenFlag, *telemetryGetUnproxiedMcpServerToolUsageProjectSlugInputFlag)
+			case "get-unproxied-mcp-server-user-usage":
+				endpoint = c.GetUnproxiedMcpServerUserUsage()
+				data, err = telemetryc.BuildGetUnproxiedMcpServerUserUsagePayload(*telemetryGetUnproxiedMcpServerUserUsageBodyFlag, *telemetryGetUnproxiedMcpServerUserUsageApikeyTokenFlag, *telemetryGetUnproxiedMcpServerUserUsageSessionTokenFlag, *telemetryGetUnproxiedMcpServerUserUsageProjectSlugInputFlag)
+			case "get-unproxied-mcp-server-client-usage":
+				endpoint = c.GetUnproxiedMcpServerClientUsage()
+				data, err = telemetryc.BuildGetUnproxiedMcpServerClientUsagePayload(*telemetryGetUnproxiedMcpServerClientUsageBodyFlag, *telemetryGetUnproxiedMcpServerClientUsageApikeyTokenFlag, *telemetryGetUnproxiedMcpServerClientUsageSessionTokenFlag, *telemetryGetUnproxiedMcpServerClientUsageProjectSlugInputFlag)
 			case "query":
 				endpoint = c.Query()
 				data, err = telemetryc.BuildQueryPayload(*telemetryQueryBodyFlag, *telemetryQuerySessionTokenFlag)
@@ -17638,6 +17677,9 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-usage: Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.`)
+	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-tool-usage: Best-effort per-tool call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
+	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-user-usage: Best-effort per-user call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
+	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-client-usage: Best-effort per-client (hook source, e.g. claude-code, cursor, codex) call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
 	fmt.Fprintln(os.Stderr, `    query: Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).`)
 	fmt.Fprintln(os.Stderr, `    query-tum-details: Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.`)
 	fmt.Fprintln(os.Stderr, `    list-sessions: Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.`)
@@ -17924,6 +17966,78 @@ func telemetryGetUnproxiedMcpServerUsageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-unproxied-mcp-server-usage --body '{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetUnproxiedMcpServerToolUsageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-unproxied-mcp-server-tool-usage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Best-effort per-tool call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-unproxied-mcp-server-tool-usage --body '{\n      \"cursor\": \"abc123\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetUnproxiedMcpServerUserUsageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-unproxied-mcp-server-user-usage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Best-effort per-user call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-unproxied-mcp-server-user-usage --body '{\n      \"cursor\": \"abc123\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetUnproxiedMcpServerClientUsageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-unproxied-mcp-server-client-usage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Best-effort per-client (hook source, e.g. claude-code, cursor, codex) call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-unproxied-mcp-server-client-usage --body '{\n      \"cursor\": \"abc123\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryQueryUsage() {

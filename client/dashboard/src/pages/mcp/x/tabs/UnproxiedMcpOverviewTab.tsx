@@ -6,6 +6,7 @@ import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedM
 import { useGetUnproxiedMcpServerUsage } from "@gram/client/react-query/getUnproxiedMcpServerUsage.js";
 import { useMemo } from "react";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
+import { UnproxiedMcpUsageBreakdown } from "./UnproxiedMcpUsageBreakdown";
 
 const USAGE_WINDOW_DAYS = 30;
 
@@ -139,6 +140,23 @@ export function UnproxiedMcpOverviewTab({
             )}
           </div>
         </div>
+
+        {server?.url && (
+          <div className="border-neutral-softest rounded-lg border p-6">
+            <Heading variant="h4">Usage breakdown</Heading>
+            <Text small muted className="mt-1">
+              Same Shadow MCP-sourced activity as the chart above, broken down
+              by tool, user, and client.
+            </Text>
+            <div className="mt-6">
+              <UnproxiedMcpUsageBreakdown
+                url={server.url}
+                from={from}
+                to={to}
+              />
+            </div>
+          </div>
+        )}
       </Stack>
     </div>
   );

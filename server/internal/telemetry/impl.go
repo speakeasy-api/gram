@@ -1814,6 +1814,158 @@ func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem
 	return &telem_gen.GetUnproxiedMcpServerUsageResult{Buckets: buckets}, nil
 }
 
+func (s *Service) GetUnproxiedMcpServerToolUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerToolUsagePayload) (*telem_gen.GetUnproxiedMcpServerToolUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerToolUsageResult{Tools: []*telem_gen.UnproxiedMcpServerToolUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerToolUsage(ctx, repo.GetUnproxiedMcpServerToolUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server tool usage").LogError(ctx, s.logger)
+	}
+
+	tools := make([]*telem_gen.UnproxiedMcpServerToolUsageRow, 0, len(rows))
+	for _, row := range rows {
+		tools = append(tools, &telem_gen.UnproxiedMcpServerToolUsageRow{
+			ToolName:     row.ToolName,
+			CallCount:    int(row.CallCount),    //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+			FailureCount: int(row.FailureCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerToolUsageResult{
+		Tools:      tools,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUserUsagePayload) (*telem_gen.GetUnproxiedMcpServerUserUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerUserUsageResult{Users: []*telem_gen.UnproxiedMcpServerUserUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerUserUsage(ctx, repo.GetUnproxiedMcpServerUserUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server user usage").LogError(ctx, s.logger)
+	}
+
+	users := make([]*telem_gen.UnproxiedMcpServerUserUsageRow, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, &telem_gen.UnproxiedMcpServerUserUsageRow{
+			UserEmail:    row.UserEmail,
+			CallCount:    int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+			LastCalledAt: row.LastCalledAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerUserUsageResult{
+		Users:      users,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerClientUsagePayload) (*telem_gen.GetUnproxiedMcpServerClientUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerClientUsageResult{Clients: []*telem_gen.UnproxiedMcpServerClientUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerClientUsage(ctx, repo.GetUnproxiedMcpServerClientUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server client usage").LogError(ctx, s.logger)
+	}
+
+	clients := make([]*telem_gen.UnproxiedMcpServerClientUsageRow, 0, len(rows))
+	for _, row := range rows {
+		clients = append(clients, &telem_gen.UnproxiedMcpServerClientUsageRow{
+			Client:    row.Client,
+			CallCount: int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerClientUsageResult{
+		Clients:    clients,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}, nil
+}
+
 // GetProjectOverview retrieves project-level overview metrics including total chats, tool calls,
 // active servers/users, and top lists. This endpoint does not support filtering.
 func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.GetProjectOverviewPayload) (res *telem_gen.GetProjectOverviewResult, err error) {

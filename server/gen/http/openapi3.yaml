@@ -41824,6 +41824,216 @@ paths:
             x-speakeasy-react-hook:
                 name: GetToolUsageUsersByTarget
                 type: query
+    /rpc/telemetry.getUnproxiedMcpServerClientUsage:
+        post:
+            description: Best-effort per-client (hook source, e.g. claude-code, cursor, codex) call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.
+            operationId: getUnproxiedMcpServerClientUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnproxiedMcpServerUsageBreakdownPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUnproxiedMcpServerClientUsageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnproxiedMcpServerClientUsage telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUnproxiedMcpServerClientUsage
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServerClientUsage
+                type: query
+    /rpc/telemetry.getUnproxiedMcpServerToolUsage:
+        post:
+            description: Best-effort per-tool call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.
+            operationId: getUnproxiedMcpServerToolUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnproxiedMcpServerUsageBreakdownPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUnproxiedMcpServerToolUsageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnproxiedMcpServerToolUsage telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUnproxiedMcpServerToolUsage
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServerToolUsage
+                type: query
     /rpc/telemetry.getUnproxiedMcpServerUsage:
         post:
             description: 'Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP''s hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.'
@@ -41928,6 +42138,111 @@ paths:
             x-speakeasy-name-override: getUnproxiedMcpServerUsage
             x-speakeasy-react-hook:
                 name: GetUnproxiedMcpServerUsage
+                type: query
+    /rpc/telemetry.getUnproxiedMcpServerUserUsage:
+        post:
+            description: Best-effort per-user call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.
+            operationId: getUnproxiedMcpServerUserUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnproxiedMcpServerUsageBreakdownPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUnproxiedMcpServerUserUsageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnproxiedMcpServerUserUsage telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUnproxiedMcpServerUserUsage
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServerUserUsage
                 type: query
     /rpc/telemetry.getUserMetricsSummary:
         post:
@@ -57309,6 +57624,32 @@ components:
             description: Top MCP and tool usage user identities for the selected filters and time range
             required:
                 - users
+        GetUnproxiedMcpServerClientUsageResult:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerClientUsageRow'
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+            description: Result of a Shadow-MCP-backed per-client usage lookup for an unproxied MCP server
+            required:
+                - clients
+        GetUnproxiedMcpServerToolUsageResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerToolUsageRow'
+            description: Result of a Shadow-MCP-backed per-tool usage lookup for an unproxied MCP server
+            required:
+                - tools
         GetUnproxiedMcpServerUsageRequestBody:
             type: object
             properties:
@@ -57338,6 +57679,19 @@ components:
             description: Result of a Shadow-MCP-backed usage lookup for an unproxied MCP server
             required:
                 - buckets
+        GetUnproxiedMcpServerUserUsageResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerUserUsageRow'
+            description: Result of a Shadow-MCP-backed per-user usage lookup for an unproxied MCP server
+            required:
+                - users
         GetUserMetricsSummaryPayload:
             type: object
             properties:
@@ -69542,6 +69896,20 @@ components:
                 - url
                 - created_at
                 - updated_at
+        UnproxiedMcpServerClientUsageRow:
+            type: object
+            properties:
+                call_count:
+                    type: integer
+                    description: Number of observed calls from this client
+                    format: int64
+                client:
+                    type: string
+                    description: The hook-reported client/agent surface
+            description: Call activity for a single client/agent surface (e.g. claude-code, cursor, codex) calling an unproxied MCP server
+            required:
+                - client
+                - call_count
         UnproxiedMcpServerTool:
             type: object
             properties:
@@ -69554,6 +69922,55 @@ components:
             description: A tool discovered on the vendor's MCP server
             required:
                 - name
+        UnproxiedMcpServerToolUsageRow:
+            type: object
+            properties:
+                call_count:
+                    type: integer
+                    description: Number of observed calls to this tool
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of observed calls that errored
+                    format: int64
+                tool_name:
+                    type: string
+                    description: The tool's name
+            description: Call activity for a single tool on an unproxied MCP server
+            required:
+                - tool_name
+                - call_count
+                - failure_count
+        UnproxiedMcpServerUsageBreakdownPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    format: date-time
+                limit:
+                    type: integer
+                    description: Number of items to return (1-500)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 500
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    format: date-time
+                url:
+                    type: string
+                    description: The unproxied MCP server's vendor URL
+                    format: uri
+            description: Shared payload shape for the unproxied MCP server tool/user/client usage breakdowns
+            required:
+                - url
+                - from
+                - to
         UnproxiedMcpServerUsageBucket:
             type: object
             properties:
@@ -69568,6 +69985,25 @@ components:
             required:
                 - date
                 - call_count
+        UnproxiedMcpServerUserUsageRow:
+            type: object
+            properties:
+                call_count:
+                    type: integer
+                    description: Number of observed calls from this user
+                    format: int64
+                last_called_at:
+                    type: string
+                    description: Time of the user's most recent observed call, ISO 8601
+                    format: date-time
+                user_email:
+                    type: string
+                    description: The calling user's email, when Shadow MCP could resolve one
+            description: Call activity for a single user of an unproxied MCP server
+            required:
+                - user_email
+                - call_count
+                - last_called_at
         UnshareSkillRequestBody:
             type: object
             properties:
