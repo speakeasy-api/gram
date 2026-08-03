@@ -26,14 +26,14 @@ const defaultRefreshTTL = 30 * 24 * time.Hour
 type RefreshTokenOpts struct {
 	// Token is the opaque refresh-token string to insert. Whoever later
 	// presents this to /<mode>/token with grant_type=refresh_token will
-	// receive a fresh access+refresh token pair (oauth2-1) or a fresh
-	// access token reusing the same refresh (oauth2). Required.
+	// receive a fresh access+refresh token pair, or a fresh access token
+	// reusing the same refresh when the client registered with
+	// rotate_refresh_tokens=false. Required.
 	Token string
 
-	// Mode picks which mode owns the row. Use oauth21.Mode ("oauth2-1")
-	// or oauth2.Mode ("oauth2"); the mode handler scopes its lookups to
-	// its own mode, so a token stamped with the wrong mode is invisible.
-	// Required.
+	// Mode picks which mode owns the row. Use OAuth21Mode; the mode
+	// handler scopes its lookups to its own mode, so a token stamped with
+	// the wrong mode is invisible. Required.
 	Mode string
 
 	// UserID is the user the token is bound to. Required — the tokens
