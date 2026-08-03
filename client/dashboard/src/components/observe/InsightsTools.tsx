@@ -1389,14 +1389,18 @@ function MultiLineChart({
       legend: SHARED_LEGEND,
       tooltip: {
         ...SHARED_TOOLTIP,
+        // Index-mode hover activates every series at that x. Drop zeros so a
+        // sparse multi-series chart doesn't build a tooltip listing every
+        // inactive source (which balloons until it covers the chart). Returning
+        // `undefined` from `label` is not enough — Chart.js treats that as
+        // "use the default callback" and still renders the line.
+        filter: (item) => (item.parsed.y ?? 0) !== 0,
         callbacks: {
           title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
-          label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return undefined;
-            return item.formattedValue
+          label: (item) =>
+            item.formattedValue
               ? `${item.dataset.label}: ${item.formattedValue}`
-              : "";
-          },
+              : "",
           ...(tooltipAfterBody
             ? {
                 afterBody: (items) =>
