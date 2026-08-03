@@ -163,7 +163,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		},
 		Raw: nil,
 	}
-	result, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+	outcome, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
@@ -172,8 +172,8 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	if err != nil {
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
 	}
-	if result.Result.Decision == "deny" {
-		reason := strings.TrimSpace(conv.PtrValOr(result.Result.Message, ""))
+	if outcome.Result.Decision == "deny" {
+		reason := strings.TrimSpace(conv.PtrValOr(outcome.Result.Message, ""))
 		if reason == "" {
 			reason = genericBlockedReason
 		}
@@ -192,8 +192,8 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		CallID:    callID,
 		TraceID:   traceID,
 		SessionID: sessionID,
-		UserID:    result.Actor.UserID,
-		Email:     result.Actor.Email,
+		UserID:    outcome.Actor.UserID,
+		Email:     outcome.Actor.Email,
 	})
 	cancel()
 	if err != nil {
