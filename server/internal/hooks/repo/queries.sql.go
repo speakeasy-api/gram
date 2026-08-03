@@ -162,36 +162,6 @@ func (q *Queries) GetDeviceOwner(ctx context.Context, arg GetDeviceOwnerParams) 
 	return i, err
 }
 
-const getProviderBillingModeAnyOrg = `-- name: GetProviderBillingModeAnyOrg :one
-SELECT billing_mode
-FROM ai_integration_configs
-WHERE organization_id = $1
-  AND provider = $2
-  AND enabled = TRUE
-  AND deleted IS FALSE
-  AND billing_mode IS NOT NULL
-ORDER BY updated_at DESC
-LIMIT 1
-`
-
-type GetProviderBillingModeAnyOrgParams struct {
-	OrganizationID string
-	Provider       string
-}
-
-// Org-level billing mode for providers whose sessions never carry an external
-// org id. Codex emits no org identity on any layer (hooks, OTEL), while the
-// codex_compliance config always pins one, so the org-matched lookup above can
-// never hit for those sessions. Only one live config per (org, provider) can
-// exist today, so the provider-wide declaration is the applicable one; the
-// ordering is defensive against historical duplicates.
-func (q *Queries) GetProviderBillingModeAnyOrg(ctx context.Context, arg GetProviderBillingModeAnyOrgParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getProviderBillingModeAnyOrg, arg.OrganizationID, arg.Provider)
-	var billing_mode pgtype.Text
-	err := row.Scan(&billing_mode)
-	return billing_mode, err
-}
-
 const getProviderOrgBillingMode = `-- name: GetProviderOrgBillingMode :one
 SELECT billing_mode
 FROM ai_integration_configs
@@ -201,17 +171,19 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    $3::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
-    OR external_organization_id = $3
+    OR external_organization_id = $4
   )
-ORDER BY (external_organization_id = $3) DESC NULLS LAST
+ORDER BY (external_organization_id = $4) DESC NULLS LAST, updated_at DESC
 LIMIT 1
 `
 
 type GetProviderOrgBillingModeParams struct {
 	OrganizationID string
 	Provider       string
+	MatchAnyOrg    bool
 	ExternalOrgID  pgtype.Text
 }
 
@@ -221,11 +193,20 @@ type GetProviderOrgBillingModeParams struct {
 // provider org; a config with none applies provider-wide. Exact-org matches are
 // preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 // NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
-// Only one live config per (org, provider) can exist today, so the ordering is
-// defensive. Only configs with a non-null billing_mode are considered, so an
-// undeclared org returns no rows (treated as unknown upstream).
+// @match_any_org disables the org scoping entirely: Codex sessions carry no org
+// identity on any layer while codex_compliance configs always pin one, so for
+// them the provider-wide declaration applies regardless of config scope. Only
+// one live config per (org, provider) can exist today, so the ordering (with
+// updated_at as the tiebreak against historical duplicates) is defensive. Only
+// configs with a non-null billing_mode are considered, so an undeclared org
+// returns no rows (treated as unknown upstream).
 func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	row := q.db.QueryRow(ctx, getProviderOrgBillingMode,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.MatchAnyOrg,
+		arg.ExternalOrgID,
+	)
 	var billing_mode pgtype.Text
 	err := row.Scan(&billing_mode)
 	return billing_mode, err

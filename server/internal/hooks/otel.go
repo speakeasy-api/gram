@@ -92,8 +92,14 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// alone would freeze a session whose entity persistence transiently failed
 		// (classified but never persisted, linked, or billing-resolved) instead of
 		// retrying on the next batch.
+		// Only an entry this Claude path owns may be adopted: the codex OTEL
+		// writer seeds the same key space (session ids are client-reported)
+		// with provider=openai entries whose shape — AccountType set, no
+		// account UUID — would otherwise satisfy the company-credential arm
+		// below and stamp Claude rows with Codex attribution.
 		var cached SessionMetadata
 		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached

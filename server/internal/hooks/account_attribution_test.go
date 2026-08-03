@@ -908,3 +908,86 @@ func TestStampAccountAttribution_SkipsEmptyFields(t *testing.T) {
 	require.NotContains(t, partial, attr.BillingModeKey)
 	require.NotContains(t, partial, attr.DeviceIDKey)
 }
+
+// TestAttributeSession_CodexPersonalWithAccountUUIDDoesNotInheritOrgBillingMode:
+// the team-only gate on the openai provider-wide billing lookup lives in
+// providerOrgBillingMode, so it also holds on the entity path — should a
+// Codex session ever carry an account UUID, a personal classification still
+// never inherits the company's declared mode.
+func TestAttributeSession_CodexPersonalWithAccountUUIDDoesNotInheritOrgBillingMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	meta := &SessionMetadata{
+		SessionID:           "codex-billing-personal-uuid",
+		ServiceName:         "Codex",
+		Provider:            providerOpenAI,
+		UserEmail:           "someone@personal.example",
+		UserID:              "",
+		ExternalAccountUUID: "codex-personal-acct-uuid",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.attributeSession(ctx, meta))
+	require.Equal(t, accountTypePersonal, meta.AccountType)
+	require.Empty(t, meta.BillingMode)
+	// The UUID means an account entity IS persisted, unlike UUID-less codex.
+	require.NotEmpty(t, meta.UserAccountID)
+}
+
+// TestLogs_DoesNotAdoptCodexCachedAttribution: session ids are client-reported
+// and the session cache is keyed on them alone, so the Claude OTEL fast path
+// must not adopt an entry the codex OTEL writer seeded — its shape (account
+// type set, no account UUID) would otherwise satisfy the company-credential
+// arm and stamp Claude rows with Codex attribution.
+func TestLogs_DoesNotAdoptCodexCachedAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	userID := "claude-collision-user"
+	workEmail := "collision@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	sessionID := "codex-claude-collision-session"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   workEmail,
+		UserID:      userID,
+		Provider:    providerOpenAI,
+		AccountType: accountTypePersonal,
+		BillingMode: "flat_rate",
+		GramOrgID:   orgID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}, 0))
+
+	// A company-credential Claude session (no account UUID / org / device):
+	// it carries no identity the cached entry lacks, so before the provider
+	// guard the fast path would have adopted the codex entry wholesale.
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", workEmail),
+			},
+		},
+	)))
+
+	var cached SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.Equal(t, providerAnthropic, cached.Provider)
+	// Claude semantics: no account UUID means company credentials → team.
+	require.Equal(t, accountTypeTeam, cached.AccountType)
+	require.Empty(t, cached.BillingMode)
+}

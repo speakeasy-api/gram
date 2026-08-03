@@ -371,6 +371,9 @@ func TestMetrics_PersistsCodexOTELMetricDataPoints(t *testing.T) {
 	require.Contains(t, row.Attributes, "tool_name")
 	require.Contains(t, row.Attributes, "shell")
 	require.Contains(t, row.Attributes, providerOpenAI)
+	// Metrics rows carry the same account attribution as the logs stream
+	// (dev@example.com resolves to the test org member → team).
+	require.Contains(t, row.Attributes, `"account_type":"team"`)
 	require.Contains(t, row.ResourceAttributes, codexServiceName)
 }
 

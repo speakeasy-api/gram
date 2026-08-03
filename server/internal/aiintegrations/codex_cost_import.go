@@ -48,12 +48,7 @@ const (
 	codexComplianceProductCodex = "codex"
 	codexComplianceProductWork  = "work"
 	codexProviderOpenAI         = "openai"
-	// codexAccountTypeTeam matches the hooks package's account_type "team"
-	// value. Every compliance COSTS row comes from the org's own enterprise
-	// feed, so the account behind it is the company's by construction — unlike
-	// session telemetry, which must classify from email resolution.
-	codexAccountTypeTeam = "team"
-	codexCreditValueUSD  = 0.04
+	codexCreditValueUSD         = 0.04
 )
 
 type codexComplianceClient interface {
@@ -358,13 +353,18 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		attr.ProviderKey:              codexProviderOpenAI,
 		attr.GenAIProviderNameKey:     codexProviderOpenAI,
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
-		attr.AccountTypeKey:           codexAccountTypeTeam,
+		attr.AccountTypeKey:           complianceAccountTypeTeam,
 	}
-	// The config's admin-declared billing mode applies to every row of its
-	// feed — this is the org-level tier of the billing-mode cascade, keyed
-	// here directly instead of via session attribution (compliance rows have
-	// no session).
-	addStringAttr(attrs, attr.BillingModeKey, cfg.BillingMode)
+	// The config's admin-declared billing mode is stamped on Codex rows only —
+	// the org-level tier of the billing-mode cascade, keyed here directly
+	// since compliance rows have no session. ChatGPT/Work rows stay unlabeled
+	// (estimate treatment): the single declaration cannot describe both
+	// surfaces, and Codex credits vs ChatGPT seats routinely bill differently,
+	// so labeling seat usage with a "metered" Codex declaration would render
+	// token-priced estimates as confident real cost downstream.
+	if isCodex {
+		addStringAttr(attrs, attr.BillingModeKey, cfg.BillingMode)
+	}
 	addStringAttr(attrs, attr.CodexComplianceEventIDKey, eventID)
 	addStringAttr(attrs, attr.CodexComplianceEventHashKey, generateCodexCostEventHash(eventID))
 	addStringAttr(attrs, attr.CodexComplianceLogIDKey, file.ID)

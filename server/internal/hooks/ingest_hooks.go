@@ -895,22 +895,45 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 
 	// Codex sessions delivered only through the relay never pass the legacy
 	// hook or OTEL paths that normally attribute the account, so classify here
-	// when no cached attribution exists (email-based for openai — see
-	// classifyAccount; the Set in Ingest persists the result for later
-	// events). Claude adapters are untouched: their attribution belongs to the
-	// OTEL path, which carries the account identity this payload lacks.
+	// when no cached attribution exists or when this event's actor email is
+	// not the one the cached classification was computed from (the same
+	// identity rule the legacy-hook and OTEL paths apply). A fresh result is
+	// written back so later events on any path adopt it instead of
+	// re-classifying. Claude adapters are untouched: their attribution belongs
+	// to the OTEL path, which carries the account identity this payload lacks.
 	if strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
 		metadata.Provider = providerOpenAI
-		if metadata.ObservedUserEmail == "" {
+		if metadata.AccountType == "" || !sameCodexIdentity(metadata.ObservedUserEmail, metadata.UserEmail) {
 			metadata.ObservedUserEmail = metadata.UserEmail
-		}
-		if metadata.AccountType == "" {
 			if err := s.attributeSession(ctx, &metadata); err != nil {
 				s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
 					attr.SlogEvent("account_attribution_failed"),
 					attr.SlogError(err),
 					attr.SlogGenAIConversationID(metadata.SessionID),
 				)
+				// Leave the session unclassified rather than half-attributed:
+				// attributeSession stamps AccountType before the step that
+				// failed, and both this branch's gate and recordCanonicalHook's
+				// session.started cache write key on AccountType alone —
+				// keeping the half state would freeze an empty billing mode
+				// for the cache lifetime.
+				metadata.AccountType = ""
+				metadata.BillingMode = ""
+			} else if metadata.SessionID != "" && metadata.AccountType != "" &&
+				!strings.EqualFold(strings.TrimSpace(payload.Event.Type), "session.started") {
+				// session.started is excluded: recordCanonicalHook already
+				// persists this metadata (attribution included) for that
+				// event; this write-back exists for sessions whose started
+				// event was never seen.
+				cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
+				err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+				cancel()
+				if err != nil {
+					s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+						attr.SlogError(err),
+						attr.SlogGenAIConversationID(metadata.SessionID),
+					)
+				}
 			}
 		}
 	}

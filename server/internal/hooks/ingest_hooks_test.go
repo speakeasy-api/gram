@@ -1868,3 +1868,47 @@ func TestCanonicalSessionMetadata_CodexAdapterUnresolvedActorIsPersonal(t *testi
 	require.Empty(t, claudeMetadata.Provider)
 	require.Empty(t, claudeMetadata.AccountType)
 }
+
+// TestCanonicalSessionMetadata_CodexReattributesOnNewActorEmail: a cached
+// classification is only adopted when this event's actor email is the one it
+// was computed from — the same identity rule the legacy-hook and OTEL paths
+// apply — so a different resolved actor on the same session re-classifies
+// instead of inheriting the prior attribution. Re-attribution is observable
+// through the billing mode: the cache carries flat_rate, but no config exists
+// in this test, so a fresh resolution must come back empty.
+func TestCanonicalSessionMetadata_CodexReattributesOnNewActorEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	newActorID := "codex-ingest-new-actor"
+	newActorEmail := "new-actor@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, newActorID, newActorEmail)
+
+	sessionID := "codex-ingest-actor-change"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:         sessionID,
+		ServiceName:       "codex",
+		UserEmail:         "teammate@example.com",
+		UserID:            "teammate-user-id",
+		Provider:          providerOpenAI,
+		AccountType:       accountTypeTeam,
+		BillingMode:       "flat_rate",
+		ObservedUserEmail: "teammate@example.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+	}, 0))
+
+	payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: newActorID, Email: newActorEmail})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	// The cached flat_rate must NOT survive: a fresh resolution ran and found
+	// no config declaration.
+	require.Empty(t, metadata.BillingMode)
+	require.Equal(t, newActorEmail, metadata.ObservedUserEmail)
+}

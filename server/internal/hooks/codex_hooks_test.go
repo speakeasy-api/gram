@@ -755,6 +755,7 @@ func TestCodexSessionMetadata_AdoptsCachedAttributionForSameEmail(t *testing.T) 
 		SessionID:   sessionID,
 		ServiceName: "Codex",
 		UserEmail:   email,
+		UserID:      "cached-user-id",
 		Provider:    providerOpenAI,
 		AccountType: accountTypeTeam,
 		BillingMode: "flat_rate",
@@ -769,6 +770,34 @@ func TestCodexSessionMetadata_AdoptsCachedAttributionForSameEmail(t *testing.T) 
 
 	require.Equal(t, accountTypeTeam, metadata.AccountType)
 	require.Equal(t, "flat_rate", metadata.BillingMode)
+	// The adopted classification includes the resolved user — no per-event
+	// re-resolution.
+	require.Equal(t, "cached-user-id", metadata.UserID)
+}
+
+// TestCodexSessionMetadata_CachesFreshAttributionOnAnyEvent: attribution
+// computed on a non-SessionStart event is written back to the session cache,
+// so later events (and the OTEL/ingest paths) adopt it instead of
+// re-classifying — a session whose SessionStart was lost does not pay
+// attribution per event forever.
+func TestCodexSessionMetadata_CachesFreshAttributionOnAnyEvent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "codex-session-attribution-recache"
+	email := "someone@personal.example"
+	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+
+	var cached SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.Equal(t, accountTypePersonal, cached.AccountType)
+	require.Equal(t, email, cached.UserEmail)
 }
 
 // TestBuildCodexTelemetryAttributes_StampsAccountAttribution verifies the

@@ -102,12 +102,10 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 	// the cost surfaces consume. Stop here for these sessions.
 	if meta.ExternalAccountUUID == "" {
 		// Codex sessions NEVER carry an account UUID, so their billing mode
-		// must resolve here rather than after the entity upsert. Gate on team:
-		// the codex_compliance config describes the company's OpenAI org, and
-		// only a team-classified session (resolved work email) is presumed to
-		// run under it — a personal Codex session must not inherit the
-		// company's declared mode.
-		if meta.Provider == providerOpenAI && meta.AccountType == accountTypeTeam {
+		// must resolve here rather than after the entity upsert. The
+		// team-only gate lives in providerOrgBillingMode so it also holds on
+		// the entity path should an openai session ever carry a UUID.
+		if meta.Provider == providerOpenAI {
 			billingMode, err := s.resolveBillingMode(ctx, meta, "")
 			if err != nil {
 				return fmt.Errorf("resolve billing mode: %w", err)
@@ -180,26 +178,28 @@ func (s *Service) resolveBillingMode(ctx context.Context, meta *SessionMetadata,
 	return conv.FromPGTextOrEmpty[string](orgMode), nil
 }
 
-// providerOrgBillingMode dispatches the org-level tier of the cascade. Sessions
-// that carry an external org id (or whose provider's configs are org-scoped in
-// a way sessions can match) go through the org-matched lookup. Codex sessions
-// carry no org identity at any layer while codex_compliance configs always pin
-// one, so for openai with no session org the provider-wide declaration applies
-// instead.
+// providerOrgBillingMode resolves the org-level tier of the cascade. Sessions
+// that carry an external org id go through the org-matched lookup. Codex
+// sessions carry no org identity at any layer while codex_compliance configs
+// always pin one, so for openai with no session org the provider-wide
+// declaration applies instead — gated on team: the config describes the
+// company's OpenAI org, and only a team-classified session (resolved work
+// email) is presumed to run under it. A personal Codex session must never
+// inherit the company's declared mode, on any path.
+//
+// The gate reads meta.AccountType, so callers must run classification first —
+// attributeSession stamps AccountType before either resolveBillingMode call
+// site; a pre-classification caller would silently resolve empty for openai.
 func (s *Service) providerOrgBillingMode(ctx context.Context, meta *SessionMetadata) (pgtype.Text, error) {
-	if meta.Provider == providerOpenAI && meta.ExternalOrgID == "" {
-		mode, err := s.repo.GetProviderBillingModeAnyOrg(ctx, repo.GetProviderBillingModeAnyOrgParams{
-			OrganizationID: meta.GramOrgID,
-			Provider:       providerBillingConfigProvider(meta.Provider),
-		})
-		if err != nil {
-			return pgtype.Text{}, fmt.Errorf("get provider billing mode: %w", err)
-		}
-		return mode, nil
+	matchAnyOrg := meta.Provider == providerOpenAI && meta.ExternalOrgID == ""
+	if matchAnyOrg && meta.AccountType != accountTypeTeam {
+		var none pgtype.Text
+		return none, nil
 	}
 	mode, err := s.repo.GetProviderOrgBillingMode(ctx, repo.GetProviderOrgBillingModeParams{
 		OrganizationID: meta.GramOrgID,
 		Provider:       providerBillingConfigProvider(meta.Provider),
+		MatchAnyOrg:    matchAnyOrg,
 		ExternalOrgID:  conv.ToPGTextEmpty(meta.ExternalOrgID),
 	})
 	if err != nil {

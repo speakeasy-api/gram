@@ -210,6 +210,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 
 	params := make([]telemetry.LogParams, 0)
 	emailToUserID := make(map[string]string)
+	attributionBySession := make(map[string]SessionMetadata)
 	for _, resourceMetric := range payload.ResourceMetrics {
 		if resourceMetric == nil {
 			continue
@@ -262,7 +263,18 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 						}
 					}
 
-					userInfo, _, _ := s.codexOTELUserInfo(ctx, attrs, emailToUserID, orgID)
+					// Stamp the same account attribution as the logs stream so
+					// a session's rows classify consistently across both.
+					userInfo, email, userID := s.codexOTELUserInfo(ctx, attrs, emailToUserID, orgID)
+					sessionMeta := s.codexOTELSessionAttribution(ctx, attributionBySession, codexOTELIdentity{
+						SessionID: stringAttr(attrs, attr.GenAIConversationIDKey),
+						Email:     email,
+						UserID:    userID,
+						OrgID:     orgID,
+						ProjectID: projectID,
+					})
+					stampAccountAttribution(attrs, sessionMeta)
+
 					params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
 						Timestamp:  timestamp,
 						ToolInfo:   toolInfo,
@@ -338,8 +350,11 @@ type codexOTELIdentity struct {
 // session cache is the cross-payload fast path — Codex exports every few
 // seconds and its identity (the email alone) rarely changes mid-session — and
 // is re-seeded after a fresh classification so the legacy hook path and the
-// ingest adapter inherit the same attribution. A record without a conversation
-// id stays email-attributed only: the zero metadata stamps nothing.
+// ingest adapter inherit the same attribution. Billing mode is frozen with the
+// classification for the cache lifetime (a declaration made mid-session is
+// picked up on the next session), matching the Claude path's attribute-once
+// semantics. A record without a conversation id stays email-attributed only:
+// the zero metadata stamps nothing.
 func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[string]SessionMetadata, id codexOTELIdentity) SessionMetadata {
 	var none SessionMetadata
 	if id.SessionID == "" {
@@ -392,10 +407,16 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(id.SessionID),
 		)
+		// Leave the session unclassified rather than half-attributed:
+		// attributeSession stamps AccountType before the step that failed,
+		// and every fast path keys on AccountType alone — caching the half
+		// state would freeze an empty billing mode for the full TTL.
+		meta.AccountType = ""
+		meta.BillingMode = ""
 	}
 	memo[id.SessionID] = meta
-	// An entry whose attribution failed (empty AccountType) is still cached —
-	// the fast path above rejects it, so the next payload retries.
+	// A failed attribution is cached with empty AccountType — the fast path
+	// above rejects it, so the next payload retries.
 	if err := s.cache.Set(ctx, sessionCacheKey(id.SessionID), meta, 24*time.Hour); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 			attr.SlogError(err),

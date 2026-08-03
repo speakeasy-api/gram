@@ -383,11 +383,6 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		}
 	}
 
-	if metadata.UserEmail != "" {
-		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, orgID)
-	} else {
-		metadata.UserID = ""
-	}
 	// On this path user_email is the account's own report (the authenticated
 	// ChatGPT account), so it doubles as the observed email consumers keep
 	// separate from actor identity.
@@ -395,20 +390,47 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 
 	// Attribute the account. Codex identity is the email alone, so when the
 	// cached classification was computed from the same email this event brings
-	// nothing new — adopt it instead of re-resolving per event. Otherwise
-	// classify fresh (email-based for openai; billing mode rides on team
-	// sessions — see classifyAccount / attributeSession). Failures leave the
+	// nothing new — adopt it, including the resolved UserID, instead of
+	// re-resolving per event. Otherwise resolve and classify fresh (email-based
+	// for openai; billing mode rides on team sessions — see classifyAccount /
+	// attributeSession) and write the result back so later events, and the
+	// OTEL/ingest paths, inherit it regardless of which event seeded it.
+	// Billing mode is frozen with the classification for the cache lifetime,
+	// matching the Claude path's attribute-once semantics. Failures leave the
 	// session unclassified rather than blocking capture or enforcement.
-	if cachedOK && cached.AccountType != "" &&
-		conv.NormalizeEmail(metadata.UserEmail) == conv.NormalizeEmail(cached.UserEmail) {
+	if cachedOK && cached.AccountType != "" && sameCodexIdentity(cached.UserEmail, metadata.UserEmail) {
+		metadata.UserID = cached.UserID
 		metadata.AccountType = cached.AccountType
 		metadata.BillingMode = cached.BillingMode
-	} else if err := s.attributeSession(ctx, metadata); err != nil {
+		return metadata
+	}
+
+	if metadata.UserEmail != "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, orgID)
+	}
+	if err := s.attributeSession(ctx, metadata); err != nil {
 		s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
 			attr.SlogEvent("account_attribution_failed"),
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(metadata.SessionID),
 		)
+		// Leave the session unclassified rather than half-attributed:
+		// attributeSession stamps AccountType before the step that failed,
+		// and the fast path above (plus recordCodexHook's SessionStart cache
+		// write) keys on AccountType alone — keeping the half state would
+		// freeze an empty billing mode for the cache lifetime.
+		metadata.AccountType = ""
+		metadata.BillingMode = ""
+	} else if metadata.SessionID != "" && metadata.AccountType != "" && payload.HookEventName != "SessionStart" {
+		// SessionStart is excluded: recordCodexHook already persists this
+		// metadata (attribution included) for that event; this write-back
+		// exists for sessions whose SessionStart was never seen.
+		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(metadata.SessionID),
+			)
+		}
 	}
 
 	return metadata
