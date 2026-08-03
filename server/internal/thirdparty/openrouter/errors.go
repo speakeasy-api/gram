@@ -48,6 +48,10 @@ func IsBadRequest(err error) bool {
 	return errors.Is(err, ErrBadRequest)
 }
 
+// ErrRateLimited signals OpenRouter rejected the request with a 429.
+// Retrying after backoff is legitimate, so callers treat it as transient.
+var ErrRateLimited = errors.New("openrouter: rate limited")
+
 // ErrContentPolicy signals the provider refused the request on content grounds:
 // a moderation, safety or content-filter rejection rather than a credential or
 // entitlement problem. The verdict is a property of the payload, so re-sending
@@ -86,13 +90,26 @@ func diagnosticBody(body []byte) string {
 // status is diagnosed: spans are the one sink already trusted with request
 // payloads (the empty-choices path records the same attribute), and without it
 // widening the marker lists means guessing at what upstream actually sent.
-func classifyHTTPError(ctx context.Context, status int, body []byte) error {
-	trace.SpanFromContext(ctx).SetAttributes(
+func classifyHTTPError(ctx context.Context, status int, header http.Header, body []byte) error {
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
 		attr.HTTPResponseStatusCode(status),
 		attr.OpenRouterResponseBody(diagnosticBody(body)),
 	)
 
 	switch status {
+	case http.StatusTooManyRequests:
+		// A 429 alone cannot be diagnosed: OpenRouter throttles on the key's
+		// credit-scaled ceiling, on account-wide surge protection, and on
+		// upstream provider capacity, and only the rate-limit headers say
+		// which. Record them so the span answers that without a reproduction.
+		span.SetAttributes(
+			attr.OpenRouterRateLimitLimit(header.Get("X-RateLimit-Limit")),
+			attr.OpenRouterRateLimitRemaining(header.Get("X-RateLimit-Remaining")),
+			attr.OpenRouterRateLimitReset(header.Get("X-RateLimit-Reset")),
+			attr.OpenRouterRetryAfter(header.Get("Retry-After")),
+		)
+		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrRateLimited)
 	case http.StatusPaymentRequired:
 		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrInsufficientCredits)
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
