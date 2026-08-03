@@ -40,14 +40,15 @@ func (s otlpSignal) name() string {
 }
 
 type TraceProcessor struct {
-	logger  *slog.Logger
-	logBulk func(context.Context, []telemetry.LogParams) error
-	calls   *callcache.Cache
-	signal  otlpSignal
-	jobs    chan otlpJob
-	stop    chan struct{}
-	done    chan struct{}
-	workers int
+	logger   *slog.Logger
+	logBulk  func(context.Context, []telemetry.LogParams) error
+	calls    *callcache.Cache
+	resolver *InstanceResolver
+	signal   otlpSignal
+	jobs     chan otlpJob
+	stop     chan struct{}
+	done     chan struct{}
+	workers  int
 
 	mu       sync.Mutex
 	started  bool
@@ -147,6 +148,7 @@ func newOTLPProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, l
 		logger:             logger.With(attr.SlogComponent("litellm.otel.processor")),
 		logBulk:            logBulk,
 		calls:              nil,
+		resolver:           nil,
 		signal:             signal,
 		jobs:               make(chan otlpJob, queueSize),
 		stop:               make(chan struct{}),
@@ -162,6 +164,12 @@ func newOTLPProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, l
 		truncatedAttrs:     truncatedAttrs,
 		invalidIdentifiers: invalidIdentifiers,
 	}
+}
+
+func (p *TraceProcessor) SetInstanceResolver(resolver *InstanceResolver) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.resolver = resolver
 }
 
 func (p *TraceProcessor) Start(ctx context.Context) {
@@ -257,6 +265,12 @@ func (p *TraceProcessor) run(ctx context.Context) {
 func (p *TraceProcessor) process(ctx context.Context, job otlpJob) {
 	persistenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tracePersistenceTimeout)
 	defer cancel()
+	p.mu.Lock()
+	resolver := p.resolver
+	p.mu.Unlock()
+	if resolver != nil {
+		enrichLiteLLMInstanceAttribution(persistenceCtx, resolver, job.rows)
+	}
 	if p.signal == otlpSignalSpans && p.calls != nil {
 		cacheCtx, cacheCancel := context.WithTimeout(persistenceCtx, callCacheTimeout)
 		enrichTraceAttribution(cacheCtx, p.logger, p.calls, job.rows)
@@ -274,6 +288,35 @@ func (p *TraceProcessor) process(ctx context.Context, job otlpJob) {
 	if err := p.logBulk(persistenceCtx, job.rows); err != nil {
 		p.persistenceFailed.Add(ctx, int64(len(job.rows)), metric.WithAttributes(attr.Reason("log_bulk_error")))
 		p.logger.WarnContext(ctx, "persist LiteLLM OTLP export", attr.SlogError(err))
+	}
+}
+
+type resolvedLiteLLMInstance struct {
+	id    string
+	found bool
+}
+
+func enrichLiteLLMInstanceAttribution(ctx context.Context, resolver *InstanceResolver, rows []telemetry.LogParams) {
+	resolveCtx, cancel := context.WithTimeout(ctx, instanceResolverTimeout)
+	defer cancel()
+	resolved := make(map[string]resolvedLiteLLMInstance)
+	for i := range rows {
+		apiKeyID, _ := rows[i].Attributes[attr.APIKeyIDKey].(string)
+		if apiKeyID == "" {
+			continue
+		}
+		organizationID := rows[i].ToolInfo.OrganizationID
+		projectID := rows[i].ToolInfo.ProjectID
+		cacheKey := instanceResolverCacheKey(organizationID, projectID, apiKeyID)
+		instance, ok := resolved[cacheKey]
+		if !ok {
+			instanceID, found := resolver.Resolve(resolveCtx, organizationID, projectID, apiKeyID)
+			instance = resolvedLiteLLMInstance{id: instanceID.String(), found: found}
+			resolved[cacheKey] = instance
+		}
+		if instance.found {
+			rows[i].Attributes[attr.LiteLLMInstanceIDKey] = instance.id
+		}
 	}
 }
 
