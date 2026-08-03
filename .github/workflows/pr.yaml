@@ -10,6 +10,14 @@ on:
   merge_group:
   workflow_dispatch:
 
+# A new commit on a PR supersedes the previous run's images, so cancel the
+# in-flight run instead of building and pushing a fleet nobody will deploy.
+# Non-PR events (main, merge queue, dispatch) group by run_id: never queued
+# behind each other, never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   id-token: write
   contents: read
