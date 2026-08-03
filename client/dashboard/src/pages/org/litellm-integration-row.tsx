@@ -360,27 +360,17 @@ export function LiteLLMIntegrationRow(): JSX.Element {
         onConfirm={handleRotate}
         onClose={closeRotateDialog}
       />
-      <ConfirmDialog
-        open={revokeTarget !== null}
-        onOpenChange={(open) => {
-          if (!open && !revokeMutation.isPending) setRevokeTarget(null);
-        }}
-        title="Revoke LiteLLM integration"
-        description={
-          <>
-            Revoke <strong>{revokeTarget?.name}</strong> and immediately
-            invalidate its ingestion key? This cannot be undone.
-          </>
-        }
-        confirmLabel="Revoke integration"
-        onConfirm={handleRevoke}
+      <RevokeInstanceDialog
+        target={revokeTarget}
         isPending={revokeMutation.isPending}
+        onConfirm={handleRevoke}
+        onClose={() => setRevokeTarget(null)}
       />
     </div>
   );
 }
 
-function CreateInstanceDialog({
+export function CreateInstanceDialog({
   open,
   onOpenChange,
   projects,
@@ -603,7 +593,7 @@ function DiagnosticsDialog({
   );
 }
 
-function RotateKeyDialog({
+export function RotateKeyDialog({
   target,
   result,
   error,
@@ -670,6 +660,37 @@ function RotateKeyDialog({
         )}
       </Dialog.Content>
     </Dialog>
+  );
+}
+
+export function RevokeInstanceDialog({
+  target,
+  isPending,
+  onConfirm,
+  onClose,
+}: {
+  target: LiteLLMInstance | null;
+  isPending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}): JSX.Element {
+  return (
+    <ConfirmDialog
+      open={target !== null}
+      onOpenChange={(open) => {
+        if (!open && !isPending) onClose();
+      }}
+      title="Revoke LiteLLM integration"
+      description={
+        <>
+          Revoke <strong>{target?.name}</strong> and immediately invalidate its
+          ingestion key? This cannot be undone.
+        </>
+      }
+      confirmLabel="Revoke integration"
+      onConfirm={onConfirm}
+      isPending={isPending}
+    />
   );
 }
 
@@ -786,7 +807,7 @@ function FailurePostureBadge({
   );
 }
 
-function DiagnosticsPanel({
+export function DiagnosticsPanel({
   instance,
 }: {
   instance: LiteLLMInstance;
@@ -794,6 +815,10 @@ function DiagnosticsPanel({
   const diagnostics = instance.diagnostics;
   return (
     <div className="bg-muted/20 grid grid-cols-1 gap-px border-t sm:grid-cols-2 lg:grid-cols-4">
+      <Diagnostic
+        label="Connection health"
+        content={<HealthBadge instance={instance} />}
+      />
       <Diagnostic
         label="LiteLLM version"
         value={diagnostics.reportedLitellmVersion ?? "Not reported"}
@@ -826,22 +851,25 @@ function Diagnostic({
   label,
   value,
   date,
+  content,
 }: {
   label: string;
   value?: string;
   date?: Date;
+  content?: React.ReactNode;
 }): JSX.Element {
   return (
     <Stack gap={1} className="bg-background p-3">
       <Text muted small>
         {label}
       </Text>
+      {content}
       {value ? <Text small>{value}</Text> : null}
       {date ? (
         <Text small>
           <HumanizeDateTime date={date} />
         </Text>
-      ) : !value ? (
+      ) : !value && !content ? (
         <Text muted small>
           Not received
         </Text>

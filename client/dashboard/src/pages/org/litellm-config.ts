@@ -1,7 +1,12 @@
 import type { LiteLLMInstanceFailurePosture } from "@gram/client/models/components/litellminstance.js";
 
 function apiBase(serverURL: string): string {
-  return serverURL.replace(/\/$/, "");
+  const url = new URL(serverURL);
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error("LiteLLM integration endpoints require HTTPS");
+  }
+  return url.toString().replace(/\/$/, "");
 }
 
 export function buildLiteLLMGuardrailConfig(

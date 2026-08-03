@@ -44,6 +44,20 @@ describe("LiteLLM configuration", () => {
     );
   });
 
+  it("rejects cleartext non-loopback endpoints", () => {
+    expect(() =>
+      buildLiteLLMEnvironment("http://api.example.com", "my-project"),
+    ).toThrow("LiteLLM integration endpoints require HTTPS");
+    expect(
+      buildLiteLLMEnvironment("http://localhost:8080", "my-project"),
+    ).toContain(
+      'export OTEL_ENDPOINT="http://localhost:8080/rpc/litellm.otel"',
+    );
+    expect(() =>
+      buildLiteLLMEnvironment("ftp://localhost", "my-project"),
+    ).toThrow("LiteLLM integration endpoints require HTTPS");
+  });
+
   it("provides safe and synthetic-block verification commands", () => {
     expect(liteLLMVerificationCommands.safe).toContain("Reply with OK.");
     expect(liteLLMVerificationCommands.blocked).toContain("ghp_R2D2C3POL");
