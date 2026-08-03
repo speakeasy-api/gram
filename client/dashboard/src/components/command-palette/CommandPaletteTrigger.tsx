@@ -2,7 +2,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";

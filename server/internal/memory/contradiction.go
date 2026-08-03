@@ -106,6 +106,7 @@ func (s *MemoryService) detectContradiction(ctx context.Context, orgID, projectI
 		ExternalUserID: "",
 		UserEmail:      "",
 		HTTPMetadata:   nil,
+		Reasoning:      nil,
 	}
 
 	response, err := s.completions.GetObjectCompletion(ctx, req)

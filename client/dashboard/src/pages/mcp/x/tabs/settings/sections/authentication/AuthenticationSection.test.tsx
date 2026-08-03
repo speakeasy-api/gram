@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthenticationSectionBody } from "./AuthenticationSection";
 import type { AuthTarget } from "./authTarget";
@@ -64,9 +65,16 @@ vi.mock("./RemoteIdentityProvidersField", () => ({
 vi.mock("./AuthenticationSetupActions", () => ({
   AuthenticationSetupActions: ({
     onUseDiscovered,
+    additionalAction,
   }: {
     onUseDiscovered: () => void;
-  }) => <button onClick={onUseDiscovered}>Use Discovered</button>,
+    additionalAction?: ReactNode;
+  }) => (
+    <>
+      <button onClick={onUseDiscovered}>Use Discovered</button>
+      {additionalAction}
+    </>
+  ),
 }));
 
 vi.mock("./DeleteRemoteIdentityProviderDialog", () => ({
@@ -160,6 +168,31 @@ describe("AuthenticationSectionBody", () => {
     expect(
       screen.getByText("https://auth.example.com|resource.read resource.write"),
     ).toBeDefined();
+  });
+
+  it("includes a target-specific setup action before a session issuer is configured", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({
+      items: [],
+      isLoading: false,
+    });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "idle",
+      metadata: null,
+    });
+
+    render(
+      <AuthenticationSectionBody
+        target={remoteTargetWithoutSessionIssuer}
+        additionalSetupAction={<button>Configure External OAuth</button>}
+      />,
+    );
+
+    expect(screen.getByText("Configure External OAuth")).toBeDefined();
   });
 
   it("does not probe configured remote servers that already have a client", () => {

@@ -39,10 +39,12 @@ var (
 // the skill efficacy judge, so every session judge sees the same
 // prompt-injection-hardened shape.
 type JudgeInput struct {
-	OrgID      string
-	ProjectID  string
-	ChatID     uuid.UUID
-	Transcript efficacy.Transcript
+	EvaluationID uuid.UUID
+	OrgID        string
+	ProjectID    string
+	ChatID       uuid.UUID
+	AuthorID     string
+	Transcript   efficacy.Transcript
 }
 
 // Verdict is a judge's normalized answer. Score is the headline metric whose
@@ -73,6 +75,13 @@ type Judge interface {
 	// and score rows, so changing it orphans all three.
 	Name() string
 	Judge(ctx context.Context, in JudgeInput) (JudgeResult, error)
+}
+
+// ScorelessJudge performs its durable work and marks its evaluation scored
+// atomically inside Judge, so it does not publish a verdict to the shared
+// ClickHouse score sink.
+type ScorelessJudge interface {
+	SkipScoreSink() bool
 }
 
 // judgeNamePattern keeps judge names safe to use as settings keys, sink
@@ -194,6 +203,7 @@ func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.
 		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:

@@ -87,7 +87,7 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
 		RiskPolicyID:   policyID,
-		ChatMessageID:  msgID,
+		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
 		Found:          found,
 	})
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTes
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
 		RiskPolicyID:   policyID,
-		ChatMessageID:  msgID,
+		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
 		Found:          true,
 	})
 	require.NoError(t, err)
@@ -142,11 +142,14 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ProjectID = &ti.projectID
-	return ctx
+	return authztest.WithAdminGrants(
+		contextvalues.SetAuthContext(ctx, authCtx),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
 }
 
 // grantOrgAdminWithChatRead returns a context for an org admin who has ALSO been granted an
-// unrestricted chat:read, with RBAC enforcement active (enterprise). chat:read
+// unrestricted chat:read, with RBAC enforcement active. chat:read
 // is not a system-role default — it must be granted explicitly — and it, not
 // org:admin, is what drives chat session see-all visibility. These tests
 // exercise that chat:read-holder path.
@@ -257,7 +260,7 @@ func TestListChats_ExternalUser_PayloadExternalUserIDIsIgnored(t *testing.T) {
 func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	ctx := initSessionCtx(t, ti)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -321,8 +324,7 @@ func TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats(t *testing.T) {
 func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	// WithExactGrants marks the context enterprise (RBAC active) but grants
-	// nothing, so the org:admin check is denied.
+	// WithExactGrants grants nothing, so the org:admin check is denied.
 	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -347,8 +349,8 @@ func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 func TestListChats_RBACDisabled_SeesOnlyOwnChats(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatServiceRBACDisabled(t)
-	// Mark the context enterprise + grant org:admin; with the org's RBAC
-	// feature flag off, ShouldEnforce still returns false and the grant is moot.
+	// Grant org:admin; with the org's RBAC feature flag off, ShouldEnforce still
+	// returns false and the grant is moot.
 	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

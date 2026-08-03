@@ -1,10 +1,10 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -48,7 +48,8 @@ import type { ToolUsageUserSummary } from "@gram/client/models/components/toolus
 import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
@@ -78,7 +79,7 @@ import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
-import type { MultiSelectGroup } from "@/components/ui/multi-select";
+import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import {
   bucketStartNsToMs,
   buildToolUsageTimeSeries,
@@ -173,6 +174,25 @@ const SHARED_TOOLTIP = {
   boxPadding: 4,
 } satisfies _BarTooltip;
 
+// Category-axis labels are mostly emails. Keep the domain — it's how you tell
+// internal from external users — and spend the character budget on the local
+// part instead. Full label is still available in the tooltip title.
+const MAX_AXIS_LABEL_CHARS = 26;
+
+function truncateAxisLabel(label: string): string {
+  if (label.length <= MAX_AXIS_LABEL_CHARS) return label;
+
+  const at = label.lastIndexOf("@");
+  if (at > 0) {
+    const domain = label.slice(at);
+    if (domain.length <= MAX_AXIS_LABEL_CHARS - 4) {
+      return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1 - domain.length)}…${domain}`;
+    }
+  }
+
+  return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1)}…`;
+}
+
 const SHARED_BAR_SCALES = {
   x: {
     stacked: true,
@@ -191,11 +211,7 @@ const SHARED_BAR_SCALES = {
       padding: 2,
       font: { size: 12 },
       callback(value) {
-        const label = this.getLabelForValue(value as number);
-        const display = label.includes("@")
-          ? label.split("@")[0]!.slice(0, 14) + "@…"
-          : label.slice(0, 14) + (label.length > 14 ? "…" : "");
-        return display;
+        return truncateAxisLabel(this.getLabelForValue(value as number));
       },
     },
   },
@@ -733,7 +749,7 @@ function HooksInnerContent({
           </div>
           <div className="flex items-center gap-2">
             <HooksSetupButton />
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild>
               <Link to={orgRoutes.logs.href()}>
                 <Settings className="h-4 w-4" />
                 Configure settings
@@ -985,7 +1001,7 @@ function StackedBarChart({
       {hiddenCount > 0 && onShowAll && (
         <div className="mt-2 flex w-full">
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             icon="chevron-down"
             iconAfter={true}
@@ -1121,7 +1137,7 @@ function UserEventCountsChart({
     const color = USER_SOURCE_COLORS[0]!;
     const chartDatasets = [
       {
-        label: "Events",
+        label: "Tool calls",
         barThickness: 24,
         data: sortedUsers.map((user) => user.eventCount),
         backgroundColor: color,
@@ -2096,7 +2112,7 @@ function HooksAnalytics({
         <UserEventCountsChart
           loading={sectionStatus.users.pending}
           error={sectionStatus.users.error}
-          title="User Event Counts"
+          title="Tool Calls by User"
           users={users}
           handleFilter={makeFilterHandler({ user: "row" })}
           expandedChart={expandedChart}

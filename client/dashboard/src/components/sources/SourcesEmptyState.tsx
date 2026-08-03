@@ -1,15 +1,15 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
 import {
   ChevronDown,
   Code,
@@ -75,12 +75,12 @@ export function SourcesEmptyState({
           <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
             <Database className="text-muted-foreground h-6 w-6" />
           </div>
-          <Type variant="subheading" className="mb-1">
+          <Text variant="subheading" className="mb-1">
             No sources yet
-          </Type>
-          <Type small muted className="mb-4 max-w-md text-center">
+          </Text>
+          <Text small muted className="mb-4 max-w-md text-center">
             {sourcesEmptyStateBody(isFunctionsEnabled, isTunneledMcpEnabled)}
-          </Type>
+          </Text>
           <RequireScope scope="project:write" level="component">
             {({ disabled }) => (
               <DropdownMenu>

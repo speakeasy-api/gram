@@ -47,7 +47,7 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 

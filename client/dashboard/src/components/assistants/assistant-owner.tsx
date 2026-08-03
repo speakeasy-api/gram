@@ -1,6 +1,6 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { User, UserX } from "lucide-react";
@@ -59,14 +59,14 @@ export function AssistantOwner({
             </AvatarFallback>
           </Avatar>
         </SimpleTooltip>
-        <Type
+        <Text
           muted={variant === "card"}
           small
           className="truncate"
           title={display}
         >
           {variant === "card" ? `Created by ${display}` : display}
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -95,9 +95,9 @@ export function AssistantOwner({
           <Icon className="size-3" />
         </AvatarFallback>
       </Avatar>
-      <Type muted small className="truncate" title={label}>
+      <Text muted small className="truncate" title={label}>
         {label}
-      </Type>
+      </Text>
     </div>
   );
 }

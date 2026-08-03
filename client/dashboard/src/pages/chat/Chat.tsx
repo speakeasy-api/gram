@@ -35,7 +35,7 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   useHideInsightsDock,
   useInsightsState,
@@ -48,6 +48,11 @@ import {
   SLASH_COMMANDS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
+import { useChatLaunch } from "@/lib/chat-launch";
+import {
+  CHAT_LANDING_GRADIENT,
+  CHAT_LANDING_GRADIENT_CLASS,
+} from "@/lib/chat-gradient";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRoutes } from "@/routes";
@@ -102,19 +107,11 @@ function ChatLandingBackdrop(): ReactElement {
       className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[460px] overflow-hidden [mask-image:linear-gradient(to_bottom,black_30%,transparent_92%)]"
     >
       <div
-        className="absolute top-[-160px] left-1/2 h-[560px] w-[920px] max-w-[140vw] -translate-x-1/2 opacity-60 blur-[72px] dark:opacity-40"
-        style={{
-          // Brand rainbow (matches INSIGHTS_AI_RAINBOW), each blob fading to its
-          // own zero-alpha so the overlaps read as soft powder, not muddy grey.
-          background: [
-            "radial-gradient(38% 48% at 30% 42%, #C83228 0%, rgba(200,50,40,0) 70%)",
-            "radial-gradient(36% 46% at 48% 28%, #FB873F 0%, rgba(251,135,63,0) 70%)",
-            "radial-gradient(42% 52% at 64% 40%, #D2DC91 0%, rgba(210,220,145,0) 72%)",
-            "radial-gradient(44% 54% at 70% 60%, #5A8250 0%, rgba(90,130,80,0) 72%)",
-            "radial-gradient(42% 52% at 42% 62%, #2873D7 0%, rgba(40,115,215,0) 72%)",
-            "radial-gradient(36% 46% at 26% 54%, #9BC3FF 0%, rgba(155,195,255,0) 72%)",
-          ].join(","),
-        }}
+        className={cn(
+          "absolute top-[-160px] left-1/2 -translate-x-1/2",
+          CHAT_LANDING_GRADIENT_CLASS,
+        )}
+        style={{ background: CHAT_LANDING_GRADIENT }}
       />
     </div>
   );
@@ -164,11 +161,16 @@ function useCyclingPlaceholder(): { text: string; visible: boolean } {
  * the `/chat` landing and embedded on the project home page. Submitting opens
  * a fresh conversation on the shared runtime and navigates to the full-page
  * chat; the server mints the chat id on the first send.
+ *
+ * `compact` drops the pinned/recents history so the widget can sit inside the
+ * project home page without competing with the dashboard below it.
  */
 export function ChatLanding({
   autoFocusInput = false,
+  compact = false,
 }: {
   autoFocusInput?: boolean;
+  compact?: boolean;
 }): ReactElement {
   const { user } = useSession();
   const navigate = useNavigate();
@@ -251,7 +253,12 @@ export function ChatLanding({
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="text-foreground text-3xl font-semibold tracking-tight">
+          <h1
+            className={cn(
+              "text-foreground font-semibold tracking-tight",
+              compact ? "text-xl" : "text-3xl",
+            )}
+          >
             {greeting}
           </h1>
           <ReleaseStageBadge stage="beta" />
@@ -310,9 +317,24 @@ export function ChatLanding({
         </form>
       </div>
 
-      <ChatHomePinned />
-      <ChatHomeRecents />
-      <ChatHomeSuggestions onPick={startChat} />
+      {compact ? (
+        // Side-by-side columns so the card stays short: starters on the left,
+        // a peek at recent threads on the right.
+        <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <ChatHomeSuggestions compact />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <ChatHomeCompactRecents />
+          </div>
+        </div>
+      ) : (
+        <>
+          <ChatHomePinned />
+          <ChatHomeRecents />
+          <ChatHomeSuggestions />
+        </>
+      )}
     </div>
   );
 }
@@ -366,8 +388,10 @@ function SlashCommandMenu({
             onMouseEnter={() => onHover(index)}
             onClick={() => onSelect(command)}
             className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left",
-              active ? "bg-muted" : "hover:bg-muted/60",
+              // `bg-accent`, not `bg-muted` — on the home page the menu sits
+              // inside a muted card, where a muted highlight is invisible.
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors",
+              active ? "bg-accent" : "hover:bg-accent/60",
             )}
           >
             <Icon className="text-muted-foreground size-4 shrink-0" />
@@ -551,6 +575,56 @@ function ChatHomeRecents(): ReactElement {
         )}
       </div>
       <RecentsBody chats={chats} loading={loading} showAll={showAll} />
+    </section>
+  );
+}
+
+// Recent threads shown by the compact (project home) variant. Deliberately a
+// peek, not a list — "View more" hands off to the full `/chat` landing.
+const COMPACT_RECENTS_COUNT = 3;
+
+function ChatHomeCompactRecents(): ReactElement {
+  const routes = useRoutes();
+  // Pinned chats take the slots first; recents fill whatever is left.
+  const { chats: pinnedChats, loading: pinnedLoading } =
+    useProjectAssistantChats(Pinned.True);
+  const { chats: recentChats, loading: recentLoading } =
+    useProjectAssistantChats(Pinned.False);
+  const loading = pinnedLoading || recentLoading;
+  const chats = [
+    ...pinnedChats.map((chat) => ({ chat, pinned: true })),
+    ...recentChats.map((chat) => ({ chat, pinned: false })),
+  ];
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex items-center justify-between px-3">
+        <h2 className="text-muted-foreground text-sm font-medium">
+          Recent Chats
+        </h2>
+        {chats.length > COMPACT_RECENTS_COUNT && (
+          <Link
+            to={routes.chat.href()}
+            className="text-muted-foreground hover:text-foreground text-sm transition-colors"
+          >
+            View more
+          </Link>
+        )}
+      </div>
+      {loading ? (
+        <p className="text-muted-foreground px-3 text-sm">
+          Loading conversations…
+        </p>
+      ) : chats.length === 0 ? (
+        <p className="text-muted-foreground px-3 text-sm">
+          Your recent conversations will appear here.
+        </p>
+      ) : (
+        <div className="flex flex-col">
+          {chats.slice(0, COMPACT_RECENTS_COUNT).map(({ chat, pinned }) => (
+            <RecentRow key={chat.id} chat={chat} pinned={pinned} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -745,25 +819,43 @@ function PinButton({
   );
 }
 
+/**
+ * Starter prompt chips. Clicking one hands the chip element to `useChatLaunch`,
+ * which flies it to the centre of the screen and then morphs it into the user
+ * bubble of the conversation it just started.
+ */
+// Chips shown by the compact (project home) variant — two rows in the
+// half-width column it sits in.
+const COMPACT_SUGGESTION_COUNT = 4;
+
 function ChatHomeSuggestions({
-  onPick,
+  compact = false,
 }: {
-  onPick: (prompt: string) => void;
+  compact?: boolean;
 }): ReactElement {
+  const launchChat = useChatLaunch();
+  // The full landing indents chips to line up with the recents rows; the
+  // compact card has no rows, so chips align flush with the composer.
+  const inset = compact ? "" : "px-3";
+  // Compact shows a trimmed set so the chips stay within two rows at the
+  // widths the project home page renders at.
+  const suggestions = compact
+    ? CHAT_LANDING_SUGGESTIONS.slice(0, COMPACT_SUGGESTION_COUNT)
+    : CHAT_LANDING_SUGGESTIONS;
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">
+      <h2 className={cn("text-muted-foreground text-sm font-medium", inset)}>
         Suggestions
       </h2>
-      <div className="flex flex-wrap gap-x-2 gap-y-2.5 px-3">
-        {CHAT_LANDING_SUGGESTIONS.map((suggestion) => {
+      <div className={cn("flex flex-wrap gap-x-2 gap-y-2.5", inset)}>
+        {suggestions.map((suggestion) => {
           const SuggestionIcon =
             INSIGHTS_SUGGESTION_ICONS[suggestion.icon ?? "sparkles"];
           return (
             <button
               key={suggestion.title}
               type="button"
-              onClick={() => onPick(suggestion.prompt)}
+              onClick={(event) => launchChat(suggestion, event.currentTarget)}
               className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
             >
               <SuggestionIcon className="size-4 shrink-0" />

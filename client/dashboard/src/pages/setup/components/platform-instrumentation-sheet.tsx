@@ -21,10 +21,11 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import { AGENT_PLATFORMS } from "../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../types";
-import { Button, Link } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Link } from "@/components/ui/Link";
 import { cn } from "@/lib/utils";
 import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "./platform-logos";
 

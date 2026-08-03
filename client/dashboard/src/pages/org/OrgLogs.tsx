@@ -1,12 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Switch } from "@/components/ui/Switch";
+import { Text } from "@/components/ui/Text";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { Eye, FileText, LogIn, Monitor, Unplug } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -167,11 +167,11 @@ function OrgLogsInner() {
       <Heading variant="h4" className="mb-2">
         Logs
       </Heading>
-      <Type muted small className="mb-6">
+      <Text muted small className="mb-6">
         Configure logging and telemetry settings for all your tool capture. When
         enabled, tool calls and traces are recorded for debugging and analytics.
         These power the insights and logs page on the platform.
-      </Type>
+      </Text>
       <LogDataRetentionBanner />
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
@@ -179,16 +179,16 @@ function OrgLogsInner() {
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <FileText className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Enable Logs
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Record tool call traces and telemetry data
-              </Type>
+              </Text>
             </Stack>
             {featuresData && (
               <RequireScope scope="org:admin" level="component">
@@ -215,17 +215,17 @@ function OrgLogsInner() {
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Eye className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Record Tool I/O
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Store tool inputs and outputs. May expose sensitive data in
                 logs.
-              </Type>
+              </Text>
             </Stack>
             {featuresData && (
               <RequireScope scope="org:admin" level="component">
@@ -245,18 +245,17 @@ function OrgLogsInner() {
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Monitor className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Agent Session Capture
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
-                Capture user prompts and assistant responses from agents like
-                Cursor, Claude Code, Codex, and more. Sessions appear in the
-                Agent Sessions tab.
-              </Type>
+                Capture user prompts and assistant responses from supported
+                coding agents. Sessions appear in the Agent Sessions tab.
+              </Text>
             </Stack>
             {featuresData && (
               <RequireScope scope="org:admin" level="component">
@@ -276,11 +275,11 @@ function OrgLogsInner() {
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Unplug className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Fail Open During Outages
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
@@ -288,7 +287,7 @@ function OrgLogsInner() {
                 of blocking them (the default). Blocking policies go unenforced
                 during the outage; events are still recorded and scanned after
                 recovery. Invalid credentials always block.
-              </Type>
+              </Text>
             </Stack>
             {featuresData && (
               <RequireScope scope="org:admin" level="component">
@@ -308,18 +307,18 @@ function OrgLogsInner() {
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <LogIn className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Hook Browser Sign-In
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Let hook plugins sign users in through the browser to record
                 events under their own identity. When off, plugins use the
                 organization key or explicitly configured credentials.
-              </Type>
+              </Text>
             </Stack>
             {featuresData && (
               <RequireScope scope="org:admin" level="component">

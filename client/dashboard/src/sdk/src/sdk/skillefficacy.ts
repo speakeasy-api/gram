@@ -6,7 +6,6 @@ import { skillEfficacyGetSettings } from "../funcs/skillEfficacyGetSettings.js";
 import { skillEfficacyQueryInsights } from "../funcs/skillEfficacyQueryInsights.js";
 import { skillEfficacyUpsertSettings } from "../funcs/skillEfficacyUpsertSettings.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { SkillEfficacyInsightsResult } from "../models/components/skillefficacyinsightsresult.js";
 import { SkillEfficacySettings } from "../models/components/skillefficacysettings.js";
 import {
   GetSkillEfficacySettingsRequest,
@@ -14,6 +13,7 @@ import {
 } from "../models/operations/getskillefficacysettings.js";
 import {
   QuerySkillEfficacyInsightsRequest,
+  QuerySkillEfficacyInsightsResponse,
   QuerySkillEfficacyInsightsSecurity,
 } from "../models/operations/queryskillefficacyinsights.js";
 import {
@@ -21,6 +21,7 @@ import {
   UpsertSkillEfficacySettingsSecurity,
 } from "../models/operations/upsertskillefficacysettings.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class SkillEfficacy extends ClientSDK {
   /**
@@ -52,8 +53,10 @@ export class SkillEfficacy extends ClientSDK {
     request?: QuerySkillEfficacyInsightsRequest | undefined,
     security?: QuerySkillEfficacyInsightsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<SkillEfficacyInsightsResult> {
-    return unwrapAsync(skillEfficacyQueryInsights(
+  ): Promise<
+    PageIterator<QuerySkillEfficacyInsightsResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(skillEfficacyQueryInsights(
       this,
       request,
       security,

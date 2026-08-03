@@ -4,6 +4,7 @@ import { unixNanoToMs } from "@/components/chart/chartUtils";
 import { type TimeSeriesStack } from "@/components/stacked-time-series";
 import { StackedTimeSeriesPanel } from "@/components/stacked-time-series-panel";
 import { type StackMode } from "./breakdown-options";
+import { TumDefinitionHint } from "./tum-definition";
 
 // The billing page's tokens-under-management breakdown: the shared stacked
 // time-series panel fed with daily token buckets, stacked by a chosen
@@ -49,10 +50,6 @@ function formatTokensAxis(value: number): string {
 // rows (rollup flag included) pass straight through as stacks.
 export type GroupSeries = TimeSeriesStack;
 
-// The header info copy for the panel.
-const HEADER_HINT =
-  "Tokens under management — the agent traffic the platform observes from your users' sessions (including Claude Code, Cowork, Cursor, and Codex): input, output, and cache-write tokens. Cache reads are excluded (re-read cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
-
 // The daily stack series for the selected mode, aligned to the points grid.
 // The panel drops all-zero stacks, so modes whose series don't apply (e.g.
 // cache writes on billed completions) fall out naturally.
@@ -93,6 +90,7 @@ export function TokenUsagePanel({
   stackBy,
   breakdownPicker,
   loading,
+  failed,
   onSelectRange,
 }: {
   // Gap-filled daily buckets from the billing details response — the axis
@@ -110,6 +108,9 @@ export function TokenUsagePanel({
   // the head of the control row.
   breakdownPicker: ReactNode;
   loading: boolean;
+  // Whether the details request failed with nothing to show — renders a
+  // distinct failure message so an outage can't read as an empty period.
+  failed: boolean;
   // Called when a bar is clicked with the bucket's time range — the caller
   // narrows the page's period to it (drill-down). Bars aren't clickable
   // without it.
@@ -127,13 +128,17 @@ export function TokenUsagePanel({
   return (
     <StackedTimeSeriesPanel
       title="Token Usage Time Series"
-      headerHint={HEADER_HINT}
+      headerHint={<TumDefinitionHint />}
       bucketsMs={bucketsMs}
       stacks={stacks}
       headerControls={breakdownPicker}
       formatValue={formatTokens}
       formatAxisValue={formatTokensAxis}
-      emptyMessage="No token usage in this range."
+      emptyMessage={
+        failed
+          ? "Couldn't load usage for this range. Try again shortly."
+          : "No token usage in this range."
+      }
       loading={loading}
       onSelectRange={onSelectRange}
     />

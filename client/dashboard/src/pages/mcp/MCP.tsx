@@ -6,10 +6,10 @@ import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
-import { DotTable } from "@/components/ui/dot-table";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { useViewMode } from "@/components/ui/use-view-mode";
+import { DotTable } from "@/components/ui/DotTable";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { handleError } from "@/lib/errors";
 import { useRoutes } from "@/routes";
@@ -22,7 +22,9 @@ import {
   mcpActivityStatus,
   type McpActivityTargetType,
 } from "@/components/mcp/mcp-activity";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -396,11 +398,11 @@ function MCPOverview() {
             </Page.Toolbar>
           )}
           {showNoMatches ? (
-            <Type muted className="py-8 text-center">
+            <Text muted className="py-8 text-center">
               {search !== ""
                 ? `No MCP servers matching “${search}”`
                 : "No MCP servers match your filters"}
-            </Type>
+            </Text>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (

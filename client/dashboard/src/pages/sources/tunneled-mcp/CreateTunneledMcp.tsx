@@ -1,14 +1,16 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { mcpServerRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { AlertCircle, Loader2, Network } from "lucide-react";
@@ -97,17 +99,17 @@ function CreateTunneledMcpForm() {
             </div>
             <Heading variant="h3">Tunneled MCP server added</Heading>
           </Stack>
-          <Type muted>
+          <Text muted>
             Use this tunnel key to connect an MCP server running in your own
             network.
-          </Type>
+          </Text>
         </Stack>
 
         <Stack gap={6}>
           <div className="rounded-lg border p-5">
-            <Type variant="subheading" className="mb-3">
+            <Text variant="subheading" className="mb-3">
               Tunnel key
-            </Type>
+            </Text>
             <Stack gap={3}>
               <Alert variant="warning" dismissible={false}>
                 This key is only shown once. Copy it now and store it securely —
@@ -159,10 +161,10 @@ function CreateTunneledMcpForm() {
           </div>
           <Heading variant="h3">Add a tunneled MCP server</Heading>
         </Stack>
-        <Type muted>
+        <Text muted>
           Register an MCP server that runs in your private network and connects
           outbound to Speakeasy through a tunnel.
-        </Type>
+        </Text>
       </Stack>
 
       <form
@@ -210,9 +212,9 @@ function CreateTunneledMcpForm() {
             <label className="text-sm leading-none font-medium">
               Transport
             </label>
-            <Type muted small>
+            <Text muted small>
               Outbound tunnel to a normal MCP server
-            </Type>
+            </Text>
           </Stack>
 
           {createSource.isError && (

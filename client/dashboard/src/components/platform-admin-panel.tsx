@@ -1,4 +1,4 @@
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -14,6 +14,7 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
+import { useUpsertBusinessMemoryAnalysisSettingsMutation } from "@gram/client/react-query/upsertBusinessMemoryAnalysisSettings.js";
 import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
@@ -393,6 +394,7 @@ function ProductFeaturesSection(): ReactElement {
       />
 
       <WorkUnitsAnalysisSection />
+      <BusinessMemoryAnalysisSection />
     </div>
   );
 }
@@ -401,6 +403,36 @@ const WORK_UNITS_MAX_CAP = 10_000;
 // Prefilled when enabling an organization whose stored cap is 0 — a cap of 0
 // disables scoring as surely as the switch.
 const WORK_UNITS_SUGGESTED_CAP = 100;
+
+function RunChatAnalysisNow(): ReactElement {
+  const trigger = useTriggerChatAnalysisMutation({
+    onSuccess: (data) => {
+      toast.success(
+        `Chat analysis triggered for ${data.projectsSignaled} project${data.projectsSignaled === 1 ? "" : "s"}.`,
+      );
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to trigger chat analysis",
+      );
+    },
+  });
+
+  return (
+    <div className="mt-2 flex items-center justify-between gap-2">
+      <p className="text-muted-foreground text-[11px]">
+        Wake every project's analysis coordinator now instead of waiting for the
+        sweep.
+      </p>
+      <ActionButton
+        onClick={() => trigger.mutate({})}
+        pending={trigger.isPending}
+      >
+        Run now
+      </ActionButton>
+    </div>
+  );
+}
 
 // WorkUnitsAnalysisSection controls the chat analysis pipeline's work-units
 // judge for the organization. Not a product feature: it writes the
@@ -419,19 +451,6 @@ function WorkUnitsAnalysisSection(): ReactElement {
     onSuccess: async () => {
       setCapInput(undefined);
       await invalidateAllChatAnalysisSettings(queryClient);
-    },
-  });
-
-  const trigger = useTriggerChatAnalysisMutation({
-    onSuccess: (data) => {
-      toast.success(
-        `Chat analysis triggered for ${data.projectsSignaled} project${data.projectsSignaled === 1 ? "" : "s"}.`,
-      );
-    },
-    onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to trigger chat analysis",
-      );
     },
   });
 
@@ -523,19 +542,120 @@ function WorkUnitsAnalysisSection(): ReactElement {
       </div>
       {/* A zero cap disables the judge server-side, so "Run now" would no-op. */}
       {settings.workUnitsEnabled && settings.workUnitsDailyCap > 0 && (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-muted-foreground text-[11px]">
-            Wake every project's analysis coordinator now instead of waiting for
-            the sweep.
-          </p>
+        <RunChatAnalysisNow />
+      )}
+      {!capValid && (
+        <p className="text-destructive mt-2 text-[11px]">
+          Cap must be a whole number from 0 to{" "}
+          {WORK_UNITS_MAX_CAP.toLocaleString()}.
+        </p>
+      )}
+      {mutation.error && (
+        <p className="text-destructive mt-2 text-[11px]">
+          {mutation.error.message}
+        </p>
+      )}
+    </>,
+  );
+}
+
+function BusinessMemoryAnalysisSection(): ReactElement {
+  const queryClient = useQueryClient();
+  const query = useChatAnalysisSettings(undefined, undefined, {
+    throwOnError: false,
+  });
+  const [capInput, setCapInput] = useState<string>();
+  const mutation = useUpsertBusinessMemoryAnalysisSettingsMutation({
+    onSuccess: async () => {
+      setCapInput(undefined);
+      await invalidateAllChatAnalysisSettings(queryClient);
+    },
+  });
+
+  const section = (children: React.ReactNode) => (
+    <Section
+      icon={FileSearch}
+      title="Business Memory Extraction"
+      description="Extracts reusable glossary entries, procedures, and prior results from quiet chat sessions. Cap is evaluations per UTC day; 0 disables extraction."
+    >
+      {children}
+    </Section>
+  );
+
+  if (query.isLoading) {
+    return section(
+      <div className="flex items-center gap-2 py-1">
+        <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
+        <span className="text-muted-foreground text-[11px]">Loading…</span>
+      </div>,
+    );
+  }
+  if (query.error || !query.data) {
+    return section(
+      <p className="text-destructive text-[11px]">
+        Failed to load business memory settings:{" "}
+        {query.error?.message ?? "unknown error"}
+      </p>,
+    );
+  }
+
+  const settings = query.data;
+  const cap = capInput ?? String(settings.businessMemoryDailyCap);
+  const capNumber = Number(cap);
+  const capValid =
+    cap.trim() !== "" &&
+    Number.isInteger(capNumber) &&
+    capNumber >= 0 &&
+    capNumber <= WORK_UNITS_MAX_CAP;
+  const capDirty = capValid && capNumber !== settings.businessMemoryDailyCap;
+  const upsert = (enabled: boolean, dailyCap: number) => {
+    mutation.mutate({
+      request: {
+        upsertBusinessMemorySettingsRequestBody: {
+          businessMemoryEnabled: enabled,
+          businessMemoryDailyCap: dailyCap,
+        },
+      },
+    });
+  };
+  const action = () => {
+    if (!settings.businessMemoryEnabled) {
+      upsert(true, capNumber > 0 ? capNumber : WORK_UNITS_SUGGESTED_CAP);
+    } else if (capDirty) {
+      upsert(true, capNumber);
+    } else {
+      upsert(false, capNumber);
+    }
+  };
+  const actionLabel = () => {
+    if (!settings.businessMemoryEnabled) return "Enable";
+    if (capDirty) return "Save cap";
+    return "Disable";
+  };
+
+  return section(
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <StatusPill enabled={settings.businessMemoryEnabled} />
+        <div className="flex items-center gap-1.5">
+          <Input
+            value={cap}
+            onChange={setCapInput}
+            aria-label="Business memory daily extraction cap"
+            className="h-6 w-20 px-2 text-[11px]"
+          />
           <ActionButton
-            onClick={() => trigger.mutate({})}
-            pending={trigger.isPending}
+            onClick={action}
+            pending={mutation.isPending}
+            disabled={!capValid}
+            destructive={settings.businessMemoryEnabled && !capDirty}
           >
-            Run now
+            {actionLabel()}
           </ActionButton>
         </div>
-      )}
+      </div>
+      {settings.businessMemoryEnabled &&
+        settings.businessMemoryDailyCap > 0 && <RunChatAnalysisNow />}
       {!capValid && (
         <p className="text-destructive mt-2 text-[11px]">
           Cap must be a whole number from 0 to{" "}

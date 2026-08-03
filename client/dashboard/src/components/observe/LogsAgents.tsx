@@ -22,9 +22,11 @@ import {
   useListChats,
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { Badge } from "@/components/ui/badge";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pin } from "lucide-react";
 import {
@@ -169,14 +171,14 @@ const SESSIONS_VIEW_OPTIONS: {
   },
 ];
 
-// Shown when RBAC is on and the caller lacks chat:read: the list is scoped to
-// their own sessions, so explain why and (for admins) point at the roles page
-// where chat:read is granted.
+// Shown when the caller lacks chat:read: the list is scoped to their own
+// sessions, so explain why and (for admins) point at the roles page where
+// chat:read is granted.
 function OwnSessionsNotice(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
-  const { hasScope, isRbacEnabled, isLoading } = useRBAC();
+  const { hasScope, isLoading } = useRBAC();
 
-  if (isLoading || !isRbacEnabled || hasScope("chat:read")) return null;
+  if (isLoading || hasScope("chat:read")) return null;
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">
@@ -737,7 +739,7 @@ function AgentSessionsPageContent({
           />
           {hasAssistantFilter && (
             <Badge
-              variant="secondary"
+              variant="neutral"
               className="w-fit gap-1.5 px-2.5 py-1 text-xs"
             >
               <Icon name="bot" className="size-3" />

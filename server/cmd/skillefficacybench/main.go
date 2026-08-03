@@ -90,7 +90,16 @@ func main() {
 	timeout := flag.Duration("timeout", 60*time.Second, "per-call timeout")
 	baselineFile := flag.String("baseline", "", "prior results JSON used to report per-case score drift")
 	outFile := flag.String("out", defaultOutFile, "write sanitized per-call results here (empty to skip)")
+	reasoningEffort := flag.String("reasoning-effort", "", "reasoning effort override; empty matches production, which disables reasoning. Routes that reject a disabled setting need an effort such as \"low\"")
 	flag.Parse()
+
+	// A route that refuses a disabled setting (Gemini 3.5+ answers "Reasoning is
+	// mandatory for this endpoint") cannot be benched against production defaults
+	// at all, so the effort is a knob rather than an assumption.
+	var reasoning *openrouter.Reasoning
+	if *reasoningEffort != "" {
+		reasoning = &openrouter.Reasoning{Effort: *reasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil}
+	}
 
 	set, err := loadBenchSet(*casesFile)
 	if err != nil {
@@ -127,7 +136,7 @@ func main() {
 		nil,
 	)
 
-	results := runBench(client, set, models, *runs, *concurrency, *timeout)
+	results := runBench(client, set, models, *runs, *concurrency, *timeout, reasoning)
 	passed := true
 	for _, model := range models {
 		summary := summarize(set, model, results)
@@ -153,7 +162,7 @@ func main() {
 	}
 }
 
-func runBench(client openrouter.CompletionClient, set benchSet, models []string, runs, concurrency int, timeout time.Duration) []result {
+func runBench(client openrouter.CompletionClient, set benchSet, models []string, runs, concurrency int, timeout time.Duration, reasoning *openrouter.Reasoning) []result {
 	type job struct {
 		model string
 		tc    testCase
@@ -177,14 +186,14 @@ func runBench(client openrouter.CompletionClient, set benchSet, models []string,
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = evaluate(client, job.model, job.tc, job.run, timeout)
+			results[i] = evaluate(client, job.model, job.tc, job.run, timeout, reasoning)
 		}()
 	}
 	wg.Wait()
 	return results
 }
 
-func evaluate(client openrouter.CompletionClient, model string, tc testCase, run int, timeout time.Duration) result {
+func evaluate(client openrouter.CompletionClient, model string, tc testCase, run int, timeout time.Duration, reasoning *openrouter.Reasoning) result {
 	res := result{
 		RequestedModel: model,
 		ActualModel:    "",
@@ -199,7 +208,7 @@ func evaluate(client openrouter.CompletionClient, model string, tc testCase, run
 		CostUSD:        nil,
 		Error:          "",
 	}
-	request, err := buildRequest(model, tc)
+	request, err := buildRequest(model, tc, reasoning)
 	if err != nil {
 		res.Error = "invalid case"
 		return res
@@ -231,7 +240,7 @@ func evaluate(client openrouter.CompletionClient, model string, tc testCase, run
 	return res
 }
 
-func buildRequest(model string, tc testCase) (openrouter.ObjectCompletionRequest, error) {
+func buildRequest(model string, tc testCase, reasoning *openrouter.Reasoning) (openrouter.ObjectCompletionRequest, error) {
 	prompt, err := efficacy.BuildJudgePrompt(efficacy.JudgeInput{
 		OrgID:        benchOrgID,
 		ProjectID:    benchProjectID,
@@ -269,6 +278,7 @@ func buildRequest(model string, tc testCase) (openrouter.ObjectCompletionRequest
 		JSONSchema:     &schema,
 		KeyType:        openrouter.KeyTypeInternal,
 		KeySlot:        billing.ModelUsageSourceSkillEfficacy,
+		Reasoning:      reasoning,
 	}, nil
 }
 

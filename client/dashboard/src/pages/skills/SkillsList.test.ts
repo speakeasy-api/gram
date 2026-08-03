@@ -2,7 +2,7 @@ import type { Skill } from "@gram/client/models/components/skill.js";
 import { describe, expect, it } from "vitest";
 import {
   filterSkills,
-  skillCountLabel,
+  prioritizeAddableSkills,
   sortSkills,
 } from "./skills-list-helpers";
 
@@ -59,43 +59,20 @@ describe("SkillsList filtering", () => {
     expect(filterSkills(skills, "", ["manual"], ["built_in"])).toEqual([]);
   });
 
-  it("never labels loaded pages as the project-wide total", () => {
+  it("prioritizes addable skills without reordering either group", () => {
+    const unavailableFirst = skill({ id: "a", hasValidVersion: false });
+    const availableFirst = skill({ id: "b" });
+    const unavailableSecond = skill({ id: "c", hasValidVersion: false });
+    const availableSecond = skill({ id: "d" });
+
     expect(
-      skillCountLabel({
-        active: false,
-        hasNextPage: true,
-        incomplete: false,
-        loadedCount: 200,
-        resultCount: 200,
-      }),
-    ).toBe("200 loaded");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: true,
-        incomplete: false,
-        loadedCount: 200,
-        resultCount: 3,
-      }),
-    ).toBe("Searching 200 loaded");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: false,
-        incomplete: false,
-        loadedCount: 240,
-        resultCount: 3,
-      }),
-    ).toBe("3 skills");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: true,
-        incomplete: true,
-        loadedCount: 200,
-        resultCount: 0,
-      }),
-    ).toBe("0 matching loaded");
+      prioritizeAddableSkills([
+        unavailableFirst,
+        availableFirst,
+        unavailableSecond,
+        availableSecond,
+      ]).map((item) => item.id),
+    ).toEqual(["b", "d", "a", "c"]);
   });
 
   it("sorts sampled metrics ahead of missing values", () => {

@@ -1,24 +1,26 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import { useCreateGcpIamPlatformCredentialMutation } from "@gram/client/react-query/createGcpIamPlatformCredential";
 import { invalidateAllListPlatformExternalCredentials } from "@gram/client/react-query/listPlatformExternalCredentials";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -134,7 +136,7 @@ export function CreateExternalCredentialSheet({
               <Input
                 value={name}
                 onChange={setName}
-                placeholder="Gram platform identity"
+                placeholder="Speakeasy platform identity"
               />
             </Stack>
 
@@ -183,10 +185,10 @@ function GcpCredentialFields({
 }): JSX.Element {
   return (
     <Stack gap={4}>
-      <Type muted small>
-        Leave blank to use Gram's ambient attached identity, or set a service
-        account for Gram to impersonate.
-      </Type>
+      <Text muted small>
+        Leave blank to use the platform's ambient attached identity, or set a
+        service account for the platform to impersonate.
+      </Text>
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">
           Impersonate service account (optional)

@@ -1,11 +1,11 @@
-import { MiniCard } from "@/components/ui/card-mini";
-import { Heading } from "@/components/ui/heading";
+import { MiniCard } from "@/components/ui/CardMini";
+import { Heading } from "@/components/ui/Heading";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -14,7 +14,8 @@ import { DeploymentFunctions } from "@gram/client/models/components/deploymentfu
 import { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/openapiv3deploymentasset.js";
 import { buildDeploymentQuery } from "@gram/client/react-query/deployment.js";
 import { buildListToolsQuery } from "@gram/client/react-query/listTools.js";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Stack } from "@/components/ui/Stack";
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { FileCodeIcon, SquareFunctionIcon } from "lucide-react";
 import React from "react";
@@ -52,7 +53,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
         <div>
           <Stack gap={2} className="mb-6">
             <Heading variant="h2">Invalid Assets</Heading>
-            <Type variant="small">
+            <Text variant="small">
               The following assets caused this deployment to fail. Correct these
               errors by managing assets in the{" "}
               <routes.mcp.Link className="text-link hover:cursor-pointer">
@@ -68,7 +69,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
                 deployment logs
               </a>
               .
-            </Type>
+            </Text>
           </Stack>
 
           <ul className="flex flex-col flex-wrap gap-4">

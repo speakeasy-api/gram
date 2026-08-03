@@ -1,6 +1,6 @@
 import { toast } from "sonner";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import {
   Command,
   CommandEmpty,
@@ -8,9 +8,9 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Command";
+import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { invalidateAllMembers } from "@gram/client/react-query/members.js";
 import {
@@ -18,7 +18,7 @@ import {
   useRoles,
 } from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -117,12 +117,12 @@ export function ChangeRoleDialog({
                 </AvatarFallback>
               </Avatar>
               <div>
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   {member.name}
-                </Type>
-                <Type variant="body" className="text-muted-foreground text-sm">
+                </Text>
+                <Text variant="body" className="text-muted-foreground text-sm">
                   {member.email}
-                </Type>
+                </Text>
               </div>
             </div>
 
@@ -176,7 +176,7 @@ export function ChangeRoleDialog({
                   const role = roleById.get(id);
                   if (!role) return null;
                   return (
-                    <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                    <Badge key={id} variant="neutral" className="gap-1 pr-1">
                       {role.name}
                       <button
                         type="button"

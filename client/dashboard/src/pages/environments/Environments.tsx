@@ -2,8 +2,8 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
-import { Action, MoreActions } from "@/components/ui/more-actions";
+import { DotCard } from "@/components/ui/DotCard";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -13,8 +13,9 @@ import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnv
 import { ArrowRight, Blocks, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
-import { Badge, Button } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
 import { toast } from "sonner";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
@@ -107,13 +108,13 @@ function EnvironmentsInner() {
               <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
                 <Blocks className="text-muted-foreground h-6 w-6" />
               </div>
-              <Type variant="subheading" className="mb-1">
+              <Text variant="subheading" className="mb-1">
                 No environments yet
-              </Type>
-              <Type small muted className="mb-4 max-w-md text-center">
+              </Text>
+              <Text small muted className="mb-4 max-w-md text-center">
                 Environments let you store configuration and secrets that can be
                 shared across multiple MCP servers.
-              </Type>
+              </Text>
               <RequireScope scope="environment:write" level="component">
                 <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                   <Button.LeftIcon>
@@ -194,23 +195,23 @@ function EnvironmentCard({
       >
         <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
           <div className="mb-2 flex items-start justify-between gap-2">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="text-md group-hover:text-primary flex-1 truncate transition-colors"
               title={environment.name}
             >
               {environment.name}
-            </Type>
+            </Text>
             <RequireScope scope="environment:write" level="component">
               <div onClick={(e) => e.stopPropagation()}>
                 <MoreActions actions={actions} />
               </div>
             </RequireScope>
           </div>
-          <Type small muted className="truncate">
+          <Text small muted className="truncate">
             {environment.description || "No description provided"}
-          </Type>
+          </Text>
           <div className="mt-auto flex items-center justify-between gap-2 pt-2">
             <Badge variant="neutral">
               {environment.entries.length}{" "}

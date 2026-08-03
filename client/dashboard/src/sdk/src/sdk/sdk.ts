@@ -14,11 +14,13 @@ import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
 import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
+import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
 import { External } from "./external.js";
@@ -126,6 +128,11 @@ export class Gram extends ClientSDK {
     return (this._auth ??= new Auth(this._options));
   }
 
+  private _businessMemories?: BusinessMemories;
+  get businessMemories(): BusinessMemories {
+    return (this._businessMemories ??= new BusinessMemories(this._options));
+  }
+
   private _chat?: Chat;
   get chat(): Chat {
     return (this._chat ??= new Chat(this._options));
@@ -149,6 +156,11 @@ export class Gram extends ClientSDK {
   private _deployments?: Deployments;
   get deployments(): Deployments {
     return (this._deployments ??= new Deployments(this._options));
+  }
+
+  private _deviceIntegrations?: DeviceIntegrations;
+  get deviceIntegrations(): DeviceIntegrations {
+    return (this._deviceIntegrations ??= new DeviceIntegrations(this._options));
   }
 
   private _domains?: Domains;

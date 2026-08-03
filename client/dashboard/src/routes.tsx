@@ -1,4 +1,5 @@
-import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
+import { Icon, IconProps } from "@/components/ui/Icon";
+import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -21,7 +22,8 @@ import SkillDetail from "./pages/skills/SkillDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
-import DeviceAgent from "./pages/device-agent/DeviceAgent";
+import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
+import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -391,16 +393,20 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Overview",
             url: "overview",
           },
-          tools: {
-            title: "MCP Server Tools",
-            url: "tools",
+          inspect: {
+            title: "MCP Server Inspect",
+            url: "inspect",
           },
-          // Legacy route. MCPServerDetails redirects this to
+          // Legacy routes. MCPServerDetails redirects `authentication` to
           // settings#authentication now that authentication lives under
-          // Settings.
+          // Settings, and `tools` to `inspect`.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
+          },
+          tools: {
+            title: "MCP Server Tools",
+            url: "tools",
           },
           teamAccess: {
             title: "MCP Server Team Access",
@@ -978,7 +984,20 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
-    component: DeviceAgent,
+    component: DeviceAgentRoot,
+    indexComponent: DeviceAgent,
+    subPages: {
+      mdmIntegrations: {
+        title: "MDM Integrations",
+        url: "mdm-integrations",
+        component: DeviceAgent,
+      },
+      mdmDetail: {
+        title: "MDM Integration",
+        url: "mdm-integrations/:provider",
+        component: MdmIntegrationDetail,
+      },
+    },
   },
   access: {
     title: "Roles & Permissions",

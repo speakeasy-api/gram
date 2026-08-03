@@ -53,6 +53,8 @@ type ListSkillEfficacyScoreSessionsParams struct {
 	SkillIDs       []string
 	From           time.Time
 	To             time.Time
+	CursorScoredAt time.Time
+	CursorID       string
 	Limit          uint64
 }
 
@@ -128,7 +130,7 @@ func deduplicatedSkillEfficacyScores(scope skillEfficacyScoreScope) (string, []a
 }
 
 func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSkillEfficacyScoreSessionsParams) ([]SkillEfficacyScoreSession, error) {
-	if arg.OrganizationID == "" || arg.ProjectID == "" || len(arg.SkillIDs) == 0 || !arg.From.Before(arg.To) || arg.Limit == 0 || arg.Limit > 100 {
+	if arg.OrganizationID == "" || arg.ProjectID == "" || len(arg.SkillIDs) == 0 || !arg.From.Before(arg.To) || arg.Limit == 0 || arg.Limit > 101 || arg.CursorScoredAt.IsZero() != (arg.CursorID == "") {
 		return nil, fmt.Errorf("list skill efficacy score sessions: invalid scope, window, or limit")
 	}
 	mappings := sq.Select(
@@ -153,14 +155,18 @@ func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSk
 	if err != nil {
 		return nil, err
 	}
-	query, args, err := sq.Select(
+	sessions := sq.Select(
 		"toString(e.id) AS id", "toString(e.skill_id) AS skill_id", "toString(e.skill_version_id) AS skill_version_id",
 		"e.surface AS surface", "m.activated_at AS activated_at", "e.created_at AS scored_at", "e.score AS score",
 		"e.rationale AS rationale", "e.est_turns_saved AS estimated_turns_saved", "e.est_minutes_saved AS estimated_minutes_saved",
 		"e.roi_confidence AS roi_confidence", "e.flags AS flags", "e.gram_chat_id AS gram_chat_id",
 	).
 		From("score_events e").
-		Join("mappings m ON m.project_id = e.project_id AND m.session_id = e.session_id AND m.surface = e.surface AND m.skill_id = toString(e.skill_id) AND m.skill_version_id = toString(e.skill_version_id)").
+		Join("mappings m ON m.project_id = e.project_id AND m.session_id = e.session_id AND m.surface = e.surface AND m.skill_id = toString(e.skill_id) AND m.skill_version_id = toString(e.skill_version_id)")
+	if arg.CursorID != "" {
+		sessions = sessions.Where("(e.created_at, e.id) < (?, toUUID(?))", arg.CursorScoredAt, arg.CursorID)
+	}
+	query, args, err := sessions.
 		OrderBy("e.created_at DESC", "e.id DESC").
 		Limit(arg.Limit).
 		Prefix("WITH mappings AS ("+mappingSQL+"), score_events AS ("+scoreSQL+")", append(mappingArgs, scoreArgs...)...).

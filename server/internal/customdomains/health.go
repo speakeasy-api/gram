@@ -1,6 +1,7 @@
 package customdomains
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -43,12 +44,21 @@ type HealthObservation struct {
 	CertificateExpiresAt *time.Time
 }
 
-func HealthIssueMessage(issue HealthIssue) string {
+// HealthIssueMessage renders the customer-facing description of a health
+// issue. expectedCNAME is the CNAME target customers must point their domain
+// at; product messaging names the exact record instead of the platform.
+func HealthIssueMessage(issue HealthIssue, expectedCNAME string) string {
 	switch issue {
 	case HealthIssueDNSNotFound:
+		if expectedCNAME != "" {
+			return fmt.Sprintf("DNS records for the domain could not be found. Create a CNAME record pointing the domain at %s.", expectedCNAME)
+		}
 		return "DNS records for the domain could not be found."
 	case HealthIssueDNSTargetMismatch:
-		return "The domain's DNS no longer resolves to Gram's endpoint."
+		if expectedCNAME != "" {
+			return fmt.Sprintf("The domain's DNS no longer resolves to the expected target. Point the domain's CNAME record at %s.", expectedCNAME)
+		}
+		return "The domain's DNS no longer resolves to the expected target."
 	case HealthIssueResourceMissing:
 		return "The routing configuration for the domain is missing."
 	case HealthIssueCertificateMissing,
@@ -59,6 +69,27 @@ func HealthIssueMessage(issue HealthIssue) string {
 	default:
 		return "The latest health check found a problem with the domain."
 	}
+}
+
+// Both thresholds must hold: rapid manual rechecks alone cannot reach a week,
+// and a week of wall-clock unhealthiness alone is not enough without sustained
+// failing checks.
+const (
+	AutoDisableConsecutiveFailures int32         = 7
+	AutoDisableUnhealthyFor        time.Duration = 7 * 24 * time.Hour
+)
+
+// ShouldAutoDisable reports whether both auto-disable thresholds are crossed.
+// check_failed is excluded: a Gram-side probe failure is not a customer fault.
+func ShouldAutoDisable(state HealthState, now time.Time) bool {
+	if state.Status != HealthStatusUnhealthy || state.Issue == HealthIssueCheckFailed {
+		return false
+	}
+	if state.ConsecutiveFailures < AutoDisableConsecutiveFailures {
+		return false
+	}
+	return state.UnhealthySince != nil &&
+		now.UTC().Sub(state.UnhealthySince.UTC()) >= AutoDisableUnhealthyFor
 }
 
 func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {

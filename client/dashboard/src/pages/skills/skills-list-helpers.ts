@@ -28,6 +28,13 @@ export function filterSkills(
   });
 }
 
+export function prioritizeAddableSkills(skills: Skill[]): Skill[] {
+  return skills.toSorted(
+    (left, right) =>
+      Number(right.hasValidVersion) - Number(left.hasValidVersion),
+  );
+}
+
 export function sortSkills(
   skills: Skill[],
   metricsBySkill: ReadonlyMap<string, SkillInsightMetrics>,
@@ -59,26 +66,4 @@ export function sortSkills(
     }
     return difference || left.displayName.localeCompare(right.displayName);
   });
-}
-
-export function skillCountLabel({
-  active,
-  hasNextPage,
-  incomplete,
-  loadedCount,
-  resultCount,
-}: {
-  active: boolean;
-  hasNextPage: boolean;
-  incomplete: boolean;
-  loadedCount: number;
-  resultCount: number;
-}): string {
-  if (active && incomplete) {
-    return `${resultCount} matching loaded`;
-  }
-  if (hasNextPage) {
-    return active ? `Searching ${loadedCount} loaded` : `${loadedCount} loaded`;
-  }
-  return `${resultCount} skill${resultCount === 1 ? "" : "s"}`;
 }

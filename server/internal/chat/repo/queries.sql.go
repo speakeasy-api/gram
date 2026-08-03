@@ -330,6 +330,20 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 	return total, err
 }
 
+type CreateChatContentPartParams struct {
+	ChatID              uuid.UUID
+	ProjectID           uuid.UUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+}
+
 type CreateChatMessageParams struct {
 	ChatID           uuid.UUID
 	Role             string
@@ -1207,6 +1221,113 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 	var last_cursor_id pgtype.Text
 	err := row.Scan(&last_cursor_id)
 	return last_cursor_id, err
+}
+
+const listChatContentPartsByChatID = `-- name: ListChatContentPartsByChatID :many
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , ccp.project_id
+  , ccp.kind
+  , ccp.content_asset_url
+  , ccp.external_id
+  , ccp.parent_chat_message_id
+  , ccp.version
+  , ccp.source
+  , ccp.metadata
+  , ccp.risk_analyzed_at
+  , ccp.created_at
+  , ccp.updated_at
+  , ccp.deleted_at
+  , ccp.deleted
+  , EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      JOIN risk_policies rp
+        ON rp.id = rr.risk_policy_id
+       AND rp.enabled IS TRUE
+       AND rp.deleted IS FALSE
+      WHERE rr.project_id = $1::uuid
+        AND rr.chat_content_part_id = ccp.id
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    ) AS is_risk
+FROM chat_content_parts ccp
+WHERE ccp.chat_id = $2
+  AND (ccp.project_id IS NULL OR ccp.project_id = $1::uuid)
+  AND ccp.deleted IS FALSE
+  -- Only the parts the requested page can actually render: one anchored to a
+  -- message on this page, or an unparented one the client places by time
+  -- proximity. Without this a page request reads every attachment body in the
+  -- chat from asset storage, then discards the ones it cannot anchor.
+  AND (
+    ccp.parent_chat_message_id IS NULL
+    OR ccp.parent_chat_message_id = ANY($3::uuid[])
+  )
+ORDER BY created_at ASC, id ASC
+`
+
+type ListChatContentPartsByChatIDParams struct {
+	ProjectID            uuid.UUID
+	ChatID               uuid.UUID
+	ParentChatMessageIds []uuid.UUID
+}
+
+type ListChatContentPartsByChatIDRow struct {
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ProjectID           uuid.NullUUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	IsRisk              bool
+}
+
+func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChatContentPartsByChatIDParams) ([]ListChatContentPartsByChatIDRow, error) {
+	rows, err := q.db.Query(ctx, listChatContentPartsByChatID, arg.ProjectID, arg.ChatID, arg.ParentChatMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatContentPartsByChatIDRow
+	for rows.Next() {
+		var i ListChatContentPartsByChatIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Kind,
+			&i.ContentAssetUrl,
+			&i.ExternalID,
+			&i.ParentChatMessageID,
+			&i.Version,
+			&i.Source,
+			&i.Metadata,
+			&i.RiskAnalyzedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.IsRisk,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
@@ -2096,6 +2217,46 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 	return items, nil
 }
 
+const listClaudeUserMessagesForPromptAttachmentParent = `-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
+SELECT cm.id, cm.content
+FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND cm.role = 'user'
+  AND cm.content != ''
+ORDER BY cm.seq DESC, cm.created_at DESC
+`
+
+type ListClaudeUserMessagesForPromptAttachmentParentParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ListClaudeUserMessagesForPromptAttachmentParentRow struct {
+	ID      uuid.UUID
+	Content string
+}
+
+func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, arg ListClaudeUserMessagesForPromptAttachmentParentParams) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
+	rows, err := q.db.Query(ctx, listClaudeUserMessagesForPromptAttachmentParent, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClaudeUserMessagesForPromptAttachmentParentRow
+	for rows.Next() {
+		var i ListClaudeUserMessagesForPromptAttachmentParentRow
+		if err := rows.Scan(&i.ID, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
 SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
@@ -2761,7 +2922,7 @@ type SeedRiskResultParams struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	RiskPolicyID   uuid.UUID
-	ChatMessageID  uuid.UUID
+	ChatMessageID  uuid.NullUUID
 	Found          bool
 }
 

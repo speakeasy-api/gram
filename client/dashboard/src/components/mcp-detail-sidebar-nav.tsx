@@ -4,11 +4,11 @@ import {
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Text } from "@/components/ui/Text";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import {
   MCPStatusDropdown,
@@ -39,12 +39,11 @@ import { useLocation, useParams } from "react-router";
 
 export function McpDetailSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
   const { toolsetSlug } = useParams<{ toolsetSlug: string }>();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const { data: toolset } = useToolset(toolsetSlug);
+  const { hasScope } = useRBAC();
   const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
   const { data: environmentsData } = useListEnvironments();
   const { data: mcpMetadataData } = useGetMcpMetadata(
@@ -64,6 +63,8 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   if (!toolsetSlug) return null;
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
+  const canViewTeamAccess =
+    !!toolset && hasScope("org:read") && hasScope("mcp:read", toolset.id);
 
   const items: McpSidebarNavItem[] = [
     {
@@ -102,7 +103,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       href: mcpDetailTabHref(routes, toolsetSlug, "performance"),
       active: activeTab === "performance",
     },
-    ...(isRbacEnabled
+    ...(canViewTeamAccess
       ? [
           {
             key: "team-access",
@@ -139,7 +140,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const cardContent = toolset && (
     <>
       <div className="flex items-center justify-between gap-1">
-        <Type className="truncate font-semibold">{toolset.name}</Type>
+        <Text className="truncate font-semibold">{toolset.name}</Text>
         <RenameMCPServerButton toolset={toolset} />
       </div>
 
@@ -152,16 +153,16 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {mcpUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={mcpUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy URL"
               className="mt-[-2px] shrink-0"
             />
@@ -171,7 +172,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>Tools</McpSidebarInfoLabel>
-        <Type variant="small">{toolset.tools?.length ?? 0}</Type>
+        <Text variant="small">{toolset.tools?.length ?? 0}</Text>
       </div>
 
       <div className="border-border flex items-stretch border-t pt-3">

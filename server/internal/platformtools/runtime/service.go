@@ -21,12 +21,14 @@ import (
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
 	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
+	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
+	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -117,10 +119,11 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 	}
 }
 
-// AssistantSkillTools returns the always-on attached-skill loader.
-func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
+// AssistantSkillTools returns the always-on attached-skill tools.
+func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, recorder *feedbackrecorder.Recorder, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: ""},
+		{Executor: platformskills.NewAssistantFeedbackTool(db, recorder), RequiredFeature: ""},
 	}
 }
 
@@ -199,10 +202,25 @@ func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformt
 	}
 }
 
-// ManagedAssistantSkillsTools returns read-only skill management tools for the
-// project's managed assistant.
+// ManagedAssistantDocsTools returns the public product-documentation tools for
+// the project's managed assistant so it can answer product questions from
+// speakeasy.com/docs/ai-control-plane instead of its own priors. The HTTP
+// client must come from a guardian policy so the outbound fetch stays within
+// the egress rules. Both tools share one client so the page index is fetched
+// and cached once rather than per tool.
+func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
+	client := platformdocs.NewClient(httpClient, platformdocs.DefaultSiteURL)
+	return []platformtools.ExternalTool{
+		{Executor: platformdocs.NewListDocsTool(client), RequiredFeature: ""},
+		{Executor: platformdocs.NewGetDocTool(client), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantSkillsTools returns skill management tools for the project's
+// managed assistant.
 func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insights platformskills.SkillInsightsReader) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewCreateTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},

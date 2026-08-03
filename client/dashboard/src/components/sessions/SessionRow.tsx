@@ -6,8 +6,8 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { MoreActions } from "@/components/ui/more-actions";
+} from "@/components/ui/ContextMenu";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import {

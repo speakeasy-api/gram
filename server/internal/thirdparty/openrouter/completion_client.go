@@ -27,6 +27,8 @@ type EmbeddingOption func(*EmbeddingOptions)
 type EmbeddingOptions struct {
 	// Dimensions requests Matryoshka truncation to N dimensions when set.
 	Dimensions *int64
+	// KeyType selects the organization key pool used for the request.
+	KeyType KeyType
 }
 
 // WithEmbeddingDimensions requests a specific output dimensionality from the
@@ -36,6 +38,14 @@ func WithEmbeddingDimensions(dimensions int) EmbeddingOption {
 	return func(o *EmbeddingOptions) {
 		d := int64(dimensions)
 		o.Dimensions = &d
+	}
+}
+
+// WithEmbeddingKeyType selects the organization key pool used for an
+// embedding request. The default is KeyTypeChat.
+func WithEmbeddingKeyType(keyType KeyType) EmbeddingOption {
+	return func(o *EmbeddingOptions) {
+		o.KeyType = keyType
 	}
 }
 
@@ -122,6 +132,13 @@ type ObjectCompletionRequest struct {
 	// KeySlot selects the customer key slot the call resolves against; the
 	// zero value falls back to UsageSource.
 	KeySlot billing.ModelUsageSource
+	// Reasoning overrides the reasoning configuration for this call. Nil
+	// disables reasoning, which is what a structured-output judge wants: the
+	// answer is a schema-shaped verdict, not an argument, and reasoning tokens
+	// are billed. Some routes reject a disabled setting outright ("Reasoning is
+	// mandatory for this endpoint"), so a caller that needs such a model must
+	// set an effort here rather than silently taking a 400.
+	Reasoning *Reasoning
 }
 
 // CompletionResponse encapsulates the result of a completion call.

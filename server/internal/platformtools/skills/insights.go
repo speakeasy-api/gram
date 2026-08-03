@@ -179,7 +179,10 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 			versionCreatedAt[version.ID] = version.CreatedAt
 		}
 	} else {
-		listed, err := t.skills.List(ctx, &genskills.ListPayload{Cursor: nil, Limit: 200, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		listed, err := t.skills.List(ctx, &genskills.ListPayload{
+			Cursor: nil, Limit: 200, Search: nil, SourceKinds: nil, Classifications: nil, Sort: "name",
+			SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		})
 		if err != nil {
 			return fmt.Errorf("list skills: %w", err)
 		}

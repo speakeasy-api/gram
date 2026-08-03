@@ -1,8 +1,8 @@
 import { ReactElement } from "react";
 import { Tool } from "@/lib/toolTypes";
 import { CanonicalToolAttributes } from "@gram/client/models/components/canonicaltoolattributes.js";
-import { Icon } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "./ui/tooltip";
+import { Icon } from "@/components/ui/Icon";
+import { SimpleTooltip } from "./ui/Tooltip";
 
 export const ToolVariationBadge = ({
   tool,

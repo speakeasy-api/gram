@@ -190,26 +190,31 @@ var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated 
 // whose org lookup failed wraps errIssuerGateOrgLookup, letting the caller
 // label it as an operational failure rather than a bad credential.
 //
-// Anonymous subjects deliberately leave the context untouched (non-nil
-// subject, no AuthContext set). The request belongs to no known principal, so
+// Anonymous subjects deliberately leave the AuthContext unset (non-nil
+// subject, no AuthContext). The request belongs to no known principal, so
 // stamping the endpoint's org as ActiveOrganizationID would misrepresent
 // the caller as a member of that org. Downstream code on the public
 // path reads org/project off the resolved endpoint directly, the same
-// way it does for unauthenticated public-endpoint traffic.
+// way it does for unauthenticated public-endpoint traffic. The OAuth client
+// id is still stamped for them — an anonymous session is anonymous in its
+// principal, not in the client that registered for it.
 //
-// SessionID and AccountType are populated for non-anonymous subjects so
-// authz.Engine.ShouldEnforce / PrepareContext treat the request as a
-// real authenticated session — without them the mcp:connect RBAC check
-// silently bypasses on enterprise endpoints (ShouldEnforce returns false
-// when AccountType != "enterprise"; PrepareContext skips when SessionID
-// is nil).
+// SessionID is populated for non-anonymous subjects so
+// authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
+// authenticated session. AccountType is retained as session metadata but does
+// not control RBAC enforcement.
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	if token == "" {
 		return ctx, nil, nil
 	}
-	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
+	session, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("validate user-session bearer: %w", err)
+	}
+
+	subject := session.Subject
+	if session.ClientID != "" {
+		ctx = contextvalues.SetOAuthClientID(ctx, session.ClientID)
 	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
@@ -229,7 +234,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		APIKeyID:              "",
 		APIKeyName:            "",
 		OrgWidePluginHooksKey: false,
-		SessionID:             &jti,
+		SessionID:             &session.JTI,
 		OrganizationSlug:      orgMetadata.Slug,
 		Email:                 nil,
 		AccountType:           orgMetadata.GramAccountType,

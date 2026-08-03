@@ -11,13 +11,25 @@ import { GramCore } from "../core.js";
 import { skillEfficacyQueryInsights } from "../funcs/skillEfficacyQueryInsights.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { SkillEfficacyInsightsResult } from "../models/components/skillefficacyinsightsresult.js";
 import {
   QuerySkillEfficacyInsightsRequest,
+  QuerySkillEfficacyInsightsResponse,
   QuerySkillEfficacyInsightsSecurity,
 } from "../models/operations/queryskillefficacyinsights.js";
 import { unwrapAsync } from "../types/fp.js";
-export type SkillEfficacyInsightsQueryData = SkillEfficacyInsightsResult;
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
+import { pageIteratorToJSON } from "./_types.js";
+export type SkillEfficacyInsightsQueryData = QuerySkillEfficacyInsightsResponse;
+
+export type SkillEfficacyInsightsInfiniteQueryData = PageIterator<
+  QuerySkillEfficacyInsightsResponse,
+  { cursor: string }
+>;
+
+export type SkillEfficacyInsightsPageParams = PageIterator<
+  QuerySkillEfficacyInsightsResponse,
+  { cursor: string }
+>["~next"];
 
 export function prefetchSkillEfficacyInsights(
   queryClient: QueryClient,
@@ -33,6 +45,26 @@ export function prefetchSkillEfficacyInsights(
       security,
       options,
     ),
+  });
+}
+
+export function prefetchSkillEfficacyInsightsInfinite(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request?: QuerySkillEfficacyInsightsRequest | undefined,
+  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  options?: RequestOptions,
+): Promise<void> {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildSkillEfficacyInsightsInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined as SkillEfficacyInsightsPageParams,
+    getNextPageParam: (previousPage: SkillEfficacyInsightsInfiniteQueryData) =>
+      previousPage["~next"],
   });
 }
 
@@ -54,6 +86,8 @@ export function buildSkillEfficacyInsightsQuery(
       to: request?.to,
       includeVersions: request?.includeVersions,
       includeScoredSessions: request?.includeScoredSessions,
+      cursor: request?.cursor,
+      limit: request?.limit,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
@@ -81,6 +115,63 @@ export function buildSkillEfficacyInsightsQuery(
   };
 }
 
+export function buildSkillEfficacyInsightsInfiniteQuery(
+  client$: GramCore,
+  request?: QuerySkillEfficacyInsightsRequest | undefined,
+  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext<QueryKey, SkillEfficacyInsightsPageParams>,
+  ) => Promise<SkillEfficacyInsightsInfiniteQueryData>;
+} {
+  return {
+    queryKey: queryKeySkillEfficacyInsightsInfinite({
+      skillIds: request?.skillIds,
+      from: request?.from,
+      to: request?.to,
+      includeVersions: request?.includeVersions,
+      includeScoredSessions: request?.includeScoredSessions,
+      cursor: request?.cursor,
+      limit: request?.limit,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function skillEfficacyInsightsQuery(
+      ctx,
+    ): Promise<SkillEfficacyInsightsInfiniteQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(
+          skillEfficacyQueryInsights(
+            client$,
+            request,
+            security,
+            mergedOptions,
+          ),
+        );
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(skillEfficacyQueryInsights(
+        client$,
+        {
+          ...request!,
+          cursor: ctx.pageParam.cursor,
+        },
+        security,
+        mergedOptions,
+      ));
+      return pageIteratorToJSON(pageResult);
+    },
+  };
+}
+
 export function queryKeySkillEfficacyInsights(
   parameters: {
     skillIds?: Array<string> | undefined;
@@ -88,9 +179,33 @@ export function queryKeySkillEfficacyInsights(
     to?: Date | undefined;
     includeVersions?: boolean | undefined;
     includeScoredSessions?: boolean | undefined;
+    cursor?: string | undefined;
+    limit?: number | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "skillEfficacy", "queryInsights", parameters];
+}
+
+export function queryKeySkillEfficacyInsightsInfinite(
+  parameters: {
+    skillIds?: Array<string> | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
+    includeVersions?: boolean | undefined;
+    includeScoredSessions?: boolean | undefined;
+    cursor?: string | undefined;
+    limit?: number | undefined;
+    gramSession?: string | undefined;
+    gramProject?: string | undefined;
+  },
+): QueryKey {
+  return [
+    "@gram/client",
+    "skillEfficacy",
+    "queryInsights",
+    "infinite",
+    parameters,
+  ];
 }

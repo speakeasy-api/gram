@@ -39,7 +39,11 @@ var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA2
 
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	b, err := json.MarshalIndent(relay.FileConfig{
-		ServerURL:    cfg.ServerURL,
+		ServerURL: cfg.ServerURL,
+		// Browser sign-in origin, only used by the relay's interactive login.
+		// Server-generated plugins authenticate with the baked HooksAPIKey, so
+		// there is no site URL to bake; omitempty drops it from the JSON.
+		SiteURL:      "",
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,

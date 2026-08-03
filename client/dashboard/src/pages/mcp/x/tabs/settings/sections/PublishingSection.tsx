@@ -1,10 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Type } from "@/components/ui/type";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Text } from "@/components/ui/Text";
 import { usePublishing } from "@/pages/mcp/usePublishing";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { FooterSaveButton, SettingsSection } from "../SettingsSection";
 
 export function PublishingSection({
@@ -38,21 +39,21 @@ export function PublishingSection({
   let body: React.ReactNode;
   if (!canPublish) {
     body = (
-      <Type muted small>
+      <Text muted small>
         {disabledMessage}
-      </Type>
+      </Text>
     );
   } else if (isLoading) {
     body = (
-      <Type muted small>
+      <Text muted small>
         Loading collections...
-      </Type>
+      </Text>
     );
   } else if (collections.length === 0) {
     body = (
-      <Type muted small>
+      <Text muted small>
         No collections available.
-      </Type>
+      </Text>
     );
   } else {
     body = (
@@ -68,13 +69,13 @@ export function PublishingSection({
               onCheckedChange={() => toggleCollection(collection.id)}
             />
             <Stack direction="vertical" gap={0}>
-              <Type small className="font-medium">
+              <Text small className="font-medium">
                 {collection.name}
-              </Type>
+              </Text>
               {collection.description && (
-                <Type muted small>
+                <Text muted small>
                   {collection.description}
-                </Type>
+                </Text>
               )}
             </Stack>
           </label>

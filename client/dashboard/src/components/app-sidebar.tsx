@@ -1,9 +1,5 @@
-import {
-  CollapsibleNavGroup,
-  CollapsibleNavItem,
-  NavButton,
-  NavGroupProvider,
-} from "@/components/nav-menu";
+import { NavButton, NavGroupProvider } from "@/components/nav-menu";
+import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
   SidebarContent,
@@ -11,7 +7,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
-} from "@/components/ui/sidebar";
+} from "@/components/ui/Sidebar";
 import { GramLogo } from "./gram-logo";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -23,9 +19,8 @@ import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarUserMenu } from "./sidebar-user-menu";
-import { useSidebar } from "@/components/ui/sidebar-context";
+import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
@@ -34,31 +29,17 @@ import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
+import { cn } from "@/lib/utils";
 import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { Button } from "./ui/button";
-import { Type } from "./ui/type";
-
-function ScopeGatedNavItem({
-  item,
-  scope,
-  resourceId,
-}: {
-  item: AppRoute;
-  scope: Scope | Scope[];
-  resourceId?: string;
-}) {
-  return (
-    <RequireScope scope={scope} resourceId={resourceId} level="section">
-      <CollapsibleNavItem item={item} />
-    </RequireScope>
-  );
-}
+import { Button } from "./ui/Button";
+import { Text } from "@/components/ui/Text";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -93,14 +74,19 @@ export function AppSidebar({
   // While grants reload (e.g. right after switching projects, when the query
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
   const { isLoading: rbacLoading } = useRBAC();
-  const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
-  const isOrgMemoryEnabled = telemetry.isFeatureEnabled("org-memory") ?? false;
-  // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
-  const isDeploymentsPageEnabled =
-    telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
+  // useProjectNavRoutes owns feature-flag and scope decisions for both the
+  // sidebar and command palette so the two surfaces cannot drift.
+  const allNavRoutes = useProjectNavRoutes();
+  const navAccess = useMemo(() => {
+    const map = new Map<string, ProjectNavRoute>();
+    for (const entry of allNavRoutes) map.set(entry.route.url, entry);
+    return map;
+  }, [allNavRoutes]);
+  const isAssistantsEnabled = navAccess.has(routes.assistants.url);
+  const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
+  const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
 
   const connectActive = [
     routes.sources,
@@ -148,15 +134,7 @@ export function AppSidebar({
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
-  const allNavRoutes = useProjectNavRoutes();
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
-  // Single source of truth for per-page scopes, shared with the command palette
-  // via useProjectNavRoutes so nav visibility and palette visibility can't drift.
-  const navAccess = useMemo(() => {
-    const map = new Map<string, ProjectNavRoute>();
-    for (const entry of allNavRoutes) map.set(entry.route.url, entry);
-    return map;
-  }, [allNavRoutes]);
   const accessFor = (
     route: AppRoute,
   ): Pick<ProjectNavRoute, "scope" | "resourceId"> => {
@@ -218,117 +196,74 @@ export function AppSidebar({
           </li>
 
           {/* Observe group */}
-          <CollapsibleNavGroup
+          <ScopeGatedNavGroup
             label="Observe"
             Icon={(p) => <Icon {...p} name="eye" />}
-            defaultHref={routes.costs.href()}
-          >
-            <ScopeGatedNavItem
-              item={routes.costs}
-              {...accessFor(routes.costs)}
-            />
-            <ScopeGatedNavItem
-              item={routes.insights}
-              {...accessFor(routes.insights)}
-            />
-            <ScopeGatedNavItem
-              item={routes.agentSessions}
-              {...accessFor(routes.agentSessions)}
-            />
-            {isOrgMemoryEnabled && (
-              <ScopeGatedNavItem
-                item={routes.orgMemory}
-                {...accessFor(routes.orgMemory)}
-              />
-            )}
-            <ScopeGatedNavItem item={routes.logs} {...accessFor(routes.logs)} />
-            <ScopeGatedNavItem
-              item={routes.employees}
-              {...accessFor(routes.employees)}
-            />
-          </CollapsibleNavGroup>
+            items={[
+              { item: routes.costs, ...accessFor(routes.costs) },
+              { item: routes.insights, ...accessFor(routes.insights) },
+              {
+                item: routes.agentSessions,
+                ...accessFor(routes.agentSessions),
+              },
+              ...(isOrgMemoryEnabled
+                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
+                : []),
+              { item: routes.logs, ...accessFor(routes.logs) },
+              { item: routes.employees, ...accessFor(routes.employees) },
+            ]}
+          />
 
           {/* Secure group */}
-          <CollapsibleNavGroup
+          <ScopeGatedNavGroup
             label="Secure"
             Icon={(p) => <Icon {...p} name="shield" />}
-            defaultHref={routes.riskOverview.href()}
             stage="beta"
-          >
-            <ScopeGatedNavItem
-              item={routes.riskOverview}
-              {...accessFor(routes.riskOverview)}
-            />
-            <ScopeGatedNavItem
-              item={routes.policyCenter}
-              {...accessFor(routes.policyCenter)}
-            />
-            <ScopeGatedNavItem
-              item={routes.riskEvents}
-              {...accessFor(routes.riskEvents)}
-            />
-            <ScopeGatedNavItem
-              item={routes.shadowMCP}
-              {...accessFor(routes.shadowMCP)}
-            />
-            <ScopeGatedNavItem
-              item={routes.detectionRules}
-              {...accessFor(routes.detectionRules)}
-            />
-          </CollapsibleNavGroup>
+            items={[
+              { item: routes.riskOverview, ...accessFor(routes.riskOverview) },
+              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
+              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
+              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
+              {
+                item: routes.detectionRules,
+                ...accessFor(routes.detectionRules),
+              },
+            ]}
+          />
 
           {/* Connect group */}
-          <CollapsibleNavGroup
+          <ScopeGatedNavGroup
             label="Connect"
             Icon={(p) => <Icon {...p} name="plug" />}
-            defaultHref={routes.sources.href()}
-          >
-            <ScopeGatedNavItem
-              item={routes.sources}
-              {...accessFor(routes.sources)}
-            />
-            <ScopeGatedNavItem
-              item={routes.catalog}
-              {...accessFor(routes.catalog)}
-            />
-            <ScopeGatedNavItem
-              item={routes.playground}
-              {...accessFor(routes.playground)}
-            />
-            {isDeploymentsPageEnabled && (
-              <ScopeGatedNavItem
-                item={routes.deployments}
-                {...accessFor(routes.deployments)}
-              />
-            )}
-          </CollapsibleNavGroup>
+            items={[
+              { item: routes.sources, ...accessFor(routes.sources) },
+              { item: routes.catalog, ...accessFor(routes.catalog) },
+              { item: routes.playground, ...accessFor(routes.playground) },
+              ...(isDeploymentsPageEnabled
+                ? [
+                    {
+                      item: routes.deployments,
+                      ...accessFor(routes.deployments),
+                    },
+                  ]
+                : []),
+            ]}
+          />
 
           {/* Distribute group */}
-          <CollapsibleNavGroup
+          <ScopeGatedNavGroup
             label="Distribute"
             Icon={(p) => <Icon {...p} name="hammer" />}
-            defaultHref={routes.mcp.href()}
-          >
-            <ScopeGatedNavItem item={routes.mcp} {...accessFor(routes.mcp)} />
-            {isAssistantsEnabled && (
-              <ScopeGatedNavItem
-                item={routes.assistants}
-                {...accessFor(routes.assistants)}
-              />
-            )}
-            <ScopeGatedNavItem
-              item={routes.skills}
-              {...accessFor(routes.skills)}
-            />
-            <ScopeGatedNavItem
-              item={routes.plugins}
-              {...accessFor(routes.plugins)}
-            />
-            <ScopeGatedNavItem
-              item={routes.environments}
-              {...accessFor(routes.environments)}
-            />
-          </CollapsibleNavGroup>
+            items={[
+              { item: routes.mcp, ...accessFor(routes.mcp) },
+              ...(isAssistantsEnabled
+                ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
+                : []),
+              { item: routes.skills, ...accessFor(routes.skills) },
+              { item: routes.plugins, ...accessFor(routes.plugins) },
+              { item: routes.environments, ...accessFor(routes.environments) },
+            ]}
+          />
 
           {/* Settings — top-level, no group */}
           <ScopeGatedTopLevelItem
@@ -410,10 +345,10 @@ const FreeTierExceededNotification = () => {
     return (
       <PersistentNotification variant="error">
         <Stack direction="vertical" gap={3} className="h-full">
-          <Type variant="subheading">Limits exceeded</Type>
-          <Type small>
+          <Text variant="subheading">Limits exceeded</Text>
+          <Text small>
             Free tier limits exceeded. Upgrade to continue using the platform.
-          </Type>
+          </Text>
           <orgRoutes.billing.Link className="mt-auto w-full">
             <Button size="sm" className="w-full">
               Billing →
@@ -447,8 +382,8 @@ const PersistentNotification = ({
 
   const closeButton = (
     <Button
-      variant="ghost"
-      size="icon"
+      variant="tertiary"
+      size="md"
       className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
@@ -472,11 +407,11 @@ const PersistentNotification = ({
       {!isMinimized && closeButton}
       {isMinimized && (
         <Button
-          variant="ghost"
-          size="icon"
+          variant="tertiary"
+          size="md"
           className="flex h-full w-full items-center justify-center"
         >
-          <Type>?</Type>
+          <Text>?</Text>
         </Button>
       )}
     </div>

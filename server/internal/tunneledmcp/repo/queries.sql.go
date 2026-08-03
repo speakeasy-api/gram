@@ -137,6 +137,42 @@ func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (T
 	return i, err
 }
 
+const getServerByIDForUpdate = `-- name: GetServerByIDForUpdate :one
+SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
+FROM tunneled_mcp_servers
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetServerByIDForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Row-locking read used inside the update transaction so a concurrent
+// enable/disable of allow_public cannot compute a stale before->after
+// transition (which drives the anonymous-session revocation).
+func (q *Queries) GetServerByIDForUpdate(ctx context.Context, arg GetServerByIDForUpdateParams) (TunneledMcpServer, error) {
+	row := q.db.QueryRow(ctx, getServerByIDForUpdate, arg.ID, arg.ProjectID)
+	var i TunneledMcpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.KeyHash,
+		&i.KeyPrefix,
+		&i.Status,
+		&i.AllowPublic,
+		&i.AgentVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getTunneledMcpServerLimitByOrganizationID = `-- name: GetTunneledMcpServerLimitByOrganizationID :one
 SELECT billing_metadata.tunneled_mcp_server_limit AS tunneled_mcp_server_limit
 FROM organization_metadata
@@ -254,19 +290,26 @@ const updateServer = `-- name: UpdateServer :one
 UPDATE tunneled_mcp_servers
 SET
     name = $1,
+    allow_public = COALESCE($2, allow_public),
     updated_at = clock_timestamp()
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
 RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateServerParams struct {
-	Name      string
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Name        string
+	AllowPublic pgtype.Bool
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
 }
 
 func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (TunneledMcpServer, error) {
-	row := q.db.QueryRow(ctx, updateServer, arg.Name, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateServer,
+		arg.Name,
+		arg.AllowPublic,
+		arg.ID,
+		arg.ProjectID,
+	)
 	var i TunneledMcpServer
 	err := row.Scan(
 		&i.ID,

@@ -6,18 +6,18 @@ import {
   invalidateShadowMCPPolicyInventory,
   useShadowMCPPolicyInventory,
 } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
-import { Card } from "@/components/ui/card";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/Card";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
+} from "@/components/ui/Select";
+import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
   SheetContent,
@@ -25,11 +25,11 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { TextArea } from "@/components/ui/textarea";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { TextArea } from "@/components/ui/Textarea";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
@@ -46,7 +46,9 @@ import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
 import type { RiskDetectionScope } from "@gram/client/models/components/riskdetectionscope.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import {
   keepPreviousData,
   useQueries,
@@ -319,10 +321,10 @@ function PolicyKindChooser(): JSX.Element {
             <Heading variant="h3" className="normal-case">
               Choose policy type
             </Heading>
-            <Type small muted>
+            <Text small muted>
               Start with a built-in detector policy or define criteria in plain
               language.
-            </Type>
+            </Text>
           </Stack>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <button
@@ -331,11 +333,11 @@ function PolicyKindChooser(): JSX.Element {
               className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
             >
               <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Type className="font-medium">Built-in detector</Type>
-              <Type small muted className="mt-1">
+              <Text className="font-medium">Built-in detector</Text>
+              <Text small muted className="mt-1">
                 Scan for secrets, PII, and risky tool calls with built-in and
                 custom detection rules.
-              </Type>
+              </Text>
             </button>
             <button
               type="button"
@@ -343,11 +345,11 @@ function PolicyKindChooser(): JSX.Element {
               className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
             >
               <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
-              <Type className="font-medium">Prompt-based</Type>
-              <Type small muted className="mt-1">
+              <Text className="font-medium">Prompt-based</Text>
+              <Text small muted className="mt-1">
                 Describe the behavior to catch in plain language; an LLM judge
                 evaluates each in-scope message.
-              </Type>
+              </Text>
             </button>
           </div>
         </Stack>
@@ -556,15 +558,15 @@ function PolicyHeader({
           {policy ? <StatusBadge /> : null}
         </Stack>
         {policy ? (
-          <Type small muted>
+          <Text small muted>
             Version {policy.version} · {kindLabel}
-          </Type>
+          </Text>
         ) : (
-          <Type small muted>
+          <Text small muted>
             {kind === "prompt"
               ? "Describe the behavior to catch. The name is generated for you."
               : "Leave the name blank to auto-generate one from the detectors."}
-          </Type>
+          </Text>
         )}
       </Stack>
       <Stack direction="horizontal" gap={2} align="center" className="shrink-0">
@@ -634,9 +636,9 @@ function SectionHeader({
         </Heading>
       ) : null}
       {description ? (
-        <Type small muted>
+        <Text small muted>
           {description}
-        </Type>
+        </Text>
       ) : null}
     </div>
   );
@@ -1009,10 +1011,10 @@ function JudgeSection({
       <Stack gap={8}>
         {/* Model */}
         <div className="space-y-2">
-          <Type small>Model</Type>
-          <Type small muted>
+          <Text small>Model</Text>
+          <Text small muted>
             The LLM that judges each in-scope message.
-          </Type>
+          </Text>
           <Select
             value={model || DEFAULT_MODEL_VALUE}
             onValueChange={(v) =>
@@ -1038,15 +1040,15 @@ function JudgeSection({
         {/* Temperature */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Type small>Temperature</Type>
-            <Type small mono>
+            <Text small>Temperature</Text>
+            <Text small mono>
               {temperature.toFixed(1)}
-            </Type>
+            </Text>
           </div>
-          <Type small muted>
+          <Text small muted>
             Lower is more deterministic and repeatable; higher allows more
             nuanced judgment but less consistent results.
-          </Type>
+          </Text>
           <div className="pt-3">
             <Slider
               value={temperature}
@@ -1062,19 +1064,19 @@ function JudgeSection({
         {/* On judge error */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Type small>On judge error</Type>
+            <Text small>On judge error</Text>
             <Stack direction="horizontal" gap={2} align="center">
-              <Type small muted>
+              <Text small muted>
                 {failOpen ? "Fail open" : "Fail closed"}
-              </Type>
+              </Text>
               <Switch checked={failOpen} onCheckedChange={onFailOpenChange} />
             </Stack>
           </div>
-          <Type small muted>
+          <Text small muted>
             If the judge times out or errors, fail open lets the message through
             (no false blocks); fail closed blocks it (stricter, but can
             interrupt legitimate traffic).
-          </Type>
+          </Text>
         </div>
       </Stack>
     </Card>
@@ -1138,11 +1140,11 @@ function LegacyScopeNotice({
   if (parts.length === 0) return null;
   return (
     <div className="border-border bg-muted/20 rounded-md border px-3 py-2">
-      <Type small muted>
+      <Text small muted>
         A legacy policy-level scope still narrows this policy in addition to the
         category scopes above ({parts.join("; ")}). It is preserved as-is and
         will be migrated into category scopes.
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -1172,18 +1174,18 @@ function RecommendedScopesPanel({
 
   if (categoriesQuery.isLoading) {
     return (
-      <Type small muted className="flex items-center gap-2">
+      <Text small muted className="flex items-center gap-2">
         <Loader2 className="size-4 animate-spin" />
         Loading detection scopes…
-      </Type>
+      </Text>
     );
   }
   if (categoriesQuery.isError) {
     return (
       <div className="flex items-center gap-3">
-        <Type small muted>
+        <Text small muted>
           Failed to load detection scopes.
-        </Type>
+        </Text>
         <Button
           variant="secondary"
           size="sm"
@@ -1393,9 +1395,9 @@ function RecommendedScopeRow({
     return (
       <div className="border-border bg-muted/20 flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Type small className="font-medium">
+          <Text small className="font-medium">
             {category.label}
-          </Type>
+          </Text>
           <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
         </div>
         <Badge variant="neutral">Session-scoped</Badge>
@@ -1430,9 +1432,9 @@ function RecommendedScopeRow({
     <div className="border-border rounded-md border px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Type small className="font-medium">
+          <Text small className="font-medium">
             {category.label}
-          </Type>
+          </Text>
           <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -1534,11 +1536,11 @@ function RecommendedScopeRow({
               }
               examples={SCOPE_EXEMPT_CEL_EXAMPLES}
             />
-            <Type small muted>
+            <Text small muted>
               Empty include and exempt scans every message surface. This scope
               replaces the recommendation; future recommendation updates will
               not apply.
-            </Type>
+            </Text>
           </div>
           <div className="border-border border-t pt-3">
             <CelTrafficPreview
@@ -1806,17 +1808,17 @@ function SeveritySection({
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium">Severity</Label>
         <Stack direction="horizontal" gap={2} align="center">
-          <Type small mono>
+          <Text small mono>
             {score.toFixed(1)}
-          </Type>
+          </Text>
           <SeverityBadge score={score} />
         </Stack>
       </div>
-      <Type small muted>
+      <Text small muted>
         Rate how severe this policy's findings are, from {SEVERITY_MIN} to{" "}
         {SEVERITY_MAX}. Findings surface this as a severity badge; it does not
         change what the policy detects.
-      </Type>
+      </Text>
       <div className="pt-3">
         <Slider
           value={score}
@@ -1858,17 +1860,17 @@ function SensitivitySection({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-sm font-medium">Detection sensitivity</Label>
-          <Type small mono>
+          <Text small mono>
             {threshold.toFixed(2)}
             {threshold === DEFAULT_PRESIDIO_THRESHOLD ? " · default" : ""}
-          </Type>
+          </Text>
         </div>
-        <Type small muted>
+        <Text small muted>
           Minimum confidence a match must clear to be flagged, from{" "}
           {PRESIDIO_THRESHOLD_MIN} to {PRESIDIO_THRESHOLD_MAX}. Higher means
           fewer false positives but may miss borderline matches. Applies to all
           confidence-scored detectors in this policy.
-        </Type>
+        </Text>
         <div className="pt-3">
           <Slider
             value={threshold}
@@ -2338,20 +2340,20 @@ function PromptReview({
         <SectionHeader description="Confirm the guardrail, scope, and response before creating the policy." />
         <Stack gap={4}>
           <SummaryRow label="Guardrail">
-            <Type small className="max-w-xl text-right">
+            <Text small className="max-w-xl text-right">
               {prompt.trim() || "No guardrail prompt configured"}
-            </Type>
+            </Text>
           </SummaryRow>
           <SummaryRow label="Judge">
-            <Type small className="text-right">
+            <Text small className="text-right">
               {modelLabel} · temperature {temperature.toFixed(1)} ·{" "}
               {failOpen ? "fail open" : "fail closed"}
-            </Type>
+            </Text>
           </SummaryRow>
           <SummaryRow label="Scope">
-            <Type small className="text-right">
+            <Text small className="text-right">
               {scopeText}
-            </Type>
+            </Text>
           </SummaryRow>
           <SummaryRow label="Action">
             <Badge variant={action === "flag" ? "neutral" : "warning"}>
@@ -2366,13 +2368,13 @@ function PromptReview({
             <SeverityBadge score={score} />
           </SummaryRow>
           <SummaryRow label="Audience">
-            <Type small>
+            <Text small>
               {audienceType === "targeted"
                 ? `${audiencePrincipalCount} targeted principal${
                     audiencePrincipalCount === 1 ? "" : "s"
                   }`
                 : "Everyone"}
-            </Type>
+            </Text>
           </SummaryRow>
         </Stack>
       </Card>
@@ -2427,23 +2429,23 @@ function ReviewScorecard({
     <Card>
       <SectionHeader description="Your review set: how well the guardrail matches your judgment on the sessions you've checked. Edits replay automatically after a short pause." />
       {reviewed === 0 ? (
-        <Type small muted>
+        <Text small muted>
           Review a few sessions on the right to build a scorecard. Aim for a
           couple of clear matches and a clean one or two.
-        </Type>
+        </Text>
       ) : (
         <Stack gap={4}>
           <div>
-            <Type className="text-2xl font-semibold">
+            <Text className="text-2xl font-semibold">
               {correct}/{judged}
-            </Type>
-            <Type small muted>
+            </Text>
+            <Text small muted>
               {judgingCount > 0
                 ? `${judgingCount} judging, ${reviewed} in review set`
                 : `match your judgment across ${reviewed} reviewed ${
                     reviewed === 1 ? "session" : "sessions"
                   }`}
-            </Type>
+            </Text>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <ScoreStat
@@ -2498,16 +2500,16 @@ function ScoreStat({
   const clickable = value > 0 && onSelect;
   const content = (
     <>
-      <Type className={cn("text-xl font-semibold", warn && "text-warning")}>
+      <Text className={cn("text-xl font-semibold", warn && "text-warning")}>
         {value}
-      </Type>
-      <Type small muted>
+      </Text>
+      <Text small muted>
         {label}
-      </Type>
+      </Text>
       {hint && value > 0 ? (
-        <Type small muted className="mt-0.5 italic">
+        <Text small muted className="mt-0.5 italic">
           {hint}
-        </Type>
+        </Text>
       ) : null}
     </>
   );
@@ -2645,22 +2647,22 @@ function ReviewedSessionRows({
     <div>
       <div className="bg-muted/30 flex items-center justify-between gap-3 border-b px-3 py-2">
         <div className="min-w-0">
-          <Type small className="font-medium">
+          <Text small className="font-medium">
             {evalVerdictLabel(verdict)}
-          </Type>
-          <Type small muted>
+          </Text>
+          <Text small muted>
             {chatIds.length} reviewed{" "}
             {chatIds.length === 1 ? "session" : "sessions"}
-          </Type>
+          </Text>
         </div>
         <Button variant="secondary" size="sm" onClick={onClear}>
           <Button.Text>Clear</Button.Text>
         </Button>
       </div>
       {chatIds.length === 0 ? (
-        <Type small muted className="block px-3 py-6 text-center">
+        <Text small muted className="block px-3 py-6 text-center">
           No reviewed sessions for this verdict.
-        </Type>
+        </Text>
       ) : (
         chatIds.map((chatId, i) => (
           <ReviewedSessionRow
@@ -2719,10 +2721,10 @@ function ReviewedSessionRow({
       )}
     >
       <div className="min-w-0 flex-1">
-        <Type small className="truncate font-medium">
+        <Text small className="truncate font-medium">
           {title}
-        </Type>
-        <Type small muted className="flex min-w-0 items-center gap-1 truncate">
+        </Text>
+        <Text small muted className="flex min-w-0 items-center gap-1 truncate">
           <span className="truncate">{userLabel}</span>
           {chat ? (
             <>
@@ -2736,7 +2738,7 @@ function ReviewedSessionRow({
               <span>metadata unavailable</span>
             </>
           ) : null}
-        </Type>
+        </Text>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <SessionMatchBadge
@@ -2862,17 +2864,17 @@ function SessionReview({
               onSelect={setSelectedIdState}
             />
           ) : chatsLoading ? (
-            <Type small muted className="block px-3 py-6 text-center">
+            <Text small muted className="block px-3 py-6 text-center">
               Loading sessions…
-            </Type>
+            </Text>
           ) : chats.length === 0 ? (
-            <Type small muted className="block px-3 py-6 text-center">
+            <Text small muted className="block px-3 py-6 text-center">
               No sessions match your search.
-            </Type>
+            </Text>
           ) : visibleChats.length === 0 ? (
-            <Type small muted className="block px-3 py-6 text-center">
+            <Text small muted className="block px-3 py-6 text-center">
               No sessions match this judge filter.
-            </Type>
+            </Text>
           ) : (
             visibleChats.map((chat, i) => (
               <SessionRow
@@ -2916,9 +2918,9 @@ function ReevaluatingIndicator({
   return (
     <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 rounded-md border px-2.5">
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      <Type small muted>
+      <Text small muted>
         Re-evaluating…
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -2958,16 +2960,16 @@ function SessionRow({
       )}
     >
       <div className="min-w-0 flex-1">
-        <Type small className="truncate font-medium">
+        <Text small className="truncate font-medium">
           {highlightQuery(title, searchQuery)}
-        </Type>
-        <Type small muted className="flex min-w-0 items-center gap-1 truncate">
+        </Text>
+        <Text small muted className="flex min-w-0 items-center gap-1 truncate">
           <span className="truncate">
             {highlightQuery(userLabel, searchQuery)}
           </span>
           <span>·</span>
           <span>{formatRelative(chat.lastMessageTimestamp)}</span>
-        </Type>
+        </Text>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <SessionMatchBadge
@@ -3088,13 +3090,13 @@ function JudgeSessionBanner({
       <div className="border-border bg-muted/30 flex items-start gap-3 border-b px-4 py-3">
         <Loader2 className="text-muted-foreground mt-0.5 size-4 shrink-0 animate-spin" />
         <div className="min-w-0">
-          <Type small className="font-medium">
+          <Text small className="font-medium">
             Judge is evaluating this session
-          </Type>
-          <Type small muted>
+          </Text>
+          <Text small muted>
             Verdicts will appear against matching messages when the run
             finishes.
-          </Type>
+          </Text>
         </div>
       </div>
     );
@@ -3105,12 +3107,12 @@ function JudgeSessionBanner({
       <div className="border-border bg-muted/20 flex items-start gap-3 border-b px-4 py-3">
         <Shield className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         <div className="min-w-0">
-          <Type small className="font-medium">
+          <Text small className="font-medium">
             Opened for judge evaluation
-          </Type>
-          <Type small muted>
+          </Text>
+          <Text small muted>
             The session has not returned a judge result yet.
-          </Type>
+          </Text>
         </div>
       </div>
     );
@@ -3130,17 +3132,17 @@ function JudgeSessionBanner({
         <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Type small className="font-semibold">
+            <Text small className="font-semibold">
               Judge flagged this session
-            </Type>
+            </Text>
             <Badge variant="warning" background>
               Flagged
             </Badge>
           </div>
-          <Type small muted>
+          <Text small muted>
             {detail} across {judgedLabel}. Matching messages are highlighted
             below.
-          </Type>
+          </Text>
         </div>
       </div>
     );
@@ -3151,14 +3153,14 @@ function JudgeSessionBanner({
       <Check className="text-success mt-0.5 size-4 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Type small className="font-semibold">
+          <Text small className="font-semibold">
             Judge found this session clean
-          </Type>
+          </Text>
           <Badge variant="neutral">Clean</Badge>
         </div>
-        <Type small muted>
+        <Text small muted>
           No messages matched across {judgedLabel}.
-        </Type>
+        </Text>
       </div>
     </div>
   );
@@ -3321,17 +3323,17 @@ function SessionTranscript({
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {transcript.isLoading ? (
-            <Type small muted className="block p-6 text-center">
+            <Text small muted className="block p-6 text-center">
               Loading transcript…
-            </Type>
+            </Text>
           ) : transcript.isError ? (
-            <Type small muted className="block p-6 text-center">
+            <Text small muted className="block p-6 text-center">
               Failed to load transcript.
-            </Type>
+            </Text>
           ) : transcript.messages.length === 0 ? (
-            <Type small muted className="block p-6 text-center">
+            <Text small muted className="block p-6 text-center">
               This session has no messages.
-            </Type>
+            </Text>
           ) : (
             <ChatTranscript
               items={displayItems}
@@ -3386,16 +3388,16 @@ function ReviewAgreementControl({
   return (
     <Stack gap={3} align="center">
       <Stack gap={1} align="center" className="text-center">
-        <Type small muted className="font-medium">
+        <Text small muted className="font-medium">
           {judgeLabel}
-        </Type>
-        <Type small muted>
+        </Text>
+        <Text small muted>
           {reviewPrompt}
-        </Type>
+        </Text>
         {staleReview ? (
-          <Type small muted className="italic">
+          <Text small muted className="italic">
             Reviewed against an earlier prompt: {evalVerdictLabel(verdict)}
-          </Type>
+          </Text>
         ) : null}
       </Stack>
       <Stack
@@ -3859,9 +3861,9 @@ export function StandardPolicyEditor({
                   />
                 )}
                 {!hasEnabledDetector && (
-                  <Type small className="text-destructive">
+                  <Text small className="text-destructive">
                     Turn on at least one detector or attach a custom rule.
-                  </Type>
+                  </Text>
                 )}
               </Stack>
             </Card>
@@ -3987,7 +3989,7 @@ function StandardReview({
       <SectionHeader description="Confirm the configuration before creating the policy." />
       <Stack gap={4}>
         <SummaryRow label="Name">
-          <Type small>{name.trim() || "Auto-generated from detectors"}</Type>
+          <Text small>{name.trim() || "Auto-generated from detectors"}</Text>
         </SummaryRow>
         <SummaryRow label="Detectors">
           {detectorLabels.length > 0 ? (
@@ -3999,25 +4001,25 @@ function StandardReview({
               ))}
             </div>
           ) : (
-            <Type small muted>
+            <Text small muted>
               None selected
-            </Type>
+            </Text>
           )}
         </SummaryRow>
         {presidioActive ? (
           <SummaryRow label="Sensitivity">
-            <Type small mono>
+            <Text small mono>
               {presidioThreshold.toFixed(2)}
               {presidioThreshold === DEFAULT_PRESIDIO_THRESHOLD
                 ? " · default"
                 : ""}
-            </Type>
+            </Text>
           </SummaryRow>
         ) : null}
         <SummaryRow label="Scope">
-          <Type small className="text-right">
+          <Text small className="text-right">
             {scopeText}
-          </Type>
+          </Text>
         </SummaryRow>
         <SummaryRow label="Action">
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
@@ -4028,13 +4030,13 @@ function StandardReview({
           <SeverityBadge score={score} />
         </SummaryRow>
         <SummaryRow label="Audience">
-          <Type small>
+          <Text small>
             {audienceType === "targeted"
               ? `${audiencePrincipalCount} targeted principal${
                   audiencePrincipalCount === 1 ? "" : "s"
                 }`
               : "Everyone"}
-          </Type>
+          </Text>
         </SummaryRow>
       </Stack>
     </Card>
@@ -4056,9 +4058,9 @@ function SummaryRow({
       gap={4}
       className="border-border/60 border-b pb-3 last:border-b-0 last:pb-0"
     >
-      <Type small muted className="shrink-0">
+      <Text small muted className="shrink-0">
         {label}
-      </Type>
+      </Text>
       <div className="min-w-0">{children}</div>
     </Stack>
   );

@@ -16,29 +16,31 @@ pin = true
 "github:speakeasy-api/openapi" = "1.24.0"
 "github:speakeasy-api/speakeasy" = "1.789.1"
 "github:FiloSottile/mkcert" = "1.4.4"
-apko = "1.2.20"
-flyctl = "0.4.62"
+apko = "1.2.29"
+flyctl = "0.4.74"
 go = "1.26.5"
 golangci-lint = "2.12.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
-melange = "0.55.0"
+melange = "0.56.4"
 nodejs = "24.16.0"
-"github:pnpm/pnpm" = "11.10.0"
+"github:pnpm/pnpm" = "11.17.0"
 watchexec = "2.5.1"
-uv = "0.11.25"
+uv = "0.11.32"
 yq = "4.53.3"
+# hk ≥1.47 fails to evaluate the json.Parser usage in hk.pkl
+# ("unknown method 'parse'"); keep 1.46.0 until hk.pkl is ported.
 hk = "1.46.0"
-pkl = "0.31.1"
-"github:temporalio/cli" = "1.7.2"
-"github:pb33f/openapi-changes" = "0.2.9"
+pkl = "0.32.1"
+"github:temporalio/cli" = "1.8.1"
+"github:pb33f/openapi-changes" = "0.2.10"
 "github:sqlc-dev/sqlc" = "1.31.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
-buf = "1.71.0"
+buf = "1.72.0"
 ruff = "0.15.20"
-"github:ast-grep/ast-grep" = "0.44.0"
-pitchfork = "2.16.0"
+"github:ast-grep/ast-grep" = "0.45.0"
+pitchfork = "2.19.0"
 "npm:@playwright/cli" = "0.1.17"
 
 # ℹ️ The settings below are sensible defaults for local development. When
@@ -200,6 +202,7 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 JAEGER_WEB_PORT = "16686"
 PROMETHEUS_PORT = "9099"
+LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
 ## Default Gram API URL baked into the dashboard's inlined Elements code and
 ## used by the CLI to point to the correct Gram API server
@@ -292,9 +295,11 @@ GRAM_ADMIN_OIDC_EMULATOR_URL = "http://{{env.GRAM_ADMIN_OIDC_EMULATOR_HOST}}:{{e
 GRAM_ADMIN_OIDC_CLIENT_ID = "gram-local.apps.googleusercontent.com"
 GRAM_ADMIN_OIDC_CLIENT_SECRET = "GOCSPX-example_secret"
 GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
-## Used for admin local development as a fake Google IDP
-MOCK_OIDC_PORT = "4000"
-MOCK_OIDC_ADDRESS = ":{{env.MOCK_OIDC_PORT}}"
+## Used for admin local development as a fake Google IDP. Derived from the
+## admin emulator vars (not a standalone *_PORT) so zero:remap-ports cannot
+## randomize the listen port and issuer out of sync with the admin client.
+MOCK_OIDC_ADDRESS = ":{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
+MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
 
 ########################
 ## Svix configuration ##

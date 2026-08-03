@@ -1,39 +1,41 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Dialog } from "@/components/ui/dialog";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useMoveOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/moveOrganizationRemoteSessionIssuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerDeletePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerDeletePreflight.js";
 import {
   invalidateAllOrganizationRemoteSessionIssuers,
   useOrganizationRemoteSessionIssuers,
 } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
-  Alert,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -44,6 +46,7 @@ import { CreateRemoteIdentityProviderSheet } from "./CreateRemoteIdentityProvide
 import { issuerDisplayName } from "./issuerDisplay";
 import { MigrateIssuerDialog } from "./MigrateIssuerDialog";
 import { migrationCandidates } from "./migrationCandidates";
+import { remoteSessionScopeTier } from "@/lib/sources";
 
 export function RemoteIdentityProvidersRoot(): JSX.Element {
   return <Outlet />;
@@ -77,10 +80,20 @@ function RemoteIdentityProvidersOverview() {
 
   const allItems = useMemo(() => data?.result.items ?? [], [data]);
 
-  const { organizational, projectSpecific } = useMemo(
+  // Three tenancy tiers. Platform issuers are inherited from the shared catalog
+  // and are read-only to the tenant, so they render in their own section without
+  // the move/consolidate/delete actions that would 404 against a global row.
+  const { platform, organizational, projectSpecific } = useMemo(
     () => ({
-      organizational: allItems.filter((item) => !item.issuer.projectId),
-      projectSpecific: allItems.filter((item) => !!item.issuer.projectId),
+      platform: allItems.filter(
+        (item) => remoteSessionScopeTier(item.issuer) === "platform",
+      ),
+      organizational: allItems.filter(
+        (item) => remoteSessionScopeTier(item.issuer) === "organization",
+      ),
+      projectSpecific: allItems.filter(
+        (item) => remoteSessionScopeTier(item.issuer) === "project",
+      ),
     }),
     [allItems],
   );
@@ -105,6 +118,47 @@ function RemoteIdentityProvidersOverview() {
   const handleMakeOrganizational = (item: OrganizationRemoteSessionIssuer) => {
     makeOrganizational.mutate({
       request: { moveIssuerRequestBody: { id: item.issuer.id } },
+    });
+  };
+
+  // One endpoint serves both tables: the org-scoped refresh resolves
+  // organizational and project-specific issuers alike.
+  const refreshMetadata =
+    useRefreshOrganizationRemoteSessionIssuerMetadataMutation({
+      onSuccess: async (result) => {
+        await Promise.all([
+          invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+          // The detail page reads the singular query, which the list
+          // invalidation above does not cover. Without this, opening the
+          // provider right after refreshing it shows the pre-refresh endpoints.
+          invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
+            refetchType: "all",
+          }),
+        ]);
+        const label = issuerDisplayName(result.issuer);
+        if (result.discoveryWarnings.length > 0) {
+          // The refresh did persist — these describe RFC 8414 deviations worth
+          // an operator's attention, not a failure. Anything severe enough to
+          // distrust the document fails the request instead.
+          toast.warning(`Refreshed ${label} with warnings`, {
+            description: result.discoveryWarnings.join(" "),
+          });
+          return;
+        }
+        toast.success(`Refreshed discoverable metadata for ${label}`);
+      },
+      onError: (error) => {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to refresh metadata",
+        );
+      },
+    });
+
+  const handleRefreshMetadata = (item: OrganizationRemoteSessionIssuer) => {
+    refreshMetadata.mutate({
+      request: { riskIDRequestBody: { id: item.issuer.id } },
     });
   };
 
@@ -139,6 +193,8 @@ function RemoteIdentityProvidersOverview() {
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
             onConsolidate={setMigrateSource}
+            onRefreshMetadata={handleRefreshMetadata}
+            refreshPending={refreshMetadata.isPending}
           />
         </Page.Section.Body>
       </Page.Section>
@@ -160,9 +216,40 @@ function RemoteIdentityProvidersOverview() {
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
             onConsolidate={setMigrateSource}
+            onRefreshMetadata={handleRefreshMetadata}
+            refreshPending={refreshMetadata.isPending}
           />
         </Page.Section.Body>
       </Page.Section>
+
+      {platform.length > 0 && (
+        <Page.Section>
+          <Page.Section.Title>
+            Platform Remote Identity Providers
+          </Page.Section.Title>
+          <Page.Section.Description className="max-w-2xl">
+            Well-known upstream identity providers curated by platform admins
+            and inherited by every organization. These are read-only here; you
+            can register your own clients against them, but only platform admins
+            can edit, move, or delete them.
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <IssuerTable
+              items={platform}
+              isLoading={isLoading}
+              showProject={false}
+              readOnly
+              emptyMessage="No platform identity providers available."
+              onDelete={setDeleteTarget}
+              onMakeOrganizational={handleMakeOrganizational}
+              onMoveToProject={setMoveTarget}
+              onConsolidate={setMigrateSource}
+              onRefreshMetadata={handleRefreshMetadata}
+              refreshPending={refreshMetadata.isPending}
+            />
+          </Page.Section.Body>
+        </Page.Section>
+      )}
 
       <CreateRemoteIdentityProviderSheet
         open={createOpen}
@@ -200,37 +287,46 @@ function IssuerTable({
   items,
   isLoading,
   showProject,
+  readOnly = false,
   emptyMessage,
   onDelete,
   onMakeOrganizational,
   onMoveToProject,
   onConsolidate,
+  onRefreshMetadata,
+  refreshPending,
 }: {
   items: OrganizationRemoteSessionIssuer[];
   isLoading: boolean;
   showProject: boolean;
+  // readOnly drops the actions column for tiers the tenant cannot mutate
+  // (platform issuers): the row still links to the read-only detail view.
+  readOnly?: boolean;
   emptyMessage: string;
   onDelete: (item: OrganizationRemoteSessionIssuer) => void;
   onMakeOrganizational: (item: OrganizationRemoteSessionIssuer) => void;
   onMoveToProject: (item: OrganizationRemoteSessionIssuer) => void;
   onConsolidate: (item: OrganizationRemoteSessionIssuer) => void;
+  onRefreshMetadata: (item: OrganizationRemoteSessionIssuer) => void;
+  refreshPending: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
 
+  const actionsHeader = readOnly ? [] : [{ label: "" }];
   const headers = showProject
     ? [
         { label: "Provider" },
         { label: "Project" },
         { label: "Clients" },
-        { label: "" },
+        ...actionsHeader,
       ]
-    : [{ label: "Provider" }, { label: "Clients" }, { label: "" }];
+    : [{ label: "Provider" }, { label: "Clients" }, ...actionsHeader];
 
   if (!isLoading && items.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         {emptyMessage}
-      </Type>
+      </Text>
     );
   }
 
@@ -251,38 +347,42 @@ function IssuerTable({
           ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
         >
           <td className="px-3 py-3">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
             >
               {issuerDisplayName(item.issuer)}
-            </Type>
-            <Type small muted as="div" className="truncate">
+            </Text>
+            <Text small muted as="div" className="truncate">
               {item.issuer.issuer}
-            </Type>
+            </Text>
           </td>
           {showProject && (
             <td className="px-3 py-3">
-              <Type small muted>
+              <Text small muted>
                 {item.projectName || "—"}
-              </Type>
+              </Text>
             </td>
           )}
           <td className="px-3 py-3">
-            <Type small muted>
+            <Text small muted>
               {item.clientCount} {item.clientCount === 1 ? "client" : "clients"}
-            </Type>
+            </Text>
           </td>
-          <td className="px-3 py-3 text-right">
-            <RowActions
-              item={item}
-              onDelete={() => onDelete(item)}
-              onMakeOrganizational={() => onMakeOrganizational(item)}
-              onMoveToProject={() => onMoveToProject(item)}
-              onConsolidate={() => onConsolidate(item)}
-            />
-          </td>
+          {!readOnly && (
+            <td className="px-3 py-3 text-right">
+              <RowActions
+                item={item}
+                onDelete={() => onDelete(item)}
+                onMakeOrganizational={() => onMakeOrganizational(item)}
+                onMoveToProject={() => onMoveToProject(item)}
+                onConsolidate={() => onConsolidate(item)}
+                onRefreshMetadata={() => onRefreshMetadata(item)}
+                refreshPending={refreshPending}
+              />
+            </td>
+          )}
         </DotRow>
       ))}
     </DotTable>
@@ -295,12 +395,16 @@ function RowActions({
   onMakeOrganizational,
   onMoveToProject,
   onConsolidate,
+  onRefreshMetadata,
+  refreshPending,
 }: {
   item: OrganizationRemoteSessionIssuer;
   onDelete: () => void;
   onMakeOrganizational: () => void;
   onMoveToProject: () => void;
   onConsolidate: () => void;
+  onRefreshMetadata: () => void;
+  refreshPending: boolean;
 }) {
   const isOrganizational = !item.issuer.projectId;
 
@@ -322,6 +426,13 @@ function RowActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={onRefreshMetadata}
+              disabled={refreshPending}
+            >
+              Refresh Discoverable Metadata
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             {isOrganizational ? (
               <DropdownMenuItem onClick={onMoveToProject}>
                 Make project-specific

@@ -1,9 +1,9 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { ArrowRight, Network } from "lucide-react";
 import { Link } from "react-router";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
@@ -43,14 +43,14 @@ export function MCPServerCard({
       <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>
         {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="text-md group-hover:text-primary flex-1 truncate transition-colors"
             title={server.name ?? undefined}
           >
             {server.name || "MCP Server"}
-          </Type>
+          </Text>
           <Badge variant="neutral" className="bg-card">
             <Badge.Text>
               {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
