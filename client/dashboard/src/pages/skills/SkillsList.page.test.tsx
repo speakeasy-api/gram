@@ -23,6 +23,8 @@ const testState = vi.hoisted(() => ({
     | undefined,
   insightsRefetch: vi.fn().mockResolvedValue(undefined),
   metricTotalCount: undefined as number | undefined,
+  metricPageSize: 200,
+  loadedMetricPageCount: 1,
   skillRequests: [] as unknown[],
   metricSkillRequests: [] as unknown[],
   searchValue: "example",
@@ -118,24 +120,31 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
           String(skill.displayName).toLowerCase().includes(request.search!),
         )
       : testState.skills;
+    const pages = Array.from(
+      { length: testState.loadedMetricPageCount },
+      (_, page) => ({
+        result: {
+          skills: matchingSkills.slice(
+            page * testState.metricPageSize,
+            (page + 1) * testState.metricPageSize,
+          ),
+          totalCount: testState.metricTotalCount ?? matchingSkills.length,
+        },
+      }),
+    );
     return {
-      data: {
-        pages: [
-          {
-            result: {
-              skills: matchingSkills,
-              totalCount: testState.metricTotalCount ?? matchingSkills.length,
-            },
-          },
-        ],
-      },
+      data: { pages },
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
       isFetchNextPageError: testState.isFetchNextPageError,
       hasNextPage: testState.hasNextPage,
       error: testState.error,
-      fetchNextPage: testState.fetchNextPage,
+      fetchNextPage: async () => {
+        testState.loadedMetricPageCount += 1;
+        testState.hasNextPage = false;
+        return testState.fetchNextPage();
+      },
       refetch: vi.fn(),
     };
   },
@@ -225,9 +234,18 @@ vi.mock("@/components/page-layout", () => {
       Apply search
     </button>
   );
+  const Filters = ({
+    onChange,
+  }: {
+    onChange: (id: string, value: string[]) => void;
+  }) => (
+    <button onClick={() => onChange("sourceKind", ["manual"])}>
+      Apply filters
+    </button>
+  );
   const Toolbar = Object.assign(Wrapper, {
     Search,
-    Filters: () => null,
+    Filters,
     Count: Wrapper,
     Actions: Wrapper,
     Refresh: () => null,
@@ -366,6 +384,8 @@ beforeEach(() => {
   testState.insightsRefetch.mockReset();
   testState.insightsRefetch.mockResolvedValue(undefined);
   testState.metricTotalCount = undefined;
+  testState.metricPageSize = 200;
+  testState.loadedMetricPageCount = 1;
   testState.skillRequests = [];
   testState.metricSkillRequests = [];
   testState.searchValue = "example";
@@ -502,6 +522,42 @@ describe("SkillsList pagination surfaces", () => {
     expect(renderedSkillNames()).toEqual(["High", "Low", "Missing"]);
   });
 
+  it("drains metric pages before sorting activations across the page boundary", async () => {
+    testState.skills = makeSkills(201);
+    testState.hasNextPage = true;
+    testState.insightsData = {
+      result: {
+        insights: [
+          { skillId: "skill_0", metrics: { activations: 90 } },
+          { skillId: "skill_200", metrics: { activations: 100 } },
+        ],
+      },
+    };
+    const { rerender } = render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    await waitFor(() => expect(testState.fetchNextPage).toHaveBeenCalledOnce());
+    rerender(<SkillsList />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    );
+
+    expect(renderedSkillNames().slice(0, 2)).toEqual([
+      "Example 200",
+      "Example 0",
+    ]);
+    expect(screen.getByText("1-50 of 201")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(renderedSkillNames()[0]).toBe("Example 49");
+    expect(screen.getByText("51-100 of 201")).toBeTruthy();
+  });
+
   it("keeps an active header sort when search resets pagination", () => {
     render(<SkillsList />);
 
@@ -514,6 +570,26 @@ describe("SkillsList pagination surfaces", () => {
     expect(screen.getByText("Example 50")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
+    expect(screen.getByText("Example 0")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("keeps an active header sort when filters reset pagination", () => {
+    render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Example 50")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(screen.getByText("Example 0")).toBeTruthy();
     expect(
       screen.getByRole("button", {
@@ -657,6 +733,51 @@ describe("SkillsList pagination surfaces", () => {
       expect(screen.getAllByTestId("skill-row")).toHaveLength(50),
     );
     expect(testState.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it("keeps metric sorting cleared after insights recover", async () => {
+    testState.skills = [
+      { ...makeSkills(1)[0], id: "zulu", displayName: "Zulu" },
+      { ...makeSkills(1)[0], id: "alpha", displayName: "Alpha" },
+      { ...makeSkills(1)[0], id: "mike", displayName: "Mike" },
+      ...makeSkills(48),
+    ];
+    const { rerender } = render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Example 47")).toBeTruthy();
+
+    testState.insightsData = undefined;
+    testState.insightsError = new Error("insights unavailable");
+    rerender(<SkillsList />);
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "Previous" })
+          .hasAttribute("disabled"),
+      ).toBe(true),
+    );
+
+    testState.metricSkillRequests = [];
+    testState.insightsData = { result: { insights: [] } };
+    testState.insightsError = null;
+    rerender(<SkillsList />);
+
+    expect(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    ).toBeTruthy();
+    expect(testState.metricSkillRequests).toEqual([]);
+    expect(renderedSkillNames().slice(0, 3)).toEqual(["Zulu", "Alpha", "Mike"]);
+    expect(
+      screen.getByRole("button", { name: "Previous" }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("badges skills with open suggestions and drains suggestion pages", async () => {
