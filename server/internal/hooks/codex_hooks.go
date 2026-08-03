@@ -399,13 +399,15 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 	// classify fresh (email-based for openai; billing mode rides on team
 	// sessions — see classifyAccount / attributeSession). Failures leave the
 	// session unclassified rather than blocking capture or enforcement.
-	if cachedOK && cached.AccountType != "" && metadata.UserEmail == cached.UserEmail {
+	if cachedOK && cached.AccountType != "" &&
+		conv.NormalizeEmail(metadata.UserEmail) == conv.NormalizeEmail(cached.UserEmail) {
 		metadata.AccountType = cached.AccountType
 		metadata.BillingMode = cached.BillingMode
 	} else if err := s.attributeSession(ctx, metadata); err != nil {
 		s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
 			attr.SlogEvent("account_attribution_failed"),
 			attr.SlogError(err),
+			attr.SlogGenAIConversationID(metadata.SessionID),
 		)
 	}
 

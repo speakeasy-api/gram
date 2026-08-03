@@ -314,6 +314,15 @@ func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any,
 	return telemetry.UserInfoByIDAndEmail(userID, email), email, userID
 }
 
+// sameCodexIdentity reports whether an incoming record's email brings no
+// identity a prior attribution lacks: either the record carries none, or it
+// matches the attributed email (case-insensitively — Codex surfaces report
+// case-variant emails, e.g. "Dev@Example.com" in the compliance feed).
+func sameCodexIdentity(attributedEmail, incomingEmail string) bool {
+	return incomingEmail == "" ||
+		conv.NormalizeEmail(attributedEmail) == conv.NormalizeEmail(incomingEmail)
+}
+
 // codexOTELIdentity carries the per-record identity inputs for session
 // attribution on the Codex OTEL stream.
 type codexOTELIdentity struct {
@@ -336,7 +345,7 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 	if id.SessionID == "" {
 		return none
 	}
-	if meta, ok := memo[id.SessionID]; ok && (id.Email == "" || meta.UserEmail == id.Email) {
+	if meta, ok := memo[id.SessionID]; ok && sameCodexIdentity(meta.UserEmail, id.Email) {
 		return meta
 	}
 
@@ -348,7 +357,7 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 	// Reuse a prior classification when this record brings no identity the
 	// cache lacks; recompute when the email is new or the entry predates
 	// classification (empty AccountType).
-	if cached.AccountType != "" && (id.Email == "" || cached.UserEmail == id.Email) {
+	if cached.AccountType != "" && sameCodexIdentity(cached.UserEmail, id.Email) {
 		memo[id.SessionID] = cached
 		return cached
 	}
