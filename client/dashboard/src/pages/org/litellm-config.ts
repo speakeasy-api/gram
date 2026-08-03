@@ -2,10 +2,13 @@ import type { LiteLLMInstanceFailurePosture } from "@gram/client/models/componen
 
 function apiBase(serverURL: string): string {
   const url = new URL(serverURL);
+  const ipv4Parts = url.hostname.split(".");
+  const ipv4Loopback =
+    ipv4Parts.length === 4 &&
+    ipv4Parts[0] === "127" &&
+    ipv4Parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
   const loopback =
-    url.hostname === "localhost" ||
-    url.hostname === "[::1]" ||
-    url.hostname.startsWith("127.");
+    url.hostname === "localhost" || url.hostname === "[::1]" || ipv4Loopback;
   if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
     throw new Error("LiteLLM integration endpoints require HTTPS");
   }

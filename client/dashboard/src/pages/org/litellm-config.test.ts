@@ -61,6 +61,9 @@ describe("LiteLLM configuration", () => {
     expect(() =>
       buildLiteLLMEnvironment("ftp://localhost", "my-project"),
     ).toThrow("LiteLLM integration endpoints require HTTPS");
+    expect(() =>
+      buildLiteLLMEnvironment("http://127.example.com", "my-project"),
+    ).toThrow("LiteLLM integration endpoints require HTTPS");
   });
 
   it("provides safe and synthetic-block verification commands", () => {
