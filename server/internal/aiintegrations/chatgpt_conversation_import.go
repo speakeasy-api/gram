@@ -381,10 +381,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 			return err
 		}
 
-		createdAt := src.parseEventTime(event.Message.CreatedAt, time.Time{})
-		if createdAt.IsZero() {
-			createdAt = src.parseEventTime(event.Timestamp, time.Now())
-		}
+		createdAt := src.eventCreatedAt(event)
 
 		content := renderChatGPTContent(event.Message.Content.Value)
 		var contentRaw []byte
@@ -433,13 +430,16 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 		return nil
 	}
 
+	// WriteExternal inserts row by row, so a mid-batch failure still leaves
+	// the earlier rows durable — record the partial count before propagating
+	// the error so failure details describe the replay-safe work accurately.
 	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write chatgpt conversation messages")
-	}
 	src.progressMu.Lock()
 	src.progress.MessagesWritten += written
 	src.progressMu.Unlock()
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "write chatgpt conversation messages")
+	}
 	return nil
 }
 
@@ -495,9 +495,29 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 	return nil
 }
 
-// parseEventTime is parseTimeOrDefault with fallback accounting: a feed
-// format change away from RFC3339 would otherwise silently stamp imported
-// history with import time.
+// eventCreatedAt resolves a message's timestamp chain (message.created_at →
+// event.timestamp → import time), counting a fallback only when the final
+// import-time default is used — the outcome that actually rewrites
+// chronology. A malformed created_at rescued by a valid event timestamp is
+// not a fallback, and two absent timestamps are.
+func (src *chatgptConversationSource) eventCreatedAt(event chatgptConversationEvent) time.Time {
+	for _, value := range []string{event.Message.CreatedAt, event.Timestamp} {
+		if value == "" {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339, value); err == nil {
+			return t.UTC()
+		}
+	}
+	src.progressMu.Lock()
+	src.progress.TimestampFallbacks++
+	src.progressMu.Unlock()
+	return time.Now().UTC()
+}
+
+// parseEventTime is parseTimeOrDefault with fallback accounting for
+// single-value timestamps: absent is fine (the fallback is expected), but a
+// present-yet-malformed value counts as a canary for feed format changes.
 func (src *chatgptConversationSource) parseEventTime(value string, fallback time.Time) time.Time {
 	if value == "" {
 		return fallback.UTC()
