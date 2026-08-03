@@ -61,21 +61,27 @@ WHERE u.workos_id = ANY(@workos_ids::text[])
 -- name: GetConnectedUserByEmail :one
 -- Callers must pass a lowercased email (conv.NormalizeEmail); stored emails are
 -- lowered here since WorkOS-synced rows can preserve the original casing.
+-- Rows can differ only by casing, so resolution must be deterministic: prefer
+-- the already-normalized row, then the oldest.
 SELECT u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = @email
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
+ORDER BY (u.email = @email) DESC, u.created_at, u.id
 LIMIT 1;
 
 -- name: GetConnectedUsersByEmails :many
 -- Callers must pass lowercased emails (conv.NormalizeEmail); stored emails are
 -- lowered here since WorkOS-synced rows can preserve the original casing.
-SELECT u.* FROM users u
+-- Rows can differ only by casing, so pick one user per email deterministically:
+-- prefer the already-normalized row, then the oldest.
+SELECT DISTINCT ON (lower(u.email)) u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(@emails::text[])
   AND our.organization_id = @organization_id
-  AND our.deleted_at IS NULL;
+  AND our.deleted_at IS NULL
+ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id;
 
 -- name: GetUsersByIDs :many
 SELECT * FROM users
