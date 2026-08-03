@@ -1599,6 +1599,9 @@ func marshalLitellmviewsLiteLLMInstanceViewToLiteLLMInstanceResponseBody(v *lite
 	if v.Project != nil {
 		res.Project = marshalLitellmviewsProjectEntryViewToProjectEntryResponseBody(v.Project)
 	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = marshalLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnosticsResponseBody(v.Diagnostics)
+	}
 
 	return res
 }
@@ -1611,6 +1614,27 @@ func marshalLitellmviewsProjectEntryViewToProjectEntryResponseBody(v *litellmvie
 		ID:   *v.ID,
 		Name: *v.Name,
 		Slug: string(*v.Slug),
+	}
+
+	return res
+}
+
+// marshalLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnosticsResponseBody
+// builds a value of type *LiteLLMInstanceDiagnosticsResponseBody from a value
+// of type *litellmviews.LiteLLMInstanceDiagnosticsView.
+func marshalLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnosticsResponseBody(v *litellmviews.LiteLLMInstanceDiagnosticsView) *LiteLLMInstanceDiagnosticsResponseBody {
+	res := &LiteLLMInstanceDiagnosticsResponseBody{
+		Status:                 string(*v.Status),
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	if v.LastErrorKind != nil {
+		lastErrorKind := string(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
 	}
 
 	return res
@@ -1635,6 +1659,9 @@ func marshalLitellmLiteLLMInstanceToLiteLLMInstanceResponseBody(v *litellm.LiteL
 	if v.Project != nil {
 		res.Project = marshalLitellmProjectEntryToProjectEntryResponseBody(v.Project)
 	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = marshalLitellmLiteLLMInstanceDiagnosticsToLiteLLMInstanceDiagnosticsResponseBody(v.Diagnostics)
+	}
 
 	return res
 }
@@ -1646,6 +1673,27 @@ func marshalLitellmProjectEntryToProjectEntryResponseBody(v *litellm.ProjectEntr
 		ID:   v.ID,
 		Name: v.Name,
 		Slug: string(v.Slug),
+	}
+
+	return res
+}
+
+// marshalLitellmLiteLLMInstanceDiagnosticsToLiteLLMInstanceDiagnosticsResponseBody
+// builds a value of type *LiteLLMInstanceDiagnosticsResponseBody from a value
+// of type *litellm.LiteLLMInstanceDiagnostics.
+func marshalLitellmLiteLLMInstanceDiagnosticsToLiteLLMInstanceDiagnosticsResponseBody(v *litellm.LiteLLMInstanceDiagnostics) *LiteLLMInstanceDiagnosticsResponseBody {
+	res := &LiteLLMInstanceDiagnosticsResponseBody{
+		Status:                 string(v.Status),
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	if v.LastErrorKind != nil {
+		lastErrorKind := string(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
 	}
 
 	return res

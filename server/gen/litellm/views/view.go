@@ -51,6 +51,7 @@ type LiteLLMInstanceView struct {
 	UpdatedAt       *string
 	LastUsedAt      *string
 	Active          *bool
+	Diagnostics     *LiteLLMInstanceDiagnosticsView
 }
 
 // ProjectEntryView is a type that runs validations on a projected type.
@@ -69,6 +70,31 @@ type SlugView string
 // LiteLLMFailurePostureView is a type that runs validations on a projected
 // type.
 type LiteLLMFailurePostureView string
+
+// LiteLLMInstanceDiagnosticsView is a type that runs validations on a
+// projected type.
+type LiteLLMInstanceDiagnosticsView struct {
+	Status                 *LiteLLMInstanceHealthStatusView
+	LastGuardrailEventAt   *string
+	LastOtelEventAt        *string
+	LastErrorAt            *string
+	LastErrorKind          *LiteLLMInstanceErrorKindView
+	ReportedLitellmVersion *string
+	// Percentage of model requests in the last 24 hours that supplied a
+	// virtual-key email.
+	VirtualKeyEmailPct24h *float64
+	// Percentage of model requests in the last 24 hours that resolved to a Gram
+	// user.
+	PlatformUserPct24h *float64
+}
+
+// LiteLLMInstanceHealthStatusView is a type that runs validations on a
+// projected type.
+type LiteLLMInstanceHealthStatusView string
+
+// LiteLLMInstanceErrorKindView is a type that runs validations on a projected
+// type.
+type LiteLLMInstanceErrorKindView string
 
 // LitellmIngestResultView is a type that runs validations on a projected type.
 type LitellmIngestResultView struct {
@@ -181,6 +207,9 @@ func ValidateLiteLLMInstanceView(result *LiteLLMInstanceView) (err error) {
 	if result.Active == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active", "result"))
 	}
+	if result.Diagnostics == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("diagnostics", "result"))
+	}
 	if result.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("result.id", *result.ID, goa.FormatUUID))
 	}
@@ -202,6 +231,11 @@ func ValidateLiteLLMInstanceView(result *LiteLLMInstanceView) (err error) {
 	}
 	if result.LastUsedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("result.last_used_at", *result.LastUsedAt, goa.FormatDateTime))
+	}
+	if result.Diagnostics != nil {
+		if err2 := ValidateLiteLLMInstanceDiagnosticsView(result.Diagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -242,6 +276,77 @@ func ValidateSlugView(result SlugView) (err error) {
 func ValidateLiteLLMFailurePostureView(result LiteLLMFailurePostureView) (err error) {
 	if !(string(result) == "fail_closed" || string(result) == "fail_open") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("result", string(result), []any{"fail_closed", "fail_open"}))
+	}
+	return
+}
+
+// ValidateLiteLLMInstanceDiagnosticsView runs the validations defined on
+// LiteLLMInstanceDiagnosticsView.
+func ValidateLiteLLMInstanceDiagnosticsView(result *LiteLLMInstanceDiagnosticsView) (err error) {
+	if result.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "result"))
+	}
+	if result.Status != nil {
+		if !(string(*result.Status) == "pending" || string(*result.Status) == "success" || string(*result.Status) == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.status", string(*result.Status), []any{"pending", "success", "failed"}))
+		}
+	}
+	if result.LastGuardrailEventAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.last_guardrail_event_at", *result.LastGuardrailEventAt, goa.FormatDateTime))
+	}
+	if result.LastOtelEventAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.last_otel_event_at", *result.LastOtelEventAt, goa.FormatDateTime))
+	}
+	if result.LastErrorAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.last_error_at", *result.LastErrorAt, goa.FormatDateTime))
+	}
+	if result.LastErrorKind != nil {
+		if !(string(*result.LastErrorKind) == "auth_failure" || string(*result.LastErrorKind) == "decode_failure" || string(*result.LastErrorKind) == "limit_exceeded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.last_error_kind", string(*result.LastErrorKind), []any{"auth_failure", "decode_failure", "limit_exceeded"}))
+		}
+	}
+	if result.ReportedLitellmVersion != nil {
+		if utf8.RuneCountInString(*result.ReportedLitellmVersion) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("result.reported_litellm_version", *result.ReportedLitellmVersion, utf8.RuneCountInString(*result.ReportedLitellmVersion), 128, false))
+		}
+	}
+	if result.VirtualKeyEmailPct24h != nil {
+		if *result.VirtualKeyEmailPct24h < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("result.virtual_key_email_pct_24h", *result.VirtualKeyEmailPct24h, 0, true))
+		}
+	}
+	if result.VirtualKeyEmailPct24h != nil {
+		if *result.VirtualKeyEmailPct24h > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("result.virtual_key_email_pct_24h", *result.VirtualKeyEmailPct24h, 100, false))
+		}
+	}
+	if result.PlatformUserPct24h != nil {
+		if *result.PlatformUserPct24h < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("result.platform_user_pct_24h", *result.PlatformUserPct24h, 0, true))
+		}
+	}
+	if result.PlatformUserPct24h != nil {
+		if *result.PlatformUserPct24h > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("result.platform_user_pct_24h", *result.PlatformUserPct24h, 100, false))
+		}
+	}
+	return
+}
+
+// ValidateLiteLLMInstanceHealthStatusView runs the validations defined on
+// LiteLLMInstanceHealthStatusView.
+func ValidateLiteLLMInstanceHealthStatusView(result LiteLLMInstanceHealthStatusView) (err error) {
+	if !(string(result) == "pending" || string(result) == "success" || string(result) == "failed") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("result", string(result), []any{"pending", "success", "failed"}))
+	}
+	return
+}
+
+// ValidateLiteLLMInstanceErrorKindView runs the validations defined on
+// LiteLLMInstanceErrorKindView.
+func ValidateLiteLLMInstanceErrorKindView(result LiteLLMInstanceErrorKindView) (err error) {
+	if !(string(result) == "auth_failure" || string(result) == "decode_failure" || string(result) == "limit_exceeded") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("result", string(result), []any{"auth_failure", "decode_failure", "limit_exceeded"}))
 	}
 	return
 }

@@ -891,6 +891,7 @@ trackedFiles:
   src/models/components/listversionsresult.ts: {}
   src/models/components/litellmingestresult.ts: {}
   src/models/components/litellminstance.ts: {}
+  src/models/components/litellminstancediagnostics.ts: {}
   src/models/components/litellminstancekeyresult.ts: {}
   src/models/components/litellmrequestdata.ts: {}
   src/models/components/litellmstructuredmessage.ts: {}
@@ -3142,7 +3143,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "201":
-          application/json: {"instance": {"active": true, "created_at": "2024-05-13T02:25:51.939Z", "created_by_user_id": "<id>", "failure_posture": "fail_open", "id": "a6cafdda-8b63-4d1f-8f46-1e1e073f4a49", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "project": {"id": "<id>", "name": "<value>", "slug": "<value>"}, "updated_at": "2024-01-25T18:24:38.648Z"}, "key": "<key>"}
+          application/json: {"instance": {"active": true, "created_at": "2024-05-13T02:25:51.939Z", "created_by_user_id": "<id>", "diagnostics": {"status": "pending"}, "failure_posture": "fail_open", "id": "a6cafdda-8b63-4d1f-8f46-1e1e073f4a49", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "project": {"id": "<id>", "name": "<value>", "slug": "<value>"}, "updated_at": "2024-01-25T18:24:38.648Z"}, "key": "<key>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6897,7 +6898,7 @@ examples:
         application/json: {"id": "9fca5242-53f4-418c-a8a4-fd65021451d5"}
       responses:
         "200":
-          application/json: {"instance": {"active": false, "created_at": "2024-04-04T04:33:24.308Z", "created_by_user_id": "<id>", "failure_posture": "fail_closed", "id": "244898d7-3d50-4a95-a145-897c83b04daa", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "project": {"id": "<id>", "name": "<value>", "slug": "<value>"}, "updated_at": "2025-11-13T23:45:18.925Z"}, "key": "<key>"}
+          application/json: {"instance": {"active": false, "created_at": "2024-04-04T04:33:24.308Z", "created_by_user_id": "<id>", "diagnostics": {"status": "success"}, "failure_posture": "fail_closed", "id": "244898d7-3d50-4a95-a145-897c83b04daa", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "project": {"id": "<id>", "name": "<value>", "slug": "<value>"}, "updated_at": "2025-11-13T23:45:18.925Z"}, "key": "<key>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

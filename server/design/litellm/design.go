@@ -36,6 +36,35 @@ var FailurePosture = Type("LiteLLMFailurePosture", String, func() {
 	Enum("fail_closed", "fail_open")
 })
 
+var InstanceHealthStatus = Type("LiteLLMInstanceHealthStatus", String, func() {
+	Description("Derived health of a LiteLLM integration's latest ingest activity.")
+	Enum("pending", "success", "failed")
+})
+
+var InstanceErrorKind = Type("LiteLLMInstanceErrorKind", String, func() {
+	Description("Safe category for the latest observed ingest error.")
+	Enum("auth_failure", "decode_failure", "limit_exceeded")
+})
+
+var InstanceDiagnostics = Type("LiteLLMInstanceDiagnostics", func() {
+	Description("Health and identity-attribution diagnostics for a LiteLLM integration. No prompt, credential, or identity values are returned.")
+	Attribute("status", InstanceHealthStatus)
+	Attribute("last_guardrail_event_at", String, func() { Format(FormatDateTime) })
+	Attribute("last_otel_event_at", String, func() { Format(FormatDateTime) })
+	Attribute("last_error_at", String, func() { Format(FormatDateTime) })
+	Attribute("last_error_kind", InstanceErrorKind)
+	Attribute("reported_litellm_version", String, func() { MaxLength(128) })
+	Attribute("virtual_key_email_pct_24h", Float64, "Percentage of model requests in the last 24 hours that supplied a virtual-key email.", func() {
+		Minimum(0)
+		Maximum(100)
+	})
+	Attribute("platform_user_pct_24h", Float64, "Percentage of model requests in the last 24 hours that resolved to a Gram user.", func() {
+		Minimum(0)
+		Maximum(100)
+	})
+	Required("status")
+})
+
 var Instance = Type("LiteLLMInstance", func() {
 	Description("A provisioned LiteLLM integration and its project-bound ingestion credential metadata.")
 	Attribute("id", String, func() { Format(FormatUUID) })
@@ -49,7 +78,8 @@ var Instance = Type("LiteLLMInstance", func() {
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 	Attribute("last_used_at", String, func() { Format(FormatDateTime) })
 	Attribute("active", Boolean)
-	Required("id", "organization_id", "project", "name", "failure_posture", "key_prefix", "created_by_user_id", "created_at", "updated_at", "active")
+	Attribute("diagnostics", InstanceDiagnostics)
+	Required("id", "organization_id", "project", "name", "failure_posture", "key_prefix", "created_by_user_id", "created_at", "updated_at", "active", "diagnostics")
 })
 
 var InstanceKeyResult = ResultType("application/vnd.litellm.instance-key-result", func() {

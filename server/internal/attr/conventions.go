@@ -419,6 +419,7 @@ const (
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
 	HookBlockReasonKey       = attribute.Key("gram.hook.block_reason")
+	LiteLLMInstanceIDKey     = attribute.Key("gram.litellm.instance_id")
 	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
 	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
 	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")

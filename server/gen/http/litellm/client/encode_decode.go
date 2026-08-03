@@ -1696,6 +1696,7 @@ func unmarshalLiteLLMInstanceResponseBodyToLitellmviewsLiteLLMInstanceView(v *Li
 	failurePosture := litellmviews.LiteLLMFailurePostureView(*v.FailurePosture)
 	res.FailurePosture = &failurePosture
 	res.Project = unmarshalProjectEntryResponseBodyToLitellmviewsProjectEntryView(v.Project)
+	res.Diagnostics = unmarshalLiteLLMInstanceDiagnosticsResponseBodyToLitellmviewsLiteLLMInstanceDiagnosticsView(v.Diagnostics)
 
 	return res
 }
@@ -1710,6 +1711,28 @@ func unmarshalProjectEntryResponseBodyToLitellmviewsProjectEntryView(v *ProjectE
 	}
 	slug := litellmviews.SlugView(*v.Slug)
 	res.Slug = &slug
+
+	return res
+}
+
+// unmarshalLiteLLMInstanceDiagnosticsResponseBodyToLitellmviewsLiteLLMInstanceDiagnosticsView
+// builds a value of type *litellmviews.LiteLLMInstanceDiagnosticsView from a
+// value of type *LiteLLMInstanceDiagnosticsResponseBody.
+func unmarshalLiteLLMInstanceDiagnosticsResponseBodyToLitellmviewsLiteLLMInstanceDiagnosticsView(v *LiteLLMInstanceDiagnosticsResponseBody) *litellmviews.LiteLLMInstanceDiagnosticsView {
+	res := &litellmviews.LiteLLMInstanceDiagnosticsView{
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	status := litellmviews.LiteLLMInstanceHealthStatusView(*v.Status)
+	res.Status = &status
+	if v.LastErrorKind != nil {
+		lastErrorKind := litellmviews.LiteLLMInstanceErrorKindView(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
+	}
 
 	return res
 }
@@ -1731,6 +1754,7 @@ func unmarshalLiteLLMInstanceResponseBodyToLitellmLiteLLMInstance(v *LiteLLMInst
 		Active:          *v.Active,
 	}
 	res.Project = unmarshalProjectEntryResponseBodyToLitellmProjectEntry(v.Project)
+	res.Diagnostics = unmarshalLiteLLMInstanceDiagnosticsResponseBodyToLitellmLiteLLMInstanceDiagnostics(v.Diagnostics)
 
 	return res
 }
@@ -1742,6 +1766,27 @@ func unmarshalProjectEntryResponseBodyToLitellmProjectEntry(v *ProjectEntryRespo
 		ID:   *v.ID,
 		Name: *v.Name,
 		Slug: types.Slug(*v.Slug),
+	}
+
+	return res
+}
+
+// unmarshalLiteLLMInstanceDiagnosticsResponseBodyToLitellmLiteLLMInstanceDiagnostics
+// builds a value of type *litellm.LiteLLMInstanceDiagnostics from a value of
+// type *LiteLLMInstanceDiagnosticsResponseBody.
+func unmarshalLiteLLMInstanceDiagnosticsResponseBodyToLitellmLiteLLMInstanceDiagnostics(v *LiteLLMInstanceDiagnosticsResponseBody) *litellm.LiteLLMInstanceDiagnostics {
+	res := &litellm.LiteLLMInstanceDiagnostics{
+		Status:                 litellm.LiteLLMInstanceHealthStatus(*v.Status),
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	if v.LastErrorKind != nil {
+		lastErrorKind := litellm.LiteLLMInstanceErrorKind(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
 	}
 
 	return res

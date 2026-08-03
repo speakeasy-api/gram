@@ -72,6 +72,28 @@ func (q *Queries) CreateLiteLLMInstance(ctx context.Context, arg CreateLiteLLMIn
 	return i, err
 }
 
+const getActiveLiteLLMInstanceIDByAPIKey = `-- name: GetActiveLiteLLMInstanceIDByAPIKey :one
+SELECT id
+FROM litellm_instances
+WHERE organization_id = $1
+  AND project_id = $2
+  AND api_key_id = $3
+  AND deleted IS FALSE
+`
+
+type GetActiveLiteLLMInstanceIDByAPIKeyParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ApiKeyID       uuid.UUID
+}
+
+func (q *Queries) GetActiveLiteLLMInstanceIDByAPIKey(ctx context.Context, arg GetActiveLiteLLMInstanceIDByAPIKeyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActiveLiteLLMInstanceIDByAPIKey, arg.OrganizationID, arg.ProjectID, arg.ApiKeyID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getLiteLLMInstanceForUpdate = `-- name: GetLiteLLMInstanceForUpdate :one
 SELECT id, organization_id, project_id, api_key_id, created_by_user_id, name, failure_posture, last_guardrail_event_at, last_otel_event_at, last_error_at, last_error_kind, reported_litellm_version, reported_litellm_version_at, created_at, updated_at, deleted_at, deleted
 FROM litellm_instances
@@ -129,6 +151,11 @@ SELECT
   , ak.key_prefix
   , ak.last_accessed_at
   , (li.deleted IS FALSE AND ak.deleted IS FALSE) AS active
+  , li.last_guardrail_event_at
+  , li.last_otel_event_at
+  , li.last_error_at
+  , li.last_error_kind
+  , li.reported_litellm_version
 FROM litellm_instances li
 JOIN projects p
   ON p.id = li.project_id
@@ -148,20 +175,25 @@ type ListLiteLLMInstancesParams struct {
 }
 
 type ListLiteLLMInstancesRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	ApiKeyID        uuid.UUID
-	CreatedByUserID string
-	Name            string
-	FailurePosture  string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	ProjectName     string
-	ProjectSlug     string
-	KeyPrefix       string
-	LastAccessedAt  pgtype.Timestamptz
-	Active          pgtype.Bool
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	ApiKeyID               uuid.UUID
+	CreatedByUserID        string
+	Name                   string
+	FailurePosture         string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	ProjectName            string
+	ProjectSlug            string
+	KeyPrefix              string
+	LastAccessedAt         pgtype.Timestamptz
+	Active                 pgtype.Bool
+	LastGuardrailEventAt   pgtype.Timestamptz
+	LastOtelEventAt        pgtype.Timestamptz
+	LastErrorAt            pgtype.Timestamptz
+	LastErrorKind          pgtype.Text
+	ReportedLitellmVersion pgtype.Text
 }
 
 func (q *Queries) ListLiteLLMInstances(ctx context.Context, arg ListLiteLLMInstancesParams) ([]ListLiteLLMInstancesRow, error) {
@@ -188,6 +220,11 @@ func (q *Queries) ListLiteLLMInstances(ctx context.Context, arg ListLiteLLMInsta
 			&i.KeyPrefix,
 			&i.LastAccessedAt,
 			&i.Active,
+			&i.LastGuardrailEventAt,
+			&i.LastOtelEventAt,
+			&i.LastErrorAt,
+			&i.LastErrorKind,
+			&i.ReportedLitellmVersion,
 		); err != nil {
 			return nil, err
 		}

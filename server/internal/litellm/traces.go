@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -267,6 +268,13 @@ func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequ
 	params := s.traceLogParams(ctx, request, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	if len(params) == 0 {
 		return nil
+	}
+	instanceID, managed := s.instanceIDForRequest(ctx)
+	for i := range params {
+		params[i].Attributes[attr.APIKeyIDKey] = authCtx.APIKeyID
+		if managed {
+			params[i].Attributes[attr.LiteLLMInstanceIDKey] = instanceID.String()
+		}
 	}
 	s.traces.Enqueue(ctx, params)
 	return nil

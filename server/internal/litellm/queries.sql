@@ -32,6 +32,11 @@ SELECT
   , ak.key_prefix
   , ak.last_accessed_at
   , (li.deleted IS FALSE AND ak.deleted IS FALSE) AS active
+  , li.last_guardrail_event_at
+  , li.last_otel_event_at
+  , li.last_error_at
+  , li.last_error_kind
+  , li.reported_litellm_version
 FROM litellm_instances li
 JOIN projects p
   ON p.id = li.project_id
@@ -52,6 +57,14 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 FOR UPDATE;
+
+-- name: GetActiveLiteLLMInstanceIDByAPIKey :one
+SELECT id
+FROM litellm_instances
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND api_key_id = @api_key_id
+  AND deleted IS FALSE;
 
 -- name: RotateLiteLLMInstanceKey :one
 UPDATE litellm_instances
