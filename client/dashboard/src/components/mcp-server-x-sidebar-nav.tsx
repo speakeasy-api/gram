@@ -202,13 +202,21 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       href: mcpServerTabHref(routes, idOrSlug, "overview"),
       active: activeTab === "overview",
     },
-    {
-      key: "inspect",
-      title: "Inspect",
-      Icon: Wrench,
-      href: mcpServerTabHref(routes, idOrSlug, "inspect"),
-      active: activeTab === "inspect",
-    },
+    // Hidden for unproxied servers for now: there's no reliable way to list
+    // their tools yet (the vendor's own auth blocks an anonymous probe, and
+    // there's no fallback source wired up), so the tab had nothing useful to
+    // show.
+    ...(isUnproxied
+      ? []
+      : [
+          {
+            key: "inspect",
+            title: "Inspect",
+            Icon: Wrench,
+            href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+            active: activeTab === "inspect",
+          },
+        ]),
     ...(canViewTeamAccess
       ? [
           {

@@ -92,6 +92,15 @@ export default function MCPServerDetails(): JSX.Element {
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
     );
   }
+  // Inspect is hidden from the nav for unproxied servers (see
+  // McpServerXSidebarNav) but the route still resolves, so bounce anyone who
+  // lands on it directly (old links, the legacy /tools redirect above) back
+  // to Overview instead of rendering a tab with nothing to show.
+  if (activeTab === "inspect" && mcpServer?.unproxiedMcpServerId) {
+    return (
+      <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
+    );
+  }
   if (!activeTab) {
     const initialTab = initialTabFromHash(location.hash);
     const hash =
