@@ -105,8 +105,14 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
       refetch: vi.fn(),
     };
   },
-  useSkillsInfinite: (request: { search?: string }) => {
-    testState.metricSkillRequests.push(request);
+  useSkillsInfinite: (
+    request: { search?: string },
+    _client: unknown,
+    options?: { enabled?: boolean },
+  ) => {
+    if (options?.enabled) {
+      testState.metricSkillRequests.push(request);
+    }
     const matchingSkills = request.search
       ? testState.skills.filter((skill) =>
           String(skill.displayName).toLowerCase().includes(request.search!),
@@ -219,13 +225,9 @@ vi.mock("@/components/page-layout", () => {
       Apply search
     </button>
   );
-  const SortBy = ({ onChange }: { onChange: (value: string) => void }) => (
-    <button onClick={() => onChange("activations")}>Apply metric sort</button>
-  );
   const Toolbar = Object.assign(Wrapper, {
     Search,
     Filters: () => null,
-    SortBy,
     Count: Wrapper,
     Actions: Wrapper,
     Refresh: () => null,
@@ -257,26 +259,67 @@ vi.mock("@/components/ui/Table", () => ({
     columns,
     data,
     noResultsMessage,
+    sort,
+    onSortChange,
   }: {
     columns: Array<{
       key: string;
+      header: ReactNode;
+      sortable?: boolean;
+      sortLabel?: string;
       render?: (row: Record<string, unknown>) => ReactNode;
     }>;
     data: Array<Record<string, unknown> & { id: string }>;
     noResultsMessage: ReactNode;
-  }) => (
-    <div>
-      {data.length === 0
-        ? noResultsMessage
-        : data.map((skill) => (
-            <div data-testid="skill-row" key={skill.id}>
-              {columns.slice(0, 1).map((column) => (
-                <div key={column.key}>{column.render?.(skill)}</div>
-              ))}
-            </div>
-          ))}
-    </div>
-  ),
+    sort: { id: string; direction: "asc" | "desc" } | null;
+    onSortChange: (
+      sort: { id: string; direction: "asc" | "desc" } | null,
+    ) => void;
+  }) => {
+    const sortableColumns = columns.filter((column) => column.sortable);
+    const nextSort = (column: (typeof columns)[number]) => {
+      if (sort?.id !== column.key) {
+        return { id: column.key, direction: "asc" as const };
+      }
+      if (sort.direction === "asc") {
+        return { id: column.key, direction: "desc" as const };
+      }
+      return null;
+    };
+
+    return (
+      <div>
+        {sortableColumns.map((column) => {
+          const label = column.sortLabel ?? column.header;
+          const direction = sort?.id === column.key ? sort.direction : null;
+          const action =
+            direction === "asc"
+              ? `Sort by ${label} descending`
+              : direction === "desc"
+                ? `Clear sort for ${label}`
+                : `Sort by ${label} ascending`;
+          return (
+            <button
+              data-sortable-id={column.key}
+              key={column.key}
+              onClick={() => onSortChange(nextSort(column))}
+            >
+              {action}
+            </button>
+          );
+        })}
+        {data.length === 0
+          ? noResultsMessage
+          : data.map((skill) => (
+              <div data-testid="skill-row" key={skill.id}>
+                {columns.slice(0, 1).map((column) => (
+                  <div key={column.key}>{column.render?.(skill)}</div>
+                ))}
+              </div>
+            ))}
+      </div>
+    );
+  },
 }));
 
 function makeSkills(count: number): Array<Record<string, unknown>> {
@@ -304,6 +347,12 @@ function makeSuggestion(index: number): Record<string, unknown> {
     skillName: `example-${index}`,
     status: "open",
   };
+}
+
+function renderedSkillNames(): string[] {
+  return screen
+    .getAllByTestId("skill-row")
+    .map((row) => row.querySelector("a")?.textContent ?? "");
 }
 
 beforeEach(() => {
@@ -344,6 +393,135 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  it("sorts the approved columns through header controls without a toolbar sort", () => {
+    render(<SkillsList />);
+
+    expect(
+      screen
+        .getAllByRole("button", { name: /sort by .* ascending/i })
+        .map((button) => button.getAttribute("data-sortable-id")),
+    ).toEqual([
+      "name",
+      "source",
+      "activations",
+      "efficacy",
+      "estimatedSavings",
+      "updated",
+    ]);
+    expect(
+      screen.queryByRole("button", { name: "Apply metric sort" }),
+    ).toBeNull();
+  });
+
+  it("sorts the current server page by skill and clears back to backend order", () => {
+    testState.skills = [
+      { ...makeSkills(1)[0], id: "zulu", displayName: "Zulu" },
+      { ...makeSkills(1)[0], id: "alpha", displayName: "Alpha" },
+      { ...makeSkills(1)[0], id: "mike", displayName: "Mike" },
+    ];
+    render(<SkillsList />);
+
+    expect(renderedSkillNames()).toEqual(["Zulu", "Alpha", "Mike"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Skill ascending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Alpha", "Mike", "Zulu"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Skill descending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Zulu", "Mike", "Alpha"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clear sort for Skill" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Zulu", "Alpha", "Mike"]);
+    expect(testState.metricSkillRequests).toEqual([]);
+  });
+
+  it("sorts activations across loaded pages and keeps missing efficacy values last", () => {
+    testState.skills = [
+      { ...makeSkills(1)[0], id: "missing", displayName: "Missing" },
+      { ...makeSkills(1)[0], id: "high", displayName: "High" },
+      { ...makeSkills(1)[0], id: "low", displayName: "Low" },
+    ];
+    testState.insightsData = {
+      result: {
+        insights: [
+          {
+            skillId: "high",
+            metrics: {
+              activations: 5,
+              efficacy: { averageScore: 0.9, estimatedMinutesSavedTotal: 9 },
+            },
+          },
+          {
+            skillId: "low",
+            metrics: {
+              activations: 2,
+              efficacy: { averageScore: 0.2, estimatedMinutesSavedTotal: 2 },
+            },
+          },
+        ],
+      },
+    };
+    render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["Missing", "Low", "High"]);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["High", "Low", "Missing"]);
+    expect(testState.metricSkillRequests).not.toEqual([]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Efficacy ascending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Low", "High", "Missing"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Efficacy descending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["High", "Low", "Missing"]);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Estimated savings ascending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["Low", "High", "Missing"]);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Estimated savings descending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["High", "Low", "Missing"]);
+  });
+
+  it("keeps an active header sort when search resets pagination", () => {
+    render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Example 50")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
+    expect(screen.getByText("Example 0")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    ).toBeTruthy();
+  });
+
   it("requests suggestion pages with the exact supported limit", () => {
     render(<SkillsList />);
 
@@ -370,7 +548,11 @@ describe("SkillsList pagination surfaces", () => {
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
     render(<SkillsList />);
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
 
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
     expect(screen.getByText("Unable to load more skills.")).toBeTruthy();
@@ -390,7 +572,11 @@ describe("SkillsList pagination surfaces", () => {
     testState.error = new Error("next page failed");
     render(<SkillsList />);
     fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
 
     expect(
       screen.getByText("Search incomplete. Retry to check remaining skills."),
@@ -432,7 +618,11 @@ describe("SkillsList pagination surfaces", () => {
 
     expect(testState.fetchNextPage).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
     await waitFor(() => expect(testState.fetchNextPage).toHaveBeenCalledOnce());
     expect(
       screen.getByText("Loading all skills to finish this view..."),
@@ -457,7 +647,11 @@ describe("SkillsList pagination surfaces", () => {
     testState.insightsError = new Error("insights unavailable");
     render(<SkillsList />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
 
     await waitFor(() =>
       expect(screen.getAllByTestId("skill-row")).toHaveLength(50),
