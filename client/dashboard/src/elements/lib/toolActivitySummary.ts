@@ -6,6 +6,22 @@ export interface HeuristicToolCall {
 }
 
 /**
+ * Tools that describe the agent's own scaffolding rather than the work the user
+ * asked for. A turn made up only of these produces a label that says nothing
+ * ("Calling Compose…"), so it degrades to a neutral phrase instead — and the
+ * server-side summarizer is told to fall back to the user's request.
+ */
+const GENERIC_TOOL_NAMES = new Set(["compose", "think", "plan", "respond"]);
+
+/** True when every call is a scaffolding tool, so the names carry no signal. */
+export function isGenericToolActivity(names: string[]): boolean {
+  return (
+    names.length > 0 &&
+    names.every((name) => GENERIC_TOOL_NAMES.has(name.toLowerCase()))
+  );
+}
+
+/**
  * describeToolActivity produces an instant, human-readable label for a turn's
  * tool activity from the tool names alone — no model call. It's the fallback
  * shown immediately (and whenever a richer LLM summary is unavailable), so it
@@ -19,7 +35,9 @@ export function describeToolActivity(
 ): string {
   const names = toolCalls.map((call) => call.name).filter(Boolean);
 
-  if (names.length === 0) {
+  // No names, or only scaffolding tools — naming them would tell the user
+  // nothing about their task.
+  if (names.length === 0 || isGenericToolActivity(names)) {
     return inProgress ? "Working…" : "Done";
   }
 

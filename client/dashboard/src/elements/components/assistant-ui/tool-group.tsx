@@ -55,17 +55,7 @@ export const ToolGroup: FC<
     for (let i = startIndex; i <= endIndex; i++) {
       const part = message.parts[i];
       if (part?.type !== "tool-call") continue;
-      let args: string | undefined;
-      if (typeof part.argsText === "string" && part.argsText.length > 0) {
-        args = part.argsText;
-      } else if (part.args != null) {
-        try {
-          args = JSON.stringify(part.args);
-        } catch {
-          args = undefined;
-        }
-      }
-      calls.push({ name: part.toolName, arguments: args });
+      calls.push({ name: part.toolName });
     }
     return JSON.stringify(calls);
   });

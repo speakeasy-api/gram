@@ -919,12 +919,13 @@ export interface ToolsConfig {
 
 /**
  * A single tool call passed to a {@link ToolActivitySummarizer}.
+ *
+ * Only the tool name is carried: arguments can contain credentials or other
+ * user secrets, so they are never sent to a summarizer.
  */
 export interface ToolActivityCall {
   /** The tool name. */
   name: string;
-  /** The tool arguments serialized as a JSON string, when available. */
-  arguments?: string;
 }
 
 /**

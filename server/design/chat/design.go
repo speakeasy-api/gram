@@ -468,13 +468,13 @@ var SummarizeChatResult = Type("SummarizeChatResult", func() {
 	Required("summary", "summary_generated_at", "cached")
 })
 
+// ToolActivityCall carries only the tool name on purpose: arguments can embed
+// credentials or other user secrets, and forwarding them to the summarizing
+// model would be an exfiltration path for no meaningful gain in label quality.
 var ToolActivityCall = Type("ToolActivityCall", func() {
 	Attribute("name", String, "The tool name.", func() {
 		MinLength(1)
 		MaxLength(256)
-	})
-	Attribute("arguments", String, "The tool arguments as a JSON string, if available. Values longer than 600 characters are rejected; callers should truncate first.", func() {
-		MaxLength(600)
 	})
 	Required("name")
 })

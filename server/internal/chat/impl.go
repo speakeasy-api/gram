@@ -1880,9 +1880,6 @@ const (
 	// maxToolActivitySummaryRunes caps the label the model returns, so a
 	// non-conforming (paragraph-length) response can't blow out the header.
 	maxToolActivitySummaryRunes = 120
-	// maxToolActivityArgumentRunes caps one tool call's argument blob so a large
-	// payload can't dominate the prompt.
-	maxToolActivityArgumentRunes = 600
 	// maxToolActivityUserMessageRunes caps the user prompt fed to the model.
 	maxToolActivityUserMessageRunes = 2000
 	// toolActivitySummaryTimeout bounds the summarization call. It runs on the hot
@@ -2048,6 +2045,10 @@ func (s *Service) SummarizeToolActivity(ctx context.Context, payload *gen.Summar
 		"The tools are listed in the order the agent called them; if the nature of the work has " +
 		"shifted over the turn, describe what the agent is doing NOW, weighting the most recent tools, " +
 		"rather than what it started with. " +
+		"Some tools are generic scaffolding (for example \"compose\", \"think\", \"plan\", \"respond\") and " +
+		"say nothing about the task; when the turn consists only of such tools, describe the user's " +
+		"underlying request instead (e.g. \"Investigating the failing deploy\"), and if there is no user " +
+		"request to draw on, reply with \"Working on it\". " +
 		"Rules: 3 to 8 words; no trailing punctuation; no surrounding quotes; " +
 		"do not mention \"tool\", \"function\", \"API\", or the raw tool names; " +
 		"describe the intent, not the mechanics. Reply with the phrase only."
@@ -2123,16 +2124,9 @@ func buildToolActivityPrompt(payload *gen.SummarizeToolActivityPayload) string {
 			continue
 		}
 		n++
-		fmt.Fprintf(&b, "%d. %s", n, truncateRunes(call.Name, maxToolActivityNameRunes))
-		if call.Arguments != nil {
-			args := strings.TrimSpace(*call.Arguments)
-			args = truncateRunes(args, maxToolActivityArgumentRunes)
-			if args != "" && args != "{}" {
-				b.WriteString(" ")
-				b.WriteString(args)
-			}
-		}
-		b.WriteString("\n")
+		// Tool names only — arguments may carry secrets and are never forwarded
+		// to the model.
+		fmt.Fprintf(&b, "%d. %s\n", n, truncateRunes(call.Name, maxToolActivityNameRunes))
 	}
 	if n == 0 {
 		return ""

@@ -14,8 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-func strptr(s string) *string { return &s }
-
+//go:fix inline
 func TestService_SummarizeToolActivity_Running(t *testing.T) {
 	t.Parallel()
 
@@ -32,11 +31,11 @@ func TestService_SummarizeToolActivity_Running(t *testing.T) {
 	ctx := initSessionCtx(t, ti)
 
 	res, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
-		UserMessage: strptr("Why are my tool calls failing?"),
+		UserMessage: new("Why are my tool calls failing?"),
 		InProgress:  true,
 		ToolCalls: []*gen.ToolActivityCall{
-			{Name: "list_deployments", Arguments: nil},
-			{Name: "get_deployment_logs", Arguments: strptr(`{"id":"abc"}`)},
+			{Name: "list_deployments"},
+			{Name: "get_deployment_logs"},
 		},
 	})
 	require.NoError(t, err)
@@ -86,6 +85,38 @@ func TestService_SummarizeToolActivity_CompletedUsesPastTense(t *testing.T) {
 	client.AssertExpectations(t)
 }
 
+func TestService_SummarizeToolActivity_GenericToolFallsBackToUserRequest(t *testing.T) {
+	t.Parallel()
+
+	client := &mockCompletionClient{}
+	var captured openrouter.CompletionRequest
+	client.On("GetCompletion", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			captured, _ = args.Get(1).(openrouter.CompletionRequest)
+		}).
+		Return(assistantTextResponse("Investigating the failing deploy"), nil).
+		Once()
+
+	ti := newTestChatServiceWithCompletion(t, client)
+	ctx := initSessionCtx(t, ti)
+
+	// A turn that only called a generic "compose" tool: the tool name says
+	// nothing, so the label must come from the user's request instead.
+	_, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
+		UserMessage: new("Why did my deploy fail?"),
+		InProgress:  true,
+		ToolCalls:   []*gen.ToolActivityCall{{Name: "compose"}},
+	})
+	require.NoError(t, err)
+
+	promptJSON, err := json.Marshal(captured.Messages)
+	require.NoError(t, err)
+	prompt := string(promptJSON)
+	require.Contains(t, prompt, "generic scaffolding")
+	require.Contains(t, prompt, "Why did my deploy fail?")
+	client.AssertExpectations(t)
+}
+
 func TestService_SummarizeToolActivity_BoundsLongOutput(t *testing.T) {
 	t.Parallel()
 
@@ -123,7 +154,7 @@ func TestService_SummarizeToolActivity_SanitizesOutput(t *testing.T) {
 	res, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
 		InProgress: false,
 		ToolCalls: []*gen.ToolActivityCall{
-			{Name: "search_web", Arguments: strptr(`{"q":"pricing"}`)},
+			{Name: "search_web"},
 		},
 	})
 	require.NoError(t, err)

@@ -2453,9 +2453,6 @@ type ChatTotalsResponseBody struct {
 type ToolActivityCallRequestBody struct {
 	// The tool name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The tool arguments as a JSON string, if available. Values longer than 600
-	// characters are rejected; callers should truncate first.
-	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 }
 
 // NewListChatsResponseBody builds the HTTP response body from the result of
@@ -4463,11 +4460,6 @@ func ValidateToolActivityCallRequestBody(body *ToolActivityCallRequestBody) (err
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 256, false))
-		}
-	}
-	if body.Arguments != nil {
-		if utf8.RuneCountInString(*body.Arguments) > 600 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.arguments", *body.Arguments, utf8.RuneCountInString(*body.Arguments), 600, false))
 		}
 	}
 	return

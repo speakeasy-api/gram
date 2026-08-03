@@ -37,10 +37,8 @@ export function createToolActivitySummarizer(
           signal,
           headers,
           body: JSON.stringify({
-            tool_calls: toolCalls.map((call) => ({
-              name: call.name,
-              arguments: call.arguments,
-            })),
+            // Names only — arguments may carry secrets and are never sent.
+            tool_calls: toolCalls.map((call) => ({ name: call.name })),
             user_message: userMessage,
             in_progress: inProgress,
           }),
