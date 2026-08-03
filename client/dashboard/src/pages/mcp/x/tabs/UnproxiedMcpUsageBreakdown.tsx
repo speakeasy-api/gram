@@ -137,13 +137,17 @@ function ToolsUsageTable({
   from: Date;
   to: Date;
 }): JSX.Element {
-  const [scope, setScope] = useState(url);
+  // Includes from/to, not just url: changing the date range must reset
+  // pagination the same way switching servers does, or a stale cursor from
+  // the previous range gets appended to the new range's rows.
+  const scopeKey = `${url}|${from.toISOString()}|${to.toISOString()}`;
+  const [scope, setScope] = useState(scopeKey);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [rows, setRows] = useState<UnproxiedMcpServerToolUsageRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
 
-  if (scope !== url) {
-    setScope(url);
+  if (scope !== scopeKey) {
+    setScope(scopeKey);
     setCursor(undefined);
     setRows([]);
     setNextCursor(undefined);
@@ -216,13 +220,17 @@ function UsersUsageTable({
   from: Date;
   to: Date;
 }): JSX.Element {
-  const [scope, setScope] = useState(url);
+  // Includes from/to, not just url: changing the date range must reset
+  // pagination the same way switching servers does, or a stale cursor from
+  // the previous range gets appended to the new range's rows.
+  const scopeKey = `${url}|${from.toISOString()}|${to.toISOString()}`;
+  const [scope, setScope] = useState(scopeKey);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [rows, setRows] = useState<UnproxiedMcpServerUserUsageRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
 
-  if (scope !== url) {
-    setScope(url);
+  if (scope !== scopeKey) {
+    setScope(scopeKey);
     setCursor(undefined);
     setRows([]);
     setNextCursor(undefined);
@@ -286,13 +294,17 @@ function ClientsUsageTable({
   from: Date;
   to: Date;
 }): JSX.Element {
-  const [scope, setScope] = useState(url);
+  // Includes from/to, not just url: changing the date range must reset
+  // pagination the same way switching servers does, or a stale cursor from
+  // the previous range gets appended to the new range's rows.
+  const scopeKey = `${url}|${from.toISOString()}|${to.toISOString()}`;
+  const [scope, setScope] = useState(scopeKey);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [rows, setRows] = useState<UnproxiedMcpServerClientUsageRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
 
-  if (scope !== url) {
-    setScope(url);
+  if (scope !== scopeKey) {
+    setScope(scopeKey);
     setCursor(undefined);
     setRows([]);
     setNextCursor(undefined);
