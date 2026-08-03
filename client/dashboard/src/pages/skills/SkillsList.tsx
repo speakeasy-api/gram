@@ -329,7 +329,7 @@ export default function SkillsList(): JSX.Element {
         ) : null,
     },
     {
-      key: "open",
+      key: "actions",
       header: "",
       width: "48px",
       render: () => (
