@@ -2957,7 +2957,8 @@ func marshalChatChatTotalsToChatTotalsResponseBody(v *chat.ChatTotals) *ChatTota
 // *ToolActivityCallRequestBody.
 func unmarshalToolActivityCallRequestBodyToChatToolActivityCall(v *ToolActivityCallRequestBody) *chat.ToolActivityCall {
 	res := &chat.ToolActivityCall{
-		Name: *v.Name,
+		Name:      *v.Name,
+		Arguments: v.Arguments,
 	}
 
 	return res

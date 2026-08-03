@@ -632,6 +632,10 @@ type SummarizeToolActivityResult struct {
 type ToolActivityCall struct {
 	// The tool name.
 	Name string
+	// The tool arguments as a JSON string, if available. Values longer than 600
+	// characters are rejected; callers should truncate first. Detected secrets are
+	// redacted server-side before the arguments are summarized.
+	Arguments *string
 }
 
 type WorkUnitsTrendBucket struct {

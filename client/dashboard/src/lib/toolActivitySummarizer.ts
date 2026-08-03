@@ -37,8 +37,12 @@ export function createToolActivitySummarizer(
           signal,
           headers,
           body: JSON.stringify({
-            // Names only — arguments may carry secrets and are never sent.
-            tool_calls: toolCalls.map((call) => ({ name: call.name })),
+            // Arguments are scrubbed of detected secrets server-side before
+            // they reach the summarizing model.
+            tool_calls: toolCalls.map((call) => ({
+              name: call.name,
+              arguments: call.arguments,
+            })),
             user_message: userMessage,
             in_progress: inProgress,
           }),

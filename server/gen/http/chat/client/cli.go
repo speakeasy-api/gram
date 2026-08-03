@@ -609,7 +609,7 @@ func BuildSummarizeToolActivityPayload(chatSummarizeToolActivityBody string, cha
 	{
 		err = json.Unmarshal([]byte(chatSummarizeToolActivityBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"in_progress\": false,\n      \"tool_calls\": [\n         {\n            \"name\": \"aa\"\n         },\n         {\n            \"name\": \"aa\"\n         }\n      ],\n      \"user_message\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"in_progress\": false,\n      \"tool_calls\": [\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aa\"\n         },\n         {\n            \"arguments\": \"aaa\",\n            \"name\": \"aa\"\n         }\n      ],\n      \"user_message\": \"aaa\"\n   }'")
 		}
 		if body.ToolCalls == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))

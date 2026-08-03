@@ -6,6 +6,10 @@ import * as z from "zod/v4-mini";
 
 export type ToolActivityCall = {
   /**
+   * The tool arguments as a JSON string, if available. Values longer than 600 characters are rejected; callers should truncate first. Detected secrets are redacted server-side before the arguments are summarized.
+   */
+  arguments?: string | undefined;
+  /**
    * The tool name.
    */
   name: string;
@@ -13,6 +17,7 @@ export type ToolActivityCall = {
 
 /** @internal */
 export type ToolActivityCall$Outbound = {
+  arguments?: string | undefined;
   name: string;
 };
 
@@ -21,6 +26,7 @@ export const ToolActivityCall$outboundSchema: z.ZodMiniType<
   ToolActivityCall$Outbound,
   ToolActivityCall
 > = z.object({
+  arguments: z.optional(z.string()),
   name: z.string(),
 });
 

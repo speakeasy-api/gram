@@ -2891,7 +2891,8 @@ func unmarshalChatTotalsResponseBodyToChatChatTotals(v *ChatTotalsResponseBody) 
 // *chat.ToolActivityCall.
 func marshalChatToolActivityCallToToolActivityCallRequestBody(v *chat.ToolActivityCall) *ToolActivityCallRequestBody {
 	res := &ToolActivityCallRequestBody{
-		Name: v.Name,
+		Name:      v.Name,
+		Arguments: v.Arguments,
 	}
 
 	return res
@@ -2902,7 +2903,8 @@ func marshalChatToolActivityCallToToolActivityCallRequestBody(v *chat.ToolActivi
 // *ToolActivityCallRequestBody.
 func marshalToolActivityCallRequestBodyToChatToolActivityCall(v *ToolActivityCallRequestBody) *chat.ToolActivityCall {
 	res := &chat.ToolActivityCall{
-		Name: v.Name,
+		Name:      v.Name,
+		Arguments: v.Arguments,
 	}
 
 	return res

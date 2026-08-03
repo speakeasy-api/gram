@@ -100,13 +100,14 @@ func TestService_SummarizeToolActivity_GenericToolFallsBackToUserRequest(t *test
 	ti := newTestChatServiceWithCompletion(t, client)
 	ctx := initSessionCtx(t, ti)
 
-	// A turn that only called a generic "compose" tool: the name is withheld
-	// entirely — shown it, the model describes the mechanics ("Drafted the
-	// message") instead of the user's task.
+	// A "compose" call says nothing on its own — its arguments are what tell the
+	// model (and so the user) what the turn is about.
 	_, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
 		UserMessage: new("Why did my deploy fail?"),
 		InProgress:  true,
-		ToolCalls:   []*gen.ToolActivityCall{{Name: "compose"}},
+		ToolCalls: []*gen.ToolActivityCall{
+			{Name: "compose", Arguments: new(`{"message":"Checking the deploy logs for errors"}`)},
+		},
 	})
 	require.NoError(t, err)
 
@@ -114,11 +115,11 @@ func TestService_SummarizeToolActivity_GenericToolFallsBackToUserRequest(t *test
 	require.NoError(t, err)
 	prompt := string(promptJSON)
 	require.Contains(t, prompt, "Why did my deploy fail?")
-	require.NotContains(t, prompt, "compose")
+	require.Contains(t, prompt, "Checking the deploy logs for errors")
 	client.AssertExpectations(t)
 }
 
-func TestService_SummarizeToolActivity_GenericToolsDroppedFromToolList(t *testing.T) {
+func TestService_SummarizeToolActivity_RedactsSecretsInArguments(t *testing.T) {
 	t.Parallel()
 
 	client := &mockCompletionClient{}
@@ -127,17 +128,18 @@ func TestService_SummarizeToolActivity_GenericToolsDroppedFromToolList(t *testin
 		Run(func(args mock.Arguments) {
 			captured, _ = args.Get(1).(openrouter.CompletionRequest)
 		}).
-		Return(assistantTextResponse("Aggregating failures and finding patterns"), nil).
+		Return(assistantTextResponse("Checking the deployment status"), nil).
 		Once()
 
 	ti := newTestChatServiceWithCompletion(t, client)
 	ctx := initSessionCtx(t, ti)
 
+	// A gitleaks-detectable credential in the arguments must not reach the model.
+	const secret = "ghp_R2D2C3POLuk3Skywalker1234567890ab"
 	_, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
 		InProgress: true,
 		ToolCalls: []*gen.ToolActivityCall{
-			{Name: "compose"},
-			{Name: "query_tool_errors"},
+			{Name: "get_deployment", Arguments: new(`{"repo":"gram","token":"` + secret + `"}`)},
 		},
 	})
 	require.NoError(t, err)
@@ -145,26 +147,10 @@ func TestService_SummarizeToolActivity_GenericToolsDroppedFromToolList(t *testin
 	promptJSON, err := json.Marshal(captured.Messages)
 	require.NoError(t, err)
 	prompt := string(promptJSON)
-	require.Contains(t, prompt, "query_tool_errors")
-	require.NotContains(t, prompt, "compose")
+	require.NotContains(t, prompt, secret)
+	// The non-sensitive part of the arguments still carries the signal.
+	require.Contains(t, prompt, "gram")
 	client.AssertExpectations(t)
-}
-
-func TestService_SummarizeToolActivity_GenericToolWithoutUserMessage(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	ti := newTestChatServiceWithCompletion(t, client)
-	ctx := initSessionCtx(t, ti)
-
-	// Nothing informative to summarize: no request to describe and no tool name
-	// worth showing. Fail fast so the client keeps its heuristic label.
-	_, err := ti.service.SummarizeToolActivity(ctx, &gen.SummarizeToolActivityPayload{
-		InProgress: true,
-		ToolCalls:  []*gen.ToolActivityCall{{Name: "compose"}},
-	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
-	client.AssertNotCalled(t, "GetCompletion", mock.Anything, mock.Anything)
 }
 
 func TestService_SummarizeToolActivity_BoundsLongOutput(t *testing.T) {

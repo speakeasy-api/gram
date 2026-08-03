@@ -919,13 +919,17 @@ export interface ToolsConfig {
 
 /**
  * A single tool call passed to a {@link ToolActivitySummarizer}.
- *
- * Only the tool name is carried: arguments can contain credentials or other
- * user secrets, so they are never sent to a summarizer.
  */
 export interface ToolActivityCall {
   /** The tool name. */
   name: string;
+  /**
+   * The tool arguments serialized as a JSON string, when available. For tools
+   * whose name says nothing about the task (`compose`), these carry the only
+   * signal. A summarizer that forwards them to a model is responsible for
+   * redacting secrets first — Gram's does so server-side.
+   */
+  arguments?: string;
 }
 
 /**

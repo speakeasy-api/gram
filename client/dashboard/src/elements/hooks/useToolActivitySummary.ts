@@ -8,6 +8,8 @@ import type { ToolActivityCall } from "@/elements/types";
 
 /** How long to wait after the tool set stops changing before summarizing. */
 const SUMMARIZE_DEBOUNCE_MS = 400;
+/** Cap per-call arguments sent over the wire; the endpoint rejects longer. */
+const MAX_ARGUMENT_CHARS = 600;
 /** Cap the user prompt sent over the wire; the endpoint rejects longer. */
 const MAX_USER_MESSAGE_CHARS = 2000;
 /** Cap how many calls are sent; the server summarizes at most this many. */
@@ -157,9 +159,10 @@ export function useToolActivitySummary({
             // Only the most recent calls matter for the current task, and the
             // server bounds the count too — send a recent window, not the whole
             // (unbounded) turn history.
-            toolCalls: toolCalls
-              .slice(-MAX_TOOL_CALLS)
-              .map((call) => ({ name: call.name })),
+            toolCalls: toolCalls.slice(-MAX_TOOL_CALLS).map((call) => ({
+              name: call.name,
+              arguments: call.arguments?.slice(0, MAX_ARGUMENT_CHARS),
+            })),
             userMessage: userMessage?.slice(0, MAX_USER_MESSAGE_CHARS),
             inProgress,
             signal: controller.signal,
