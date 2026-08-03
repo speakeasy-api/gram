@@ -337,6 +337,7 @@ export function LiteLLMIntegrationRow(): JSX.Element {
           open
           onOpenChange={setCreateOpen}
           projects={projects}
+          initialProjectSlug={selectedProjectSlug}
           onProjectCreated={setProjectSlug}
         />
       ) : null}
@@ -374,15 +375,17 @@ export function CreateInstanceDialog({
   open,
   onOpenChange,
   projects,
+  initialProjectSlug,
   onProjectCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projects: Array<{ id: string; name: string; slug: string }>;
+  initialProjectSlug: string;
   onProjectCreated: (projectSlug: string) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const [projectSlug, setProjectSlug] = useState("");
+  const [projectSlug, setProjectSlug] = useState(initialProjectSlug);
   const [name, setName] = useState("");
   const [failurePosture, setFailurePosture] =
     useState<FailurePosture>("fail_closed");

@@ -2,7 +2,10 @@ import type { LiteLLMInstanceFailurePosture } from "@gram/client/models/componen
 
 function apiBase(serverURL: string): string {
   const url = new URL(serverURL);
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  const loopback =
+    url.hostname === "localhost" ||
+    url.hostname === "[::1]" ||
+    url.hostname.startsWith("127.");
   if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
     throw new Error("LiteLLM integration endpoints require HTTPS");
   }

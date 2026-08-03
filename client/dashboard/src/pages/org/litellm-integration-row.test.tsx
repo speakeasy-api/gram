@@ -139,6 +139,7 @@ describe("LiteLLM integration dialogs", () => {
         open
         onOpenChange={onOpenChange}
         projects={[{ id: "project-test", name: "Project", slug: "project" }]}
+        initialProjectSlug="project"
         onProjectCreated={() => {}}
       />,
     );
@@ -162,6 +163,7 @@ describe("LiteLLM integration dialogs", () => {
         open
         onOpenChange={() => {}}
         projects={[{ id: "project-test", name: "Project", slug: "project" }]}
+        initialProjectSlug="project"
         onProjectCreated={onProjectCreated}
       />,
     );

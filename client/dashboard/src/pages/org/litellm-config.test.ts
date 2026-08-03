@@ -53,6 +53,11 @@ describe("LiteLLM configuration", () => {
     ).toContain(
       'export OTEL_ENDPOINT="http://localhost:8080/rpc/litellm.otel"',
     );
+    expect(
+      buildLiteLLMEnvironment("http://127.0.0.2:8080", "my-project"),
+    ).toContain(
+      'export OTEL_ENDPOINT="http://127.0.0.2:8080/rpc/litellm.otel"',
+    );
     expect(() =>
       buildLiteLLMEnvironment("ftp://localhost", "my-project"),
     ).toThrow("LiteLLM integration endpoints require HTTPS");
