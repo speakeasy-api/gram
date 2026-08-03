@@ -32,6 +32,7 @@ import { HooksServerNames } from "./hooksservernames.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
+import { Litellm } from "./litellm.js";
 import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
@@ -214,6 +215,11 @@ export class Gram extends ClientSDK {
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
+  }
+
+  private _litellm?: Litellm;
+  get litellm(): Litellm {
+    return (this._litellm ??= new Litellm(this._options));
   }
 
   private _mcpEndpoints?: McpEndpoints;

@@ -77,7 +77,10 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	if method == TokenEndpointAuthMethodBasic {
-		req.SetBasicAuth(clientID, clientSecret)
+		// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
+		// going into the Basic authorization header. Upstreams that decode per
+		// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
+		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
 	}
 	return req, nil
 }

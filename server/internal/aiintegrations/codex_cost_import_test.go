@@ -59,10 +59,18 @@ func TestBuildCodexCostLogParamsVerifiesSHAAndMapsTelemetry(t *testing.T) {
 	require.Equal(t, "GPT-5.5 - Output,GPT-5.5 - Input,GPT-5.5 - Cached Input", attrs[attr.CodexComplianceBillingSKUsKey])
 	require.Equal(t, "org-openai", attrs[attr.ExternalOrgIDKey])
 	require.Equal(t, "gpt-5.5", attrs[attr.GenAIResponseModelKey])
-	require.Equal(t, int64(75348), attrs[attr.GenAIUsageInputTokensKey])
-	require.Equal(t, int64(879616), attrs[attr.GenAIUsageCacheReadInputTokensKey])
-	require.Equal(t, int64(4858), attrs[attr.GenAIUsageOutputTokensKey])
-	require.Equal(t, int64(959822), attrs[attr.GenAIUsageTotalTokensKey])
+	// Codex rows meter cost only: gen_ai.usage token counts would double
+	// count metering against the Codex OTEL stream, the token source of
+	// truth. The raw counts are preserved under codex.compliance.* keys,
+	// which nothing sums.
+	require.NotContains(t, attrs, attr.GenAIUsageInputTokensKey)
+	require.NotContains(t, attrs, attr.GenAIUsageCacheReadInputTokensKey)
+	require.NotContains(t, attrs, attr.GenAIUsageOutputTokensKey)
+	require.NotContains(t, attrs, attr.GenAIUsageTotalTokensKey)
+	require.Equal(t, int64(75348), attrs[attr.CodexComplianceInputTokensKey])
+	require.Equal(t, int64(879616), attrs[attr.CodexComplianceCachedInputTokensKey])
+	require.Equal(t, int64(4858), attrs[attr.CodexComplianceOutputTokensKey])
+	require.Equal(t, int64(959822), attrs[attr.CodexComplianceTotalTokensKey])
 	require.InDelta(t, 0.962288, attrs[attr.GenAIUsageCostKey], 0.000001)
 }
 
@@ -98,6 +106,15 @@ func TestBuildCodexCostLogParamsRoutesNonCodexProductsToChatGPTURN(t *testing.T)
 	require.Equal(t, codexUsageMetricsURN, codexRow.Attributes[attr.ResourceURNKey])
 	require.Equal(t, codexHookSource, codexRow.Attributes[attr.HookSourceKey])
 	require.Equal(t, "codex", codexRow.Attributes[attr.CodexComplianceProductKey])
+	// Metered cost only on the codex row; the raw token counts move to the
+	// codex.compliance.* keys, out of reach of the agent-usage predicates.
+	require.NotContains(t, codexRow.Attributes, attr.GenAIUsageInputTokensKey)
+	require.NotContains(t, codexRow.Attributes, attr.GenAIUsageOutputTokensKey)
+	require.NotContains(t, codexRow.Attributes, attr.GenAIUsageTotalTokensKey)
+	require.Equal(t, int64(10), codexRow.Attributes[attr.CodexComplianceInputTokensKey])
+	require.Equal(t, int64(5), codexRow.Attributes[attr.CodexComplianceOutputTokensKey])
+	require.Equal(t, int64(15), codexRow.Attributes[attr.CodexComplianceTotalTokensKey])
+	require.InDelta(t, 0.02, codexRow.Attributes[attr.GenAIUsageCostKey], 0.000001)
 
 	chatgptRow := logParams[1]
 	require.Equal(t, chatgptUsageMetricsURN, chatgptRow.ToolInfo.URN)
@@ -105,13 +122,24 @@ func TestBuildCodexCostLogParamsRoutesNonCodexProductsToChatGPTURN(t *testing.T)
 	require.Equal(t, chatgptUsageMetricsURN, chatgptRow.Attributes[attr.ResourceURNKey])
 	require.Equal(t, chatgptHookSource, chatgptRow.Attributes[attr.HookSourceKey])
 	require.Equal(t, "ChatGPT", chatgptRow.Attributes[attr.CodexComplianceProductKey])
+	// Parked non-Codex rows keep gen_ai.usage token counts — the compliance
+	// feed is their only usage source — and gain no codex.compliance.* copies.
+	require.Equal(t, int64(20), chatgptRow.Attributes[attr.GenAIUsageInputTokensKey])
+	require.Equal(t, int64(8), chatgptRow.Attributes[attr.GenAIUsageOutputTokensKey])
+	require.Equal(t, int64(28), chatgptRow.Attributes[attr.GenAIUsageTotalTokensKey])
+	require.NotContains(t, chatgptRow.Attributes, attr.CodexComplianceInputTokensKey)
 
 	workRow := logParams[2]
 	require.Equal(t, chatgptUsageMetricsURN, workRow.ToolInfo.URN)
-	require.Equal(t, chatgptHookSource, workRow.ToolInfo.Name)
+	// Work shares the chatgpt URN but gets its own hook_source: hook_source
+	// is a summary GROUP BY dimension, so this is what keeps ChatGPT and
+	// Work spend separable after the raw rows age out.
+	require.Equal(t, chatgptWorkHookSource, workRow.ToolInfo.Name)
+	require.Equal(t, chatgptWorkHookSource, workRow.Attributes[attr.HookSourceKey])
 	require.Equal(t, "Work", workRow.Attributes[attr.CodexComplianceProductKey])
+	require.Equal(t, int64(30), workRow.Attributes[attr.GenAIUsageInputTokensKey])
 	// Billing still prices non-Codex rows; the cost just lands under the
-	// parked URN instead of the codex stream.
+	// chatgpt URN instead of the codex stream.
 	require.InDelta(t, 0.04, workRow.Attributes[attr.GenAIUsageCostKey], 0.000001)
 }
 

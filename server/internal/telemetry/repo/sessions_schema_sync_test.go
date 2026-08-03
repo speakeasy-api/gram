@@ -25,7 +25,7 @@ var sessionSharedPredicateFragments = []string{
 	// tool_result row markers.
 	"(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')",
 	// Agent usage-row URN prefixes.
-	"(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))",
+	"(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))",
 	// Agent completed tool-call hook rows.
 	"hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')",
 	// Tool-call dedup identity.

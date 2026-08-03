@@ -3,6 +3,7 @@ import type { ShadowMCPInventoryServer } from "@gram/client/models/components/sh
 import { describe, expect, it } from "vitest";
 import {
   eligibleShadowMCPAllowRulePolicies,
+  shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusDescription,
   shadowMCPPolicyState,
@@ -36,6 +37,7 @@ function server(
   return {
     access: "none",
     allowedPolicyIds: [],
+    blockedPolicyIds: [],
     canonicalServerUrl: "https://example.com/mcp",
     firstSeen: new Date("2026-01-01T00:00:00Z"),
     lastSeen: new Date("2026-01-02T00:00:00Z"),
@@ -162,5 +164,25 @@ describe("shadowMCPInventoryStatus", () => {
     expect(
       shadowMCPInventoryStatusDescription(server({ access: "none" }), "none"),
     ).toBe("Not blocking");
+  });
+});
+
+describe("shadowMCPBlockingPolicyDisposition", () => {
+  it("returns null with no blocking policies", () => {
+    expect(shadowMCPBlockingPolicyDisposition([])).toBeNull();
+  });
+
+  it("returns allow_all only when every blocking policy declares it", () => {
+    expect(
+      shadowMCPBlockingPolicyDisposition([
+        { shadowMcpDisposition: "allow_all" },
+      ]),
+    ).toBe("allow_all");
+    expect(
+      shadowMCPBlockingPolicyDisposition([
+        { shadowMcpDisposition: "allow_all" },
+        { shadowMcpDisposition: undefined },
+      ]),
+    ).toBe("block_all");
   });
 });

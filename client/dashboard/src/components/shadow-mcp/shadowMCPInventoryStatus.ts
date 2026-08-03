@@ -15,6 +15,23 @@ export type ShadowMCPInventoryStatus =
   | "pending"
   | "unavailable";
 
+export type ShadowMCPPolicyDisposition = "block_all" | "allow_all";
+
+/**
+ * The effective disposition of the project's enabled blocking shadow MCP
+ * policies, or null when none exist. With legacy multi-policy data,
+ * deny-by-default wins: allow_all only applies when every blocking policy
+ * declares it.
+ */
+export function shadowMCPBlockingPolicyDisposition(
+  policies: Pick<RiskPolicy, "shadowMcpDisposition">[],
+): ShadowMCPPolicyDisposition | null {
+  if (policies.length === 0) return null;
+  return policies.every((policy) => policy.shadowMcpDisposition === "allow_all")
+    ? "allow_all"
+    : "block_all";
+}
+
 export function eligibleShadowMCPAllowRulePolicies(
   policies: RiskPolicy[] | undefined,
 ): RiskPolicy[] {
@@ -97,12 +114,21 @@ export function shadowMCPInventoryStatusBadgeVariant(
 export function shadowMCPInventoryStatusDescription(
   server: ShadowMCPInventoryServer,
   policyState: ShadowMCPPolicyState,
+  disposition: ShadowMCPPolicyDisposition | null = null,
 ): string {
   if (server.requestCount > 0) {
     return `${server.requestCount} access ${server.requestCount === 1 ? "request" : "requests"} pending`;
   }
-  if (server.access === "allowed") return "Allowed by URL rule";
-  if (server.access === "blocked") return "Blocked by policy";
+  if (server.access === "allowed") {
+    return disposition === "allow_all"
+      ? "Allowed by default"
+      : "Allowed by URL rule";
+  }
+  if (server.access === "blocked") {
+    return disposition === "allow_all"
+      ? "Blocked by rule"
+      : "Blocked by policy";
+  }
   if (policyState === "unavailable") return "Policy status unavailable";
   if (policyState === "blocking") return "Blocked by policy";
   return "Not blocking";

@@ -1,5 +1,18 @@
 # dashboard
 
+## 0.100.0
+
+### Minor Changes
+
+- 944c4df: Shadow MCP policy creation now offers a default-disposition choice: Block all servers (allow exceptions) or Allow all servers (block exceptions). The server selector flips between picking allowed and blocked servers to match, and the disposition is shown read-only when editing since switching posture requires deleting and recreating the policy.
+- b131cea: Project assistant tool calls now render Claude-style: the assistant precedes each tool batch with a terse activity phrase ("Investigating failures in the last 30 days") which becomes the heading of a single collapsed tool group. Consecutive batches merge into one group whose heading advances (with shimmer) as the investigation progresses, groups never auto-expand, and the global thinking loader hides while a tool group is streaming. The dashboard output-channel guidance instructs the model to emit the phrase before every tool call.
+- 41626e6: Add a contract value estimator to the TUM Contract section of the billing page (platform admin only). It approximates what an enterprise account is worth under either commercial model — a committed platform fee with tiered overage, or uncommitted pay-as-you-go — off the org's observed tokens under management, and flags accounts whose overage has grown large enough relative to their base contract to warrant an expansion conversation.
+
+### Patch Changes
+
+- 6ca548f: Add the `chatgpt` and `chatgpt-work` sources to the product-surface taxonomy now that ChatGPT/Work compliance usage is admitted to the summaries. The compliance importer now routes Work rows to the `chatgpt-work` hook source (ChatGPT and unknown surfaces stay `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while the raw `codex.compliance.product` attribute is not, and summaries outlive the raw-row TTL. Also: a `chatgpt` chat source alias, ChatGPT/ChatGPT Work labels and the OpenAI mark in the dashboard label/icon maps and onboarding live-tail, broadened "OpenAI Compliance Logs" settings copy, and local seed fixtures emitting compliance-shaped `chatgpt:usage:metrics` rows for both products.
+- dd9e519: Announce the contract estimator's load failure to screen readers. The message replaces a loading skeleton after the page has settled, so without a live region there was no indication the estimate had failed or that reloading was the way to recover.
+
 ## 0.99.0
 
 ### Minor Changes
