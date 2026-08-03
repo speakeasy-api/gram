@@ -20,6 +20,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -1612,6 +1613,17 @@ func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPay
 			Type: eventType,
 		},
 	}
+}
+
+func TestMergeSourceAttributesDoesNotOverrideCanonicalFields(t *testing.T) {
+	t.Parallel()
+	base := map[attr.Key]any{attr.ProjectIDKey: "canonical-project"}
+	mergeSourceAttributes(base, map[attr.Key]any{
+		attr.ProjectIDKey:     "external-project",
+		attr.LiteLLMCallIDKey: "call-id",
+	})
+	require.Equal(t, "canonical-project", base[attr.ProjectIDKey])
+	require.Equal(t, "call-id", base[attr.LiteLLMCallIDKey])
 }
 
 // The gram.hook.event attribute vocabulary is the provider-style HookEvent

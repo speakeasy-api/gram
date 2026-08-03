@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -29,6 +30,30 @@ import (
 
 const hookIngestSchemaV1 = "hook.ingest.v1"
 
+type authenticatedIngestOptionsKey struct{}
+
+// AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
+type AuthenticatedIngestOptions struct {
+	AllowWarnAcknowledgement     bool
+	AllowSessionIdentityFallback bool
+	SourceAttributes             map[attr.Key]any
+}
+
+func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
+	return AuthenticatedIngestOptions{
+		AllowWarnAcknowledgement:     true,
+		AllowSessionIdentityFallback: true,
+		SourceAttributes:             nil,
+	}
+}
+
+func authenticatedIngestOptions(ctx context.Context) AuthenticatedIngestOptions {
+	if options, ok := ctx.Value(authenticatedIngestOptionsKey{}).(AuthenticatedIngestOptions); ok {
+		return options
+	}
+	return defaultAuthenticatedIngestOptions()
+}
+
 const (
 	canonicalSessionCacheWriteTimeout = time.Second
 	skillObservationWriteTimeout      = time.Second
@@ -47,6 +72,12 @@ func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 // IngestAuthenticated bypasses transport authentication for trusted in-process
 // callers that have already authenticated the supplied organization and project.
 func (s *Service) IngestAuthenticated(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
+	return s.IngestAuthenticatedWithOptions(ctx, authCtx, payload, defaultAuthenticatedIngestOptions())
+}
+
+// IngestAuthenticatedWithOptions bypasses transport authentication and applies
+// behavior selected by a trusted in-process caller.
+func (s *Service) IngestAuthenticatedWithOptions(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload, options AuthenticatedIngestOptions) (*gen.IngestHookResult, error) {
 	if payload == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "ingest payload is required")
 	}
@@ -63,8 +94,11 @@ func (s *Service) IngestAuthenticated(ctx context.Context, authCtx *contextvalue
 	payloadCopy := *payload
 	payloadCopy.ApikeyToken = nil
 	payloadCopy.ProjectSlugInput = nil
+	options.SourceAttributes = maps.Clone(options.SourceAttributes)
 
-	return s.Ingest(contextvalues.SetAuthContext(ctx, &authCopy), &payloadCopy)
+	ctx = contextvalues.SetAuthContext(ctx, &authCopy)
+	ctx = context.WithValue(ctx, authenticatedIngestOptionsKey{}, options)
+	return s.Ingest(ctx, &payloadCopy)
 }
 
 // Ingest is the feature-first hook endpoint; this path only accepts the
@@ -456,7 +490,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			Prompt: canonicalPromptText(payload),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" {
+			if scanResult.Action == "warn" && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
@@ -632,7 +666,7 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 
 	toolName := toolref.MCPFunctionOf(rawToolName)
 	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
-	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy.ID, toolName, evidence); denied {
+	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
 			OrganizationID:  authCtx.ActiveOrganizationID,
@@ -806,11 +840,13 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		// ingest keys with no self-reported email): the device bridge may have
 		// attributed the owning employee. A resolved identity is never
 		// overwritten.
-		if metadata.UserEmail == "" {
-			metadata.UserEmail = cached.UserEmail
-		}
-		if metadata.UserID == "" {
-			metadata.UserID = cached.UserID
+		if authenticatedIngestOptions(ctx).AllowSessionIdentityFallback {
+			if metadata.UserEmail == "" {
+				metadata.UserEmail = cached.UserEmail
+			}
+			if metadata.UserID == "" {
+				metadata.UserID = cached.UserID
+			}
 		}
 	}
 	return metadata
@@ -886,6 +922,7 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	if skill != "" && isExplicitSkillActivation(payload) {
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
 	}
+	mergeSourceAttributes(attrs, authenticatedIngestOptions(ctx).SourceAttributes)
 
 	// Carry the account attribution (provider, external_org_id, account_type,
 	// device_id) onto every hook event row so per-tool-call telemetry can be
@@ -911,8 +948,17 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.TraceIDKey] = generateTraceID()
 		attrs[attr.ToolNameKey] = "Skill"
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
+		mergeSourceAttributes(attrs, authenticatedIngestOptions(ctx).SourceAttributes)
 		stampAccountAttribution(attrs, *metadata)
 		s.logHookTelemetry(ctx, authCtx, metadata, timestamp, "Skill", attrs)
+	}
+}
+
+func mergeSourceAttributes(base, source map[attr.Key]any) {
+	for key, value := range source {
+		if _, exists := base[key]; !exists {
+			base[key] = value
+		}
 	}
 }
 

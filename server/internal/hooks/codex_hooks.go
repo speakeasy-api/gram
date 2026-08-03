@@ -132,7 +132,14 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				codexMetaServer, isCodexMetaTool := codexMCPMetaToolServer(payload)
 				var detail string
 				var denied bool
-				if isCodexMetaTool {
+				switch {
+				case policy.IsAllowAll():
+					// Permit-by-default: the blocked-list membership check is
+					// the whole gate. The fail-closed inventory/provenance
+					// checks below are block_all concepts — an unverified or
+					// unmatched server is simply allowed here.
+					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
+				case isCodexMetaTool:
 					// Codex's built-in MCP resource tools are not Gram
 					// toolset calls, so they never carry x-gram-toolset-id.
 					// Enforce them from the inventory target instead.
@@ -149,10 +156,12 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 							denied = true
 						}
 					}
-				} else {
-					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, toolName, evidence)
+				default:
+					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
 				}
-				if !denied && !isCodexMetaTool {
+				// No inventory fail-closed pass runs under allow-all; the
+				// blocked-list check above is the whole gate.
+				if !policy.IsAllowAll() && !denied && !isCodexMetaTool {
 					// The inventory snapshot pins where the call actually
 					// routes: deny when it points at a non-Gram target, or
 					// when the active inventory cannot uniquely prove the
@@ -168,7 +177,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 							detail, denied = inventoryDetail, true
 						}
 					}
-				} else if denied && !isCodexMetaTool && evidence.ServerIdentity != "" && matched == nil {
+				} else if !policy.IsAllowAll() && denied && !isCodexMetaTool && evidence.ServerIdentity != "" && matched == nil {
 					detail = fmt.Sprintf("MCP server %q could not be verified from Codex inventory", evidence.ServerIdentity)
 				}
 				if denied {

@@ -52,8 +52,10 @@ func deriveEventURN(legacyURN string, attrs map[attr.Key]any) string {
 		}
 		return urn.NewTelemetryEvent(urn.TelemetryEventOriginGramService, urn.TelemetryEventKindLog, eventType).String()
 	case EventSourceAPI:
-		// The only event_source=api writer today is the Cursor Admin API
-		// usage poller; its rows are usage measurements.
+		// event_source=api writers: the Cursor Admin API usage poller, the
+		// Anthropic Admin Analytics poller, and the OpenAI compliance COSTS
+		// import (codex:usage / chatgpt:usage rows). All are usage
+		// measurements.
 		return urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderAPI, urn.TelemetryEventKindMetric, eventTypeUsage).String()
 	case EventSourceHook:
 		return deriveHookEventURN(legacyURN, attrs)

@@ -82,6 +82,16 @@ func DeleteShadowMCPInventoryPolicyBypassAccessPath() string {
 	return "/rpc/access.deleteShadowMCPInventoryPolicyBypass"
 }
 
+// BlockShadowMCPInventoryServerAccessPath returns the URL path to the access service blockShadowMCPInventoryServer HTTP endpoint.
+func BlockShadowMCPInventoryServerAccessPath() string {
+	return "/rpc/access.blockShadowMCPInventoryServer"
+}
+
+// UnblockShadowMCPInventoryServerAccessPath returns the URL path to the access service unblockShadowMCPInventoryServer HTTP endpoint.
+func UnblockShadowMCPInventoryServerAccessPath() string {
+	return "/rpc/access.unblockShadowMCPInventoryServer"
+}
+
 // ResolveShadowMCPInventoryRequestAccessPath returns the URL path to the access service resolveShadowMCPInventoryRequest HTTP endpoint.
 func ResolveShadowMCPInventoryRequestAccessPath() string {
 	return "/rpc/access.resolveShadowMCPInventoryRequest"

@@ -784,6 +784,94 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /rpc/access.blockShadowMCPInventoryServer:
+        post:
+            description: Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.
+            operationId: blockShadowMCPInventoryServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BlockShadowMCPInventoryServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: blockShadowMCPInventoryServer access
+            tags:
+                - access
+            x-speakeasy-name-override: blockShadowMCPInventoryServer
+            x-speakeasy-react-hook:
+                name: BlockShadowMCPInventoryServer
+                type: mutation
     /rpc/access.createRole:
         post:
             description: Create a new custom role.
@@ -2556,6 +2644,109 @@ paths:
             x-speakeasy-name-override: resolveShadowMCPInventoryRequest
             x-speakeasy-react-hook:
                 name: ResolveShadowMCPInventoryRequest
+                type: mutation
+    /rpc/access.unblockShadowMCPInventoryServer:
+        delete:
+            description: Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.
+            operationId: unblockShadowMCPInventoryServer
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: server_url
+                  required: true
+                  schema:
+                    format: uri
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: policy_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: unblockShadowMCPInventoryServer access
+            tags:
+                - access
+            x-speakeasy-name-override: unblockShadowMCPInventoryServer
+            x-speakeasy-react-hook:
+                name: UnblockShadowMCPInventoryServer
                 type: mutation
     /rpc/access.updateMemberRoles:
         put:
@@ -18513,6 +18704,101 @@ paths:
             x-speakeasy-name-override: validate
             x-speakeasy-react-hook:
                 name: ValidateAPIKey
+    /rpc/litellm.ingest/beta/litellm_basic_guardrail_api:
+        post:
+            description: Evaluates and captures a LiteLLM model request before it reaches the provider.
+            operationId: ingestLiteLLMGuardrail
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IngestRequestBody2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LitellmIngestResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: ingest litellm
+            tags:
+                - litellm
+            x-speakeasy-name-override: ingestGuardrail
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/mcpEndpoints.checkSlugAvailability:
         get:
             description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -51793,6 +52079,22 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        BlockShadowMCPInventoryServerRequestBody:
+            type: object
+            properties:
+                policy_id:
+                    type: string
+                    format: uuid
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    format: uri
+            required:
+                - project_id
+                - server_url
+                - policy_id
         BuiltinExclusionCategory:
             type: object
             properties:
@@ -54024,6 +54326,11 @@ components:
                     items:
                         type: string
                     description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+                shadow_mcp_blocked_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.'
                 shadow_mcp_disposition:
                     type: string
                     description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
@@ -58009,6 +58316,52 @@ components:
                 - schema_version
                 - source
                 - event
+        IngestRequestBody2:
+            type: object
+            properties:
+                additional_provider_specific_params:
+                    type: object
+                    additionalProperties: true
+                images:
+                    type: array
+                    items:
+                        type: string
+                input_type:
+                    type: string
+                    enum:
+                        - request
+                        - response
+                litellm_call_id:
+                    type: string
+                litellm_trace_id:
+                    type: string
+                litellm_version:
+                    type: string
+                model:
+                    type: string
+                request_data:
+                    $ref: '#/components/schemas/LiteLLMRequestData'
+                request_headers:
+                    type: object
+                    additionalProperties:
+                        type: string
+                structured_messages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LiteLLMStructuredMessage'
+                texts:
+                    type: array
+                    items:
+                        type: string
+                tool_calls:
+                    type: array
+                    items: {}
+                tools:
+                    type: array
+                    items: {}
+            required:
+                - input_type
+                - request_data
         InstanceMcpServer:
             type: object
             properties:
@@ -59021,6 +59374,7 @@ components:
                         - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
+                        - risk_policy:block
                         - chat:read
                 selectors:
                     type: array
@@ -59056,6 +59410,7 @@ components:
                             - skill:blocked_write
                             - risk_policy:evaluate
                             - risk_policy:bypass
+                            - risk_policy:block
                             - chat:read
                     description: The inherited scopes the primary scope grants.
             required:
@@ -59686,6 +60041,66 @@ components:
             required:
                 - package
                 - versions
+        LiteLLMRequestData:
+            type: object
+            properties:
+                user_api_key_alias:
+                    type: string
+                user_api_key_end_user_id:
+                    type: string
+                user_api_key_hash:
+                    type: string
+                user_api_key_org_id:
+                    type: string
+                user_api_key_team_alias:
+                    type: string
+                user_api_key_team_id:
+                    type: string
+                user_api_key_user_email:
+                    type: string
+                user_api_key_user_id:
+                    type: string
+            description: Sanitized metadata bound to the LiteLLM virtual key and request.
+        LiteLLMStructuredMessage:
+            type: object
+            properties:
+                content: {}
+                role:
+                    type: string
+            description: A message supplied to LiteLLM for the guarded model request.
+            required:
+                - role
+        LitellmIngestResult:
+            type: object
+            properties:
+                action:
+                    enum:
+                        - BLOCKED
+                        - NONE
+                        - GUARDRAIL_INTERVENED
+                    type: string
+                    x-speakeasy-name-override: LiteLLMGuardrailAction
+                blocked_reason:
+                    type: string
+                images:
+                    type: array
+                    items:
+                        type: string
+                stream_holdback_chars:
+                    type: array
+                    items:
+                        type: integer
+                        format: int64
+                texts:
+                    type: array
+                    items:
+                        type: string
+                tools:
+                    type: array
+                    items: {}
+            description: LiteLLM Generic Guardrail decision.
+            required:
+                - action
         LogFilter:
             type: object
             properties:
@@ -63749,7 +64164,7 @@ components:
                     maximum: 10
                 shadow_mcp_disposition:
                     type: string
-                    description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
+                    description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
                     enum:
                         - block_all
                         - allow_all
@@ -64371,6 +64786,7 @@ components:
                         - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
+                        - risk_policy:block
                         - chat:read
                 selectors:
                     type: array
@@ -64532,6 +64948,7 @@ components:
                         - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
+                        - risk_policy:block
                         - chat:read
                 visibility:
                     type: string
@@ -65755,6 +66172,11 @@ components:
                     type: array
                     items:
                         type: string
+                blocked_policy_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
                 canonical_server_url:
                     type: string
                 first_seen:
@@ -65799,6 +66221,7 @@ components:
                 - access
                 - request_count
                 - allowed_policy_ids
+                - blocked_policy_ids
         ShadowMCPInventoryURLState:
             type: object
             properties:
@@ -65808,6 +66231,11 @@ components:
                     type: array
                     items:
                         type: string
+                blocked_policy_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
                 latest_request:
                     $ref: '#/components/schemas/ShadowMCPInventoryRequestSummary'
                 request_count:
@@ -65817,6 +66245,7 @@ components:
                 - access
                 - request_count
                 - allowed_policy_ids
+                - blocked_policy_ids
         ShadowMCPInventoryUser:
             type: object
             properties:
@@ -70345,6 +70774,11 @@ components:
                     items:
                         type: string
                     description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+                shadow_mcp_blocked_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.'
                 shadow_mcp_disposition:
                     type: string
                     description: 'The policy''s shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.'
@@ -71699,6 +72133,8 @@ tags:
       description: Explore third-party tools in Gram.
     - name: keys
       description: Managing system api keys.
+    - name: litellm
+      description: Receives LiteLLM Generic Guardrail callbacks.
     - name: mcpEndpoints
       description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
     - name: mcpMetadata

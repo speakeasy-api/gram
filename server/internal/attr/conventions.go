@@ -403,7 +403,14 @@ const (
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
-	HookBlockReasonKey = attribute.Key("gram.hook.block_reason")
+	HookBlockReasonKey       = attribute.Key("gram.hook.block_reason")
+	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
+	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
+	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
+	LiteLLMTeamIDKey         = attribute.Key("gram.litellm.team_id")
+	LiteLLMTeamAliasKey      = attribute.Key("gram.litellm.team_alias")
+	LiteLLMEndUserIDKey      = attribute.Key("gram.litellm.end_user_id")
+	LiteLLMOrganizationIDKey = attribute.Key("gram.litellm.org_id")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -493,6 +500,20 @@ const (
 	CodexComplianceReasoningKey   = attribute.Key("codex.compliance.reasoning")
 	CodexComplianceProductKey     = attribute.Key("codex.compliance.product")
 	CodexComplianceBillingSKUsKey = attribute.Key("codex.compliance.billing_skus")
+
+	// CodexCompliance*TokensKey preserve the raw COSTS token counts on
+	// Codex-product rows WITHOUT entering token metering. Those rows must not
+	// carry gen_ai.usage.* token keys — their codex:usage URN is admitted by
+	// the ClickHouse agent-usage predicates, which would sum them on top of
+	// the codex:otel:logs stream (the Codex token source of truth) and double
+	// count orgs running both feeds. The compliance feed also covers surfaces
+	// OTEL never sees (cloud-delegated tasks, GitHub code review), so the
+	// counts are retained under these namespaced keys — summed by nothing —
+	// until metering can partition by codex.compliance.surface/client.
+	CodexComplianceInputTokensKey       = attribute.Key("codex.compliance.input_tokens")
+	CodexComplianceCachedInputTokensKey = attribute.Key("codex.compliance.cached_input_tokens")
+	CodexComplianceOutputTokensKey      = attribute.Key("codex.compliance.output_tokens")
+	CodexComplianceTotalTokensKey       = attribute.Key("codex.compliance.total_tokens")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
