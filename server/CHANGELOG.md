@@ -1,5 +1,18 @@
 # server
 
+## 1.4.0
+
+### Minor Changes
+
+- ca05169: Add an authenticated LiteLLM Generic Guardrail endpoint that enforces prompt policies before model calls and captures blocked prompts.
+- 7f4e1b8: Capture LiteLLM model responses with consistent per-call session and user attribution for asynchronous risk analysis.
+- 73b9590: Requests and approvals now understand allow-all shadow MCP policies. Approving a bypass request (from the approvals page or the inventory review flow) on an allow_all policy revokes the server URL's risk_policy:block grant — a project-wide unblock with no principal-scoped bypass grants. Revoking restores the block grant; denying leaves it untouched. The request status change is audited like every other bypass-request decision. The approval UIs skip the audience/policy pickers for these requests and explain that approval unblocks the server for everyone in the project.
+
+### Patch Changes
+
+- 798db6b: The project assistant can now distribute the skills it creates. `platform_distribute_skill` and `platform_undistribute_skill` attach a skill to a plugin or assistant and revoke it again, and `platform_list_plugins` resolves a plugin by name to the ID they take. All three reuse the same permissions, feature gating, and audit logging as the dashboard.
+- bd3aac6: Shadow MCP inventory and status surfaces are now disposition-aware. Under an allow-all policy the inventory reports servers as allowed by default and blocked only when a block rule lists them, the policy status banner explains the allow-by-default posture, and the primary per-server action flips from managing allow rules to Block Server / Unblock Server — which add and remove the policy's risk_policy:block grants through dedicated inventory endpoints.
+
 ## 1.3.0
 
 ### Minor Changes
