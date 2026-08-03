@@ -28,9 +28,10 @@ import (
 )
 
 const (
-	// judgeTimeout bounds a single judge completion call. The judge runs inline
-	// on the realtime hook path, so this is also the worst-case added latency
-	// before a fail-open allow on a stuck model.
+	// judgeTimeout bounds a single judge completion call. Async batch analysis
+	// and streams can use the full window. Sync hooks enforcement nests this
+	// under risk.ScanForEnforcement's ~1s budget, so the earlier deadline wins
+	// and a stuck model cannot hold gating for the full 10s.
 	judgeTimeout = 10 * time.Second
 	// defaultModel is the prompt-injection judge. Gemini 3.1 Flash Lite, chosen from a
 	// multi-model sweep over real speakeasy-team traffic (POC-193). On the
