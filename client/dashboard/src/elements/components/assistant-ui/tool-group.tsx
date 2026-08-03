@@ -1,6 +1,5 @@
 import { useAuiState } from "@assistant-ui/react";
 import { useMemo, type FC, type PropsWithChildren } from "react";
-import { useReportToolActivityPending } from "@/elements/hooks/useToolActivityPending";
 import { useElements } from "@/elements/hooks/useElements";
 import { useToolActivitySummary } from "@/elements/hooks/useToolActivitySummary";
 import { ToolUIGroup } from "@/elements/components/ui/tool-ui";
@@ -57,19 +56,26 @@ export const ToolGroup: FC<
 
   // Serialize the group's tool calls to a stable string so useAuiState only
   // triggers a re-render when they actually change, then parse once.
+  //
+  // Arguments are read only from calls that have finished streaming: mid-stream
+  // `argsText` grows by a token at a time, and including it would re-run this
+  // selector (and the stringify/parse round trip) on every one of them for a
+  // value the summary can't use until it's complete anyway.
   const toolCallsJson = useAuiState(({ message }) => {
     const calls: ToolActivityCall[] = [];
     for (let i = startIndex; i <= endIndex; i++) {
       const part = message.parts[i];
       if (part?.type !== "tool-call") continue;
       let args: string | undefined;
-      if (typeof part.argsText === "string" && part.argsText.length > 0) {
-        args = part.argsText;
-      } else if (part.args != null) {
-        try {
-          args = JSON.stringify(part.args);
-        } catch {
-          args = undefined;
+      if (part.status?.type !== "running") {
+        if (typeof part.argsText === "string" && part.argsText.length > 0) {
+          args = part.argsText;
+        } else if (part.args != null) {
+          try {
+            args = JSON.stringify(part.args);
+          } catch {
+            args = undefined;
+          }
         }
       }
       calls.push({ name: part.toolName, arguments: args });
@@ -110,30 +116,7 @@ export const ToolGroup: FC<
     return children;
   }
 
-  return (
-    <ToolGroupBody
-      label={label}
-      running={anyMessagePartsAreRunning || pending}
-      defaultExpanded={defaultExpanded}
-    >
-      {children}
-    </ToolGroupBody>
-  );
-};
-
-/**
- * Split from ToolGroup so the pending registration sits below the early return
- * for custom-component groups — those render their own UI and never wait on a
- * summary, so they must not hold the thread's indicator down.
- */
-const ToolGroupBody: FC<
-  PropsWithChildren<{
-    label: string;
-    running: boolean;
-    defaultExpanded: boolean;
-  }>
-> = ({ label, running, defaultExpanded, children }) => {
-  useReportToolActivityPending(running);
+  const running = anyMessagePartsAreRunning || pending;
 
   // Present tool activity as a single human-readable "task" line with the
   // individual calls collapsed behind it — users rarely need the raw
@@ -143,8 +126,8 @@ const ToolGroupBody: FC<
       <ToolUIGroup
         title={label}
         // The group owns the working state — tools running, or the label still
-        // settling — and the thread's own indicator stands down while it does
-        // (see useToolActivityPending), so there is only ever one spinner.
+        // settling. The thread's thinking indicator hides itself whenever the
+        // message ends in a tool call, so only one spinner is ever on screen.
         status={running ? "running" : "complete"}
         // Shimmer while the tools run and while the label is still settling (an
         // enriched summary in flight after completion / on a material change).

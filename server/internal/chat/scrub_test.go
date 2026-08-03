@@ -8,6 +8,44 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
+func TestRedactSensitiveKeys(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "redacts a credential no scanner would recognize",
+			content: `{"user":"adam","password":"hunter2"}`,
+			want:    `{"user":"adam","password":"[redacted]"}`,
+		},
+		{
+			name:    "matches key names case-insensitively and by substring",
+			content: `{"X-Api-Key":"abc","authToken":"def"}`,
+			want:    `{"X-Api-Key":"[redacted]","authToken":"[redacted]"}`,
+		},
+		{
+			name:    "leaves descriptive values alone",
+			content: `{"query":"deploy failed","repo":"gram"}`,
+			want:    `{"query":"deploy failed","repo":"gram"}`,
+		},
+		{
+			name:    "handles escaped quotes inside a redacted value",
+			content: `{"secret":"a\"b","note":"keep"}`,
+			want:    `{"secret":"[redacted]","note":"keep"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, redactSensitiveKeys(tt.content))
+		})
+	}
+}
+
 func TestRedactFindings(t *testing.T) {
 	t.Parallel()
 

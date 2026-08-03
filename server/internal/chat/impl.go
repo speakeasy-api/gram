@@ -2150,8 +2150,13 @@ func (s *Service) buildToolActivityPrompt(ctx context.Context, payload *gen.Summ
 		n++
 		fmt.Fprintf(&b, "%d. %s", n, truncateRunes(call.Name, maxToolActivityNameRunes))
 		if call.Arguments != nil {
-			args := s.scrubToolArguments(ctx, strings.TrimSpace(*call.Arguments))
-			args = truncateRunes(args, maxToolActivityArgumentRunes)
+			// Bounded before scrubbing, so scanning never runs over bytes the
+			// prompt would drop anyway.
+			args := s.scrubToolArguments(
+				ctx,
+				strings.TrimSpace(*call.Arguments),
+				maxToolActivityArgumentRunes,
+			)
 			if args != "" && args != "{}" {
 				b.WriteString(" ")
 				b.WriteString(args)

@@ -3,7 +3,6 @@
 import { useAuiState } from "@assistant-ui/react";
 import { type FC, useEffect, useMemo, useState } from "react";
 
-import { useAnyToolActivityPending } from "@/elements/hooks/useToolActivityPending";
 import { cn } from "@/lib/utils";
 
 /**
@@ -179,27 +178,25 @@ function useThinkingVerb(
  * `aui-md[data-status="running"]` rules in global.css) takes over.
  */
 export const ThinkingIndicator: FC = () => {
-  // A working tool group shows its own spinner against its summary line. Both
-  // at once describes one wait as two, so this one stands down.
-  const toolGroupWorking = useAnyToolActivityPending();
   const active = useAuiState(({ message }) => {
     if (message.status?.type !== "running") return false;
     const parts = message.parts;
     if (parts.length === 0) return true;
     const last = parts[parts.length - 1];
     if (!last) return true;
-    if (last.type === "tool-call" || last.type === "reasoning") return true;
+    // A trailing tool call renders a tool group, which carries its own spinner
+    // against its summary line while it works and settles. Showing this one too
+    // describes a single wait as two things happening.
+    if (last.type === "tool-call") return false;
+    if (last.type === "reasoning") return true;
     if (last.type === "text") return last.text.trim().length === 0;
     return false;
   });
 
   const reducedMotion = usePrefersReducedMotion();
-  const { verb, visible } = useThinkingVerb(
-    active && !toolGroupWorking,
-    reducedMotion,
-  );
+  const { verb, visible } = useThinkingVerb(active, reducedMotion);
 
-  if (!active || toolGroupWorking) return null;
+  if (!active) return null;
 
   return (
     <div

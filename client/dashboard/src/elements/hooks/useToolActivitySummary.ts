@@ -8,7 +8,11 @@ import type { ToolActivityCall } from "@/elements/types";
 
 /** How long to wait after the tool set stops changing before summarizing. */
 const SUMMARIZE_DEBOUNCE_MS = 400;
-/** Cap per-call arguments sent over the wire; the endpoint rejects longer. */
+/**
+ * Cap per-call arguments sent over the wire. The endpoint accepts up to this
+ * much and truncates anything longer, so trimming here only saves bandwidth —
+ * the server's own bound is what protects the prompt.
+ */
 const MAX_ARGUMENT_CHARS = 600;
 /** Cap the user prompt sent over the wire; the endpoint rejects longer. */
 const MAX_USER_MESSAGE_CHARS = 2000;
@@ -88,13 +92,19 @@ export function useToolActivitySummary({
   );
 
   // A key over everything that should change the summary: the ordered tool
-  // names, the running/complete phase, and the user's prompt. Argument churn
-  // during streaming is deliberately excluded so we don't re-summarize on every
-  // token.
+  // names, how many calls have their arguments yet, the running/complete phase,
+  // and the user's prompt. Arguments are counted, not included: their content
+  // changes token by token while streaming, but a call gaining arguments is a
+  // real change in signal — for an opaque `compose` call they are the whole of
+  // it — so the summary is worth redoing once they land.
+  const argumentsReady = useMemo(
+    () => toolCalls.filter((call) => (call.arguments ?? "") !== "").length,
+    [toolCalls],
+  );
   const key = useMemo(
     () =>
-      `${toolCalls.map((call) => call.name).join("|")}::${inProgress}::${userMessage ?? ""}`,
-    [toolCalls, inProgress, userMessage],
+      `${toolCalls.map((call) => call.name).join("|")}::${argumentsReady}::${inProgress}::${userMessage ?? ""}`,
+    [toolCalls, argumentsReady, inProgress, userMessage],
   );
 
   const [enrichedByKey, setEnrichedByKey] = useState<Record<string, string>>(
