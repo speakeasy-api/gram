@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -130,4 +131,44 @@ func TestUpdateConfigurationRejectsInvalidPlatformLayer(t *testing.T) {
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeInvalid, shareableErr.Code)
+}
+
+func TestUpdateConfigurationPreservesStoredUnknownKeys(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{Config: map[string]any{
+		"pinned_target":  "1.2.3",
+		"future_setting": map[string]any{"enabled": true},
+	}})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{Config: map[string]any{
+		"update_channel": "beta",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"enabled": true}, updated.Config["future_setting"], "stored unknown keys must survive updates that omit them")
+	require.Equal(t, "beta", updated.Config["update_channel"])
+	require.NotContains(t, updated.Config, "pinned_target", "omitting a known key must remove it")
+}
+
+func TestUpdateConfigurationRejectsNewerStoredSchemaVersion(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	_, err := agentrepo.New(ti.conn).UpsertDeviceAgentConfiguration(ctx, agentrepo.UpsertDeviceAgentConfigurationParams{
+		OrganizationID: ti.orgID,
+		SchemaVersion:  2,
+		Config:         []byte(`{"future_setting":true}`),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"update_channel": "stable"},
+	})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeConflict, shareableErr.Code)
 }

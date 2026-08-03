@@ -142,6 +142,25 @@ SELECT organization_id, schema_version, config, created_at, updated_at
 FROM device_agent_configurations
 WHERE organization_id = @organization_id;
 
+-- AcquireDeviceAgentConfigurationLock serializes configuration updates for an
+-- organization even when no row exists yet — FOR UPDATE cannot lock an absent
+-- row, so two concurrent first-time saves would otherwise both audit a nil
+-- before-snapshot. Transaction-scoped: released automatically at
+-- commit/rollback.
+
+-- name: AcquireDeviceAgentConfigurationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || @organization_id::text, 0));
+
+-- GetDeviceAgentConfigurationForUpdate locks the row for the update
+-- transaction so the unknown-key merge and audit before-snapshot cannot read
+-- a config replaced beneath them.
+
+-- name: GetDeviceAgentConfigurationForUpdate :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
 -- name: UpsertDeviceAgentConfiguration :one
 INSERT INTO device_agent_configurations (
   organization_id,

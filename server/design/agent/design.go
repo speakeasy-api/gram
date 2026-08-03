@@ -99,7 +99,7 @@ var _ = Service("agent", func() {
 	})
 
 	Method("getConfiguration", func() {
-		Description("Get the organization-wide device-agent configuration for the dashboard. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.")
+		Description("Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.")
 
 		Security(security.Session)
 
@@ -121,7 +121,7 @@ var _ = Service("agent", func() {
 	})
 
 	Method("updateConfiguration", func() {
-		Description("Create or replace the organization-wide, non-secret device-agent configuration. Unknown keys are preserved for forward compatibility; identity and credential keys are rejected.")
+		Description("Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.")
 
 		Security(security.Session)
 

@@ -33,7 +33,7 @@ export class Agent extends ClientSDK {
    * getConfiguration agent
    *
    * @remarks
-   * Get the organization-wide device-agent configuration for the dashboard. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
+   * Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
    */
   async getConfiguration(
     request?: GetDeviceAgentConfigurationRequest | undefined,
@@ -90,7 +90,7 @@ export class Agent extends ClientSDK {
    * updateConfiguration agent
    *
    * @remarks
-   * Create or replace the organization-wide, non-secret device-agent configuration. Unknown keys are preserved for forward compatibility; identity and credential keys are rejected.
+   * Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.
    */
   async updateConfiguration(
     request: UpdateDeviceAgentConfigurationRequest,

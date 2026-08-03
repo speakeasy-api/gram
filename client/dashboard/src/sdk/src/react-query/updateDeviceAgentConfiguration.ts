@@ -55,7 +55,7 @@ export type UpdateDeviceAgentConfigurationMutationError =
  * updateConfiguration agent
  *
  * @remarks
- * Create or replace the organization-wide, non-secret device-agent configuration. Unknown keys are preserved for forward compatibility; identity and credential keys are rejected.
+ * Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.
  */
 export function useUpdateDeviceAgentConfigurationMutation(
   options?: MutationHookOptions<

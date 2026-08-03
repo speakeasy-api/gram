@@ -379,10 +379,6 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 	}
 
 	config := normalizeDeviceAgentConfiguration(payload.Config)
-	configJSON, err := validateDeviceAgentConfiguration(config)
-	if err != nil {
-		return nil, err
-	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -391,18 +387,44 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+
+	// Serialize concurrent updates: the advisory lock covers the absent-row
+	// case, and FOR UPDATE covers existing rows, so the unknown-key merge and
+	// audit before-snapshot cannot read a config replaced beneath them.
+	if err := queries.AcquireDeviceAgentConfigurationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "serialize device agent configuration update").LogError(ctx, s.logger)
+	}
+
 	var beforeSnapshot *audit.DeviceAgentConfigurationSnapshot
-	before, err := queries.GetDeviceAgentConfiguration(ctx, authCtx.ActiveOrganizationID)
+	before, err := queries.GetDeviceAgentConfigurationForUpdate(ctx, authCtx.ActiveOrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "get existing device agent configuration").LogError(ctx, s.logger)
 	default:
+		if before.SchemaVersion > deviceAgentConfigurationSchemaVersion {
+			return nil, oops.E(
+				oops.CodeConflict,
+				nil,
+				"stored device agent configuration uses schema version %d, which this server cannot edit",
+				before.SchemaVersion,
+			)
+		}
 		snapshot, err := buildDeviceAgentConfigurationSnapshot(before)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decode existing device agent configuration").LogError(ctx, s.logger)
 		}
 		beforeSnapshot = &snapshot
+
+		config, err = mergeStoredDeviceAgentConfiguration(config, before.Config)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "merge device agent configuration").LogError(ctx, s.logger)
+		}
+	}
+
+	configJSON, err := validateDeviceAgentConfiguration(config)
+	if err != nil {
+		return nil, err
 	}
 
 	row, err := queries.UpsertDeviceAgentConfiguration(ctx, repo.UpsertDeviceAgentConfigurationParams{

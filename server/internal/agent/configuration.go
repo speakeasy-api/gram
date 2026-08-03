@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
 	"strings"
@@ -29,6 +30,39 @@ var forbiddenDeviceAgentConfigurationKeys = map[string]struct{}{
 	"org_slug":  {},
 	"org_token": {},
 	"v":         {},
+}
+
+// knownDeviceAgentConfigurationKeys are the version-1 settings this server
+// edits. Update requests replace these wholesale — omitting one removes it —
+// while any other stored key is preserved so a server that predates a setting
+// cannot delete it on behalf of a client that never saw it.
+var knownDeviceAgentConfigurationKeys = map[string]struct{}{
+	"platforms":             {},
+	"update_channel":        {},
+	"auto_update":           {},
+	"pinned_target":         {},
+	"blocked_versions":      {},
+	"sync_interval_seconds": {},
+}
+
+// mergeStoredDeviceAgentConfiguration overlays an update on the stored
+// document: known keys come only from the request (absence removes them),
+// unknown stored keys survive unless the request overwrites them.
+func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte) (map[string]any, error) {
+	var storedConfig map[string]any
+	if err := json.Unmarshal(stored, &storedConfig); err != nil {
+		return nil, fmt.Errorf("decode stored device agent configuration: %w", err)
+	}
+
+	merged := make(map[string]any, len(storedConfig)+len(incoming))
+	for key, value := range storedConfig {
+		if _, known := knownDeviceAgentConfigurationKeys[key]; known {
+			continue
+		}
+		merged[key] = value
+	}
+	maps.Copy(merged, incoming)
+	return merged, nil
 }
 
 func validateDeviceAgentConfiguration(config map[string]any) ([]byte, error) {

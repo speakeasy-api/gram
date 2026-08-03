@@ -15,17 +15,27 @@ The configuration document supports these keys:
 
 - `platforms`: a map from tool name to `false`, `"user"`, or `"managed"`.
   `false` disables management, `user` writes in the user's home directory, and
-  `managed` uses the elevated managed writer.
-- `update_channel`
-- `auto_update`
-- `pinned_target`
-- `blocked_versions`
-- `sync_interval_seconds` (60 through 86,400)
+  `managed` uses the elevated managed writer. Tool names must be 1 through 64
+  characters.
+- `update_channel`: optional non-empty string of at most 128 characters naming
+  the release channel agents should follow.
+- `auto_update`: optional non-empty string of at most 128 characters carrying
+  the update mode understood by deployed agent versions.
+- `pinned_target`: optional non-empty string of at most 128 characters pinning
+  the fleet to a specific agent release.
+- `blocked_versions`: optional array of at most 100 non-empty strings, each at
+  most 128 characters, naming agent releases that must not be installed.
+- `sync_interval_seconds`: optional whole number of seconds between
+  reconciliations, 60 through 86,400.
 
-The envelope carries `schema_version`; it is metadata, not a remotely editable
-setting. Agents must ignore unknown document keys so additive settings remain
-forward compatible. Gram preserves unknown keys when the dashboard edits known
-settings.
+Every key is optional. The whole document must stay under 64 KiB. The envelope
+carries `schema_version`; it is metadata, not a remotely editable setting.
+Agents must ignore unknown document keys so additive settings remain forward
+compatible. An update replaces the known settings above wholesale — omitting
+one removes it — while Gram preserves stored keys the serving version does not
+recognize, so an older server cannot delete settings understood only by newer
+agents. Gram also rejects updates when the stored document carries a newer
+`schema_version` than the serving version understands.
 
 Gram rejects the device-local keys `email`, `org_token`, `org_slug`, `org_name`,
 and `v`. Identity, credentials, and the local configuration schema always stay
