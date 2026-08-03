@@ -240,11 +240,12 @@ func TestMSTeamsAdapterDecodeTurnRendersContextAndText(t *testing.T) {
 
 	got, err := msteamsAdapter{}.DecodeTurn(assistantThreadEventRecord{
 		EventID:               "evt-1",
-		NormalizedPayloadJSON: []byte(`{"event_type":"message","user_id":"29:user","user_name":"Jo Doe","reply_to_id":"123","text":"hello bot"}`),
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","conversation_type":"personal","user_id":"29:user","user_name":"Jo Doe","reply_to_id":"123","text":"hello bot"}`),
 	})
 	require.NoError(t, err)
 	require.Contains(t, got, "<message-context>")
 	require.Contains(t, got, "EventType: message")
+	require.Contains(t, got, "ConversationType: personal")
 	require.Contains(t, got, "UserName: Jo Doe")
 	require.Contains(t, got, "ReplyToID: 123")
 	require.True(t, strings.HasSuffix(got, "hello bot"))

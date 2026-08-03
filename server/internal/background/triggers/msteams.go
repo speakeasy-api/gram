@@ -16,6 +16,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -231,13 +232,16 @@ type botFrameworkAuthenticator struct {
 	// init (the registry constructs definitions as a package-level var) so the
 	// global tracer provider is real by the time the first webhook arrives.
 	clientFn func() *guardian.HTTPClient
+	// fetchGroup coalesces concurrent metadata fetches so cold-start or
+	// post-outage delivery bursts share one request instead of queueing.
+	fetchGroup singleflight.Group
 
 	mu     sync.Mutex
 	keySet oidc.KeySet
 	// retryAfter negative-caches metadata fetch failures. Deliveries arriving
-	// before it return immediately instead of piling up behind the mutex for a
-	// 10s fetch each — Teams retries failed deliveries, so a metadata endpoint
-	// blip would otherwise self-amplify.
+	// before it return immediately instead of waiting out a 10s fetch each —
+	// Teams retries failed deliveries, so a metadata endpoint blip would
+	// otherwise self-amplify.
 	retryAfter time.Time
 }
 
@@ -250,6 +254,7 @@ func newBotFrameworkAuthenticator(metadataURL, issuer string) *botFrameworkAuthe
 			client.Timeout = 10 * time.Second
 			return client
 		}),
+		fetchGroup: singleflight.Group{},
 		mu:         sync.Mutex{},
 		keySet:     nil,
 		retryAfter: time.Time{},
@@ -258,26 +263,45 @@ func newBotFrameworkAuthenticator(metadataURL, issuer string) *botFrameworkAuthe
 
 func (b *botFrameworkAuthenticator) remoteKeySet() (oidc.KeySet, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.keySet != nil {
-		return b.keySet, nil
+	cached, retryAfter := b.keySet, b.retryAfter
+	b.mu.Unlock()
+	if cached != nil {
+		return cached, nil
 	}
-	if time.Now().Before(b.retryAfter) {
+	if time.Now().Before(retryAfter) {
 		return nil, fmt.Errorf("openid metadata unavailable, retrying later")
 	}
-	client := b.clientFn()
 
-	jwksURI, err := b.fetchJWKSURI(client)
+	// The fetch runs outside the mutex so deliveries never queue behind the
+	// network round-trip; singleflight collapses a concurrent burst into one
+	// request whose result (or failure) they all share.
+	keySet, err, _ := b.fetchGroup.Do("keyset", func() (any, error) {
+		client := b.clientFn()
+		jwksURI, err := b.fetchJWKSURI(client)
+		if err != nil {
+			b.mu.Lock()
+			b.retryAfter = time.Now().Add(30 * time.Second)
+			b.mu.Unlock()
+			return nil, err
+		}
+		// The key set outlives this request: it caches Microsoft's signing
+		// keys and re-fetches them on rotation, so it is bound to a background
+		// context carrying our bounded-timeout client rather than the request
+		// context.
+		keySet := oidc.NewRemoteKeySet(oidc.ClientContext(context.Background(), client), jwksURI)
+		b.mu.Lock()
+		b.keySet = keySet
+		b.mu.Unlock()
+		return keySet, nil
+	})
 	if err != nil {
-		b.retryAfter = time.Now().Add(30 * time.Second)
 		return nil, err
 	}
-
-	// The key set outlives this request: it caches Microsoft's signing keys
-	// and re-fetches them on rotation, so it is bound to a background context
-	// carrying our bounded-timeout client rather than the request context.
-	b.keySet = oidc.NewRemoteKeySet(oidc.ClientContext(context.Background(), client), jwksURI)
-	return b.keySet, nil
+	set, ok := keySet.(oidc.KeySet)
+	if !ok {
+		return nil, fmt.Errorf("unexpected key set type %T", keySet)
+	}
+	return set, nil
 }
 
 // fetchJWKSURI deliberately detaches from the inbound delivery's context: the

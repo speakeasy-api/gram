@@ -85,6 +85,11 @@ func (msteamsAdapter) DecodeTurn(event assistantThreadEventRecord) (string, erro
 	if payload.EventType != "" {
 		fmt.Fprintf(&b, "EventType: %s\n", payload.EventType)
 	}
+	// The output guidance keys "always reply" on personal chats, so the turn
+	// must carry the conversation type for the model to apply it.
+	if payload.ConversationType != "" {
+		fmt.Fprintf(&b, "ConversationType: %s\n", payload.ConversationType)
+	}
 	if payload.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
 	}
