@@ -120,20 +120,16 @@ SET last_guardrail_event_at = CASE
   , reported_litellm_version = CASE
       WHEN @reported_litellm_version::text <> ''
         AND @reported_version_observed_at::timestamptz IS NOT NULL
-        AND @reported_version_observed_at::timestamptz > GREATEST(
-          COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
-          COALESCE(last_otel_event_at, '-infinity'::timestamptz),
-          COALESCE(last_error_at, '-infinity'::timestamptz)
-        )
-        -- A version observed alongside newer signals in the same write is
-        -- stale; one stamped with its own batch's timestamp still passes.
-        AND @reported_version_observed_at::timestamptz >= GREATEST(
-          COALESCE(@guardrail_observed_at::timestamptz, '-infinity'::timestamptz),
-          COALESCE(@otel_observed_at::timestamptz, '-infinity'::timestamptz),
-          COALESCE(CASE WHEN @error_kind::text <> '' THEN @error_observed_at::timestamptz END, '-infinity'::timestamptz)
-        )
+        AND (reported_litellm_version_at IS NULL OR @reported_version_observed_at::timestamptz > reported_litellm_version_at)
         THEN @reported_litellm_version::text
       ELSE reported_litellm_version
+    END
+  , reported_litellm_version_at = CASE
+      WHEN @reported_litellm_version::text <> ''
+        AND @reported_version_observed_at::timestamptz IS NOT NULL
+        AND (reported_litellm_version_at IS NULL OR @reported_version_observed_at::timestamptz > reported_litellm_version_at)
+        THEN @reported_version_observed_at::timestamptz
+      ELSE reported_litellm_version_at
     END
 WHERE organization_id = @organization_id
   AND project_id = @project_id
@@ -162,15 +158,6 @@ WHERE organization_id = @organization_id
     OR (
       @reported_litellm_version::text <> ''
       AND @reported_version_observed_at::timestamptz IS NOT NULL
-      AND @reported_version_observed_at::timestamptz > GREATEST(
-        COALESCE(last_guardrail_event_at, '-infinity'::timestamptz),
-        COALESCE(last_otel_event_at, '-infinity'::timestamptz),
-        COALESCE(last_error_at, '-infinity'::timestamptz)
-      )
-      AND @reported_version_observed_at::timestamptz >= GREATEST(
-        COALESCE(@guardrail_observed_at::timestamptz, '-infinity'::timestamptz),
-        COALESCE(@otel_observed_at::timestamptz, '-infinity'::timestamptz),
-        COALESCE(CASE WHEN @error_kind::text <> '' THEN @error_observed_at::timestamptz END, '-infinity'::timestamptz)
-      )
+      AND (reported_litellm_version_at IS NULL OR @reported_version_observed_at::timestamptz > reported_litellm_version_at)
     )
   );
