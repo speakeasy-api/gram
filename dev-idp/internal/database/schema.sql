@@ -50,9 +50,10 @@ CREATE TABLE IF NOT EXISTS memberships (
 CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_id_organization_id_key
   ON memberships (user_id, organization_id);
 
--- Per-mode currentUser. `subject_ref` is mode-specific: a `users.id` for
--- mock-workos/oauth2-1/oauth2, a WorkOS `sub` for `workos`. Stored as
--- TEXT with no FK because the workos value is external.
+-- currentUser per identity slot. `subject_ref` is slot-specific: a `users.id`
+-- for the `oauth2-1` slot, an external WorkOS `sub` for the `workos` slot.
+-- Which slot is authoritative follows GRAM_DEVIDP_BACKEND. Stored as TEXT
+-- with no FK because the workos value is external.
 CREATE TABLE IF NOT EXISTS current_users (
   mode TEXT NOT NULL PRIMARY KEY,
   subject_ref TEXT NOT NULL,
@@ -62,12 +63,12 @@ CREATE TABLE IF NOT EXISTS current_users (
 
 -- Dynamically registered OAuth 2.1 clients. The dev-idp only needs enough
 -- state to reject /authorize redirect_uri values that were not registered.
+--
 -- `rotate_refresh_tokens` defaults on (OAuth 2.1 recommends rotation). Clients
 -- register with it off to emulate upstreams that reuse refresh tokens, which
 -- Gram has to tolerate in the wild.
 CREATE TABLE IF NOT EXISTS oauth_clients (
   client_id TEXT NOT NULL PRIMARY KEY,
-  mode TEXT NOT NULL,
   client_secret TEXT NOT NULL,
   redirect_uris TEXT NOT NULL DEFAULT '[]',
   rotate_refresh_tokens INTEGER NOT NULL DEFAULT 1,
@@ -75,12 +76,9 @@ CREATE TABLE IF NOT EXISTS oauth_clients (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS oauth_clients_mode_idx ON oauth_clients (mode);
-
 -- Short-TTL `/authorize` codes.
 CREATE TABLE IF NOT EXISTS auth_codes (
   code TEXT NOT NULL PRIMARY KEY,
-  mode TEXT NOT NULL,
   user_id TEXT NOT NULL,
   client_id TEXT NOT NULL,
   redirect_uri TEXT NOT NULL,
@@ -100,7 +98,6 @@ CREATE INDEX IF NOT EXISTS auth_codes_expires_at_idx ON auth_codes (expires_at);
 -- value. `client_id` recorded for inspection only.
 CREATE TABLE IF NOT EXISTS tokens (
   token TEXT NOT NULL PRIMARY KEY,
-  mode TEXT NOT NULL,
   user_id TEXT NOT NULL,
   client_id TEXT NOT NULL,
   kind TEXT NOT NULL,
@@ -117,7 +114,7 @@ CREATE INDEX IF NOT EXISTS tokens_user_id_idx ON tokens (user_id);
 CREATE INDEX IF NOT EXISTS tokens_expires_at_idx ON tokens (expires_at);
 
 -- =============================================================================
--- WorkOS-emulation tables (consumed by the mock-workos mode's
+-- WorkOS-emulation tables (consumed by the local backend's
 -- /user_management/* and /authorization/organizations/* endpoints).
 -- =============================================================================
 

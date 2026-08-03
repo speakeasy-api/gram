@@ -13,7 +13,6 @@ import (
 
 type AuthCode struct {
 	Code                string
-	Mode                string
 	UserID              uuid.UUID
 	ClientID            string
 	RedirectUri         string
@@ -55,7 +54,6 @@ type Membership struct {
 
 type OauthClient struct {
 	ClientID            string
-	Mode                string
 	ClientSecret        string
 	RedirectUris        string
 	RotateRefreshTokens bool
@@ -85,7 +83,6 @@ type OrganizationRole struct {
 
 type Token struct {
 	Token     string
-	Mode      string
 	UserID    uuid.UUID
 	ClientID  string
 	Kind      string

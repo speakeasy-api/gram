@@ -1,8 +1,8 @@
-// WorkOS-shaped REST surface served by the mock-workos mode. Wire
+// WorkOS-shaped REST surface backing the local identity backend. Wire
 // shapes match workos-go/v6 SDK types (see workos_types.go) so Gram-side's
 // `*workos.Client` decodes our responses identically to api.workos.com.
 //
-// Endpoint inventory (idp-design.md §7.1, "WorkOS emulation" block):
+// Endpoint inventory:
 //
 //	GET  /user_management/users/{id}
 //	GET  /user_management/users                                              (?email, ?organization_id, ?after, ?limit)
@@ -48,7 +48,6 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
-	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 )
 
 // invitationLifetime is how long an emulated invitation stays in the
@@ -112,8 +111,8 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 // =============================================================================
 
 // handleWorkosAuthenticate implements the WorkOS SDK's AuthenticateWithCode
-// endpoint. Consumes an auth code issued by the oauth2 mode's /authorize
-// and returns a response matching the workos-go AuthenticateResponse shape.
+// endpoint. Consumes an auth code issued by /oauth2-1/authorize and returns a
+// response matching the workos-go AuthenticateResponse shape.
 func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body struct {
@@ -140,7 +139,6 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	// through the WorkOS user-management SDK.
 	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
 		Code: body.Code,
-		Mode: oauth21.Mode,
 		Ts:   time.Now(),
 	})
 	if err != nil {
@@ -383,7 +381,6 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 	queries := repo.New(h.db)
 	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
 		Code: code,
-		Mode: "oauth2",
 		Ts:   time.Now(),
 	})
 	if err != nil {

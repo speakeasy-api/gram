@@ -51,7 +51,6 @@ func TestCreateRefreshToken_OAuth21RefreshSucceeds(t *testing.T) {
 	const seeded = "seeded-refresh-token"
 	devidptest.CreateRefreshToken(t, t.Context(), inst.Repo, devidptest.RefreshTokenOpts{
 		Token:  seeded,
-		Mode:   devidptest.OAuth21Mode,
 		UserID: inst.DefaultUser.ID,
 	})
 

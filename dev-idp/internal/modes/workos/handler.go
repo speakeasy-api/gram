@@ -36,7 +36,6 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
-	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 	gramworkos "github.com/speakeasy-api/gram/dev-idp/internal/workos"
 )
 
@@ -159,7 +158,6 @@ func (h *Handler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 	queries := repo.New(h.db)
 	if _, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
 		Code: body.Code,
-		Mode: oauth21.Mode,
 		Ts:   time.Now(),
 	}); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "auth code is unknown, consumed, or expired"})
