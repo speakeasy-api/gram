@@ -1,7 +1,7 @@
 // Package devidptest spins up a real dev-idp HTTP server inside a test.
 //
-// Launch wires bootstrap.Open + keystore.New + the oauth2 / oauth2-1 (and
-// optionally mock-workos) mode handlers under an httptest.NewServer,
+// Launch wires bootstrap.Open + keystore.New + the oauth2-1 (and optionally
+// mock-workos) mode handlers under an httptest.NewServer,
 // returning an Instance with the addressable issuer URLs, a *sql.DB handle,
 // a *repo.Queries for direct sqlc seeding, and helpers for fetching
 // authorization-server metadata and seeding refresh tokens.
@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
-	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth2"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 	"github.com/speakeasy-api/gram/plog"
 )
@@ -50,9 +49,6 @@ const (
 // Mode discriminator strings persisted by dev-idp on its auth_codes,
 // tokens, and current_users rows.
 const (
-	// OAuth20Mode is the discriminator for OAuth 2.0 mode rows.
-	OAuth20Mode = oauth2.Mode
-
 	// OAuth21Mode is the discriminator for OAuth 2.1 mode rows.
 	OAuth21Mode = oauth21.Mode
 
@@ -67,12 +63,6 @@ type Instance struct {
 	// Issuer is the externally addressable base URL of the running server,
 	// without any mode prefix (e.g. "http://127.0.0.1:38291").
 	Issuer string
-
-	// OAuth20URL is the issuer URL of the OAuth 2.0 mode handler
-	// (Issuer + "/oauth2"). Use this wherever a Gram toolset or
-	// external_oauth_server_metadata row references the upstream OAuth
-	// 2.0 authorization server.
-	OAuth20URL string
 
 	// OAuth21URL is the issuer URL of the OAuth 2.1 mode handler
 	// (Issuer + "/oauth2-1"). Use this wherever a Gram toolset or
@@ -106,8 +96,8 @@ type Instance struct {
 	rsaKey *rsa.PrivateKey
 }
 
-// LaunchOpts configures Launch. The zero value is valid: oauth2 + oauth2-1
-// mounted, mock-workos disabled, shared package-level RSA key.
+// LaunchOpts configures Launch. The zero value is valid: oauth2-1 mounted,
+// mock-workos disabled, shared package-level RSA key.
 type LaunchOpts struct {
 	// EnableMockWorkos mounts the mock-workos mode under
 	// Instance.MockWorkosURL. Disabled by default — most OAuth flow
@@ -167,10 +157,6 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21H.Handler()))
 	oauth21H.RegisterRootRoutes(outer)
 
-	oauth2H := oauth2.NewHandler(oauth2.Config{ExternalURL: pubURL}, ks, logger, tp, db)
-	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2H.Handler()))
-	oauth2H.RegisterRootRoutes(outer)
-
 	var mockWorkosURL string
 	if opts.EnableMockWorkos {
 		mwH := mockworkos.NewHandler(logger, tp, db)
@@ -205,7 +191,6 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 
 	return &Instance{
 		Issuer:        pubURL,
-		OAuth20URL:    pubURL + oauth2.Prefix,
 		OAuth21URL:    pubURL + oauth21.Prefix,
 		MockWorkosURL: mockWorkosURL,
 		DB:            db,
@@ -226,13 +211,6 @@ func (i *Instance) SigningKey() *rsa.PrivateKey { return i.rsaKey }
 func (i *Instance) OAuth21Metadata(t *testing.T) []byte {
 	t.Helper()
 	return fetchMetadata(t, i.Issuer, oauth21.Prefix)
-}
-
-// OAuth20Metadata fetches the dev-idp's RFC 8414 authorization-server
-// metadata for the oauth2 mode.
-func (i *Instance) OAuth20Metadata(t *testing.T) []byte {
-	t.Helper()
-	return fetchMetadata(t, i.Issuer, oauth2.Prefix)
 }
 
 // fetchMetadata reads the RFC 8414 authorization-server metadata for an
@@ -259,7 +237,7 @@ func fetchMetadata(t *testing.T, host, issuerPath string) []byte {
 // current_users rows need to point at Instance.DefaultUser. Mirrors the
 // modes Launch actually mounts.
 func currentUserModes(enableMockWorkos bool) []string {
-	modes := []string{oauth21.Mode, oauth2.Mode}
+	modes := []string{oauth21.Mode}
 	if enableMockWorkos {
 		modes = append(modes, mockworkos.Mode)
 	}
