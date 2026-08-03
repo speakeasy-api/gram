@@ -824,6 +824,7 @@ describe("ShadowMCPServerDetail", () => {
       data: inventoryServer({
         access: "none",
         allowedPolicyIds: [],
+        blockedPolicyIds: [],
       }),
       error: null,
       isLoading: false,
@@ -964,6 +965,7 @@ describe("ShadowMCPServerDetail", () => {
       data: inventoryServer({
         access: "none",
         allowedPolicyIds: [],
+        blockedPolicyIds: [],
         latestRequest: {
           id: "request-1",
           policyId: "cached-policy",
