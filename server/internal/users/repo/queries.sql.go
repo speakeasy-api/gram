@@ -35,10 +35,10 @@ func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) error 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE lower(u.email) = $1
+WHERE lower(u.email) = lower($1)
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
-ORDER BY (u.email = $1) DESC, u.created_at, u.id
+ORDER BY (u.email = lower($1)) DESC, u.created_at, u.id
 LIMIT 1
 `
 
@@ -47,8 +47,8 @@ type GetConnectedUserByEmailParams struct {
 	OrganizationID string
 }
 
-// Callers must pass a lowercased email (conv.NormalizeEmail); stored emails are
-// lowered here since WorkOS-synced rows can preserve the original casing.
+// Emails are compared lowercased on both sides since WorkOS-synced rows can
+// preserve the original casing and callers may too.
 // Rows can differ only by casing, so resolution must be deterministic: prefer
 // the already-normalized row, then the oldest.
 func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedUserByEmailParams) (User, error) {
@@ -75,7 +75,7 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
 SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE lower(u.email) = ANY($1::text[])
+WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id
@@ -86,8 +86,8 @@ type GetConnectedUsersByEmailsParams struct {
 	OrganizationID string
 }
 
-// Callers must pass lowercased emails (conv.NormalizeEmail); stored emails are
-// lowered here since WorkOS-synced rows can preserve the original casing.
+// Emails are compared lowercased on both sides since WorkOS-synced rows can
+// preserve the original casing and callers may too.
 // Rows can differ only by casing, so pick one user per email deterministically:
 // prefer the already-normalized row, then the oldest.
 func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnectedUsersByEmailsParams) ([]User, error) {
