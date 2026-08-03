@@ -13,12 +13,15 @@ import {
   formatTunneledMcpDisplay,
   sourceTypeToUrnKind,
 } from "@/lib/sources";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components/asset.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@/components/ui/Badge";
 import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
+import { AssetImage } from "@/components/asset-image";
 
 export type NamedAsset =
   | (Asset & {
@@ -45,6 +48,7 @@ export type NamedAsset =
       url: string;
       type: "remotemcp";
       transportType?: string;
+      mcpServerId?: string;
     }
   | {
       id: string;
@@ -54,6 +58,7 @@ export type NamedAsset =
       type: "tunneledmcp";
       createdAt?: Date;
       updatedAt?: Date;
+      mcpServerId?: string;
     }
   | {
       id: string;
@@ -62,6 +67,7 @@ export type NamedAsset =
       name?: string | null;
       url: string;
       type: "unproxiedmcp";
+      mcpServerId?: string;
     };
 
 // sourceCardNameAndSubtitle centralizes the "what to render" logic for
@@ -99,6 +105,30 @@ function sourceCardNameAndSubtitle(asset: NamedAsset): {
     case "externalmcp":
       return { displayName: asset.name, displaySubtitle: undefined };
   }
+}
+
+// SourceMcpIcon looks up the real server icon for remote/tunneled/unproxied
+// sources (mcp_metadata.logo_id, keyed by the wrapping mcp_server, not the
+// source row itself) and falls back to the generic Network icon when there's
+// no wrapping mcp_server yet or no icon has been set on it.
+export function SourceMcpIcon({
+  mcpServerId,
+  className,
+}: {
+  mcpServerId: string | undefined;
+  className: string;
+}): JSX.Element {
+  const { data } = useGetMcpMetadata({ mcpServerId }, undefined, {
+    enabled: !!mcpServerId,
+    retry: false,
+    throwOnError: false,
+  });
+  const logoAssetId = data?.metadata?.logoAssetId;
+
+  if (logoAssetId) {
+    return <AssetImage assetId={logoAssetId} className={className} />;
+  }
+  return <Network className={cn("text-muted-foreground", className)} />;
 }
 
 const sourceTypeConfig = {
@@ -203,11 +233,18 @@ export function SourceCard({
       );
     }
     if (
-      asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
       asset.type === "tunneledmcp" ||
       asset.type === "unproxiedmcp"
     ) {
+      return (
+        <SourceMcpIcon
+          mcpServerId={asset.mcpServerId}
+          className="h-8 w-8 object-contain"
+        />
+      );
+    }
+    if (asset.type === "externalmcp") {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }
     return <FileCode className="text-muted-foreground h-8 w-8" />;

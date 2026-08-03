@@ -3,7 +3,7 @@ import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Network } from "lucide-react";
+import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { Badge } from "../ui/Badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { MCPActivityIndicator } from "./MCPActivityIndicator";
@@ -39,7 +39,12 @@ export function MCPServerTableRow({
   return (
     <DotRow
       onClick={handleClick}
-      icon={<Network className="text-muted-foreground h-5 w-5" />}
+      icon={
+        <SourceMcpIcon
+          mcpServerId={server.id}
+          className="h-5 w-5 object-contain"
+        />
+      }
     >
       {/* Name */}
       <td className="px-3 py-3">

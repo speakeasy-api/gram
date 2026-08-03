@@ -226,6 +226,7 @@ export default function Sources(): JSX.Element {
       url: server.url,
       type: "remotemcp" as const,
       transportType: server.transportType,
+      mcpServerId: mcpUsage.remoteMcpServerIds.get(server.id),
     }));
 
     const tunneledMcpSources: NamedAsset[] = isTunneledMcpEnabled
@@ -237,6 +238,7 @@ export default function Sources(): JSX.Element {
           type: "tunneledmcp" as const,
           createdAt: server.createdAt,
           updatedAt: server.updatedAt,
+          mcpServerId: mcpUsage.tunneledMcpServerIds.get(server.id),
         }))
       : [];
 
@@ -249,6 +251,7 @@ export default function Sources(): JSX.Element {
       name: server.name,
       url: server.url,
       type: "unproxiedmcp" as const,
+      mcpServerId: mcpUsage.unproxiedMcpServerIds.get(server.id),
     }));
 
     return [
@@ -267,6 +270,7 @@ export default function Sources(): JSX.Element {
     tunneledMcpServersResult,
     unproxiedMcpServersResult,
     isTunneledMcpEnabled,
+    mcpUsage,
   ]);
 
   const filteredSources = useMemo(() => {
@@ -637,10 +641,17 @@ export default function Sources(): JSX.Element {
 interface McpUsage {
   /** Every tool URN exposed by any toolset (Hosted MCP server). */
   toolsetToolUrns: string[];
-  /** IDs of remote/tunneled/unproxied MCP servers that have an mcp_server row. */
-  remoteMcpServerIds: Set<string>;
-  tunneledMcpServerIds: Set<string>;
-  unproxiedMcpServerIds: Set<string>;
+  /**
+   * Source id -> wrapping mcp_server id, for remote/tunneled/unproxied
+   * sources. A Map instead of a Set so the same lookup used for "is this
+   * source used" doubles as the id needed to fetch that server's icon
+   * (mcp_metadata is keyed by mcp_server id, not the source's own id). If a
+   * source were ever wrapped by more than one mcp_server (not possible via
+   * today's create flows), this keeps the last one seen.
+   */
+  remoteMcpServerIds: Map<string, string>;
+  tunneledMcpServerIds: Map<string, string>;
+  unproxiedMcpServerIds: Map<string, string>;
 }
 
 /**
@@ -662,18 +673,18 @@ function useMcpUsage(): McpUsage {
     const toolsetToolUrns = (toolsetsData?.toolsets ?? []).flatMap(
       (toolset) => toolset.toolUrns ?? [],
     );
-    const remoteMcpServerIds = new Set<string>();
-    const tunneledMcpServerIds = new Set<string>();
-    const unproxiedMcpServerIds = new Set<string>();
+    const remoteMcpServerIds = new Map<string, string>();
+    const tunneledMcpServerIds = new Map<string, string>();
+    const unproxiedMcpServerIds = new Map<string, string>();
     for (const server of mcpServersResult?.mcpServers ?? []) {
       if (server.remoteMcpServerId) {
-        remoteMcpServerIds.add(server.remoteMcpServerId);
+        remoteMcpServerIds.set(server.remoteMcpServerId, server.id);
       }
       if (server.tunneledMcpServerId) {
-        tunneledMcpServerIds.add(server.tunneledMcpServerId);
+        tunneledMcpServerIds.set(server.tunneledMcpServerId, server.id);
       }
       if (server.unproxiedMcpServerId) {
-        unproxiedMcpServerIds.add(server.unproxiedMcpServerId);
+        unproxiedMcpServerIds.set(server.unproxiedMcpServerId, server.id);
       }
     }
     return {

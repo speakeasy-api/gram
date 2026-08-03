@@ -11,7 +11,7 @@ import {
 import { useRoutes } from "@/routes";
 import { Badge } from "@/components/ui/Badge";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
-import type { NamedAsset } from "./SourceCard";
+import { SourceMcpIcon, type NamedAsset } from "./SourceCard";
 
 const sourceTypeConfig = {
   openapi: { label: "OpenAPI" },
@@ -129,11 +129,18 @@ export function SourceTableRow({
       );
     }
     if (
-      asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
       asset.type === "tunneledmcp" ||
       asset.type === "unproxiedmcp"
     ) {
+      return (
+        <SourceMcpIcon
+          mcpServerId={asset.mcpServerId}
+          className="h-5 w-5 object-contain"
+        />
+      );
+    }
+    if (asset.type === "externalmcp") {
       return <Network className="text-muted-foreground h-5 w-5" />;
     }
     return <FileCode className="text-muted-foreground h-5 w-5" />;
