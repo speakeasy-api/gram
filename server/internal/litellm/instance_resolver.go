@@ -70,6 +70,9 @@ func (r *InstanceResolver) Resolve(ctx context.Context, organizationID, projectI
 		if queryErr != nil {
 			return uuid.Nil, fmt.Errorf("get active LiteLLM instance by API key: %w", queryErr)
 		}
+		if cached, ok := r.cache.Get(cacheKey); ok {
+			return cached, nil
+		}
 		r.cache.Add(cacheKey, instanceID)
 		return instanceID, nil
 	})
@@ -91,7 +94,13 @@ func (r *InstanceResolver) Remember(organizationID string, projectID uuid.UUID, 
 }
 
 func (r *InstanceResolver) Forget(organizationID string, projectID uuid.UUID, apiKeyID string) {
-	r.cache.Remove(instanceResolverCacheKey(organizationID, projectID.String(), apiKeyID))
+	cacheKey := instanceResolverCacheKey(organizationID, projectID.String(), apiKeyID)
+	// Tombstone before and after waiting so an older in-flight fill cannot restore a revoked key.
+	r.cache.Add(cacheKey, uuid.Nil)
+	_, _, _ = r.group.Do(cacheKey, func() (any, error) {
+		return uuid.Nil, nil
+	})
+	r.cache.Add(cacheKey, uuid.Nil)
 }
 
 func instanceResolverCacheKey(organizationID, projectID, apiKeyID string) string {
