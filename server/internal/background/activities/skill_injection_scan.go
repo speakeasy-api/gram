@@ -98,6 +98,13 @@ func (s *SkillInjectionScanner) Scan(ctx context.Context, params ScanSkillVersio
 		result.Processed++
 		if flagged {
 			result.Flagged++
+			// Until the verdict is surfaced in the product, this is the only signal a
+			// manifest tripped the judge — emit it so alerting has something to hook.
+			s.logger.WarnContext(ctx, "skill version flagged for prompt injection",
+				attr.SlogOrganizationID(row.OrganizationID),
+				attr.SlogProjectID(row.ProjectID.String()),
+				slog.String("skill_version_id", row.SkillVersionID.String()),
+			)
 		}
 	}
 
