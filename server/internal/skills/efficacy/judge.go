@@ -82,7 +82,7 @@ Output ONLY the JSON object, no prose or markdown fences.`
 
 // Judge asks an LLM how well one skill served one session. Conventions follow
 // the risk judge: strict JSON schema, zero temperature, hard call timeout, and
-// the shared per-(org, model) judge rate limiter.
+// the shared key-scoped judge rate limiter.
 type Judge struct {
 	logger  *slog.Logger
 	tracer  trace.Tracer
@@ -138,7 +138,8 @@ func (j *Judge) Judge(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 	// A Store outage is not a throttle: proceed rather than stall the pipeline on
 	// limiter infrastructure. A real throttle is retryable - the unit keeps its
 	// reservation and its attempt budget.
-	switch res, err := j.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, JudgeModel)); {
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceSkillEfficacy, JudgeModel)
+	switch res, err := j.limiter.Allow(ctx, bucket); {
 	case err != nil:
 		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
 			attr.SlogError(err),
