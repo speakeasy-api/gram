@@ -304,6 +304,13 @@ CREATE TABLE IF NOT EXISTS skill_versions (
   spec_valid boolean NOT NULL,
   validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
 
+  -- Prompt-injection scan of the manifest content. injection_scanned_at is null
+  -- until the background sweep classifies the version; injection_flagged records
+  -- the verdict and injection_rationale the judge's reasoning when flagged.
+  injection_scanned_at timestamptz,
+  injection_flagged boolean,
+  injection_rationale TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   promoted_at timestamptz,
   created_by_user_id TEXT NOT NULL,
@@ -317,6 +324,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key O
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_effective_at_id_idx ON skill_versions (skill_id, COALESCE(promoted_at, created_at) DESC, id DESC);
+CREATE INDEX IF NOT EXISTS skill_versions_injection_scan_idx ON skill_versions (id) WHERE injection_scanned_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS skill_version_lineages (
   skill_version_id uuid NOT NULL,

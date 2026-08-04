@@ -1227,7 +1227,7 @@ WHERE s.project_id = $9
   AND s.archived_at IS NULL
 ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
-RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, created_at, promoted_at, created_by_user_id
+RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, injection_scanned_at, injection_flagged, injection_rationale, created_at, promoted_at, created_by_user_id
 `
 
 type CreateSkillVersionParams struct {
@@ -1267,6 +1267,9 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
+		&i.InjectionScannedAt,
+		&i.InjectionFlagged,
+		&i.InjectionRationale,
 		&i.CreatedAt,
 		&i.PromotedAt,
 		&i.CreatedByUserID,
@@ -1857,7 +1860,7 @@ func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginFor
 }
 
 const getProjectSkillVersion = `-- name: GetProjectSkillVersion :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.injection_scanned_at, sv.injection_flagged, sv.injection_rationale, sv.created_at, sv.promoted_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -1882,6 +1885,9 @@ func (q *Queries) GetProjectSkillVersion(ctx context.Context, arg GetProjectSkil
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
+		&i.InjectionScannedAt,
+		&i.InjectionFlagged,
+		&i.InjectionRationale,
 		&i.CreatedAt,
 		&i.PromotedAt,
 		&i.CreatedByUserID,
@@ -2695,7 +2701,7 @@ func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (G
 }
 
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.injection_scanned_at, sv.injection_flagged, sv.injection_rationale, sv.created_at, sv.promoted_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -2723,6 +2729,9 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
+		&i.InjectionScannedAt,
+		&i.InjectionFlagged,
+		&i.InjectionRationale,
 		&i.CreatedAt,
 		&i.PromotedAt,
 		&i.CreatedByUserID,
@@ -2732,7 +2741,7 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 
 const getSkillVersionDetails = `-- name: GetSkillVersionDetails :one
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.injection_scanned_at, sv.injection_flagged, sv.injection_rationale, sv.created_at, sv.promoted_at, sv.created_by_user_id,
   svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
@@ -2787,6 +2796,9 @@ func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersio
 		&i.SkillVersion.Metadata,
 		&i.SkillVersion.SpecValid,
 		&i.SkillVersion.ValidationErrors,
+		&i.SkillVersion.InjectionScannedAt,
+		&i.SkillVersion.InjectionFlagged,
+		&i.SkillVersion.InjectionRationale,
 		&i.SkillVersion.CreatedAt,
 		&i.SkillVersion.PromotedAt,
 		&i.SkillVersion.CreatedByUserID,
@@ -4588,7 +4600,7 @@ func (q *Queries) ListSkillSuggestionProjects(ctx context.Context, arg ListSkill
 
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.injection_scanned_at, sv.injection_flagged, sv.injection_rationale, sv.created_at, sv.promoted_at, sv.created_by_user_id,
   svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
@@ -4665,6 +4677,9 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.SkillVersion.Metadata,
 			&i.SkillVersion.SpecValid,
 			&i.SkillVersion.ValidationErrors,
+			&i.SkillVersion.InjectionScannedAt,
+			&i.SkillVersion.InjectionFlagged,
+			&i.SkillVersion.InjectionRationale,
 			&i.SkillVersion.CreatedAt,
 			&i.SkillVersion.PromotedAt,
 			&i.SkillVersion.CreatedByUserID,
@@ -4960,6 +4975,59 @@ func (q *Queries) ListUnreviewedSkillFeedback(ctx context.Context, arg ListUnrev
 	return items, nil
 }
 
+const listUnscannedSkillVersions = `-- name: ListUnscannedSkillVersions :many
+SELECT
+  sv.id AS skill_version_id,
+  sv.skill_id,
+  s.project_id,
+  p.organization_id,
+  sv.content
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+JOIN projects p ON p.id = s.project_id
+WHERE sv.injection_scanned_at IS NULL
+ORDER BY sv.id
+LIMIT $1
+`
+
+type ListUnscannedSkillVersionsRow struct {
+	SkillVersionID uuid.UUID
+	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Content        string
+}
+
+// Cross-project scan queue for prompt-injection classification. Rows drop out of
+// the partial index once injection_scanned_at is set, so a plain LIMIT re-query
+// walks the backlog without a cursor. organization_id/project_id ride along so
+// the judge attributes to and rate-limits by the owning tenant.
+func (q *Queries) ListUnscannedSkillVersions(ctx context.Context, batchSize int32) ([]ListUnscannedSkillVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listUnscannedSkillVersions, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnscannedSkillVersionsRow
+	for rows.Next() {
+		var i ListUnscannedSkillVersionsRow
+		if err := rows.Scan(
+			&i.SkillVersionID,
+			&i.SkillID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const loadReservedSkillEfficacyEvaluations = `-- name: LoadReservedSkillEfficacyEvaluations :many
 UPDATE skill_efficacy_evaluations e
 SET claim_token = $1::uuid,
@@ -5195,6 +5263,38 @@ func (q *Queries) MarkSkillSessionVersionsSynced(ctx context.Context, arg MarkSk
 	return result.RowsAffected(), nil
 }
 
+const markSkillVersionInjectionScan = `-- name: MarkSkillVersionInjectionScan :execrows
+UPDATE skill_versions sv
+SET
+  injection_scanned_at = clock_timestamp(),
+  injection_flagged = $1,
+  injection_rationale = $2
+FROM skills s
+WHERE sv.skill_id = s.id
+  AND s.project_id = $3
+  AND sv.id = $4
+`
+
+type MarkSkillVersionInjectionScanParams struct {
+	InjectionFlagged   pgtype.Bool
+	InjectionRationale pgtype.Text
+	ProjectID          uuid.UUID
+	SkillVersionID     uuid.UUID
+}
+
+func (q *Queries) MarkSkillVersionInjectionScan(ctx context.Context, arg MarkSkillVersionInjectionScanParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSkillVersionInjectionScan,
+		arg.InjectionFlagged,
+		arg.InjectionRationale,
+		arg.ProjectID,
+		arg.SkillVersionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const promoteObservedSkillToManual = `-- name: PromoteObservedSkillToManual :one
 UPDATE skills
 SET source_kind = 'manual',
@@ -5243,7 +5343,7 @@ WHERE s.project_id = $1
   AND sv.skill_id = s.id
   AND sv.id = $3
   AND sv.spec_valid IS TRUE
-RETURNING sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
+RETURNING sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.injection_scanned_at, sv.injection_flagged, sv.injection_rationale, sv.created_at, sv.promoted_at, sv.created_by_user_id
 `
 
 type PromoteSkillVersionParams struct {
@@ -5265,6 +5365,9 @@ func (q *Queries) PromoteSkillVersion(ctx context.Context, arg PromoteSkillVersi
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
+		&i.InjectionScannedAt,
+		&i.InjectionFlagged,
+		&i.InjectionRationale,
 		&i.CreatedAt,
 		&i.PromotedAt,
 		&i.CreatedByUserID,
@@ -5633,7 +5736,7 @@ func (q *Queries) ResolveSkillRegressionBases(ctx context.Context, arg ResolveSk
 
 const resolveSkillSuggestionBase = `-- name: ResolveSkillSuggestionBase :one
 WITH base AS (
-  SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
+  SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.injection_scanned_at, sv.injection_flagged, sv.injection_rationale, sv.created_at, sv.promoted_at, sv.created_by_user_id
   FROM skills s
   JOIN skill_versions sv ON sv.skill_id = s.id
   LEFT JOIN skill_version_origins svo
