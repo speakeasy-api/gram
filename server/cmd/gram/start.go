@@ -1128,7 +1128,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("create spend gate: %w", err)
 			}
 
-			about.Attach(mux, about.NewService(logger, tracerProvider))
+			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger))

@@ -4,29 +4,60 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"time"
 
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/about"
 	srv "github.com/speakeasy-api/gram/server/gen/http/about/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 )
+
+// deviceAgentReleasesBaseURL is the public, unauthenticated bucket the
+// device-agent release pipeline publishes to (device-agent's release.yml,
+// release-pkg-macos job). The pkg itself has no "latest" alias there, same as
+// the raw daemon/CLI binaries — every consumer resolves the current version
+// off releases.json and builds the versioned URL, which is what this handler
+// does server-side so docs/IT-admin instructions have one stable link.
+const deviceAgentReleasesBaseURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod"
+
+const installDeviceAgentMacOSPath = "/v1/install/device-agent-macos.pkg"
+
+type deviceAgentReleasesManifest struct {
+	Latest struct {
+		Speakeasyd struct {
+			Version string `json:"version"`
+		} `json:"speakeasyd"`
+	} `json:"latest"`
+}
 
 type Service struct {
 	logger *slog.Logger
 	tracer trace.Tracer
+
+	guardianPolicy         *guardian.Policy
+	deviceAgentManifestURL string
+	deviceAgentReleasesURL string
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy) *Service {
 	return &Service{
-		logger: logger.With(attr.SlogComponent("about")),
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/about"),
+		logger:                 logger.With(attr.SlogComponent("about")),
+		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/about"),
+		guardianPolicy:         guardianPolicy,
+		deviceAgentManifestURL: deviceAgentReleasesBaseURL + "/releases.json",
+		deviceAgentReleasesURL: deviceAgentReleasesBaseURL,
 	}
 }
 
@@ -38,6 +69,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+
+	// Raw HTTP handler: a stable, version-agnostic link to the current signed
+	// macOS device-agent pkg, for docs/IT-admin instructions that can't run
+	// the dashboard's own version-resolution logic.
+	mux.Handle("GET", installDeviceAgentMacOSPath, service.handleInstallDeviceAgentMacOS)
 }
 
 // Openapi implements about.Service.
@@ -46,4 +82,58 @@ func (s *Service) Openapi(context.Context) (res *gen.OpenapiResult, body io.Read
 		ContentType:   "text/yaml",
 		ContentLength: int64(len(openapiDoc)),
 	}, io.NopCloser(bytes.NewReader(openapiDoc)), nil
+}
+
+// handleInstallDeviceAgentMacOS resolves the current device-agent version from
+// the public releases manifest and 302-redirects to that version's signed
+// pkg. Never hardcode the pkg URL elsewhere; link here instead so every
+// consumer stays current without a docs edit on every release.
+func (s *Service) handleInstallDeviceAgentMacOS(w http.ResponseWriter, r *http.Request) {
+	ctx, span := s.tracer.Start(r.Context(), "about.handleInstallDeviceAgentMacOS")
+	defer span.End()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.deviceAgentManifestURL, nil)
+	if err != nil {
+		span.SetStatus(codes.Error, "build manifest request")
+		s.logger.ErrorContext(ctx, "build device-agent manifest request", attr.SlogError(err))
+		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+
+	client := s.guardianPolicy.Client()
+	client.Timeout = 5 * time.Second
+	resp, err := client.Do(req)
+	if err != nil {
+		span.SetStatus(codes.Error, "fetch manifest")
+		s.logger.ErrorContext(ctx, "fetch device-agent releases manifest", attr.SlogError(err))
+		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		span.SetStatus(codes.Error, "manifest non-200")
+		s.logger.ErrorContext(ctx, "device-agent releases manifest returned non-200", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
+		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+
+	var manifest deviceAgentReleasesManifest
+	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+		span.SetStatus(codes.Error, "decode manifest")
+		s.logger.ErrorContext(ctx, "decode device-agent releases manifest", attr.SlogError(err))
+		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+
+	version := manifest.Latest.Speakeasyd.Version
+	if version == "" {
+		span.SetStatus(codes.Error, "empty version")
+		s.logger.ErrorContext(ctx, "device-agent releases manifest missing latest.speakeasyd.version")
+		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+
+	pkgURL := fmt.Sprintf("%s/v%s/speakeasy-agent_%s.pkg", s.deviceAgentReleasesURL, version, version)
+	http.Redirect(w, r, pkgURL, http.StatusFound)
 }
