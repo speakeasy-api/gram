@@ -88,6 +88,7 @@ func (h *dbHandler) seedApp(t *testing.T, clientID, secret string) repo.EmaApp {
 		ID:           uuid.New(),
 		ClientID:     clientID,
 		ClientSecret: secret,
+		Jwks:         "",
 		Name:         clientID,
 		Enabled:      true,
 	})

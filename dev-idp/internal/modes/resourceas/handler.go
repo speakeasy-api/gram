@@ -17,10 +17,8 @@ package resourceas
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/rsa"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -100,6 +98,10 @@ func (h *Handler) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /{slug}/token", h.handleToken)
 	mux.HandleFunc("POST /{slug}/introspect", h.handleIntrospect)
+	// Ungated by slug on purpose: this is public key material, identical for
+	// every resource on this dev-idp, and a verifier reaching it has already
+	// resolved a real issuer through the metadata document.
+	mux.Handle("GET /{slug}/.well-known/jwks.json", h.keystore.JWKSHandler())
 	return mux
 }
 
@@ -126,6 +128,7 @@ type asMetadata struct {
 	Issuer                            string   `json:"issuer"`
 	TokenEndpoint                     string   `json:"token_endpoint"`
 	IntrospectionEndpoint             string   `json:"introspection_endpoint"`
+	JwksURI                           string   `json:"jwks_uri"`
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 	ScopesSupported                   []string `json:"scopes_supported"`
@@ -154,6 +157,7 @@ func (h *Handler) handleASMetadata(w http.ResponseWriter, r *http.Request) {
 		Issuer:                            iss,
 		TokenEndpoint:                     iss + "/token",
 		IntrospectionEndpoint:             iss + "/introspect",
+		JwksURI:                           iss + "/.well-known/jwks.json",
 		GrantTypesSupported:               []string{ema.GrantTypeJWTBearer},
 		TokenEndpointAuthMethodsSupported: []string{"none"},
 		ScopesSupported:                   h.advertisedScopes(r.Context(), resource),
@@ -295,17 +299,34 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	granted := ema.NarrowScope(claims.Scope, rule.AllowedScopes)
 
-	access := "ema_" + randomHex(32)
+	now := time.Now()
+	expiresAt := now.Add(accessTokenLifetime)
+	jti := uuid.NewString()
+
+	access, err := h.signAccessToken(resource, accessTokenClaims{
+		jti:      jti,
+		subject:  userID.String(),
+		clientID: claims.ClientID,
+		scope:    granted,
+		issuedAt: now,
+		expires:  expiresAt,
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "sign resource access token", slog.Any("error", err))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
+		return
+	}
+
 	if _, err := queries.CreateEmaResourceToken(ctx, repo.CreateEmaResourceTokenParams{
-		Token:      access,
+		Jti:        jti,
 		ResourceID: resource.ID,
 		UserID:     userID,
 		ClientID:   claims.ClientID,
 		Audience:   resource.ResourceIdentifier,
 		Scope:      granted,
-		ExpiresAt:  time.Now().Add(accessTokenLifetime),
+		ExpiresAt:  expiresAt,
 	}); err != nil {
-		h.logger.ErrorContext(ctx, "issue resource access token", slog.Any("error", err))
+		h.logger.ErrorContext(ctx, "record resource access token", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
 		return
 	}
@@ -561,9 +582,22 @@ func (h *Handler) handleIntrospect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The token is a signed JWT, so everything except revocation is settled
+	// by verifying it. The ledger lookup that follows is only there to catch
+	// a token that has been revoked since it was issued.
+	claims, err := h.parseAccessToken(resource, token)
+	if err != nil {
+		h.logger.InfoContext(ctx, "introspect rejected token",
+			slog.String("resource", resource.Slug),
+			slog.Any("error", err),
+		)
+		writeJSON(w, http.StatusOK, inactive)
+		return
+	}
+
 	queries := repo.New(h.db)
 	stored, err := queries.GetActiveEmaResourceToken(ctx, repo.GetActiveEmaResourceTokenParams{
-		Token:      token,
+		Jti:        claims.ID,
 		ResourceID: resource.ID,
 		Ts:         time.Now(),
 	})
@@ -630,12 +664,6 @@ func (h *Handler) getJSON(ctx context.Context, url string, into any) error {
 		return fmt.Errorf("decode %s: %w", url, err)
 	}
 	return nil
-}
-
-func randomHex(nBytes int) string {
-	b := make([]byte, nBytes)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
