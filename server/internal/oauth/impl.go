@@ -951,10 +951,14 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	}
 
 	serverURL := s.serverURL.String()
+	// Register only the canonical remote-login callback. Every login flow —
+	// including the /x/mcp custom-domain surface — redirects through it (see
+	// remotesessions.canonicalCallbackRouteBase), and some IdPs (e.g.
+	// Cloudflare Access) strictly allowlist redirect URIs and reject the whole
+	// registration when any requested URI is not allowlisted, so registering
+	// unused callbacks makes DCR needlessly fail against them.
 	redirectURIs := []string{
-		fmt.Sprintf("%s/oauth/callback", serverURL),
 		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
-		fmt.Sprintf("%s/x/mcp/remote_login_callback", serverURL),
 	}
 
 	dcrReq := DCRRequest{
