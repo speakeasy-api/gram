@@ -54,14 +54,7 @@ import {
 } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  cloneElement,
-  type ComponentPropsWithoutRef,
-  type ReactElement,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -310,20 +303,9 @@ function TopUsersTable({
         handleLoadMore={onLoadMore}
         hasMore={hasMore}
         isLoading={isLoading}
+        isRowClickable={(user) => Boolean(user.email)}
+        onRowClick={onOpenUser}
         rowKey={(row) => row.userKey}
-        renderRow={(user, rowElement) => {
-          if (!user.email) return rowElement;
-
-          const userRow = rowElement as ReactElement<
-            ComponentPropsWithoutRef<"tr">
-          >;
-          return cloneElement(userRow, {
-            className: [userRow.props.className, "cursor-pointer"]
-              .filter(Boolean)
-              .join(" "),
-            onClick: () => onOpenUser(user),
-          });
-        }}
       />
     </Table>
   );

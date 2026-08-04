@@ -268,6 +268,8 @@ vi.mock("@/components/ui/Table", () => ({
         data,
         handleLoadMore,
         hasMore,
+        isRowClickable,
+        onRowClick,
         renderRow,
         rowKey,
       }: {
@@ -278,6 +280,8 @@ vi.mock("@/components/ui/Table", () => ({
         data: Array<{ userKey: string }>;
         handleLoadMore?: () => void;
         hasMore?: boolean;
+        isRowClickable?: (row: { userKey: string }) => boolean;
+        onRowClick?: (row: { userKey: string }) => void;
         renderRow?: (
           row: { userKey: string },
           rowElement: ReactElement,
@@ -287,7 +291,17 @@ vi.mock("@/components/ui/Table", () => ({
         <tbody>
           {data.map((row) => {
             const rowElement = (
-              <tr key={rowKey(row)}>
+              <tr
+                className={
+                  isRowClickable?.(row) === false ? undefined : "cursor-pointer"
+                }
+                key={rowKey(row)}
+                onClick={
+                  isRowClickable?.(row) === false
+                    ? undefined
+                    : () => onRowClick?.(row)
+                }
+              >
                 {columns.map((column) => (
                   <td key={column.key}>{column.render?.(row)}</td>
                 ))}
