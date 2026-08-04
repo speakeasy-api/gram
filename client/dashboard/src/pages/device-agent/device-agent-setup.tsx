@@ -30,11 +30,6 @@ const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 
-// macOS installs from the signed .pkg attached to the GitHub Release (ADR-0015)
-// rather than the raw-binary manifest above — it isn't part of releases.json.
-const GITHUB_RELEASES_URL =
-  "https://github.com/speakeasy-api/device-agent/releases";
-
 // Shared inline-link styling for the anchors/Links on this page.
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
 
@@ -733,12 +728,56 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
+// PkgDownloadButton is BinaryDownloadButton's single-artifact sibling: no
+// sha256 to show (the pkg isn't in releases.json, so useAgentReleases never
+// resolves one for it — see PKG_BASE), so the title/hover affordance is
+// dropped rather than shown empty.
+function PkgDownloadButton({
+  href,
+  version,
+}: {
+  href: string;
+  version: string;
+}) {
+  return (
+    <a
+      href={href}
+      download
+      className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 rounded-md border px-3 py-2 transition-colors"
+    >
+      <Download className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span className="flex flex-col leading-tight">
+        <span className="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
+          Installer
+        </span>
+        <span className="text-foreground font-mono text-xs">
+          speakeasy-agent.pkg
+        </span>
+        <span className="text-muted-foreground mt-0.5 text-[10px]">
+          v{version}
+        </span>
+      </span>
+    </a>
+  );
+}
+
 // MacInstallStep is the first (and only pre-identity) setup step on macOS:
-// grab the signed .pkg from the GitHub Release and install it, either by hand
-// on one machine or pushed through an MDM as a normal Package. Unlike
-// Windows/Linux there's no separate chmod/move or service-registration step —
-// the pkg's postinstall does both (ADR-0015: device-agent, ONBOARDING_JAMF.md).
+// grab the signed .pkg and install it, either by hand on one machine or
+// pushed through an MDM as a normal Package. Unlike Windows/Linux there's no
+// separate chmod/move or service-registration step — the pkg's postinstall
+// does both (ADR-0015: device-agent, ONBOARDING_JAMF.md).
 function MacInstallStep() {
+  const { data, isError } = useAgentReleases();
+  const version = data?.latest["speakeasyd"]?.version ?? null;
+  // The pkg ships from the same bucket/version layout as the raw binaries
+  // (device-agent's release-pkg-macos job), but isn't itself listed in
+  // releases.json — it's the manual/MDM on-ramp, not something the
+  // auto-update client discovers — so its URL is built directly rather than
+  // read off the manifest the way ManualDownload reads speakeasyd/speakeasy.
+  const pkgUrl = version
+    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`
+    : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
@@ -746,38 +785,45 @@ function MacInstallStep() {
         <BinaryLegend />
       </div>
       <div className="flex flex-col gap-2">
-        <SubLabel>Get the installer</SubLabel>
-        <Text small muted>
-          Grab <code>speakeasy-agent_&lt;version&gt;.pkg</code> from the{" "}
-          <ExternalLink
-            href={GITHUB_RELEASES_URL}
-            target="_blank"
-            iconSuffixName="external-link"
-          >
-            current stable GitHub Release
-          </ExternalLink>
-          . One universal build covers Apple Silicon and Intel. It's Developer
-          ID signed, notarized, and stapled, so a browser download needs no
-          Gatekeeper workaround.
-        </Text>
-      </div>
-      <div className="flex flex-col gap-2">
-        <SubLabel>Install it — one machine</SubLabel>
+        <SubLabel>Run the download + install script</SubLabel>
         <StepNote>
           Provision <code>managed.json</code> first (see the identity step next)
-          for a deterministic first start, then install:
+          for a deterministic first start.
         </StepNote>
-        <CodeBlock language="bash">{`sudo installer -pkg "./speakeasy-agent_<version>.pkg" -target /`}</CodeBlock>
+        <CodeBlock language="bash">{`${bashVersionAssign(version)}
+curl -fSL -o speakeasy-agent.pkg "${RELEASES_BASE}/v\${VERSION}/speakeasy-agent_\${VERSION}.pkg"
+sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
       </div>
       <OrDivider />
       <div className="flex flex-col gap-2">
-        <SubLabel>Install it — fleet via MDM</SubLabel>
+        <SubLabel>Download the installer directly</SubLabel>
+        {pkgUrl ? (
+          <PkgDownloadButton href={pkgUrl} version={version ?? ""} />
+        ) : (
+          <Text small muted>
+            {isError
+              ? "Couldn't load the latest release — use the download script above, or open the "
+              : "Loading the latest release… or use the download script above, or open the "}
+            <ExternalLink
+              href={MANIFEST_URL}
+              target="_blank"
+              iconSuffixName="external-link"
+            >
+              release manifest
+            </ExternalLink>{" "}
+            for the current version.
+          </Text>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Or push it as a fleet via MDM</SubLabel>
         <Text small muted>
-          Upload the pkg to your MDM (Jamf, Kandji, Intune, …) as a{" "}
-          <strong className="font-medium">Package</strong> and scope a policy to
-          install it once per computer — no script needed. The pkg installs the
-          daemon, CLI, menu-bar UI, and privileged helper together, and its
-          postinstall step registers the per-user LaunchAgents itself.
+          Download the pkg (above) and upload it to your MDM (Jamf, Kandji,
+          Intune, …) as a <strong className="font-medium">Package</strong>, then
+          scope a policy to install it once per computer — no script needed. The
+          pkg installs the daemon, CLI, menu-bar UI, and privileged helper
+          together, and its postinstall step registers the per-user LaunchAgents
+          itself.
         </Text>
         <Text small muted>
           Don't re-push the pkg for routine version bumps — with{" "}
