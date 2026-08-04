@@ -36,7 +36,7 @@ import {
   SKILL_CLASSIFICATION_OPTIONS,
   SKILL_SOURCE_OPTIONS,
 } from "./skill-badge-options";
-import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
+import { SkillSourceBadge } from "./skill-badges";
 import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 import { useOpenSkillSuggestions } from "./use-open-skill-suggestions";
@@ -190,7 +190,7 @@ export default function SkillsList(): JSX.Element {
     {
       key: "name",
       header: "Skill",
-      width: "1.5fr",
+      width: "2fr",
       sortable: true,
       sortValue: (skill) => skill.displayName.toLocaleLowerCase(),
       render: (skill) => (
@@ -214,16 +214,6 @@ export default function SkillsList(): JSX.Element {
       ),
     },
     {
-      key: "summary",
-      header: "Summary",
-      width: "2fr",
-      render: (skill) => (
-        <Text small muted className="line-clamp-2">
-          {skill.summary || "No summary"}
-        </Text>
-      ),
-    },
-    {
       key: "source",
       header: (
         <ColumnHeaderTooltip
@@ -231,7 +221,7 @@ export default function SkillsList(): JSX.Element {
           tooltip="How the skill entered the registry: added manually, or captured from agent use."
         />
       ),
-      width: "120px",
+      width: "0.8fr",
       sortable: true,
       sortLabel: "Source",
       sortValue: (skill) =>
@@ -240,28 +230,9 @@ export default function SkillsList(): JSX.Element {
       render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
     },
     {
-      key: "classification",
-      header: (
-        <ColumnHeaderTooltip
-          label="Classification"
-          tooltip="Custom skills belong to your organization; built-in skills come from plugins or platform defaults."
-        />
-      ),
-      width: "130px",
-      render: (skill) => (
-        <SkillClassificationBadge value={skill.classification} />
-      ),
-    },
-    {
-      key: "versions",
-      header: "Versions",
-      width: "90px",
-      render: (skill) => <Text small>{skill.versionCount}</Text>,
-    },
-    {
       key: "activations",
       header: "Activations (30d)",
-      width: "130px",
+      width: "0.8fr",
       sortable: true,
       sortValue: (skill) => metricsBySkill.get(skill.id)?.activations ?? 0,
       render: (skill) => (
@@ -279,7 +250,7 @@ export default function SkillsList(): JSX.Element {
           tooltip="Average usefulness score from sampled sessions that used this skill."
         />
       ),
-      width: "110px",
+      width: "0.8fr",
       sortable: true,
       sortLabel: "Efficacy",
       sortValue: (skill) =>
@@ -309,7 +280,7 @@ export default function SkillsList(): JSX.Element {
           tooltip="Estimated time saved across scored sessions that used this skill."
         />
       ),
-      width: "150px",
+      width: "0.8fr",
       sortable: true,
       sortLabel: "Estimated savings",
       sortValue: (skill) =>
@@ -328,7 +299,7 @@ export default function SkillsList(): JSX.Element {
     {
       key: "updated",
       header: "Updated",
-      width: "150px",
+      width: "0.8fr",
       sortable: true,
       sortValue: (skill) => skill.updatedAt,
       render: (skill) => (
@@ -358,7 +329,7 @@ export default function SkillsList(): JSX.Element {
         ) : null,
     },
     {
-      key: "open",
+      key: "actions",
       header: "",
       width: "48px",
       render: () => (

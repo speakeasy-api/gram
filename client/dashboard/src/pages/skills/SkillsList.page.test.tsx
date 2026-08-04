@@ -283,6 +283,7 @@ vi.mock("@/components/ui/Table", () => ({
     columns: Array<{
       key: string;
       header: ReactNode;
+      width?: string;
       sortable?: boolean;
       sortLabel?: string;
       render?: (row: Record<string, unknown>) => ReactNode;
@@ -307,6 +308,15 @@ vi.mock("@/components/ui/Table", () => ({
 
     return (
       <div>
+        <div data-testid="table-column-keys">
+          {columns.map((column) => (
+            <span
+              data-column-key={column.key}
+              data-column-width={column.width}
+              key={column.key}
+            />
+          ))}
+        </div>
         {sortableColumns.map((column) => {
           const label =
             column.sortLabel ??
@@ -415,6 +425,40 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  it("shows only the compact skills table columns", () => {
+    render(<SkillsList />);
+
+    expect(
+      Array.from(
+        screen
+          .getByTestId("table-column-keys")
+          .querySelectorAll("[data-column-key]"),
+      ).map((element) => element.getAttribute("data-column-key")),
+    ).toEqual([
+      "name",
+      "source",
+      "activations",
+      "efficacy",
+      "estimatedSavings",
+      "updated",
+      "share",
+      "actions",
+    ]);
+
+    const renderedColumns = screen
+      .getByTestId("table-column-keys")
+      .querySelectorAll("[data-column-key]");
+    const widthsByKey = new Map(
+      Array.from(renderedColumns).map((element) => [
+        element.getAttribute("data-column-key"),
+        element.getAttribute("data-column-width"),
+      ]),
+    );
+
+    expect(widthsByKey.get("activations")).toBe("0.8fr");
+    expect(widthsByKey.get("estimatedSavings")).toBe("0.8fr");
+  });
+
   it("sorts the approved columns through header controls without a toolbar sort", () => {
     render(<SkillsList />);
 
