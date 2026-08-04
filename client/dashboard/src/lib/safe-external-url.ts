@@ -17,17 +17,27 @@ export function safeExternalHttpUrl(
   }
 }
 
+let externalTabCounter = 0;
+
 /** Keep scheme validation and isolated-tab flags together at navigation sinks. */
 export function openSafeExternalUrl(raw: string | null | undefined): boolean {
   const url = safeExternalHttpUrl(raw);
   if (!url) return false;
 
-  // A "noopener" feature string makes window.open return null even on
-  // success, hiding popup-blocker failures — sever the opener manually so a
-  // null return reliably means the tab did not open.
-  const opened = window.open(url, "_blank");
+  // A "noopener"/"noreferrer" feature string makes window.open return null
+  // even on success, hiding popup-blocker failures. Instead, open a uniquely
+  // named blank tab so null reliably means the popup was blocked, disown it,
+  // then navigate it through an anchor that strips the Referer header.
+  const target = `gram-external-${externalTabCounter++}`;
+  const opened = window.open("", target);
   if (!opened) return false;
   opened.opener = null;
+
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.target = target;
+  anchor.referrerPolicy = "no-referrer";
+  anchor.click();
   return true;
 }
 

@@ -49,20 +49,38 @@ describe("safeExternalHttpUrl", () => {
 });
 
 describe("openSafeExternalUrl", () => {
-  it("opens the normalized URL in an isolated tab", () => {
+  it("opens the normalized URL in an isolated tab without a referrer", () => {
     const opened = { opener: window } as unknown as Window;
     const open = vi.spyOn(window, "open").mockImplementation(() => opened);
+    let clicked: HTMLAnchorElement | undefined;
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+      function (this: HTMLAnchorElement) {
+        clicked = this;
+      },
+    );
 
     expect(openSafeExternalUrl("HTTPS://EXAMPLE.COM:443/docs")).toBe(true);
-    expect(open).toHaveBeenCalledWith("https://example.com/docs", "_blank");
+
+    const target = open.mock.calls[0]?.[1];
+    expect(open).toHaveBeenCalledWith(
+      "",
+      expect.stringMatching(/^gram-external-\d+$/),
+    );
     expect(opened.opener).toBeNull();
+    expect(clicked?.href).toBe("https://example.com/docs");
+    expect(clicked?.target).toBe(target);
+    expect(clicked?.referrerPolicy).toBe("no-referrer");
   });
 
   it("reports a popup-blocked tab as not opened", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
 
     expect(openSafeExternalUrl("https://example.com/docs")).toBe(false);
     expect(open).toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
   });
 
   it("does not open a rejected URL", () => {
