@@ -78,7 +78,7 @@ type EmaResource struct {
 }
 
 type EmaResourceToken struct {
-	Token      string
+	Jti        string
 	ResourceID uuid.UUID
 	UserID     uuid.UUID
 	ClientID   string
