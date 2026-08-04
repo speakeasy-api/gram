@@ -50,14 +50,19 @@ describe("safeExternalHttpUrl", () => {
 
 describe("openSafeExternalUrl", () => {
   it("opens the normalized URL in an isolated tab", () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const opened = { opener: window } as unknown as Window;
+    const open = vi.spyOn(window, "open").mockImplementation(() => opened);
 
     expect(openSafeExternalUrl("HTTPS://EXAMPLE.COM:443/docs")).toBe(true);
-    expect(open).toHaveBeenCalledWith(
-      "https://example.com/docs",
-      "_blank",
-      "noopener,noreferrer",
-    );
+    expect(open).toHaveBeenCalledWith("https://example.com/docs", "_blank");
+    expect(opened.opener).toBeNull();
+  });
+
+  it("reports a popup-blocked tab as not opened", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    expect(openSafeExternalUrl("https://example.com/docs")).toBe(false);
+    expect(open).toHaveBeenCalled();
   });
 
   it("does not open a rejected URL", () => {

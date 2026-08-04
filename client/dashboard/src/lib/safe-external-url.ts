@@ -22,7 +22,12 @@ export function openSafeExternalUrl(raw: string | null | undefined): boolean {
   const url = safeExternalHttpUrl(raw);
   if (!url) return false;
 
-  window.open(url, "_blank", "noopener,noreferrer");
+  // A "noopener" feature string makes window.open return null even on
+  // success, hiding popup-blocker failures — sever the opener manually so a
+  // null return reliably means the tab did not open.
+  const opened = window.open(url, "_blank");
+  if (!opened) return false;
+  opened.opener = null;
   return true;
 }
 

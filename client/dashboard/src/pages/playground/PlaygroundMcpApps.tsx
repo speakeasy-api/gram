@@ -1,5 +1,8 @@
 import { Text } from "@/components/ui/Text";
-import { safeExternalHttpUrl } from "@/lib/safe-external-url";
+import {
+  openSafeExternalUrl,
+  safeExternalHttpUrl,
+} from "@/lib/safe-external-url";
 import type { Toolset } from "@/lib/toolTypes";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ToolFallback } from "@/elements";
@@ -508,7 +511,9 @@ async function handleIframeRequest(init: {
         if (!safeUrl) {
           return err(message.id, -32602, "Unsupported URL");
         }
-        window.open(safeUrl, "_blank", "noopener,noreferrer");
+        if (!openSafeExternalUrl(safeUrl)) {
+          return err(message.id, -32000, "Failed to open URL");
+        }
         return ok(message.id, {});
       }
       case "resources/read":
