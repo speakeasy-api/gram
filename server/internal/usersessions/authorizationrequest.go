@@ -57,7 +57,7 @@ func (r *AuthorizationRequest) SetDefaults() {}
 // BEFORE it can safely redirect any error back to the caller. Per RFC
 // 6749 §4.1.2.1, an unknown client_id or invalid redirect_uri means we
 // can't trust the URI we'd redirect to — these errors MUST be surfaced
-// inline. Callers should run this first; if it returns a *OAuthError,
+// inline. Callers should run this first; if it returns a *oauthwire.Error,
 // write it as an HTTP-level response and stop.
 func (r *AuthorizationRequest) ValidateRedirectableFields() error {
 	if r.ClientID == "" {

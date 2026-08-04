@@ -178,32 +178,44 @@ func TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching(t *testing.T) {
 	require.Zero(t, ds.requests.Load(), "a denied client_id must not cost an outbound document fetch")
 }
 
-// TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement is the
-// property the whole rollout rests on: the decision recorded under
-// reporting must be the decision presets will make. If these diverged, the
-// measurement would not predict the switch.
+// TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement holds the
+// configuration constant and varies ONLY the mode, which is the whole claim:
+// reporting and presets reach the same decision and differ only in whether
+// it is applied.
 //
-// Both issuers are given the same custom URL, so both should evaluate to
-// admitted; the one difference is what happens to a URL neither admits.
+// An earlier version gave the custom URL to one issuer and not the other, so
+// it compared two different configurations and demonstrated nothing about
+// mode equivalence. Decision-level equivalence is pinned exhaustively in
+// admission.TestEvaluate_ReportingDecidesExactlyAsPresets; this covers the
+// wiring end to end.
 func TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	// A custom URL is honoured identically under reporting: the DB lookup
-	// runs, so the simulation cannot report a false denial.
+	// Two issuers, neither listing the URL, differing only in mode.
 	reporting := seedFreshIssuerToolset(t, ctx, ti)
-	allowCustomCimdURL(t, ctx, ti, reporting, ds.clientID)
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 
 	verifier := pkceVerifier(t)
-	w := doCIMDAuthorize(t, ti, reporting.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
-	require.Equal(t, http.StatusFound, w.Code)
 
-	// The same URL, unlisted, on a presets issuer: refused.
-	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
+	w := doCIMDAuthorize(t, ti, reporting.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code, "reporting must admit what presets would refuse")
+	require.Positive(t, ds.requests.Load(), "an admitted client_id reaches the document fetch")
+
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+
+	// The agreement runs the other way too: a URL the issuer does list is
+	// admitted under both, so reporting is not simply admitting blindly.
+	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
+	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code, "presets admits a listed URL")
+
+	allowCustomCimdURL(t, ctx, ti, reporting, ds.clientID)
+	w = doCIMDAuthorize(t, ti, reporting.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code, "reporting admits a listed URL")
 }
 
 // TestCIMDAdmission_PresetsDenialIsActionable: the description is the end

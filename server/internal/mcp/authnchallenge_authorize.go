@@ -89,7 +89,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
-			// Checked before the generic *OAuthError branch below, since an
+			// Checked before the generic *oauthwire.Error branch below, since an
 			// admission denial is policy rather than a spec violation and
 			// carries its own actionable description. Already logged with
 			// the presented client_id inside admitCIMDClient.
@@ -222,7 +222,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 // writeAuthorizeOAuthError unwraps a *oauthwire.Error to its code +
 // description and forwards to writeAuthorizeError. Falls back to a generic
 // invalid_request if err is something else (shouldn't happen — Validate
-// returns *OAuthError).
+// returns *oauthwire.Error).
 func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
 	var oauthErr *oauthwire.Error
 	if errors.As(err, &oauthErr) {

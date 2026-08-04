@@ -39,7 +39,7 @@ func AuthCodeTokenRequestFromForm(form url.Values) *AuthCodeTokenRequest {
 func (r *AuthCodeTokenRequest) SetDefaults() {}
 
 // Validate checks the presence of each required field. Returns an
-// *OAuthError on rejection. The redirect_uri match against the
+// *oauthwire.Error on rejection. The redirect_uri match against the
 // authorization grant and the PKCE verifier match against the stored
 // code_challenge live in the handler (they require grant-side state).
 func (r *AuthCodeTokenRequest) Validate() error {
@@ -75,7 +75,7 @@ func RefreshTokenRequestFromForm(form url.Values) *RefreshTokenRequest {
 // with the other request types.
 func (r *RefreshTokenRequest) SetDefaults() {}
 
-// Validate checks the presence of refresh_token. Returns an *OAuthError
+// Validate checks the presence of refresh_token. Returns an *oauthwire.Error
 // on rejection. Hash lookup + client-binding verification + expiry check
 // live in the handler since they require database state.
 func (r *RefreshTokenRequest) Validate() error {

@@ -166,8 +166,8 @@ func (s *Service) userSessionCIMDEnabled(ctx context.Context, logger *slog.Logge
 
 // admitCIMDClient enforces the issuer's CIMD admission policy against a
 // presented URL-shaped client_id, before any document is fetched. Returns
-// nil when the client is admitted, a *cimdAdmissionError when policy denies
-// it, and a wrapped error when the custom-URL lookup itself fails.
+// nil when the client is admitted, a *admission.DenialError when policy
+// denies it, and a wrapped error when the custom-URL lookup itself fails.
 //
 // The catalog is consulted first and in memory, so the common case — a
 // preset client on a presets-mode issuer — never touches the database. Only

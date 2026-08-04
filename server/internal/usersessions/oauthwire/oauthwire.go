@@ -35,9 +35,10 @@ func (e *Error) Error() string { return e.Code + ": " + e.Description }
 //   - https://... for web + confidential clients.
 //   - http://... only when the host is a loopback literal (127.0.0.1, ::1,
 //     localhost) per RFC 8252 §7.3.
-//   - custom-scheme://... for native apps, restricted per RFC 8252 §7.1:
-//     scheme must contain a "." (reverse-DNS form) to make collisions
-//     between independent apps unlikely.
+//   - custom-scheme://... for native apps. RFC 8252 §7.1 recommends
+//     reverse-DNS form (com.example.app) to make collisions between
+//     independent apps unlikely, but that is NOT enforced here: any scheme
+//     outside the blocklist below is accepted, dotted or not. See AIS-434.
 //
 // Dangerous schemes (javascript:, data:, vbscript:, file:, blob:, etc.)
 // are rejected unconditionally — they would let a registered redirect_uri
@@ -65,11 +66,11 @@ func ValidateRedirectURI(raw string) error {
 			return &Error{Code: "invalid_redirect_uri", Description: "http redirect_uri is only allowed for loopback hosts (127.0.0.1, ::1, localhost)"}
 		}
 	default:
-		// Native-app custom scheme. RFC 8252 §7.1 recommends reverse-DNS
-		// form (e.g. com.example.app); require a "." in the scheme to make
-		// inter-app collisions unlikely. Reject the well-known dangerous
-		// schemes explicitly even if a future spec extension would allow
-		// them through the dot rule.
+		// Native-app custom scheme. Only the well-known dangerous schemes
+		// are rejected. The RFC 8252 §7.1 reverse-DNS recommendation is
+		// deliberately not enforced (AIS-434): adding it would change which
+		// already-registered clients validate, so it is tracked separately
+		// rather than folded into an unrelated change.
 		switch scheme {
 		case "javascript", "data", "vbscript", "file", "blob", "view-source":
 			return &Error{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri scheme %q is not permitted", scheme)}

@@ -19,18 +19,20 @@ func TestResolveMode_NullResolvesToReporting(t *testing.T) {
 	require.False(t, mode.Enforces(), "the default must not enforce yet")
 }
 
-// TestResolveMode_EmptyStringMatchesNull covers the degenerate stored
-// value. A non-NULL empty string is indistinguishable from unset in intent,
-// so it must resolve identically and not fall through to the fail-closed
-// branch.
-func TestResolveMode_EmptyStringMatchesNull(t *testing.T) {
+// TestResolveMode_EmptyStringFailsClosed: a non-NULL empty string is a data
+// error, not an absent choice. Nothing writes one, so it can only come from
+// a direct database write, and treating it as "unset" would silently hand a
+// corrupt row the permissive default.
+func TestResolveMode_EmptyStringFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	empty, emptyRecognized := ResolveMode("", true)
+	empty, recognized := ResolveMode("", true)
+	require.Equal(t, ModeDisabled, empty)
+	require.False(t, recognized, "caller must be able to log the bad value")
+
 	null, nullRecognized := ResolveMode("", false)
-	require.Equal(t, null, empty)
-	require.Equal(t, nullRecognized, emptyRecognized)
-	require.True(t, emptyRecognized)
+	require.NotEqual(t, null, empty, "NULL and empty string must not be conflated")
+	require.True(t, nullRecognized)
 }
 
 func TestResolveMode_ExplicitValues(t *testing.T) {

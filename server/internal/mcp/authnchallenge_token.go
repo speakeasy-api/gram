@@ -121,7 +121,17 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	// Note this stops the issuance of new tokens; access tokens already
 	// minted stay valid until they expire (see AIS-406).
 	if clientRow.ClientIDMetadataUri.Valid {
-		if mode, _ := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid); mode == admission.ModeDisabled {
+		mode, recognized := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
+		if !recognized {
+			// Still fails closed below, but without this the rejection is
+			// indistinguishable from an operator deliberately choosing
+			// `disabled`, so a corrupt row would never be diagnosed from
+			// the token leg.
+			logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+				attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
+			)
+		}
+		if mode == admission.ModeDisabled {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
 		}
@@ -428,7 +438,7 @@ func (s *Service) mintSessionAndRespond(
 // writeTokenOAuthError unwraps a *oauthwire.Error to its code +
 // description and forwards to writeTokenError. Falls back to a generic
 // invalid_request if err is something else (shouldn't happen — Validate
-// returns *OAuthError).
+// returns *oauthwire.Error).
 func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
 	var oauthErr *oauthwire.Error
 	if errors.As(err, &oauthErr) {

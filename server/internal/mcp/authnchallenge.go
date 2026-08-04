@@ -405,10 +405,14 @@ var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not m
 // failure. Callers are responsible for first checking that the endpoint
 // is issuer-gated.
 //
-// This is the single place where issuer config reaches a
-// ResolvedMcpEndpoint: every construction path runs it, and it already had
-// to load the row for the FK check, so carrying config out of it costs no
-// additional query.
+// This is where issuer config reaches an OAuth-facing
+// ResolvedMcpEndpoint, and it already had to load the row for the FK check,
+// so carrying config out of it costs no additional query.
+//
+// It is NOT run by every construction path: the runtime issuer-gate in
+// impl.go builds an endpoint without it. Nothing on that path reads the
+// config today, but any future consumer must either route through here or
+// tolerate an unstamped endpoint, which reads as an unset mode.
 //
 // Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
 // the live-FK check in the same place as the

@@ -75,7 +75,7 @@ func TestCatalog_ReturnsCopy(t *testing.T) {
 	first := Catalog()
 	require.NotEmpty(t, first)
 	original := first[0]
-	first[0] = Preset{VendorKey: "attacker", DisplayName: "attacker", URL: unknownURL, Enabled: true}
+	first[0] = Preset{VendorKey: "attacker", DisplayName: "attacker", URL: unknownURL, DisplayOnly: false, Enabled: true}
 
 	second := Catalog()
 	require.Equal(t, original, second[0])
@@ -101,16 +101,58 @@ func TestCatalogMatch_ReportsWhichEntryMatched(t *testing.T) {
 	require.Empty(t, reason, "a miss must carry no reason")
 }
 
-// TestCatalogMatch_ExactEntryWinsOverPattern: an exact entry that also
-// falls inside a pattern's namespace must report as exact. Codex CLI is
-// exactly this case — it is listed by name and also matched by the ChatGPT
-// connector wildcard.
-func TestCatalogMatch_ExactEntryWinsOverPattern(t *testing.T) {
+// TestCatalogMatch_DisplayOnlyEntriesAttributeToTheirRule: a DisplayOnly
+// row names a URL that some other entry admits, so the admission must be
+// attributed to the rule that actually made it. Codex CLI is exactly this
+// case — listed by name, admitted by the ChatGPT connector wildcard.
+//
+// Reporting it as an exact match would misattribute the traffic and hide
+// how much work the wildcard is doing, which is the one thing the
+// exact/pattern split exists to measure.
+func TestCatalogMatch_DisplayOnlyEntriesAttributeToTheirRule(t *testing.T) {
 	t.Parallel()
 
 	reason, ok := CatalogMatch("https://chatgpt.com/oauth/codex/client.json")
 	require.True(t, ok)
-	require.Equal(t, AdmitCatalogExact, reason)
+	require.Equal(t, AdmitCatalogPattern, reason)
+}
+
+// TestCatalog_DisplayOnlyEntriesAreCoveredByARule pins the invariant that
+// makes DisplayOnly safe: a row excluded from matching must still be
+// admitted by something, or marking it DisplayOnly silently de-admitted a
+// client the catalog claims to support.
+func TestCatalog_DisplayOnlyEntriesAreCoveredByARule(t *testing.T) {
+	t.Parallel()
+
+	var found int
+	for _, preset := range Catalog() {
+		if !preset.DisplayOnly {
+			continue
+		}
+		found++
+		require.Falsef(t, preset.IsPattern(), "a DisplayOnly entry names one URL, so %q must not be a pattern", preset.URL)
+		require.Truef(t, catalogAdmits(preset.URL), "DisplayOnly entry %q is admitted by nothing", preset.URL)
+	}
+	require.Positive(t, found, "expected at least one DisplayOnly entry; delete this guard deliberately if they were removed")
+}
+
+// TestCatalog_DisabledEntriesAreNotAdmitted is the guard for the failure
+// cubic caught: before DisplayOnly existed, setting Enabled=false on a row
+// whose URL fell inside a wildcard left it reported as disabled by the
+// management API while /authorize still accepted it.
+//
+// Vacuous while every entry is enabled, which is the point — it fails the
+// build the moment someone disables one that another rule still covers.
+func TestCatalog_DisabledEntriesAreNotAdmitted(t *testing.T) {
+	t.Parallel()
+
+	for _, preset := range Catalog() {
+		if preset.Enabled || preset.DisplayOnly {
+			continue
+		}
+		require.Falsef(t, catalogAdmits(preset.URL),
+			"%q is disabled but another catalog entry still admits it", preset.URL)
+	}
 }
 
 // catalogAdmits is the bool-only view of CatalogMatch, for the many

@@ -33,12 +33,25 @@ type Preset struct {
 	// to this compile-time catalog and can never widen the host.
 	URL string
 
+	// DisplayOnly marks an entry that NAMES a client for the management API
+	// but is not itself an admission rule, because another entry — in
+	// practice a wildcard covering the same vendor — already admits its URL.
+	//
+	// It exists so the two states stay honest. Without it, an operator could
+	// set Enabled=false on such a row, see it reported as disabled by
+	// listPresets, and still have the URL admitted by the overlapping
+	// pattern. A DisplayOnly row is excluded from matching entirely, so the
+	// wildcard is unambiguously the rule and Enabled means what it says on
+	// every row that participates.
+	DisplayOnly bool
+
 	// Enabled gates the entry without deleting it. A disabled entry is
 	// inert for admission but still listed by the management API, so an
 	// operator can see that Gram knows about the vendor and has chosen not
 	// to admit it. Disabling an entry immediately de-admits it on every
 	// presets-mode issuer at deploy, so it is only for pulling an entry
-	// that turns out to be wrong.
+	// that turns out to be wrong. Meaningless on a DisplayOnly row, which
+	// never participates in matching.
 	Enabled bool
 }
 
@@ -46,6 +59,9 @@ type Preset struct {
 // than a literal client_id. Surfaced through the management API so the
 // dashboard can render a glob as such instead of offering it as a URL a
 // client would present verbatim.
+//
+// A DisplayOnly entry is never a pattern: it names one concrete URL that
+// some other entry admits.
 func (p Preset) IsPattern() bool {
 	return isPattern(p.URL)
 }
@@ -77,12 +93,14 @@ var catalog = []Preset{
 		VendorKey:   "anthropic",
 		DisplayName: "Anthropic (Claude Code)",
 		URL:         "https://claude.ai/oauth/claude-code-client-metadata",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 	{
 		VendorKey:   "anthropic",
 		DisplayName: "Anthropic (Claude)",
 		URL:         "https://claude.ai/oauth/mcp-oauth-client-metadata",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 
@@ -92,12 +110,14 @@ var catalog = []Preset{
 		VendorKey:   "microsoft",
 		DisplayName: "Visual Studio Code",
 		URL:         "https://vscode.dev/oauth/client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 	{
 		VendorKey:   "microsoft",
 		DisplayName: "Visual Studio Code (Insiders)",
 		URL:         "https://insiders.vscode.dev/oauth/client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 
@@ -106,6 +126,7 @@ var catalog = []Preset{
 		VendorKey:   "zed",
 		DisplayName: "Zed",
 		URL:         "https://zed.dev/oauth/client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 
@@ -114,15 +135,17 @@ var catalog = []Preset{
 		VendorKey:   "block",
 		DisplayName: "Goose",
 		URL:         "https://goose-docs.ai/oauth/client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 
 	// Verified 2026-07. OpenAI mints a document per connector, so the
-	// namespace is unbounded and the pattern entry is the only way to admit
-	// ChatGPT at all — see pattern.go. The two exact entries below are
-	// redundant for MATCHING (the pattern covers them) but are listed so
-	// the management API can name them: an operator reading the catalog
-	// should see "ChatGPT" and "Codex CLI", not just a glob.
+	// namespace is unbounded and only a pattern can admit it — see
+	// pattern.go. Two named entries follow so an operator reading the
+	// catalog sees "ChatGPT" and "Codex CLI" rather than just a glob, but
+	// note they differ: Codex sits inside the wildcard's namespace and is
+	// therefore DisplayOnly, while the constant ChatGPT document has no
+	// segment where the wildcard expects one and so is a rule of its own.
 	//
 	// Note both of OpenAI's documents omit token_endpoint_auth_method
 	// entirely; the validator treats that as "none" rather than rejecting,
@@ -131,18 +154,24 @@ var catalog = []Preset{
 		VendorKey:   "openai",
 		DisplayName: "ChatGPT (connectors)",
 		URL:         "https://chatgpt.com/oauth/*/client.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 	{
 		VendorKey:   "openai",
 		DisplayName: "ChatGPT",
 		URL:         "https://chatgpt.com/oauth/client.json",
+		// NOT DisplayOnly. The connector wildcard requires exactly one path
+		// segment between /oauth/ and /client.json, and this URL has none,
+		// so nothing else admits it. It is a rule in its own right.
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 	{
 		VendorKey:   "openai",
 		DisplayName: "Codex CLI",
 		URL:         "https://chatgpt.com/oauth/codex/client.json",
+		DisplayOnly: true,
 		Enabled:     true,
 	},
 
@@ -156,12 +185,14 @@ var catalog = []Preset{
 		VendorKey:   "notion",
 		DisplayName: "Notion",
 		URL:         "https://www.notion.so/oauth/mcp-client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 	{
 		VendorKey:   "notion",
 		DisplayName: "Notion (app.notion.com)",
 		URL:         "https://app.notion.com/oauth/mcp-client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 
@@ -170,6 +201,7 @@ var catalog = []Preset{
 		VendorKey:   "mcpjam",
 		DisplayName: "MCPJam Inspector",
 		URL:         "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 
@@ -178,6 +210,7 @@ var catalog = []Preset{
 		VendorKey:   "factory",
 		DisplayName: "Factory Droid",
 		URL:         "https://api.factory.ai/mcp/oauth-client",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 
@@ -186,6 +219,7 @@ var catalog = []Preset{
 		VendorKey:   "stacklok",
 		DisplayName: "ToolHive",
 		URL:         "https://toolhive.dev/oauth/client-metadata.json",
+		DisplayOnly: false,
 		Enabled:     true,
 	},
 }
@@ -204,7 +238,7 @@ func buildCatalogIndex() (map[string]struct{}, []string) {
 	index := make(map[string]struct{}, len(catalog))
 	var patterns []string
 	for _, preset := range catalog {
-		if !preset.Enabled {
+		if !preset.Enabled || preset.DisplayOnly {
 			continue
 		}
 		if preset.IsPattern() {

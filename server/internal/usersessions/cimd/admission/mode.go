@@ -87,8 +87,14 @@ func (m Mode) Enforces() bool {
 // bool reports whether the stored value was RECOGNIZED, not whether it was
 // present: false means the column held something outside the enum, which
 // resolves to ModeDisabled — fail closed — and the caller must log it.
+//
+// Only a genuine NULL takes the default. A non-NULL empty string is NOT
+// treated as unset: nothing writes one (IsValidMode rejects it), so it can
+// only arrive from a direct database write, which makes it a data error
+// rather than an absent choice. It fails closed like any other
+// unrecognized value.
 func ResolveMode(stored string, valid bool) (Mode, bool) {
-	if !valid || stored == "" {
+	if !valid {
 		return ModeReporting, true
 	}
 	switch mode := Mode(stored); mode {

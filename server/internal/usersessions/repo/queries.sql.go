@@ -241,14 +241,26 @@ WHERE iss.id = $3
   AND iss.project_id = $1
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, project_id, user_session_issuer_id, client_id_metadata_uri, created_at, updated_at, deleted_at, deleted
+DO UPDATE SET updated_at = user_session_issuer_cimd_clients.updated_at
+RETURNING id, project_id, user_session_issuer_id, client_id_metadata_uri, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
 `
 
 type CreateUserSessionIssuerCimdClientParams struct {
 	ProjectID           uuid.UUID
 	ClientIDMetadataUri string
 	UserSessionIssuerID uuid.UUID
+}
+
+type CreateUserSessionIssuerCimdClientRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	ClientIDMetadataUri string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	Inserted            bool
 }
 
 // Adds an issuer-specific allowed CIMD document URL. The SELECT source
@@ -258,9 +270,16 @@ type CreateUserSessionIssuerCimdClientParams struct {
 // previously soft-deleted inserts a fresh row, since the unique index
 // covers live rows only and the audit trail should show a new grant rather
 // than silently reviving an old one.
-func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg CreateUserSessionIssuerCimdClientParams) (UserSessionIssuerCimdClient, error) {
+//
+// `inserted` distinguishes the two so the caller only records an add event
+// for a real new grant. The DO UPDATE is a deliberate no-op write of the
+// existing updated_at: a genuine touch would misreport a re-add as a
+// modification, but ON CONFLICT still needs an action for RETURNING to
+// yield the row. `xmax = 0` is the standard test for "this row came from
+// the INSERT rather than the UPDATE".
+func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg CreateUserSessionIssuerCimdClientParams) (CreateUserSessionIssuerCimdClientRow, error) {
 	row := q.db.QueryRow(ctx, createUserSessionIssuerCimdClient, arg.ProjectID, arg.ClientIDMetadataUri, arg.UserSessionIssuerID)
-	var i UserSessionIssuerCimdClient
+	var i CreateUserSessionIssuerCimdClientRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
@@ -270,6 +289,7 @@ func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg Cre
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+		&i.Inserted,
 	)
 	return i, err
 }

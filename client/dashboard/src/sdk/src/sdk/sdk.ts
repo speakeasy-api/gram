@@ -67,6 +67,7 @@ import { Usage } from "./usage.js";
 import { UserSessionClients } from "./usersessionclients.js";
 import { UserSessionConsents } from "./usersessionconsents.js";
 import { UserSessionIssuers } from "./usersessionissuers.js";
+import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
@@ -405,6 +406,12 @@ export class Gram extends ClientSDK {
   private _userSessionIssuers?: UserSessionIssuers;
   get userSessionIssuers(): UserSessionIssuers {
     return (this._userSessionIssuers ??= new UserSessionIssuers(this._options));
+  }
+
+  private _userSessionIssuersCimdClients?: UserSessionIssuersCimdClients;
+  get userSessionIssuersCimdClients(): UserSessionIssuersCimdClients {
+    return (this._userSessionIssuersCimdClients ??=
+      new UserSessionIssuersCimdClients(this._options));
   }
 
   private _userSessions?: UserSessions;

@@ -136,21 +136,35 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer cimd client").LogError(ctx, logger)
 	}
 
-	view := userSessionIssuerCimdClientView(row)
+	view := &types.UserSessionIssuerCimdClient{
+		ID:                  row.ID.String(),
+		ProjectID:           row.ProjectID.String(),
+		UserSessionIssuerID: row.UserSessionIssuerID.String(),
+		ClientIDMetadataURI: row.ClientIDMetadataUri,
+		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:           row.UpdatedAt.Time.Format(time.RFC3339),
+	}
 
-	if err := s.audit.LogUserSessionIssuerCimdClientAdd(ctx, dbtx, audit.LogUserSessionIssuerCimdClientAddEvent{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ProjectID:             *authCtx.ProjectID,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
-		ActorSlug:             nil,
-		CimdClientURN:         urn.NewUserSessionIssuerCimdClient(row.ID),
-		ClientIDMetadataURI:   row.ClientIDMetadataUri,
-		CimdClientSnapshot:    view,
-		UserSessionIssuerURN:  urn.NewUserSessionIssuer(issuer.ID),
-		UserSessionIssuerSlug: issuer.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer cimd client add").LogError(ctx, logger)
+	// Only a real new grant is audited. The query is idempotent, so a repeat
+	// add returns the existing row; recording an "add" for it would put a
+	// second grant of the same URL in the trail at a time when nothing was
+	// granted, and an operator reading that history would see a change that
+	// never happened.
+	if row.Inserted {
+		if err := s.audit.LogUserSessionIssuerCimdClientAdd(ctx, dbtx, audit.LogUserSessionIssuerCimdClientAddEvent{
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			ProjectID:             *authCtx.ProjectID,
+			Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:      authCtx.Email,
+			ActorSlug:             nil,
+			CimdClientURN:         urn.NewUserSessionIssuerCimdClient(row.ID),
+			ClientIDMetadataURI:   row.ClientIDMetadataUri,
+			CimdClientSnapshot:    view,
+			UserSessionIssuerURN:  urn.NewUserSessionIssuer(issuer.ID),
+			UserSessionIssuerSlug: issuer.Slug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer cimd client add").LogError(ctx, logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

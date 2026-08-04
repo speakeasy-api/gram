@@ -193,6 +193,13 @@ SELECT EXISTS (
 -- previously soft-deleted inserts a fresh row, since the unique index
 -- covers live rows only and the audit trail should show a new grant rather
 -- than silently reviving an old one.
+--
+-- `inserted` distinguishes the two so the caller only records an add event
+-- for a real new grant. The DO UPDATE is a deliberate no-op write of the
+-- existing updated_at: a genuine touch would misreport a re-add as a
+-- modification, but ON CONFLICT still needs an action for RETURNING to
+-- yield the row. `xmax = 0` is the standard test for "this row came from
+-- the INSERT rather than the UPDATE".
 INSERT INTO user_session_issuer_cimd_clients (project_id, user_session_issuer_id, client_id_metadata_uri)
 SELECT @project_id, iss.id, @client_id_metadata_uri
 FROM user_session_issuers AS iss
@@ -200,8 +207,8 @@ WHERE iss.id = @user_session_issuer_id
   AND iss.project_id = @project_id
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING *;
+DO UPDATE SET updated_at = user_session_issuer_cimd_clients.updated_at
+RETURNING *, (xmax = 0) AS inserted;
 
 -- name: GetUserSessionIssuerCimdClientByID :one
 SELECT cimd.*

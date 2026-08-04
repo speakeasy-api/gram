@@ -2,13 +2,13 @@ lockVersion: 2.0.0
 id: 89c6b3db-5ce7-4976-841a-59e4c12e08b8
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.791.1
-  generationVersion: 2.926.2
+  speakeasyVersion: 1.791.0
+  generationVersion: 2.924.0
   releaseVersion: 0.1.0
 persistentEdits:
-  generation_id: 94fcefdc-978d-40a3-81e7-88fb87ca990d
-  pristine_commit_hash: 404d036da640dbc386176ca0a70e2d415cc8a382
-  pristine_tree_hash: 6c9e7fe1c674385ced0b9597d017a18a4ae92fec
+  generation_id: ca277c60-7409-4545-a202-437b76a3583f
+  pristine_commit_hash: b9aca66d27206f72c6248e080011c5455fd66e92
+  pristine_tree_hash: 65204c412b69ff5a9b54e4df5a7401c4e8179405
 features:
   go:
     additionalDependencies: 0.1.0
@@ -339,8 +339,8 @@ trackedFiles:
     pristine_git_object: 767002c7898128324d8741ce9c534bd466492169
   speakeasyhooks.go:
     id: "362480178789"
-    last_write_checksum: sha1:aefa6147d5fe1b2d6a0d0c9c1b788207e0db1605
-    pristine_git_object: a453a526673062d74f7e84995efc0668b2dae98d
+    last_write_checksum: sha1:0e336d90db395aa1bf2cec856e452bc0b06b972b
+    pristine_git_object: a8d5cb172a4ae05829826c7575fbe346a501bb32
   types/bigint.go:
     id: 6f911e1a03c3
     last_write_checksum: sha1:49b004005d0461fb04b846eca062b070b0360b31
