@@ -140,7 +140,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   {
     id: "codex",
     name: "OpenAI Codex",
-    description: "OpenAI Codex CLI & the ChatGPT desktop app",
+    description: "Codex CLI & Codex mode in the ChatGPT app",
     icon: "codex",
     connected: false,
     setupSteps: [
