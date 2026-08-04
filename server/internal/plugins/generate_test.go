@@ -1598,21 +1598,54 @@ func TestGenerateCodexInstallScriptResolvesCodexByProbeOrder(t *testing.T) {
 	require.NotContains(t, calls, "local-bin-ran", "a later candidate must not run once an earlier one matches")
 }
 
-// The two /Applications candidates cannot be executed here — a test cannot
-// place a bundle under the system Applications directory — so their presence
-// is pinned instead. OpenAI merged the standalone Codex app into the unified
-// ChatGPT app, which is where the codex CLI now ships; dropping that entry
-// silently returns install to "codex executable not found" on any machine
-// with only the post-merge app (verified by hand against 0.146, DNO-737).
-func TestGenerateCodexInstallScriptProbesBothMacAppBundles(t *testing.T) {
+// The /Applications candidates cannot be executed here — a test cannot place
+// a bundle under the system Applications directory — so the candidate list is
+// read out of the generated script and asserted whole. That pins both which
+// paths are probed and the order they are tried in, and a failure prints the
+// actual list rather than an index comparison.
+//
+// ChatGPT.app leads the bundle pair because OpenAI merged the standalone
+// Codex app into the unified ChatGPT app, which is where the maintained codex
+// CLI now ships (verified by hand against 0.146, DNO-737); the frozen legacy
+// bundle stays as a fallback for machines that never migrated. Dropping the
+// unified entry silently returns install to "codex executable not found" on
+// any post-merge machine.
+func TestGenerateCodexInstallScriptProbesCandidatesInOrder(t *testing.T) {
 	t.Parallel()
 
 	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
 	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
 	require.NoError(t, err)
 
-	require.Contains(t, string(script), "/Applications/ChatGPT.app/Contents/Resources/codex")
-	require.Contains(t, string(script), "/Applications/Codex.app/Contents/Resources/codex")
+	require.Equal(t, []string{
+		"${codex_home}/packages/standalone/current/bin/codex",
+		"${HOME}/.local/bin/codex",
+		"/usr/local/bin/codex",
+		"/Applications/ChatGPT.app/Contents/Resources/codex",
+		"/Applications/Codex.app/Contents/Resources/codex",
+	}, codexProbeCandidates(t, script))
+}
+
+// codexProbeCandidates reads find_codex's ordered candidate list out of the
+// generated script.
+func codexProbeCandidates(t *testing.T, script []byte) []string {
+	t.Helper()
+
+	const marker = "for candidate in"
+	start := strings.Index(string(script), marker)
+	require.Positive(t, start, "generated script must declare a candidate list")
+	body := string(script)[start+len(marker):]
+	end := strings.Index(body, "; do")
+	require.Positive(t, end, "candidate list must terminate with '; do'")
+
+	candidates := make([]string, 0, 8)
+	for field := range strings.FieldsSeq(body[:end]) {
+		field = strings.Trim(field, "\\\"")
+		if field != "" {
+			candidates = append(candidates, field)
+		}
+	}
+	return candidates
 }
 
 // Root-level dotted keys (features.hooks = true) implicitly define the
