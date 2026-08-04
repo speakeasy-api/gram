@@ -11,7 +11,8 @@ the ingest matched only `codex_cli_rs`. Those payloads were not dropped: they fe
 Claude path and were persisted as `claude-code:otel:logs` rows carrying
 Claude's hook source and account attribution, so Codex traffic silently
 inflated Claude surfaces while never being metered as Codex usage. The
-ingest now matches the `codex_` service-name family.
+ingest now matches the whole Codex service-name family, both separators
+included.
 
 Routing is also now per OTEL resource rather than per payload: a collector
 that fans several clients into one export previously had the whole batch
