@@ -41,11 +41,13 @@ const (
 	// live device sessions captured by hooks/OTEL.
 	codexCloudSourceSlug = "codex-web"
 	// codexCloudClientWeb is the client_id marking cloud web-task events —
-	// the only client this import admits. CODEX_DESKTOP_APP events also
-	// appear (trace volume) but describe a device surface that may gain hook
-	// capture; importing them here could collide with live-captured sessions
-	// (same session-id UUID space), so they are counted and skipped until the
-	// unified-desktop-app verification settles that boundary.
+	// the only client this import admits. The feed also carries DEVICE
+	// clients (CODEX_CLI became its dominant client in early August 2026,
+	// plus CODEX_DESKTOP_APP and CODEX_SDK_TS): those sessions are hook/OTEL
+	// captured live, and importing them here would create a duplicate chat
+	// for every device session (same session-id UUID space). This allowlist
+	// is the sole guard against that duplication, so SkippedClients running
+	// hot is expected, not a fault.
 	codexCloudClientWeb = "CODEX_WEB"
 	// Codex cloud event shapes: a prompt submission and the model's reply.
 	codexCloudDetailPromptSent       = "PROMPT_SENT"
