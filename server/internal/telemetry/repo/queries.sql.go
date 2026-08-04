@@ -386,6 +386,12 @@ type ShadowMCPInventoryUserRow struct {
 	UserEmail  string
 	LastCalled time.Time
 	CallCount  uint64
+	Sources    []ShadowMCPInventoryUserSourceRow
+}
+
+type ShadowMCPInventoryUserSourceRow struct {
+	Source    string
+	CallCount uint64
 }
 
 type shadowMCPInventoryTraceUsageRow struct {
@@ -394,6 +400,7 @@ type shadowMCPInventoryTraceUsageRow struct {
 	ServerName string    `ch:"server_name"`
 	UserKey    string    `ch:"user_key"`
 	UserEmail  string    `ch:"user_email"`
+	HookSource string    `ch:"hook_source"`
 	CalledAt   time.Time `ch:"called_at"`
 }
 
@@ -1121,6 +1128,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	}
 
 	users := make(map[string]*ShadowMCPInventoryUserRow)
+	sourceCountsByUser := make(map[string]map[string]uint64)
 	for _, traceRow := range traceRows {
 		invURL, ok := shadowmcp.CanonicalizeInventoryURL(traceRow.ServerURL)
 		if !ok || invURL.CanonicalURL != arg.CanonicalServerURL || traceRow.UserKey == "" {
@@ -1135,14 +1143,32 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 				CallCount:  0,
 			}
 			users[traceRow.UserKey] = user
+			sourceCountsByUser[traceRow.UserKey] = make(map[string]uint64)
 		}
 		if user.UserEmail == "" {
 			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
 		}
 		user.CallCount++
+		sourceCountsByUser[traceRow.UserKey][traceRow.HookSource]++
 		if traceRow.CalledAt.After(user.LastCalled) {
 			user.LastCalled = traceRow.CalledAt
 		}
+	}
+	for userKey, user := range users {
+		sourceCounts := sourceCountsByUser[userKey]
+		user.Sources = make([]ShadowMCPInventoryUserSourceRow, 0, len(sourceCounts))
+		for source, callCount := range sourceCounts {
+			user.Sources = append(user.Sources, ShadowMCPInventoryUserSourceRow{
+				Source:    source,
+				CallCount: callCount,
+			})
+		}
+		sort.Slice(user.Sources, func(i, j int) bool {
+			if user.Sources[i].CallCount != user.Sources[j].CallCount {
+				return user.Sources[i].CallCount > user.Sources[j].CallCount
+			}
+			return user.Sources[i].Source < user.Sources[j].Source
+		})
 	}
 
 	userRows := sortedShadowMCPInventoryUsers(users)
@@ -1163,6 +1189,7 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		"max(tool_source) AS server_name",
 		"if(max(trace_summaries.user_email) != '', max(trace_summaries.user_email), max(trace_summaries.user_id)) AS user_key",
 		"max(trace_summaries.user_email) AS user_email",
+		"max(hook_source) AS hook_source",
 		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
 	).
 		From("trace_summaries").

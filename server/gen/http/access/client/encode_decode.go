@@ -5927,6 +5927,31 @@ func unmarshalShadowMCPInventoryUserResponseBodyToAccessShadowMCPInventoryUser(v
 		LastCalled:       *v.LastCalled,
 		ObservedUseCount: *v.ObservedUseCount,
 	}
+	if v.Sources != nil {
+		res.Sources = make([]*access.ShadowMCPInventoryUserSource, len(v.Sources))
+		for i, val := range v.Sources {
+			if val == nil {
+				res.Sources[i] = nil
+				continue
+			}
+			res.Sources[i] = unmarshalShadowMCPInventoryUserSourceResponseBodyToAccessShadowMCPInventoryUserSource(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPInventoryUserSourceResponseBodyToAccessShadowMCPInventoryUserSource
+// builds a value of type *access.ShadowMCPInventoryUserSource from a value of
+// type *ShadowMCPInventoryUserSourceResponseBody.
+func unmarshalShadowMCPInventoryUserSourceResponseBodyToAccessShadowMCPInventoryUserSource(v *ShadowMCPInventoryUserSourceResponseBody) *access.ShadowMCPInventoryUserSource {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPInventoryUserSource{
+		Source:           *v.Source,
+		ObservedUseCount: *v.ObservedUseCount,
+	}
 
 	return res
 }

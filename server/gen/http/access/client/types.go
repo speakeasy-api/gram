@@ -4931,10 +4931,18 @@ type ShadowMCPInventoryRequestSummaryResponseBody struct {
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
 // types.
 type ShadowMCPInventoryUserResponseBody struct {
-	UserKey          *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
-	Name             *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Email            *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
-	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	UserKey          *string                                     `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
+	Name             *string                                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Email            *string                                     `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	LastCalled       *string                                     `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount *int                                        `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
+	Sources          []*ShadowMCPInventoryUserSourceResponseBody `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+}
+
+// ShadowMCPInventoryUserSourceResponseBody is used to define fields on
+// response body types.
+type ShadowMCPInventoryUserSourceResponseBody struct {
+	Source           *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	ObservedUseCount *int    `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
 }
 
@@ -15881,6 +15889,25 @@ func ValidateShadowMCPInventoryUserResponseBody(body *ShadowMCPInventoryUserResp
 	}
 	if body.LastCalled != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called", *body.LastCalled, goa.FormatDateTime))
+	}
+	for _, e := range body.Sources {
+		if e != nil {
+			if err2 := ValidateShadowMCPInventoryUserSourceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateShadowMCPInventoryUserSourceResponseBody runs the validations
+// defined on ShadowMCPInventoryUserSourceResponseBody
+func ValidateShadowMCPInventoryUserSourceResponseBody(body *ShadowMCPInventoryUserSourceResponseBody) (err error) {
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.ObservedUseCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_use_count", "body"))
 	}
 	return
 }

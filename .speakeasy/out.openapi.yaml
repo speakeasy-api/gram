@@ -65988,11 +65988,26 @@ components:
         observed_use_count:
           type: integer
           format: int64
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShadowMCPInventoryUserSource'
         user_key:
           type: string
       required:
         - user_key
         - last_called
+        - observed_use_count
+    ShadowMCPInventoryUserSource:
+      type: object
+      properties:
+        observed_use_count:
+          type: integer
+          format: int64
+        source:
+          type: string
+      required:
+        - source
         - observed_use_count
     ShareSkillRequestBody:
       type: object
