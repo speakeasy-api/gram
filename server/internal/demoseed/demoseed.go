@@ -68,8 +68,13 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	// script's SET line cannot carry across statements — the setting rides on
 	// the context instead. Statements are split on ';': the seed files keep
 	// semicolons out of string literals by convention (see seed/demo/PAGES.md).
+	// mutations_sync=2 waits for ALL replicas (prod ClickHouse Cloud is
+	// replicated; =1 would let the re-insert race a delete still running on
+	// another replica). The base client caps max_execution_time at 60s, which
+	// prod-sized telemetry_logs mutations can exceed — raise it here.
 	chCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"mutations_sync": 1,
+		"mutations_sync":     2,
+		"max_execution_time": 600,
 	}))
 	for _, stmt := range splitStatements(clickhouseSQL) {
 		if strings.HasPrefix(strings.ToUpper(stmt), "SET ") {
