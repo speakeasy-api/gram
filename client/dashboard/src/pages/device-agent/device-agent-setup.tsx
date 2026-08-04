@@ -88,7 +88,11 @@ const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
 // or if it fails.
 function bashVersionAssign(version: string | null) {
   return version
-    ? `VERSION=${version}`
+    ? // Quoted so a version string can't break out of the assignment into a
+      // second shell command if a compromised/malformed manifest ever served
+      // one with shell metacharacters — matches psVersionAssign below, which
+      // already quotes.
+      `VERSION="${version}"`
     : `VERSION=$(curl -s ${MANIFEST_URL} | jq -r '.latest.speakeasyd.version')`;
 }
 function psVersionAssign(version: string | null) {
@@ -437,14 +441,24 @@ function BinaryLegend() {
 }
 
 // ManualIdentity is the personal/PoC identity path: sign in once with the CLI.
-function ManualIdentity() {
+function ManualIdentity({ os }: { os: OsKey }) {
+  // The macOS pkg deliberately doesn't put the CLI on PATH (ADR-0015: it would
+  // serve a stale binary after the first auto-update), so `speakeasy` alone
+  // is command-not-found there — reach it by its per-user seed path instead,
+  // same as MacVerifyStep. Windows/Linux keep the bare command: their raw
+  // binaries land in the shell's cwd/PATH per the download step above.
+  const command =
+    os === "macos"
+      ? `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`
+      : "speakeasy enroll";
+
   return (
     <div className="flex flex-col gap-4">
       <Text muted>
         On a device that isn't MDM-managed, set identity by signing in once
         after installing with no <code>managed.json</code> required.
       </Text>
-      <CodeBlock language="bash">{`speakeasy enroll`}</CodeBlock>
+      <CodeBlock language="bash">{command}</CodeBlock>
       <Text small muted>
         It opens a browser, you sign in, and the agent stores your email locally
         in <code>local.json</code>. If IT later pushes a{" "}
@@ -730,8 +744,8 @@ const MANAGED_CONFIG_PATHS = [
 
 // PkgDownloadButton is BinaryDownloadButton's single-artifact sibling: no
 // sha256 to show (the pkg isn't in releases.json, so useAgentReleases never
-// resolves one for it — see PKG_BASE), so the title/hover affordance is
-// dropped rather than shown empty.
+// resolves one for it), so the title/hover affordance is dropped rather than
+// shown empty.
 function PkgDownloadButton({
   href,
   version,
@@ -768,7 +782,7 @@ function PkgDownloadButton({
 // does both (ADR-0015: device-agent, ONBOARDING_JAMF.md).
 function MacInstallStep() {
   const { data, isError } = useAgentReleases();
-  const version = data?.latest["speakeasyd"]?.version ?? null;
+  const version = data?.latest?.["speakeasyd"]?.version ?? null;
   // The pkg ships from the same bucket/version layout as the raw binaries
   // (device-agent's release-pkg-macos job), but isn't itself listed in
   // releases.json — it's the manual/MDM on-ramp, not something the
@@ -787,8 +801,9 @@ function MacInstallStep() {
       <div className="flex flex-col gap-2">
         <SubLabel>Run the download + install script</SubLabel>
         <StepNote>
-          Provision <code>managed.json</code> first (see the identity step next)
-          for a deterministic first start.
+          Deploying via Fleet MDM? Provision <code>managed.json</code> first
+          (see the identity step next) for a deterministic first start.
+          Personal/PoC enrolls via OAuth instead — nothing to provision first.
         </StepNote>
         <CodeBlock language="bash">{`${bashVersionAssign(version)}
 curl -fSL -o speakeasy-agent.pkg "${RELEASES_BASE}/v\${VERSION}/speakeasy-agent_\${VERSION}.pkg"
@@ -818,12 +833,22 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
       <div className="flex flex-col gap-2">
         <SubLabel>Or push it as a fleet via MDM</SubLabel>
         <Text small muted>
-          Download the pkg (above) and upload it to your MDM (Jamf, Kandji,
-          Intune, …) as a <strong className="font-medium">Package</strong>, then
-          scope a policy to install it once per computer — no script needed. The
-          pkg installs the daemon, CLI, menu-bar UI, and privileged helper
-          together, and its postinstall step registers the per-user LaunchAgents
-          itself.
+          Get the pkg — the script or button above, or (if the automatic lookup
+          above is down) build the URL directly from the current version in the{" "}
+          <ExternalLink
+            href={MANIFEST_URL}
+            target="_blank"
+            iconSuffixName="external-link"
+          >
+            release manifest
+          </ExternalLink>
+          :{" "}
+          <code>.../v&lt;version&gt;/speakeasy-agent_&lt;version&gt;.pkg</code>.
+          Upload it to your MDM (Jamf, Kandji, Intune, …) as a{" "}
+          <strong className="font-medium">Package</strong>, then scope a policy
+          to install it once per computer — no script needed. The pkg installs
+          the daemon, CLI, menu-bar UI, and privileged helper together, and its
+          postinstall step registers the per-user LaunchAgents itself.
         </Text>
         <Text small muted>
           Don't re-push the pkg for routine version bumps — with{" "}
@@ -855,8 +880,9 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 }
 
 // IdentityStep is the final sheet step: pick how the agent learns who's on the
-// device (fleet MDM vs personal enrollment).
-function IdentityStep() {
+// device (fleet MDM vs personal enrollment). Takes os because ManualIdentity's
+// enroll command differs on macOS (see there).
+function IdentityStep({ os }: { os: OsKey }) {
   return (
     <div className="flex flex-col gap-6">
       <Text small muted>
@@ -875,14 +901,14 @@ function IdentityStep() {
             value="personal"
             icon="user"
             title="Personal / PoC"
-            desc="Sign in once with speakeasy enroll."
+            desc="Sign in once with the agent CLI."
           />
         </TabsList>
         <TabsContent value="fleet" className="pt-2">
           <FleetIdentity />
         </TabsContent>
         <TabsContent value="personal" className="pt-2">
-          <ManualIdentity />
+          <ManualIdentity os={os} />
         </TabsContent>
       </Tabs>
     </div>
@@ -926,7 +952,7 @@ function buildSteps(os: OsKey): SetupStep[] {
     return [
       { title: "Download and install the agent", body: <MacInstallStep /> },
       { title: "Verify it's running", body: <MacVerifyStep /> },
-      { title: "Set the user's identity", body: <IdentityStep /> },
+      { title: "Set the user's identity", body: <IdentityStep os={os} /> },
     ];
   }
 
@@ -953,7 +979,10 @@ function buildSteps(os: OsKey): SetupStep[] {
     title: "Verify it's running",
     body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
   });
-  steps.push({ title: "Set the user's identity", body: <IdentityStep /> });
+  steps.push({
+    title: "Set the user's identity",
+    body: <IdentityStep os={os} />,
+  });
   return steps;
 }
 
