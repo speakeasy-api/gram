@@ -133,6 +133,7 @@ func createIssuerGatedMcpServer(
 		IsPublic:                     opts.Visibility == mcpservers.VisibilityPublic,
 		UpstreamMetadata:             opts.UpstreamMetadata,
 		RemoteSessionCallbackBaseURL: opts.RemoteSessionCallbackBaseURL,
+		RemoteSessionRedirectURI:     "",
 		AuthnChallengeMode:           opts.AuthnChallengeMode,
 	})
 

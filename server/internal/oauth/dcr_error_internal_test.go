@@ -1,6 +1,10 @@
 package oauth
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestDCRErrorDetail(t *testing.T) {
 	t.Parallel()
@@ -58,4 +62,34 @@ func TestDCRErrorDetail(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProxyRegistrationRedirectURIs_LoopbackOverride(t *testing.T) {
+	t.Parallel()
+
+	redirectURI := "http://localhost:49152/callback"
+	got, err := proxyRegistrationRedirectURIs("https://app.getgram.ai", &redirectURI)
+	require.NoError(t, err)
+	require.Equal(t, []string{redirectURI}, got)
+}
+
+func TestProxyRegistrationRedirectURIs_RejectsNonLoopbackOverride(t *testing.T) {
+	t.Parallel()
+
+	redirectURI := "https://attacker.example.com/callback"
+	_, err := proxyRegistrationRedirectURIs("https://app.getgram.ai", &redirectURI)
+	require.Error(t, err)
+}
+
+func TestProxyRegistrationRedirectURIs_HostedDefaults(t *testing.T) {
+	t.Parallel()
+
+	got, err := proxyRegistrationRedirectURIs("https://app.getgram.ai", nil)
+	require.NoError(t, err)
+	want := []string{
+		"https://app.getgram.ai/oauth/callback",
+		"https://app.getgram.ai/mcp/remote_login_callback",
+		"https://app.getgram.ai/x/mcp/remote_login_callback",
+	}
+	require.Equal(t, want, got)
 }

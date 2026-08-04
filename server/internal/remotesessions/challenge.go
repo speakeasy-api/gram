@@ -33,6 +33,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,10 @@ type ParentChallenge struct {
 	McpSlug             string
 	RouteBase           string
 	FinalRedirectURI    string
+	// RemoteOAuthRedirectURI is an optional loopback redirect owned by the
+	// device agent. The agent relays the upstream code and state from this
+	// local callback to Gram's canonical remote-login callback.
+	RemoteOAuthRedirectURI string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
 	Resource string
@@ -297,7 +302,15 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	codeChallenge := s256Challenge(verifier)
 	redirectURI := m.callbackURL(canonicalCallbackRouteBase)
 	stateParam := stateID
-	if client.LegacyCallbackUrl {
+	if parent.RemoteOAuthRedirectURI != "" {
+		if client.LegacyCallbackUrl {
+			return "", errors.New("legacy remote session clients do not support loopback redirects")
+		}
+		if err := ValidateLoopbackRedirectURI(parent.RemoteOAuthRedirectURI); err != nil {
+			return "", fmt.Errorf("validate remote OAuth redirect URI: %w", err)
+		}
+		redirectURI = parent.RemoteOAuthRedirectURI
+	} else if client.LegacyCallbackUrl {
 		// Upstream was registered against the legacy oauth_proxy_servers
 		// callback. Keep that exact redirect_uri so the upstream's
 		// strict-match check still passes, and wrap the state in a JSON
@@ -531,6 +544,41 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 // document; the originating surface lives in the login state's RouteBase for
 // the post-callback bounce.
 const canonicalCallbackRouteBase = "mcp"
+
+// ValidateLoopbackRedirectURI accepts only an absolute HTTP URL on a loopback
+// host with an explicit port. It is used for device-agent callbacks: allowing
+// any other target here would turn the remote OAuth authorize flow into an
+// open redirect that can deliver upstream authorization codes to an attacker.
+func ValidateLoopbackRedirectURI(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse URI: %w", err)
+	}
+	if !parsed.IsAbs() || parsed.Scheme != "http" || parsed.Opaque != "" {
+		return errors.New("URI must be an absolute http URL")
+	}
+	if parsed.User != nil {
+		return errors.New("URI must not contain user info")
+	}
+	if parsed.Fragment != "" {
+		return errors.New("URI must not contain a fragment")
+	}
+	switch strings.ToLower(parsed.Hostname()) {
+	case "localhost", "127.0.0.1", "::1":
+		// Allowed loopback hosts per RFC 8252 section 7.3.
+	default:
+		return errors.New("URI host must be localhost, 127.0.0.1, or ::1")
+	}
+	port := parsed.Port()
+	if port == "" {
+		return errors.New("URI must include an explicit port")
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return errors.New("URI port must be between 1 and 65535")
+	}
+	return nil
+}
 
 // callbackURL is the route-base-scoped path the upstream provider redirects
 // back to after the user authenticates. Empty routeBase falls back to "mcp"

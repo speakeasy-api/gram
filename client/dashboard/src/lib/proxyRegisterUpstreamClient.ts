@@ -11,6 +11,7 @@ export type ProxyRegisteredClient = {
 
 export type ProxyRegisterUpstreamClientInput = {
   registrationEndpoint: string;
+  redirectUri?: string;
   scope?: string;
   tokenEndpointAuthMethod?: string;
 };
@@ -34,6 +35,7 @@ export async function proxyRegisterUpstreamClient(
   const body: Record<string, unknown> = {
     registration_endpoint: input.registrationEndpoint,
   };
+  if (input.redirectUri !== undefined) body.redirect_uri = input.redirectUri;
   if (input.scope !== undefined) body.scope = input.scope;
   if (input.tokenEndpointAuthMethod !== undefined) {
     body.token_endpoint_auth_method = input.tokenEndpointAuthMethod;

@@ -118,12 +118,13 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 
 			subject := urn.NewUserSubject("scope-subject")
 			authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-				ID:                  uuid.NewString(),
-				ProjectID:           *authCtx.ProjectID,
-				UserSessionIssuerID: userIssuer,
-				Subject:             &subject,
-				McpSlug:             "",
-				FinalRedirectURI:    "",
+				ID:                     uuid.NewString(),
+				ProjectID:              *authCtx.ProjectID,
+				UserSessionIssuerID:    userIssuer,
+				Subject:                &subject,
+				McpSlug:                "",
+				FinalRedirectURI:       "",
+				RemoteOAuthRedirectURI: "",
 			}, clients[0])
 			require.NoError(t, err)
 
@@ -173,12 +174,13 @@ func TestBuildAuthorizationUrl_OrgLevelIssuer(t *testing.T) {
 
 	subject := urn.NewUserSubject("org-list-subject")
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		ID:                  uuid.NewString(),
-		ProjectID:           *authCtx.ProjectID,
-		UserSessionIssuerID: userIssuerID,
-		Subject:             &subject,
-		McpSlug:             "",
-		FinalRedirectURI:    "",
+		ID:                     uuid.NewString(),
+		ProjectID:              *authCtx.ProjectID,
+		UserSessionIssuerID:    userIssuerID,
+		Subject:                &subject,
+		McpSlug:                "",
+		FinalRedirectURI:       "",
+		RemoteOAuthRedirectURI: "",
 	}, clients[0])
 	require.NoError(t, err)
 

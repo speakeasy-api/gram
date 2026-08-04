@@ -512,15 +512,16 @@ func (s *Service) buildRemoteSessionCards(
 	}
 
 	parent := remotesessions.ParentChallenge{
-		ID:                  challengeState.ID,
-		ProjectID:           endpoint.ProjectID,
-		OrganizationID:      endpoint.OrganizationID,
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Subject:             challengeState.Subject,
-		McpSlug:             endpoint.Slug,
-		RouteBase:           endpoint.RouteBase,
-		FinalRedirectURI:    "",
-		Resource:            endpoint.UpstreamResource,
+		ID:                     challengeState.ID,
+		ProjectID:              endpoint.ProjectID,
+		OrganizationID:         endpoint.OrganizationID,
+		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
+		Subject:                challengeState.Subject,
+		McpSlug:                endpoint.Slug,
+		RouteBase:              endpoint.RouteBase,
+		FinalRedirectURI:       "",
+		RemoteOAuthRedirectURI: challengeState.RemoteOAuthRedirectURI,
+		Resource:               endpoint.UpstreamResource,
 	}
 
 	cards := make([]remoteSessionCard, 0, len(clients))

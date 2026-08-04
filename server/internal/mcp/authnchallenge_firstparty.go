@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // HandleFirstPartyConnect is the chi handler at
@@ -48,9 +49,21 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
 // to or redirect back to. Once the user links every card on the consent page,
 // the flow is terminal and the page closes its dashboard-opened tab.
+//
+// A device agent may provide remote_redirect_uri as an ephemeral loopback
+// callback. Upstream providers redirect there first; the local listener then
+// relays code+state to Gram's canonical remote-login callback. This avoids
+// requiring the provider to allowlist Gram's hosted callback.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+
+	remoteOAuthRedirectURI := r.URL.Query().Get("remote_redirect_uri")
+	if remoteOAuthRedirectURI != "" {
+		if err := remotesessions.ValidateLoopbackRedirectURI(remoteOAuthRedirectURI); err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid remote_redirect_uri").LogError(ctx, logger)
+		}
+	}
 
 	csrfToken, err := generateOpaqueToken()
 	if err != nil {
@@ -72,9 +85,10 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		CodeChallengeMethod: "",
 		CSRFToken:           csrfToken,
 		// Subject is stamped by HandleIDPCallback from authoritative IDP claims.
-		Subject:    nil,
-		CreatedAt:  time.Now(),
-		FirstParty: true,
+		Subject:                nil,
+		CreatedAt:              time.Now(),
+		FirstParty:             true,
+		RemoteOAuthRedirectURI: remoteOAuthRedirectURI,
 	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)

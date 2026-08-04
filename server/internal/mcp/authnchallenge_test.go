@@ -32,6 +32,7 @@ import (
 type mockIdentityResolver struct {
 	buildAuthURLResult *url.URL
 	buildAuthURLErr    error
+	buildAuthURLParams *identity.AuthorizationURLParams
 
 	exchangeResult *identity.IDPUserInfo
 	exchangeErr    error
@@ -44,7 +45,8 @@ type mockIdentityResolver struct {
 	hasAccessOK     bool
 }
 
-func (m *mockIdentityResolver) BuildAuthorizationURL(_ context.Context, _ identity.AuthorizationURLParams) (*url.URL, error) {
+func (m *mockIdentityResolver) BuildAuthorizationURL(_ context.Context, params identity.AuthorizationURLParams) (*url.URL, error) {
+	m.buildAuthURLParams = &params
 	return m.buildAuthURLResult, m.buildAuthURLErr
 }
 

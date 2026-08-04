@@ -329,10 +329,11 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 
 	subject := urn.NewUserSubject("cimd-authz-subject")
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		ID:                  uuid.NewString(),
-		ProjectID:           *authCtx.ProjectID,
-		UserSessionIssuerID: userIssuer,
-		Subject:             &subject,
+		ID:                     uuid.NewString(),
+		ProjectID:              *authCtx.ProjectID,
+		UserSessionIssuerID:    userIssuer,
+		Subject:                &subject,
+		RemoteOAuthRedirectURI: "",
 	}, clients[0])
 	require.NoError(t, err)
 

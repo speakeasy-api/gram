@@ -211,12 +211,13 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 	// URL carries the opaque state id the callback exchanges against.
 	subject := urn.NewUserSubject("synthetic-subject-" + slugSuffix)
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		ID:                  uuid.NewString(),
-		ProjectID:           *authCtx.ProjectID,
-		UserSessionIssuerID: userIssuer,
-		Subject:             &subject,
-		McpSlug:             "synthetic-mcp-" + slugSuffix,
-		FinalRedirectURI:    "",
+		ID:                     uuid.NewString(),
+		ProjectID:              *authCtx.ProjectID,
+		UserSessionIssuerID:    userIssuer,
+		Subject:                &subject,
+		McpSlug:                "synthetic-mcp-" + slugSuffix,
+		FinalRedirectURI:       "",
+		RemoteOAuthRedirectURI: "",
 	}, clients[0])
 	require.NoError(t, err)
 

@@ -38,6 +38,9 @@ type IssuerGatedToolsetOpts struct {
 	// /mcp/remote_login_callback URL. Tests that drive a real upstream
 	// authorize flow should set this to the Gram server URL.
 	RemoteSessionCallbackBaseURL string
+	// RemoteSessionRedirectURI registers an exact callback instead of the
+	// hosted Gram callback. Used by loopback integration tests.
+	RemoteSessionRedirectURI string
 	// AuthnChallengeMode is "chain" or "interactive". Default "interactive".
 	AuthnChallengeMode string
 }
@@ -123,7 +126,9 @@ func CreateIssuerGatedToolset(
 	require.NoError(t, err)
 
 	redirectURIs := []string{"http://localhost/unused"}
-	if opts.RemoteSessionCallbackBaseURL != "" {
+	if opts.RemoteSessionRedirectURI != "" {
+		redirectURIs = []string{opts.RemoteSessionRedirectURI}
+	} else if opts.RemoteSessionCallbackBaseURL != "" {
 		// Gram drives the upstream authorize with the canonical /mcp
 		// remote-login callback on every surface, so register exactly that.
 		redirectURIs = []string{strings.TrimRight(opts.RemoteSessionCallbackBaseURL, "/") + "/mcp/remote_login_callback"}

@@ -228,13 +228,14 @@ func TestHandleRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.Len(t, clients, 1)
 
 	parent := remotesessions.ParentChallenge{
-		ID:                  parentID,
-		ProjectID:           result.McpServer.ProjectID,
-		UserSessionIssuerID: result.UserSessionIssuer.ID,
-		Subject:             &anonymousSubject,
-		McpSlug:             result.Slug,
-		RouteBase:           "x/mcp",
-		FinalRedirectURI:    "",
+		ID:                     parentID,
+		ProjectID:              result.McpServer.ProjectID,
+		UserSessionIssuerID:    result.UserSessionIssuer.ID,
+		Subject:                &anonymousSubject,
+		McpSlug:                result.Slug,
+		RouteBase:              "x/mcp",
+		FinalRedirectURI:       "",
+		RemoteOAuthRedirectURI: "",
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
