@@ -56,8 +56,10 @@ const (
 // the compliance feed is their only token source, so those rows are metered
 // here. Deliberately an allowlist: an unrecognized client defaults to
 // un-metered, because under-counting a new surface beats double counting a
-// device one. cli/exec meter via OTEL; desktop_app and unknown stay excluded
-// until DNO-737 settles whether the unified desktop app exports OTEL.
+// device one. Every device client meters via OTEL and so must stay out of this
+// map: cli, exec, and — settled under DNO-737 — desktop_app, which is Codex
+// mode in the unified ChatGPT app and reports OTEL under the service name
+// codex-app-server. Adding a device client here would double count it.
 var codexCloudMeteredClients = map[string]bool{
 	"github": true,
 	"web":    true,
