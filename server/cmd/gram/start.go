@@ -972,6 +972,9 @@ func newStartCommand() *cli.Command {
 			litellmTraceProcessor = litellm.NewTraceProcessor(logger, meterProvider, telemLogger, litellmCalls)
 			litellmMetricProcessor = litellm.NewMetricProcessor(logger, meterProvider, telemLogger)
 			litellmHealthProcessor = litellm.NewHealthProcessor(logger, db)
+			litellmInstanceResolver := litellm.NewInstanceResolver(logger, db)
+			litellmTraceProcessor.SetInstanceResolver(litellmInstanceResolver)
+			litellmMetricProcessor.SetInstanceResolver(litellmInstanceResolver)
 			litellmTraceProcessor.Start(ctx)
 			litellmMetricProcessor.Start(ctx)
 			litellmHealthProcessor.Start(ctx)
@@ -1172,7 +1175,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellmService = litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, productFeatures, auditLogger, c.String("environment"))
+			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, productFeatures, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))

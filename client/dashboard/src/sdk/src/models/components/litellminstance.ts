@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  LiteLLMInstanceDiagnostics,
+  LiteLLMInstanceDiagnostics$inboundSchema,
+} from "./litellminstancediagnostics.js";
 import { ProjectEntry, ProjectEntry$inboundSchema } from "./projectentry.js";
 
 /**
@@ -31,6 +35,10 @@ export type LiteLLMInstance = {
   active: boolean;
   createdAt: Date;
   createdByUserId: string;
+  /**
+   * Health and identity-attribution diagnostics for a LiteLLM integration. No prompt, credential, or identity values are returned.
+   */
+  diagnostics: LiteLLMInstanceDiagnostics;
   /**
    * How LiteLLM behaves when Gram cannot evaluate a request.
    */
@@ -61,6 +69,7 @@ export const LiteLLMInstance$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     created_by_user_id: z.string(),
+    diagnostics: LiteLLMInstanceDiagnostics$inboundSchema,
     failure_posture: LiteLLMInstanceFailurePosture$inboundSchema,
     id: z.string(),
     key_prefix: z.string(),

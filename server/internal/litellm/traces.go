@@ -268,6 +268,7 @@ func (s *Service) ingestTraceExport(ctx context.Context, request *otlpExportRequ
 	if len(params) == 0 {
 		return nil
 	}
+	enrichAcceptedTelemetryAttribution(ctx, s.instances, authCtx, params)
 	s.traces.Enqueue(ctx, params)
 	return nil
 }

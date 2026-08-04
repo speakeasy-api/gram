@@ -165,9 +165,11 @@ func (s *Service) ingestMetricExport(ctx context.Context, request *collectorv1.E
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 	params := s.metricLogParams(ctx, request, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
-	if len(params) > 0 {
-		s.metrics.Enqueue(ctx, params)
+	if len(params) == 0 {
+		return nil
 	}
+	enrichAcceptedTelemetryAttribution(ctx, s.instances, authCtx, params)
+	s.metrics.Enqueue(ctx, params)
 	return nil
 }
 

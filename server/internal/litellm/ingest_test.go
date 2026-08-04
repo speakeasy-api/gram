@@ -156,6 +156,8 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 		metrics:   nil,
 		health:    newDisabledHealthProcessor(t),
 		db:        nil,
+		telemetry: nil,
+		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
 		authz:     nil,
 		features:  nil,
 		audit:     nil,

@@ -60181,6 +60181,8 @@ components:
           format: date-time
         created_by_user_id:
           type: string
+        diagnostics:
+          $ref: '#/components/schemas/LiteLLMInstanceDiagnostics'
         failure_posture:
           type: string
           description: How LiteLLM behaves when Gram cannot evaluate a request.
@@ -60216,6 +60218,51 @@ components:
         - created_at
         - updated_at
         - active
+        - diagnostics
+    LiteLLMInstanceDiagnostics:
+      type: object
+      properties:
+        last_error_at:
+          type: string
+          format: date-time
+        last_error_kind:
+          type: string
+          description: Safe category for the latest observed ingest error.
+          enum:
+            - auth_failure
+            - decode_failure
+            - limit_exceeded
+        last_guardrail_event_at:
+          type: string
+          format: date-time
+        last_otel_event_at:
+          type: string
+          format: date-time
+        platform_user_pct_24h:
+          type: number
+          description: Percentage of model requests in the last 24 hours that resolved to a Gram user.
+          format: double
+          minimum: 0
+          maximum: 100
+        reported_litellm_version:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          description: Derived health of a LiteLLM integration's latest ingest activity.
+          enum:
+            - pending
+            - success
+            - failed
+        virtual_key_email_pct_24h:
+          type: number
+          description: Percentage of model requests in the last 24 hours that supplied a virtual-key email.
+          format: double
+          minimum: 0
+          maximum: 100
+      description: Health and identity-attribution diagnostics for a LiteLLM integration. No prompt, credential, or identity values are returned.
+      required:
+        - status
     LiteLLMRequestData:
       type: object
       properties:

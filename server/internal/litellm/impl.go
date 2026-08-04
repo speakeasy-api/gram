@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 const (
@@ -57,16 +58,20 @@ type Service struct {
 	metrics   *MetricProcessor
 	health    *HealthProcessor
 	db        *pgxpool.Pool
+	telemetry telemetryrepo.CHTX
+	instances *InstanceResolver
 	authz     *authz.Engine
 	features  featureChecker
 	audit     *audit.Logger
 	keyPrefix string
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
 		logger:    logger.With(attr.SlogComponent("litellm")),
@@ -77,6 +82,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		metrics:   metrics,
 		health:    health,
 		db:        db,
+		telemetry: telemetryDB,
+		instances: instances,
 		authz:     authzEngine,
 		features:  features,
 		audit:     auditLogger,
@@ -95,7 +102,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
-	if strings.TrimSpace(key) == "" {
+	if strings.TrimSpace(key) == "" && scheme.Name != constants.SessionSecurityScheme {
 		var err error
 		if scheme.Name == constants.ProjectSlugSecuritySchema {
 			err = oops.E(oops.CodeUnauthorized, nil, "project header is required")

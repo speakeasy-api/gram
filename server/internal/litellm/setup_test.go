@@ -173,6 +173,9 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
 	metricProcessor := NewMetricProcessor(logger, meterProvider, telemetryLogger)
 	healthProcessor := NewHealthProcessor(logger, conn)
+	instanceResolver := NewInstanceResolver(logger, conn)
+	traceProcessor.SetInstanceResolver(instanceResolver)
+	metricProcessor.SetInstanceResolver(instanceResolver)
 	traceProcessor.Start(ctx)
 	metricProcessor.Start(ctx)
 	healthProcessor.Start(ctx)
@@ -185,7 +188,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	})
 	features := &testProductFeatures{enabled: false}
 	auditLogger := audit.NewLogger()
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, features, auditLogger, "local")
+	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, features, auditLogger, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
