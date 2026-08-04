@@ -30,6 +30,7 @@ import { ALLOW_RULE_POLICY_REQUIRED } from "@/components/shadow-mcp/shadowMCPInv
 import { useProject } from "@/contexts/Auth";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { encodeCrumb } from "@/pages/costs/taxonomy";
+import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRoutes } from "@/routes";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
@@ -90,13 +91,17 @@ function UserSources({
   });
 
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {orderedSources.map((source) => (
-        <Badge key={source.source} variant="neutral">
-          <Badge.Text>
-            {`${sourceLabel(source.source)} · ${source.observedUseCount}`}
-          </Badge.Text>
-        </Badge>
+        <div className="flex items-center gap-1.5" key={source.source}>
+          <HookSourceIcon source={source.source} className="size-4 shrink-0" />
+          <span className="whitespace-nowrap font-medium">
+            {sourceLabel(source.source)}
+          </span>
+          <Badge variant="neutral">
+            <Badge.Text>{source.observedUseCount}</Badge.Text>
+          </Badge>
+        </div>
       ))}
     </div>
   );
@@ -261,7 +266,7 @@ function TopUsersTable({
       key: "sources",
       header: "Sources",
       render: (user) => <UserSources sources={user.sources} />,
-      width: "280px",
+      width: "1fr",
     },
     {
       key: "calls",
@@ -269,7 +274,7 @@ function TopUsersTable({
       render: (user) => (
         <Text variant="small">{usageCountLabel(user.observedUseCount)}</Text>
       ),
-      width: "160px",
+      width: "0.6fr",
     },
     {
       key: "lastCalled",
@@ -277,7 +282,7 @@ function TopUsersTable({
       render: (user) => (
         <Text variant="small">{formatShortDate(user.lastCalled)}</Text>
       ),
-      width: "180px",
+      width: "0.6fr",
     },
   ];
 
@@ -464,7 +469,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const onOpenUser = (user: ShadowMCPInventoryUser) => {
     if (!user.email) return;
 
-    navigate(
+    void navigate(
       `${routes.costs.href()}/${encodeCrumb({ dim: Dimension.Email, value: user.email })}`,
     );
   };

@@ -1082,6 +1082,7 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
+				Sources:    nil,
 			}
 			users[traceRow.UserKey] = user
 		}
@@ -1141,6 +1142,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
+				Sources:    nil,
 			}
 			users[traceRow.UserKey] = user
 			sourceCountsByUser[traceRow.UserKey] = make(map[string]uint64)

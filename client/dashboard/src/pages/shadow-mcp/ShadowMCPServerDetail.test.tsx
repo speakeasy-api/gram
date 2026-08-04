@@ -566,13 +566,15 @@ describe("ShadowMCPServerDetail", () => {
     const lastCalled = new Date("2026-01-04T10:00:00Z");
     renderDetailPage();
 
-    expect(screen.getByText("Claude Code · 12")).toBeTruthy();
-    expect(screen.getByText("Cursor · 3")).toBeTruthy();
-    expect(screen.getByText("Unknown · 1")).toBeTruthy();
-    expect(screen.getByText("15 calls")).toBeTruthy();
-
     const emailRow = screen.getByText("alex@example.com").closest("tr");
     expect(emailRow).toBeTruthy();
+    expect(within(emailRow!).getByText("Claude Code")).toBeTruthy();
+    expect(within(emailRow!).getByText("Cursor")).toBeTruthy();
+    expect(within(emailRow!).getByText("Unknown")).toBeTruthy();
+    expect(within(emailRow!).getByText("12")).toBeTruthy();
+    expect(within(emailRow!).getByText("3")).toBeTruthy();
+    expect(within(emailRow!).getByText("1")).toBeTruthy();
+    expect(within(emailRow!).getByText("15 calls")).toBeTruthy();
     expect(
       within(emailRow!).getByText(formatShortDate(lastCalled)),
     ).toBeTruthy();

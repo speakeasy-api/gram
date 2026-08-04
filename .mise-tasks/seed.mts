@@ -307,6 +307,7 @@ async function seedShadowMCPInventoryData(init: {
 
   const inventoryRows: string[] = [];
   const telemetryRows: string[] = [];
+  const hookSources = ["claude-code", "cursor", "codex"];
   const clickhouseDateTime64 = (date: Date) =>
     date.toISOString().replace("T", " ").replace("Z", "");
   for (const [serverIndex, [serverName, serverURL]] of servers.entries()) {
@@ -320,7 +321,18 @@ async function seedShadowMCPInventoryData(init: {
     const userCount = 3 + (serverIndex % 6);
     const callCount = 8 + serverIndex * 3;
     for (let callIndex = 0; callIndex < callCount; callIndex++) {
-      const userEmail = users[(serverIndex * 2 + callIndex) % userCount];
+      const userCallIndex = serverIndex * 2 + callIndex;
+      const userSlot = userCallIndex % userCount;
+      const userEmail = users[userSlot];
+      const primaryHookSource =
+        hookSources[(serverIndex + userSlot) % hookSources.length];
+      const isMultiSourceUser = userSlot === serverIndex % userCount;
+      const hookSource = isMultiSourceUser
+        ? hookSources[
+            (serverIndex + userSlot + Math.floor(userCallIndex / userCount)) %
+              hookSources.length
+          ]
+        : primaryHookSource;
       const calledAt = new Date(
         lastSeen.getTime() - callIndex * (35 + serverIndex * 4) * 60 * 1000,
       );
@@ -335,7 +347,7 @@ async function seedShadowMCPInventoryData(init: {
         "gen_ai.tool.call.result": "ok",
         "gram.event.source": "hook",
         "gram.hook.event": "PostToolUse",
-        "gram.hook.source": "claude-code",
+        "gram.hook.source": hookSource,
         "gram.mcp.server_url": serverURL,
         "gram.project.id": projectId,
         "gram.tool.name": toolName,
