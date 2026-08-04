@@ -440,6 +440,28 @@ func TestListChats_Filter_Search(t *testing.T) {
 	require.Contains(t, result.Chats[0].Title, "needle")
 }
 
+func TestListChats_Filter_SearchUnresolvedExternalUserID(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	chatID := seedChat(t, ctx, ti, "", "opaque-provider-user-id", "unresolved chat")
+
+	search := "provider-user"
+	payload := defaultPayload()
+	payload.Search = &search
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ID)
+
+	search = "missing@example.com"
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Zero(t, result.Total)
+	require.Empty(t, result.Chats)
+}
+
 func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
