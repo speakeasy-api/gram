@@ -811,6 +811,7 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 	if claudeMetrics == nil {
 		return nil
 	}
+	payload = claudeMetrics
 
 	logger.InfoContext(ctx, "Received Claude token metrics",
 		attr.SlogEvent("claude_metrics"),

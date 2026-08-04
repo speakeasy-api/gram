@@ -381,6 +381,79 @@ func TestMetrics_PersistsCodexOTELMetricDataPoints(t *testing.T) {
 	require.Contains(t, row.ResourceAttributes, codexTestServiceName)
 }
 
+// TestMetrics_MixedCollectorBatchRoutesEachResourceToItsOwnStream is the
+// metrics twin of the logs mixed-batch test. It is the case that caught a
+// real asymmetry: the logs handler narrowed its payload to the Claude half
+// but the metrics handler did not, so Codex resources still reached the
+// Claude usage extractor — which rejects Codex's cumulative temporality and
+// would have dropped the batch's Claude rows along with it.
+func TestMetrics_MixedCollectorBatchRoutesEachResourceToItsOwnStream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	codexMetric := "codex.tool.call"
+	unit := "1"
+	claudeMetric := "claude_code.token.usage"
+	mixed := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "codex_exec")}},
+			ScopeMetrics: []*gen.OTELScopeMetrics{{Metrics: []*gen.OTELMetric{{
+				Name: &codexMetric,
+				Unit: &unit,
+				Sum: &gen.OTELSum{
+					// Codex exports cumulative counters — the temporality the
+					// Claude extractor rejects outright.
+					AggregationTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+					DataPoints: []*gen.OTELNumberDataPoint{{
+						TimeUnixNano: new(nanoString(timestamp)),
+						AsInt:        "3",
+						Attributes: []*gen.OTELAttribute{
+							strAttr("conversation.id", "conv-mixed-metrics"),
+							strAttr("user.email", "mixed-codex@example.com"),
+						},
+					}},
+				},
+			}}}},
+		},
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")}},
+			ScopeMetrics: []*gen.OTELScopeMetrics{{Metrics: []*gen.OTELMetric{{
+				Name: &claudeMetric,
+				Unit: &unit,
+				Sum: &gen.OTELSum{
+					AggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+					DataPoints: []*gen.OTELNumberDataPoint{{
+						TimeUnixNano: new(nanoString(timestamp)),
+						AsInt:        "7",
+						Attributes: []*gen.OTELAttribute{
+							strAttr("session.id", "session-mixed-metrics"),
+							strAttr("type", "input"),
+						},
+					}},
+				},
+			}}}},
+		},
+	}}
+
+	require.NoError(t, ti.service.Metrics(ctx, mixed))
+
+	// The Codex half lands verbatim on its own stream...
+	codexRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELMetricsURN, timestamp, 1)
+	require.Contains(t, codexRows[0].Attributes, "codex.tool.call")
+	require.Contains(t, codexRows[0].ResourceAttributes, "codex_exec")
+
+	// ...and the Claude half still produces its usage rows. This is the
+	// assertion that fails when the Claude path is handed the unsplit
+	// payload: the extractor rejects Codex's cumulative temporality and
+	// returns, taking the batch's Claude rows down with it.
+	claudeRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "claude-code:usage:metrics", timestamp, 1)
+	require.Contains(t, claudeRows[0].Attributes, "session-mixed-metrics")
+}
+
 func TestMetrics_CodexPayloadDoesNotWriteClaudeUsageRows(t *testing.T) {
 	t.Parallel()
 
