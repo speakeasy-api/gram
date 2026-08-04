@@ -445,13 +445,7 @@ ORDER BY o.name ASC;
 -- existing row so callers always get a usable record back.
 -- name: CreateXaaApp :one
 INSERT INTO xaa_apps (id, client_id, client_secret, name, enabled)
-VALUES (
-  @id,
-  @client_id,
-  COALESCE(sqlc.narg('client_secret'), ''),
-  @name,
-  @enabled
-)
+VALUES (@id, @client_id, @client_secret, @name, @enabled)
 ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
 RETURNING *;
 

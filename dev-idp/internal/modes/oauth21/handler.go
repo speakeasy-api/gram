@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
+	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
 )
 
 // Mode is the current_users slot this handler resolves its subject from.
@@ -156,6 +157,12 @@ type asMetadata struct {
 	// metadata-document URL as the client_id. The dev-idp dereferences it in
 	// handleAuthorize instead of requiring DCR/pre-registration.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+
+	// IdentityChainingRequestedTokenTypesSupported advertises which
+	// `requested_token_type` values the token-exchange grant honors. Listing
+	// the ID-JAG type is how a client learns this IdP can mint cross-app
+	// access grants (draft-ietf-oauth-identity-assertion-authz-grant).
+	IdentityChainingRequestedTokenTypesSupported []string `json:"identity_chaining_requested_token_types_supported"`
 }
 
 type oidcMetadata struct {
@@ -176,11 +183,13 @@ func (h *Handler) baseMetadata() asMetadata {
 		RevocationEndpoint:                iss + "/revoke",
 		JwksURI:                           iss + "/.well-known/jwks.json",
 		ResponseTypesSupported:            []string{"code"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token", xaa.GrantTypeTokenExchange},
 		CodeChallengeMethodsSupported:     []string{"S256"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
 		ScopesSupported:                   []string{"openid", "email", "profile"},
 		ClientIDMetadataDocumentSupported: true,
+
+		IdentityChainingRequestedTokenTypesSupported: []string{xaa.TokenTypeIDJAG},
 	}
 }
 
@@ -423,10 +432,12 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		h.handleAuthorizationCodeGrant(ctx, w, r)
 	case "refresh_token":
 		h.handleRefreshTokenGrant(ctx, w, r)
+	case xaa.GrantTypeTokenExchange:
+		h.handleTokenExchangeGrant(ctx, w, r)
 	case "":
 		oauthError(w, http.StatusBadRequest, "invalid_request", "grant_type is required")
 	default:
-		oauthError(w, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code and refresh_token are supported")
+		oauthError(w, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code, refresh_token, and token-exchange are supported")
 	}
 }
 
