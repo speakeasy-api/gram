@@ -639,3 +639,26 @@ INSERT INTO xaa_redeemed_jags (issuer, jti, resource_id, expires_at)
 VALUES (@issuer, @jti, @resource_id, @expires_at)
 ON CONFLICT (issuer, jti) DO NOTHING
 RETURNING *;
+
+-- =============================================================================
+-- xaa_resource_tokens
+-- =============================================================================
+
+-- name: CreateXaaResourceToken :one
+INSERT INTO xaa_resource_tokens (
+  token, resource_id, user_id, client_id, audience, scope, expires_at
+)
+VALUES (
+  @token, @resource_id, @user_id, @client_id, @audience, @scope, @expires_at
+)
+RETURNING *;
+
+-- GetActiveXaaResourceToken resolves a bearer token presented back to the
+-- resource authorization server that minted it. Scoped by resource_id so a
+-- token minted by one resource cannot be introspected at another.
+-- name: GetActiveXaaResourceToken :one
+SELECT * FROM xaa_resource_tokens
+WHERE token = @token
+  AND resource_id = @resource_id
+  AND revoked_at IS NULL
+  AND expires_at > @ts;

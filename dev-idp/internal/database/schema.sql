@@ -292,3 +292,29 @@ CREATE TABLE IF NOT EXISTS xaa_redeemed_jags (
 
 CREATE INDEX IF NOT EXISTS xaa_redeemed_jags_expires_at_idx
   ON xaa_redeemed_jags (expires_at);
+
+-- Access tokens issued by a resource authorization server. Deliberately not
+-- the `tokens` table: these are minted by a different authorization server,
+-- under a different grant, and are audience-restricted to one MCP server --
+-- so `audience` is a column here rather than something inferred. Keeping them
+-- apart also means the whole XAA surface drops in one piece.
+CREATE TABLE IF NOT EXISTS xaa_resource_tokens (
+  token TEXT NOT NULL PRIMARY KEY,
+  resource_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  audience TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT '',
+  expires_at DATETIME NOT NULL,
+  revoked_at DATETIME,
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS xaa_resource_tokens_user_id_idx
+  ON xaa_resource_tokens (user_id);
+CREATE INDEX IF NOT EXISTS xaa_resource_tokens_expires_at_idx
+  ON xaa_resource_tokens (expires_at);
