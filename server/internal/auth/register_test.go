@@ -1,7 +1,9 @@
 package auth_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -9,8 +11,13 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featureRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func TestService_Register(t *testing.T) {
@@ -437,4 +444,104 @@ func TestService_Register(t *testing.T) {
 		assert.Contains(t, newOrg.Slug, "collide-me-", "slug should start with base and have a random suffix")
 		assert.Len(t, newOrg.Slug, len("collide-me-")+4, "suffix should be 4 hex chars")
 	})
+}
+
+// registerViaSignup drives a zero-org user through Callback + Authenticate so
+// they hold a session with no active org and a WorkOS ID, then returns the
+// authenticated context ready for Register. The mock WorkOS fetcher makes the
+// derived Gram org ID deterministic: orgid.FromWorkOSID("workos_org_" + orgName).
+func registerViaSignup(t *testing.T, workosUserID, email string) (context.Context, *e2eInstance) {
+	t.Helper()
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         email,
+		Organizations: []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotEmpty(t, callbackResult.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	return ctx, inst
+}
+
+func featureEnabled(t *testing.T, ctx context.Context, inst *e2eInstance, orgID string, f productfeatures.Feature) bool {
+	t.Helper()
+	enabled, err := featureRepo.New(inst.conn).IsFeatureEnabled(ctx, featureRepo.IsFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(f),
+	})
+	require.NoError(t, err)
+	return enabled
+}
+
+func TestService_Register_EnterpriseTrialWhenFlagOn(t *testing.T) {
+	t.Parallel()
+
+	ctx, inst := registerViaSignup(t, "user_01ENT_TRIAL_ON", "trial-on@example.com")
+
+	const orgName = "Enterprise Trial Org"
+	gramOrgID := orgid.FromWorkOSID("workos_org_" + orgName)
+	inst.flags.SetFlag(feature.FlagEnterpriseTrials, gramOrgID, true)
+
+	require.NoError(t, inst.service.Register(ctx, &gen.RegisterPayload{OrgName: orgName}))
+
+	org, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, gramOrgID)
+	require.NoError(t, err)
+	assert.Equal(t, "enterprise", org.GramAccountType)
+	assert.True(t, org.Whitelisted)
+
+	// The trial window rides the schema INSERT defaults: an active ~14-day window.
+	require.True(t, org.FreeTrialStartedAt.Valid)
+	require.True(t, org.FreeTrialEndsAt.Valid)
+	assert.WithinDuration(t, org.FreeTrialStartedAt.Time.Add(14*24*time.Hour), org.FreeTrialEndsAt.Time, time.Hour)
+
+	// First member is linked to the org.
+	members, err := orgRepo.New(inst.conn).ListOrganizationUsers(ctx, gramOrgID)
+	require.NoError(t, err)
+	require.Len(t, members, 1)
+
+	// The enterprise bundle (8 capabilities) plus universal RBAC are enabled.
+	for _, f := range []productfeatures.Feature{
+		productfeatures.FeatureLogs, productfeatures.FeatureToolIOLogs, productfeatures.FeatureSessionCapture,
+		productfeatures.FeatureAuthzChallengeLogging, productfeatures.FeatureWebhooks, productfeatures.FeatureHooksBrowserLogin,
+		productfeatures.FeatureCustomModelKeys, productfeatures.FeatureSkills, productfeatures.FeatureRBAC,
+	} {
+		assert.Truef(t, featureEnabled(t, ctx, inst, gramOrgID, f), "feature %s should be enabled", f)
+	}
+
+	// Identity entitlements stay withheld so the Identity page shows its upsell.
+	assert.False(t, featureEnabled(t, ctx, inst, gramOrgID, productfeatures.FeatureSSO), "sso must be withheld")
+	assert.False(t, featureEnabled(t, ctx, inst, gramOrgID, productfeatures.FeatureSCIM), "scim must be withheld")
+}
+
+func TestService_Register_StaysFreeWhenFlagOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, inst := registerViaSignup(t, "user_01ENT_TRIAL_OFF", "trial-off@example.com")
+
+	const orgName = "Free Signup Org"
+	gramOrgID := orgid.FromWorkOSID("workos_org_" + orgName)
+	// Flag left unset on the InMemory provider → evaluates false.
+
+	require.NoError(t, inst.service.Register(ctx, &gen.RegisterPayload{OrgName: orgName}))
+
+	org, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, gramOrgID)
+	require.NoError(t, err)
+	assert.Equal(t, "free", org.GramAccountType)
+	assert.False(t, org.Whitelisted)
+
+	// No enterprise bundle seeded on the flag-off path.
+	assert.False(t, featureEnabled(t, ctx, inst, gramOrgID, productfeatures.FeatureLogs), "bundle must not seed when flag off")
+	assert.False(t, featureEnabled(t, ctx, inst, gramOrgID, productfeatures.FeatureSSO))
+	assert.False(t, featureEnabled(t, ctx, inst, gramOrgID, productfeatures.FeatureSCIM))
 }
