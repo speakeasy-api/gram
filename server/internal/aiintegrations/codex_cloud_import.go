@@ -95,6 +95,14 @@ type CodexCloudSyncProgress struct {
 	// (tool calls, lifecycle events) that would otherwise import as silently
 	// incomplete transcripts.
 	SkippedDetails int `json:"skipped_details"`
+	// SkippedMissingIDs counts prompt/response events dropped because they
+	// carry no session id or event id — a canary for the feed dropping the
+	// fields the import is keyed on. Without it a feed that stopped emitting
+	// session_id would import nothing while every other counter read zero and
+	// the run reported success, which is indistinguishable from a quiet
+	// window. event_id is also the message dedupe key, so losing it silently
+	// would take replay safety with it.
+	SkippedMissingIDs int `json:"skipped_missing_ids"`
 	// TimestampFallbacks counts events whose timestamps failed RFC3339
 	// parsing and fell back to import time — a canary for upstream format
 	// changes that would otherwise silently rewrite history chronology.
@@ -150,6 +158,7 @@ func (s *CodexCloudImportService) SyncCodexCloudSessions(ctx context.Context, cf
 		ChatsUpserted:      0,
 		SkippedClients:     0,
 		SkippedDetails:     0,
+		SkippedMissingIDs:  0,
 		TimestampFallbacks: 0,
 		WatermarkReached:   cfg.PollWatermarkAt,
 	}
@@ -378,6 +387,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	// TimestampFallbacks canary.
 	admittedAt := make([]time.Time, 0, len(events))
 	fallbacksBefore := src.timestampFallbacks()
+	skippedMissingIDs := 0
 	for _, event := range events {
 		if !strings.EqualFold(strings.TrimSpace(event.ClientID), codexCloudClientWeb) {
 			skippedClients++
@@ -389,6 +399,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			continue
 		}
 		if event.EventDetails.SessionID == "" || event.EventID == "" {
+			skippedMissingIDs++
 			continue
 		}
 		createdAt := src.eventCreatedAt(event)
@@ -407,10 +418,11 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			state.firstPrompt = strings.TrimSpace(event.EventDetails.PromptText)
 		}
 	}
-	if skippedClients > 0 || skippedDetails > 0 {
+	if skippedClients > 0 || skippedDetails > 0 || skippedMissingIDs > 0 {
 		src.progressMu.Lock()
 		src.progress.SkippedClients += skippedClients
 		src.progress.SkippedDetails += skippedDetails
+		src.progress.SkippedMissingIDs += skippedMissingIDs
 		src.progressMu.Unlock()
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {

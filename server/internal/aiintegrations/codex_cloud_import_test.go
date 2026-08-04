@@ -445,3 +445,63 @@ func TestCodexCloudRetryAfterOnlyBacksOffOnRateLimits(t *testing.T) {
 		require.False(t, retry, "only a 429 is retryable: %v", err)
 	}
 }
+
+// TestCodexCloudCountsEventsMissingIdentifiers: a web prompt/response event
+// with no session id (or no event id) clears the client and detail-type
+// filters and is then dropped. Uncounted, a feed that stopped emitting
+// session_id would import nothing while every other canary read zero and the
+// run reported success — indistinguishable from a window with no cloud
+// activity. event_id matters doubly: it is the message dedupe key.
+func TestCodexCloudCountsEventsMissingIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Codex Cloud Missing IDs Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, nil)
+	cfg := created.Config
+	cfg.ProjectID = project.ID
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+	// Both clear the client and detail-type gates; one lacks session_id, the
+	// other lacks event_id.
+	noSession := `{"event_id":"cdx_ns","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T12:00:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"","model":"gpt-5.5","prompt_text":"orphan prompt"}}` + "\n"
+	noEventID := `{"event_id":"","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T12:01:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"44444444-5555-4666-8777-888888888888","model":"gpt-5.5","prompt_text":"unidentified prompt"}}` + "\n"
+	body := noSession + noEventID
+
+	file := codexCloudFixtureFile(body)
+	file.ID = "eclf_missing_ids"
+
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	src := &codexCloudSource{
+		client:         &stubCodexComplianceClient{downloads: map[string][]byte{file.ID: []byte(body)}},
+		svc:            svc,
+		cfg:            cfg,
+		pageLimit:      codexCloudPageLimit,
+		users:          newConnectedUserResolver(conn, orgID),
+		chatIDs:        map[string]uuid.UUID{},
+		titledSessions: map[string]bool{},
+		progress:       &CodexCloudSyncProgress{},
+	}
+
+	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
+
+	require.Equal(t, 2, src.progress.SkippedMissingIDs,
+		"an event dropped for a missing identifier must be counted, not silently discarded")
+	require.Zero(t, src.progress.SkippedClients)
+	require.Zero(t, src.progress.SkippedDetails)
+	require.Zero(t, src.progress.ChatsUpserted, "an unidentifiable event must not create a chat")
+	require.Zero(t, src.progress.MessagesWritten)
+
+	// The canary must be visible in the failure report operators read.
+	require.Contains(t, src.progress.String(), "skipped_missing_ids=2")
+}
