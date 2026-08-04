@@ -205,6 +205,49 @@ func TestResolveActivatedSkillClaudeUsesConfigDirectory(t *testing.T) {
 	require.Equal(t, path, resolved.sourcePath)
 }
 
+func TestResolveActivatedSkillClaudeFollowsConfiguredRootSymlinkWithinConfigTree(t *testing.T) {
+	home := t.TempDir()
+	configRoot := filepath.Join(t.TempDir(), "custom-claude")
+	sharedRoot := filepath.Join(configRoot, "shared-skills")
+	targetPath := writeSkillManifest(t, filepath.Join(sharedRoot, "configured"), []byte("configured"))
+	require.NoError(t, os.Symlink(sharedRoot, filepath.Join(configRoot, "skills")))
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", configRoot)
+
+	resolved := resolveActivatedSkill(claudeSkillEvent(t.TempDir(), "configured"), activatedSkillPayload("configured"))
+
+	require.Equal(t, "personal", resolved.sourceLevel)
+	require.Equal(t, filepath.Join(configRoot, "skills", "configured", "SKILL.md"), resolved.sourcePath)
+	require.Equal(t, "configured", resolved.content)
+	require.Equal(t, sha256Hex([]byte("configured")), resolved.rawSHA256)
+	require.True(t, resolved.captureReady)
+	resolvedPath, err := filepath.EvalSymlinks(resolved.sourcePath)
+	require.NoError(t, err)
+	targetPath, err = filepath.EvalSymlinks(targetPath)
+	require.NoError(t, err)
+	require.Equal(t, targetPath, resolvedPath)
+}
+
+func TestResolveActivatedSkillClaudeRejectsConfiguredRootSymlinkOutsideConfigTree(t *testing.T) {
+	home := t.TempDir()
+	sandbox := t.TempDir()
+	configRoot := filepath.Join(sandbox, "custom-claude")
+	externalRoot := filepath.Join(sandbox, "external-skills")
+	writeSkillManifest(t, filepath.Join(externalRoot, "configured"), []byte("outside configured tree"))
+	require.NoError(t, os.MkdirAll(configRoot, 0o755))
+	require.NoError(t, os.Symlink(externalRoot, filepath.Join(configRoot, "skills")))
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", configRoot)
+
+	resolved := resolveActivatedSkill(claudeSkillEvent(t.TempDir(), "configured"), activatedSkillPayload("configured"))
+
+	require.Equal(t, "configured", resolved.name)
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.Empty(t, resolved.rawSHA256)
+	require.False(t, resolved.captureReady)
+}
+
 func TestResolveActivatedSkillClaudeUsesApplicablePluginRecord(t *testing.T) {
 	home := t.TempDir()
 	configRoot := filepath.Join(t.TempDir(), "claude")

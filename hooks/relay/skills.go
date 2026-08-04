@@ -635,7 +635,7 @@ func openValidatedSkill(location skillLocation) (*os.File, string, bool) {
 // authorizedSkillRoot applies the boundary selected by the resolver. Project
 // and standard personal skills may link between known provider skill trees
 // under the same owner. Configured, managed, and plugin locations stay within
-// their exact resolved tree.
+// their exact resolved tree and its resolver-selected parent.
 func authorizedSkillRoot(location skillLocation, resolvedRoot, resolvedPath string) (string, bool) {
 	switch location.authorization {
 	case skillAuthorizationProject, skillAuthorizationPersonal:
@@ -660,7 +660,10 @@ func authorizedSkillRoot(location skillLocation, resolvedRoot, resolvedPath stri
 		}
 		return "", false
 	case skillAuthorizationExact:
-		if pathWithin(resolvedPath, resolvedRoot) {
+		// Resolve the parent independently so a symlink at the exact root cannot
+		// redefine its confinement boundary outside the resolver-selected tree.
+		resolvedParent, err := filepath.EvalSymlinks(filepath.Dir(location.root))
+		if err == nil && pathWithin(resolvedRoot, resolvedParent) && pathWithin(resolvedPath, resolvedRoot) {
 			return filepath.Clean(location.root), true
 		}
 		return "", false
