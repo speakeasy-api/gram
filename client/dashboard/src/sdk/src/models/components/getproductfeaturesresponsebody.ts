@@ -10,10 +10,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type GetProductFeaturesResponseBody = {
   /**
-   * Whether the organization can provision push integrations for AI platforms
-   */
-  aiPlatformPushIntegrationsEnabled: boolean;
-  /**
    * Whether authz challenge logging to ClickHouse is enabled
    */
   authzChallengeLoggingEnabled: boolean;
@@ -73,7 +69,6 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    ai_platform_push_integrations_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
@@ -90,8 +85,6 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "ai_platform_push_integrations_enabled":
-        "aiPlatformPushIntegrationsEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "device_agent": "deviceAgent",

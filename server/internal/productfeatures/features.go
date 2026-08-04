@@ -24,6 +24,9 @@ const (
 	FeatureSkills                     Feature = "skills"
 	FeatureSkillCaptureMetadataOnly   Feature = "skill_capture_metadata_only"
 	FeatureAIPlatformPushIntegrations Feature = "ai_platform_push_integrations"
+	// FeatureAdminMCP enables the organization-level Admin MCP capability.
+	// The runtime also requires a separate rollout gate before admitting traffic.
+	FeatureAdminMCP Feature = "admin_mcp"
 )
 
 type FeatureCache struct {

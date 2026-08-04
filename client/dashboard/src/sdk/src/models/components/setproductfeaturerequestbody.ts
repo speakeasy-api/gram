@@ -22,7 +22,6 @@ export const FeatureName = {
   CustomModelKeys: "custom_model_keys",
   Skills: "skills",
   SkillCaptureMetadataOnly: "skill_capture_metadata_only",
-  AiPlatformPushIntegrations: "ai_platform_push_integrations",
 } as const;
 /**
  * Name of the feature to update

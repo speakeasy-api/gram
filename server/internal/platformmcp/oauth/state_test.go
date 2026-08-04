@@ -77,6 +77,38 @@ func TestInMemoryStore_RejectsGrantWithMismatchedRedirectOrPKCE(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestInMemoryStore_AuthorizeConnectionCreatesAndReauthorizesAtomically(t *testing.T) {
+	t.Parallel()
+
+	store := adminoauth.NewInMemoryStore()
+	client := adminoauth.Client{ID: "client-1"}
+	require.NoError(t, store.RegisterClient(t.Context(), client))
+
+	first := adminoauth.AuthorizeConnectionInput{
+		Connection: adminoauth.Connection{ID: "connection-1", ClientID: client.ID, Subject: "user:user-1", OrganizationID: "organization-1", Generation: "generation-1"},
+		Grant:      adminoauth.Grant{Code: "code-1", ClientID: client.ID, RedirectURI: "https://client.example/callback", CodeChallenge: pkceChallenge("test-verifier"), ExpiresAt: time.Now().Add(time.Minute)},
+		Now:        time.Now(),
+	}
+	connection, err := store.AuthorizeConnection(t.Context(), first)
+	require.NoError(t, err)
+	require.Equal(t, first.Connection, connection)
+
+	session := sessionFor(connection, client.ID, "refresh-old")
+	require.NoError(t, store.CreateSession(t.Context(), session))
+	second := first
+	second.Connection = adminoauth.Connection{ID: "connection-new", ClientID: client.ID, Subject: "user:user-1", OrganizationID: "organization-1", Generation: "generation-2"}
+	second.Grant.Code = "code-2"
+	second.Now = time.Now()
+
+	connection, err = store.AuthorizeConnection(t.Context(), second)
+	require.NoError(t, err)
+	require.Equal(t, "connection-1", connection.ID)
+	require.Equal(t, "generation-2", connection.Generation)
+
+	_, err = store.RotateSession(t.Context(), rotateInput(session, sessionFor(session.Connection, client.ID, "refresh-new")))
+	require.ErrorIs(t, err, adminoauth.ErrAlreadyUsed)
+}
+
 func TestInMemoryStore_RotatesRefreshTokenOnce(t *testing.T) {
 	t.Parallel()
 

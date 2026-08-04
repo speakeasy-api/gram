@@ -82,6 +82,8 @@ type GetProductFeaturesResult struct {
 	SkillCaptureMetadataOnly bool
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool
+	// Whether the organization is eligible for the Gram Admin MCP capability
+	AdminMcpEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.

@@ -148,10 +148,6 @@ export type CreateRiskPolicyRequestBody = {
    */
   shadowMcpAllowedUrls?: Array<string> | undefined;
   /**
-   * For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.
-   */
-  shadowMcpBlockedUrls?: Array<string> | undefined;
-  /**
    * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
    */
   shadowMcpDisposition?: ShadowMcpDisposition | undefined;
@@ -206,7 +202,6 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   scope_include?: string | undefined;
   score: number;
   shadow_mcp_allowed_urls?: Array<string> | undefined;
-  shadow_mcp_blocked_urls?: Array<string> | undefined;
   shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
@@ -239,7 +234,6 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     scopeInclude: z.optional(z.string()),
     score: z._default(z.number(), 5),
     shadowMcpAllowedUrls: z.optional(z.array(z.string())),
-    shadowMcpBlockedUrls: z.optional(z.array(z.string())),
     shadowMcpDisposition: z.optional(ShadowMcpDisposition$outboundSchema),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
@@ -262,7 +256,6 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
       shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
-      shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
       shadowMcpDisposition: "shadow_mcp_disposition",
       userMessage: "user_message",
     });

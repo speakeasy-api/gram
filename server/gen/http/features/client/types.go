@@ -53,6 +53,8 @@ type GetProductFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
+	// Whether the organization is eligible for the Gram Admin MCP capability
+	AdminMcpEnabled *bool `form:"admin_mcp_enabled,omitempty" json:"admin_mcp_enabled,omitempty" xml:"admin_mcp_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -459,6 +461,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		SkillsEnabled:                     *body.SkillsEnabled,
 		SkillCaptureMetadataOnly:          *body.SkillCaptureMetadataOnly,
 		AiPlatformPushIntegrationsEnabled: *body.AiPlatformPushIntegrationsEnabled,
+		AdminMcpEnabled:                   *body.AdminMcpEnabled,
 		DeviceAgent:                       *body.DeviceAgent,
 	}
 
@@ -806,6 +809,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.AiPlatformPushIntegrationsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
+	}
+	if body.AdminMcpEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("admin_mcp_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))
