@@ -5,6 +5,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -113,7 +114,7 @@ function SSOConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
+          openSafeExternalUrl(data.url);
           toast.info("Continue setup in the WorkOS portal");
         },
       },
@@ -162,7 +163,7 @@ function DirectorySyncConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
+          openSafeExternalUrl(data.url);
           toast.info("Continue setup in the WorkOS portal");
         },
       },

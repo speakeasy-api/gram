@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { DotCard } from "@/components/ui/DotCard";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Plugin } from "@gram/client/models/components/plugin.js";
@@ -125,7 +126,7 @@ export default function Plugins(): JSX.Element {
         action: {
           label: "Open",
           onClick: () => {
-            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+            openSafeExternalUrl(data.repoUrl);
           },
         },
       });

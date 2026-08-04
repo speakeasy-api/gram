@@ -1,4 +1,5 @@
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 
 export type IssuerDocumentationLink = {
   label: string;
@@ -12,14 +13,7 @@ export type IssuerDocumentationLink = {
 // past a write path would execute on click. Checking again at the render sink
 // keeps that from depending on an invariant held one layer away.
 export function isAbsoluteHttpUrl(raw: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return false;
-  }
-
-  return parsed.protocol === "http:" || parsed.protocol === "https:";
+  return safeExternalHttpUrl(raw) !== null;
 }
 
 // The documentation URLs an issuer can carry, in the order they are shown.

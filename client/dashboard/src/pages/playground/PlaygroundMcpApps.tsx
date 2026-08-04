@@ -1,4 +1,5 @@
 import { Text } from "@/components/ui/Text";
+import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import type { Toolset } from "@/lib/toolTypes";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ToolFallback } from "@/elements";
@@ -503,10 +504,11 @@ async function handleIframeRequest(init: {
         if (!url) {
           return err(message.id, -32602, "Missing URL");
         }
-        if (!isSafeExternalUrl(url)) {
+        const safeUrl = safeExternalHttpUrl(url);
+        if (!safeUrl) {
           return err(message.id, -32602, "Unsupported URL");
         }
-        window.open(url, "_blank", "noopener,noreferrer");
+        window.open(safeUrl, "_blank", "noopener,noreferrer");
         return ok(message.id, {});
       }
       case "resources/read":
@@ -572,18 +574,6 @@ async function requestMcpJsonRpc<T>(
   }
 
   return payload.result as T;
-}
-
-// Links surfaced by an embedded MCP app are untrusted input; only allow
-// navigation to web URLs so a frame cannot open javascript:, file:, or
-// arbitrary custom-scheme links from the host page.
-function isSafeExternalUrl(raw: string): boolean {
-  try {
-    const parsed = new URL(raw);
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
-  } catch {
-    return false;
-  }
 }
 
 function ok(id: JsonRpcId, result: unknown): JsonRpcResponse {
