@@ -1,4 +1,4 @@
--- Demo workspace seed — ClickHouse side.
+-- Demo org seed — ClickHouse side.
 --
 -- Regenerates all demo-org telemetry. Every statement is scoped to the fixed
 -- demo project UUIDs / demo org id (telemetry_logs has no org column; the

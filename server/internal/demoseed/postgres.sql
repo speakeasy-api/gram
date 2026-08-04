@@ -1,4 +1,4 @@
--- Demo workspace seed — Postgres side.
+-- Demo org seed — Postgres side.
 --
 -- Defines demo.ensure_demo_org(), a fully self-contained, idempotent function
 -- that (re)generates the shared demo organization's data. Every write is scoped
@@ -182,7 +182,7 @@ BEGIN
   -- carried by the fixed org id (constants.DemoOrganizationID) — NOT by
   -- account type, which the auth callback overwrites anyway.
   INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-  VALUES (demo_org, 'Acme Demo Workspace', 'acme-demo', 'enterprise', TRUE)
+  VALUES (demo_org, 'Acme Demo Org', 'acme-demo', 'enterprise', TRUE)
   ON CONFLICT (id) DO UPDATE
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
         gram_account_type = EXCLUDED.gram_account_type;

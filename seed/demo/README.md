@@ -1,4 +1,4 @@
-# Demo workspace seed
+# Demo org seed
 
 SQL-first seed for the shared, read-only demo organization. The SQL lives in
 `server/internal/demoseed/{postgres,clickhouse}.sql`, is go:embedded into the
@@ -73,8 +73,8 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
    product feature, PLUS a defense-in-depth guard rejecting mutating RPCs when
    `ActiveOrganizationID == demo org` (scope coverage across handlers is not
    complete).
-5. Frontend: reuse the `ImpersonationBanner` machinery for a "Demo workspace —
-   read only" banner + exit; add the entry point ("Explore demo workspace").
+5. Frontend: reuse the `ImpersonationBanner` machinery for a "Demo org —
+   read only" banner + exit; add the entry point ("Explore demo org").
 6. DONE for impersonation (commits 0f8d13113e + ae256351c1):
    `access.listGrants` returns the admin scope set before the WorkOS check,
    and `listMembers`/`listRoles` fall through to the pure-Postgres role

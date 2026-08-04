@@ -1,4 +1,4 @@
-# Demo workspace verification playbook
+# Demo org verification playbook
 
 Agent-driven page verification for the demo seed. Run after
 `mise run seed:demo` with the `gram-playwright-cli` skill

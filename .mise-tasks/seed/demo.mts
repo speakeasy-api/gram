@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
-//MISE description="Apply the demo workspace seed via `gram demo-seed` (embedded SQL from server/internal/demoseed/)"
+//MISE description="Apply the demo org seed via `gram demo-seed` (embedded SQL from server/internal/demoseed/)"
 //MISE dir="{{ config_root }}"
 
 import { $ } from "zx";

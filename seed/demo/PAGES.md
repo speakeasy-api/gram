@@ -1,4 +1,4 @@
-# Demo workspace page checklist
+# Demo org page checklist
 
 Acceptance contract for the demo seed. Every dashboard page a demo user can
 reach must render populated (no empty state, no error boundary) from the data

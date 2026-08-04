@@ -75,7 +75,7 @@ function getAdminOverrideCookie(): string | null {
   return value || null;
 }
 
-// The shared demo workspace is entered through the same override mechanism,
+// The shared demo org is entered through the same override mechanism,
 // but it isn't a customer org being impersonated — brand it as a demo instead
 // of an impersonation warning.
 const DEMO_ORG_SLUG = "acme-demo";
@@ -103,7 +103,7 @@ const ImpersonationBanner = () => {
       <ShieldAlert className="h-4 w-4 shrink-0" />
       <span className="font-mono font-bold">
         {isDemo
-          ? "Demo workspace — sample data"
+          ? "Demo org — sample data"
           : `Impersonating ${organization.slug}`}
       </span>
       <button
