@@ -184,6 +184,28 @@ func TestInMemoryStore_RejectsRefreshForDifferentConnection(t *testing.T) {
 	require.ErrorIs(t, err, platformoauth.ErrGeneration)
 }
 
+func TestInMemoryStore_GetConnectionSkipsRevokedHistory(t *testing.T) {
+	t.Parallel()
+
+	store, grant := seededGrant(t)
+	for _, id := range []string{grant.Connection.ID, "connection-revoked-2", "connection-revoked-3"} {
+		connection := grant.Connection
+		connection.ID = id
+		if id != grant.Connection.ID {
+			require.NoError(t, store.RegisterConnection(t.Context(), connection))
+		}
+		require.NoError(t, store.RevokeConnection(t.Context(), id, time.Now()))
+	}
+	active := grant.Connection
+	active.ID = "connection-active"
+	require.NoError(t, store.RegisterConnection(t.Context(), active))
+
+	connection, err := store.GetConnection(t.Context(), active.OrganizationID, active.Subject, active.ClientID)
+
+	require.NoError(t, err)
+	require.Equal(t, active.ID, connection.ID)
+}
+
 func TestInMemoryStore_RotationInvalidatesOldGeneration(t *testing.T) {
 	t.Parallel()
 
@@ -197,6 +219,39 @@ func TestInMemoryStore_RotationInvalidatesOldGeneration(t *testing.T) {
 
 	_, err = store.RotateSession(t.Context(), rotateInput(session, sessionFor(grant.Connection, grant.ClientID, "refresh-new")))
 	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+}
+
+func TestInMemoryStore_RevokeAccessSessionRejectsRepeatedRevocation(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	session := sessionFor(grant.Connection, grant.ClientID, "refresh-session")
+	require.NoError(t, store.CreateSession(t.Context(), session))
+	require.NoError(t, store.CreateSession(t.Context(), sessionFor(grant.Connection, grant.ClientID, "refresh-other")))
+
+	_, err := store.RevokeAccessSession(t.Context(), session.JTI, grant.ClientID, time.Now())
+	require.NoError(t, err)
+	_, err = store.RevokeAccessSession(t.Context(), session.JTI, grant.ClientID, time.Now())
+	require.ErrorIs(t, err, adminoauth.ErrNotFound)
+
+	stored, err := store.GetSessionByRefreshHash(t.Context(), session.RefreshHash)
+	require.NoError(t, err)
+	require.NotNil(t, stored.RevokedAt)
+}
+
+func TestInMemoryStore_RejectsDuplicateActiveConnectionAndSessionJTI(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	connection := grant.Connection
+	connection.ID = "connection-duplicate"
+	require.ErrorIs(t, store.RegisterConnection(t.Context(), connection), adminoauth.ErrAlreadyUsed)
+
+	first := sessionFor(grant.Connection, grant.ClientID, "refresh-first")
+	second := sessionFor(grant.Connection, grant.ClientID, "refresh-second")
+	second.JTI = first.JTI
+	require.NoError(t, store.CreateSession(t.Context(), first))
+	require.ErrorIs(t, store.CreateSession(t.Context(), second), adminoauth.ErrAlreadyUsed)
 }
 
 func TestInMemoryStore_ClientRevocationRevokesSessionFamily(t *testing.T) {

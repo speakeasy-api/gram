@@ -160,14 +160,6 @@ func NewPostgresReader(db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{store: adminrepo.New(db)}
 }
 
-func (r *PostgresReader) GetAdminContext(_ context.Context, principal Principal) (AdminContext, error) {
-	return AdminContext{
-		OrganizationID: principal.OrganizationID,
-		ConnectionID:   principal.ConnectionID,
-		ReadOnly:       true,
-	}, nil
-}
-
 func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
 	if r.store == nil {
 		return ListProjectsOutput{}, ErrUnavailable
