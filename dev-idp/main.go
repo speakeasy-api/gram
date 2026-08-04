@@ -158,6 +158,10 @@ func run() error {
 
 	outer := http.NewServeMux()
 
+	// Explain the prefixes dev-idp used to serve before anything else claims
+	// them, so stale configuration reports itself instead of 404ing.
+	mountRetiredPrefixes(outer, logger)
+
 	oauth21Handler := oauth21.NewHandler(
 		oauth21.Config{ExternalURL: pubURL, LoginClientID: *loginClientID},
 		ks, logger, tp, db,
