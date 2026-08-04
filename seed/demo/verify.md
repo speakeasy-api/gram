@@ -31,7 +31,7 @@ where a value is expected.
 3. **Cost dashboard** — non-zero total cost; breakdown by user shows the six
    demo users; by model shows claude-sonnet-4-6 / claude-opus-4-5 / gpt-5.6;
    by agent shows claude-code / cursor.
-4. **Project overview** (both `acme-support` and `acme-platform`) — metric
+4. **Project overview** (the `default` project) — metric
    cards non-zero (tool calls, chats).
 5. **Tool logs / traces** — entries for `tools:http:acme:*` tools, ~7% error
    status.

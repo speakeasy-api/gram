@@ -24,8 +24,7 @@ directory holds the authoring docs:
 | Thing      | Value                                                                                         |
 | ---------- | --------------------------------------------------------------------------------------------- |
 | Org id     | `org_gram_demo_workspace` (slug `acme-demo`, account type `enterprise` for gated pages)       |
-| Project A  | `dec0de00-0000-4000-a000-000000000001` (`acme-support`)                                       |
-| Project B  | `dec0de00-0000-4000-a000-000000000002` (`acme-platform`)                                      |
+| Project    | `dec0de00-0000-4000-a000-000000000001` (`default` — the single demo project)                  |
 | Chat ids   | `demo.det_uuid('gram-demo-chat-' + n)`: md5, version nibble 5, variant 8; same in both stores |
 | Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                           |
 

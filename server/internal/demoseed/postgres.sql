@@ -13,8 +13,8 @@
 --
 -- Constants (must match seed/demo/clickhouse.sql):
 --   org id       org_gram_demo_workspace
---   project ids  dec0de00-0000-4000-a000-000000000001 (acme-support)
---                dec0de00-0000-4000-a000-000000000002 (acme-platform)
+--   project id   dec0de00-0000-4000-a000-000000000001 ('Default' — the only
+--                project; ...0002 survives only as a legacy delete scope)
 --   chat ids     demo.det_uuid('gram-demo-chat-' || n) — md5 with RFC nibbles
 --   message ids  demo.det_uuid('gram-demo-msg-' || n || '-' || m)
 --   users        user_demo_* / *@demo.getgram.ai (parallel arrays below; the
@@ -40,7 +40,6 @@ DECLARE
   proj_a    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000000001';
   proj_b    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000000002';
   policy_a  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f001';
-  policy_b  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f002';
 
   asset_id     CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000a001';
   deploy_id    CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000d001';
@@ -195,9 +194,11 @@ BEGIN
   DELETE FROM assets WHERE project_id IN (proj_a, proj_b);
   DELETE FROM projects WHERE organization_id = demo_org;
 
+  -- Single project: the demo org intentionally has exactly one project so
+  -- new users land somewhere obvious. proj_b remains declared ONLY as a
+  -- legacy-cleanup delete scope from when the seed created two projects.
   INSERT INTO projects (id, name, slug, organization_id) VALUES
-    (proj_a, 'Acme Support',  'acme-support',  demo_org),
-    (proj_b, 'Acme Platform', 'acme-platform', demo_org);
+    (proj_a, 'Default', 'default', demo_org);
 
   -- 'rbac' is required for the agent-sessions list: without it
   -- authz.ShouldEnforce is false and chatVisibilityScope falls back to
@@ -460,14 +461,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
                              sources, enabled, action, audience_type, auto_name, version)
   VALUES
     (policy_a, proj_a, demo_org, 'Acme secrets & PII policy', 'standard',
-     '{regex,presidio}', TRUE, 'flag', 'everyone', TRUE, 1),
-    (policy_b, proj_b, demo_org, 'Acme secrets & PII policy', 'standard',
      '{regex,presidio}', TRUE, 'flag', 'everyone', TRUE, 1);
 
   FOR i IN 1 .. bulk_chats LOOP
     chat_id := demo.det_uuid('gram-demo-chat-' || i);
-    chat_proj := CASE WHEN i % 3 = 0 THEN proj_b ELSE proj_a END;
-    chat_policy := CASE WHEN i % 3 = 0 THEN policy_b ELSE policy_a END;
+    chat_proj := proj_a;
+    chat_policy := policy_a;
     owner_idx := 1 + (i % array_length(demo_user_ids, 1));
     -- 5h spacing = ~12.5 days for 60 chats: inside the session/cost MV date
     -- cutoffs and the 90-day TTLs; matches the ClickHouse formula exactly.
@@ -566,7 +565,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
                             actor_display_name, action, subject_id, subject_type,
                             subject_display_name, created_at)
     VALUES (demo.det_uuid('gram-demo-audit-' || i), demo_org,
-            CASE WHEN i % 2 = 0 THEN proj_b ELSE proj_a END,
+            proj_a,
             demo_user_ids[1 + (i % 6)], 'user', demo_user_names[1 + (i % 6)],
             audit_actions[1 + (i % array_length(audit_actions, 1))],
             'demo-subject-' || i, 'toolset',
@@ -663,15 +662,15 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- Every table that carries both the demo org id and a project id must agree
   -- with the demo constants: a mismatch means an insert escaped its scoping.
   SELECT count(*) INTO stray FROM (
-    SELECT 1 FROM deployments WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    SELECT 1 FROM deployments WHERE organization_id = demo_org AND project_id <> proj_a
     UNION ALL
-    SELECT 1 FROM toolsets WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    SELECT 1 FROM toolsets WHERE organization_id = demo_org AND project_id <> proj_a
     UNION ALL
-    SELECT 1 FROM risk_policies WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    SELECT 1 FROM risk_policies WHERE organization_id = demo_org AND project_id <> proj_a
     UNION ALL
-    SELECT 1 FROM risk_results WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    SELECT 1 FROM risk_results WHERE organization_id = demo_org AND project_id <> proj_a
     UNION ALL
-    SELECT 1 FROM audit_logs WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    SELECT 1 FROM audit_logs WHERE organization_id = demo_org AND project_id <> proj_a
   ) x;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo projects', stray;
