@@ -232,7 +232,7 @@ export default function SkillsList(): JSX.Element {
     {
       key: "activations",
       header: "Activations (30d)",
-      width: "130px",
+      width: "1fr",
       sortable: true,
       sortValue: (skill) => metricsBySkill.get(skill.id)?.activations ?? 0,
       render: (skill) => (
@@ -280,7 +280,7 @@ export default function SkillsList(): JSX.Element {
           tooltip="Estimated time saved across scored sessions that used this skill."
         />
       ),
-      width: "150px",
+      width: "1fr",
       sortable: true,
       sortLabel: "Estimated savings",
       sortValue: (skill) =>
