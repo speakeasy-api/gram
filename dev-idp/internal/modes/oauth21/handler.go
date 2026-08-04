@@ -1,7 +1,12 @@
 // Package oauth21 implements the dev-idp's OAuth 2.1 authorization server:
-// PKCE (S256), stateless DCR, and OIDC compliance. It is the dev-idp's only
-// OAuth surface — it backs both the `remote_session_issuer` rows used in
-// remote-session tests and the authorize leg of dashboard login.
+// PKCE (S256), stateless DCR, and OIDC compliance. It backs both the
+// `remote_session_issuer` rows used in remote-session tests and the authorize
+// leg of dashboard login.
+//
+// It also doubles as the enterprise IdP for cross-app access: the token
+// endpoint mints ID-JAG grants under the RFC 8693 token-exchange grant (see
+// idjag.go). The server that redeems those grants is a different issuer,
+// internal/modes/resourceas.
 //
 // Identity resolution is non-interactive — every /authorize call resolves the
 // currentUser and immediately redirects with the issued code. Dynamic client
