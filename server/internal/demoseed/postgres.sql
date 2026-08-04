@@ -7,8 +7,8 @@
 --
 --   Local:  applied by `mise run seed:demo` (psql -f this file, which also
 --           executes the function at the bottom).
---   Prod:   the function is installed once, then pg_cron runs
---           `SELECT demo.ensure_demo_org();` daily. Timestamps are relative to
+--   Prod:   the function is installed once, then the scheduled runner executes
+--           it daily via `gram demo-seed`. Timestamps are relative to
 --           now(), so each run regenerates a fresh trailing ~12-day window.
 --
 -- Constants (must match seed/demo/clickhouse.sql):

@@ -1,18 +1,23 @@
 # Demo workspace seed
 
-SQL-first seed for the shared, read-only demo organization. The same two SQL
-files run in every environment:
+SQL-first seed for the shared, read-only demo organization. The SQL lives in
+`server/internal/demoseed/{postgres,clickhouse}.sql`, is go:embedded into the
+server binary, and is applied by the `gram demo-seed` subcommand — the SAME
+code path locally and in prod, versioned atomically with each deploy. This
+directory holds the authoring docs:
 
-- `postgres.sql` — installs and executes `demo.ensure_demo_org()`
-  (idempotent; all writes scoped to the demo constants; pre/postflight
-  isolation asserts abort the transaction on any violation).
-- `clickhouse.sql` — scoped deletes (source table + every MV target) followed
-  by fresh inserts; MVs repopulate summaries on INSERT. Postflight
-  `throwIf` asserts fail the run on missing or leaked rows.
+- `server/internal/demoseed/postgres.sql` — installs and executes
+  `demo.ensure_demo_org()` (idempotent; all writes scoped to the demo
+  constants; pre/postflight isolation asserts abort the transaction on any
+  violation). Deliberately NOT a migration: migrations are append-only and
+  the seed churns; `CREATE OR REPLACE` + daily rerun is the upgrade path.
+- `server/internal/demoseed/clickhouse.sql` — scoped deletes (source table +
+  every MV target) followed by fresh inserts; MVs repopulate summaries on
+  INSERT. Postflight `throwIf` asserts fail the run on missing or leaked
+  rows. Keep semicolons out of string literals — the runner splits on ';'.
 - `PAGES.md` — the acceptance contract: which dashboard page each piece of
   data feeds and its verification status.
-- `verify.spec.ts` — Playwright assertions per page (run via
-  `mise run seed:demo --verify`).
+- `verify.md` — the agent-driven page verification playbook.
 
 ## Fixed constants
 
@@ -30,21 +35,25 @@ ever needed (fresh rows are past every MV date cutoff).
 
 ## Running
 
-- Local, whole stack: `mise run seed:demo`, then verify pages with the
-  `verify.md` playbook (playwright agent).
-- Prod (target wiring):
-  1. Postgres: install `demo.ensure_demo_org()` and schedule
-     `SELECT demo.ensure_demo_org();` daily via pg_cron (infra repo).
-  2. ClickHouse: run `clickhouse.sql` via `clickhouse-client --multiquery`
-     from the infra cron, AFTER the Postgres run (CH has no procedural
-     functions). Both are idempotent.
+- Local: `mise run seed:demo` (wraps `gram demo-seed`), then verify pages
+  with the `verify.md` playbook (playwright agent).
+- Prod (target wiring, gram-infra repo — NOT a GitHub Action, NOT pg_cron;
+  pg_cron is not provisioned on the Cloud SQL instance despite earlier
+  assumptions): a Helm-templated Kubernetes CronJob in
+  `infra/helm/gram/templates/` running the server image with
+  `args: ["demo-seed"]`, synced by ArgoCD like every other workload. The
+  image tag is pinned per env in `values-{env}.yaml`, so a merged seed change
+  reaches prod on the next release promotion. Known wiring caveats (see the
+  db-sweeper CronJob as the template): the app IAM DB user has no CREATE
+  grants — use the atlas/owner Postgres URL secret; and run the Cloud SQL
+  proxy as an explicit sidecar with --quitquitquit so the Job completes.
 
 ## Iteration loop
 
-1. Edit the SQL.
-2. `mise run seed:demo --verify`.
+1. Edit the SQL in `server/internal/demoseed/`.
+2. `mise run seed:demo`, verify per `verify.md`.
 3. Fix until green, tick the page in `PAGES.md`, commit. Prod picks the change
-   up on the next scheduled run.
+   up on the next release.
 
 ## Server changes required for user access (not yet implemented)
 
