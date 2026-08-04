@@ -47,6 +47,11 @@ func TestBuildCodexCostLogParamsVerifiesSHAAndMapsTelemetry(t *testing.T) {
 	require.Equal(t, "api", attrs[attr.EventSourceKey])
 	require.Equal(t, "codex", attrs[attr.HookSourceKey])
 	require.Equal(t, "openai", attrs[attr.ProviderKey])
+	// Compliance rows come from the org's own enterprise feed, so they are
+	// team by construction; billing mode only rides when the config declares
+	// one (this fixture doesn't).
+	require.Equal(t, complianceAccountTypeTeam, attrs[attr.AccountTypeKey])
+	require.NotContains(t, attrs, attr.BillingModeKey)
 	require.Equal(t, cfg.ID.String(), attrs[attr.AIIntegrationConfigIDKey])
 	require.Equal(t, "event_1", attrs[attr.CodexComplianceEventIDKey])
 	require.Equal(t, "90eb39010cad917b66d5b9d7ce27fe9b7217b93b02760406e55aee41eb5433c3", attrs[attr.CodexComplianceEventHashKey])
@@ -312,4 +317,43 @@ type captureWatermarkStore struct {
 func (s *captureWatermarkStore) AdvanceWatermark(_ context.Context, _ uuid.UUID, checkpoint timewindowpoller.PollCheckpoint) error {
 	s.checkpoints = append(s.checkpoints, checkpoint)
 	return nil
+}
+
+// TestBuildCodexCostLogParamsStampsConfigBillingMode: the admin-declared
+// billing mode on the codex_compliance config rides on Codex rows only — the
+// org-level tier of the billing-mode cascade, keyed directly since compliance
+// rows have no session to attribute through (DNO-734). ChatGPT/Work rows stay
+// unlabeled: the single declaration cannot describe both surfaces, and
+// labeling seat usage with a metered Codex declaration would render
+// token-priced estimates as confident real cost.
+func TestBuildCodexCostLogParamsStampsConfigBillingMode(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(
+		`{"event_id":"event_billing","type":"COSTS","timestamp":"2026-07-19T15:59:59Z","payload":{"identity":{"user_id":"user_1","email":"dev@example.com"},"product":"codex","measures":{"usage":{"text_input_tokens":10},"billing":[]}}}` + "\n" +
+			`{"event_id":"event_billing_chat","type":"COSTS","timestamp":"2026-07-19T16:59:59Z","payload":{"identity":{"user_id":"user_2","email":"dev2@example.com"},"product":"ChatGPT","measures":{"usage":{"text_input_tokens":20},"billing":[]}}}` + "\n",
+	)
+
+	cfg := codexCostConfig()
+	cfg.BillingMode = "flat_rate"
+	file := codexapi.LogFile{
+		ID:         "eclf_billing",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 19, 16, 0, 0, 0, time.UTC),
+		FileName:   "COSTS_2026-07-19T16:00:00.000000+00:00.jsonl",
+		FileSize:   int64(len(body)),
+		FileSHA256: "",
+	}
+
+	logParams, err := buildCodexCostLogParams(cfg, file, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 2)
+
+	codexRow := logParams[0]
+	require.Equal(t, complianceAccountTypeTeam, codexRow.Attributes[attr.AccountTypeKey])
+	require.Equal(t, "flat_rate", codexRow.Attributes[attr.BillingModeKey])
+
+	chatgptRow := logParams[1]
+	require.Equal(t, complianceAccountTypeTeam, chatgptRow.Attributes[attr.AccountTypeKey])
+	require.NotContains(t, chatgptRow.Attributes, attr.BillingModeKey)
 }

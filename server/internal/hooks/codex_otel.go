@@ -53,9 +53,11 @@ func isCodexLogsPayload(payload *gen.LogsPayload) bool {
 // off token-bearing response.completed rows, replacing the deprecated derived
 // codex:usage:metrics rows.
 //
-// Unlike the Claude path there is no session/account attribution here: Codex
-// OTEL payloads carry no account identity for attributeSession to key on (see
-// codexSessionMetadata), so rows are attributed by user.email only.
+// Codex OTEL payloads carry no account identity beyond user.email, so account
+// attribution here is email-based (see classifyAccount): each conversation is
+// attributed once per payload (memoized, with the session cache as the
+// cross-payload fast path) and its rows are stamped with account_type /
+// billing_mode so the cost surfaces can classify Codex spend (DNO-734).
 func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *gen.LogsPayload, orgID string, projectID string) {
 	if s.telemetryLogger == nil || payload == nil {
 		return
@@ -79,8 +81,10 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 
 	params := make([]telemetry.LogParams, 0)
 	// Memoize email resolution: a Codex export batches many records for the
-	// same user, so resolve each distinct email once per payload.
+	// same user, so resolve each distinct email once per payload. Session
+	// attribution is likewise memoized per conversation id.
 	emailToUserID := make(map[string]string)
+	attributionBySession := make(map[string]SessionMetadata)
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
 			continue
@@ -132,11 +136,21 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 					logAttrs[attr.SpanIDKey] = spanID
 				}
 
+				userInfo, email, userID := s.codexOTELUserInfo(ctx, logAttrs, emailToUserID, orgID)
+				sessionMeta := s.codexOTELSessionAttribution(ctx, attributionBySession, codexOTELIdentity{
+					SessionID: stringAttr(logAttrs, attr.GenAIConversationIDKey),
+					Email:     email,
+					UserID:    userID,
+					OrgID:     orgID,
+					ProjectID: projectID,
+				})
+				stampAccountAttribution(logAttrs, sessionMeta)
+
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
 				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   toolInfo,
-					UserInfo:   s.codexOTELUserInfo(ctx, logAttrs, emailToUserID, orgID),
+					UserInfo:   userInfo,
 					Attributes: logAttrs,
 				}, observedTimestamp, resourceAttrs))
 			}
@@ -196,6 +210,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 
 	params := make([]telemetry.LogParams, 0)
 	emailToUserID := make(map[string]string)
+	attributionBySession := make(map[string]SessionMetadata)
 	for _, resourceMetric := range payload.ResourceMetrics {
 		if resourceMetric == nil {
 			continue
@@ -248,10 +263,22 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 						}
 					}
 
+					// Stamp the same account attribution as the logs stream so
+					// a session's rows classify consistently across both.
+					userInfo, email, userID := s.codexOTELUserInfo(ctx, attrs, emailToUserID, orgID)
+					sessionMeta := s.codexOTELSessionAttribution(ctx, attributionBySession, codexOTELIdentity{
+						SessionID: stringAttr(attrs, attr.GenAIConversationIDKey),
+						Email:     email,
+						UserID:    userID,
+						OrgID:     orgID,
+						ProjectID: projectID,
+					})
+					stampAccountAttribution(attrs, sessionMeta)
+
 					params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
 						Timestamp:  timestamp,
 						ToolInfo:   toolInfo,
-						UserInfo:   s.codexOTELUserInfo(ctx, attrs, emailToUserID, orgID),
+						UserInfo:   userInfo,
 						Attributes: attrs,
 					}, timestamp, resourceAttrs))
 				}
@@ -279,10 +306,12 @@ func normalizeCodexLogAttributes(attrs map[attr.Key]any) {
 
 // codexOTELUserInfo attributes a row to the Gram user resolved from the
 // record's user.email, memoizing lookups in emailToUserID across the payload.
-func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any, emailToUserID map[string]string, orgID string) telemetry.UserInfo {
+// The resolved email and user id are returned alongside the UserInfo so the
+// session-attribution path can reuse them without a second resolution.
+func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any, emailToUserID map[string]string, orgID string) (telemetry.UserInfo, string, string) {
 	email := strings.TrimSpace(stringAttr(attrs, attr.UserEmailKey))
 	if email == "" {
-		return telemetry.UserInfoByEmail("")
+		return telemetry.UserInfoByEmail(""), "", ""
 	}
 
 	lookup := conv.NormalizeEmail(email)
@@ -292,7 +321,107 @@ func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any,
 		emailToUserID[lookup] = userID
 	}
 	if userID == "" {
-		return telemetry.UserInfoByEmail(email)
+		return telemetry.UserInfoByEmail(email), email, ""
 	}
-	return telemetry.UserInfoByIDAndEmail(userID, email)
+	return telemetry.UserInfoByIDAndEmail(userID, email), email, userID
+}
+
+// sameCodexIdentity reports whether an incoming record's email brings no
+// identity a prior attribution lacks: either the record carries none, or it
+// matches the attributed email (case-insensitively — Codex surfaces report
+// case-variant emails, e.g. "Dev@Example.com" in the compliance feed).
+func sameCodexIdentity(attributedEmail, incomingEmail string) bool {
+	return incomingEmail == "" ||
+		conv.NormalizeEmail(attributedEmail) == conv.NormalizeEmail(incomingEmail)
+}
+
+// codexOTELIdentity carries the per-record identity inputs for session
+// attribution on the Codex OTEL stream.
+type codexOTELIdentity struct {
+	SessionID string
+	Email     string
+	UserID    string
+	OrgID     string
+	ProjectID string
+}
+
+// codexOTELSessionAttribution returns the account attribution for a Codex OTEL
+// record's session, computing it at most once per (payload, session). The
+// session cache is the cross-payload fast path — Codex exports every few
+// seconds and its identity (the email alone) rarely changes mid-session — and
+// is re-seeded after a fresh classification so the legacy hook path and the
+// ingest adapter inherit the same attribution. Billing mode is frozen with the
+// classification for the cache lifetime (a declaration made mid-session is
+// picked up on the next session), matching the Claude path's attribute-once
+// semantics. A record without a conversation id stays email-attributed only:
+// the zero metadata stamps nothing.
+func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[string]SessionMetadata, id codexOTELIdentity) SessionMetadata {
+	var none SessionMetadata
+	if id.SessionID == "" {
+		return none
+	}
+	if meta, ok := memo[id.SessionID]; ok && sameCodexIdentity(meta.UserEmail, id.Email) {
+		return meta
+	}
+
+	var cached SessionMetadata
+	if err := s.cache.Get(ctx, sessionCacheKey(id.SessionID), &cached); err != nil ||
+		cached.ServiceName != "Codex" || cached.GramOrgID != id.OrgID || cached.ProjectID != id.ProjectID {
+		cached = none
+	}
+	// Reuse a prior classification when this record brings no identity the
+	// cache lacks; recompute when the email is new or the entry predates
+	// classification (empty AccountType).
+	if cached.AccountType != "" && sameCodexIdentity(cached.UserEmail, id.Email) {
+		memo[id.SessionID] = cached
+		return cached
+	}
+
+	userEmail, userID := id.Email, id.UserID
+	if userEmail == "" {
+		userEmail, userID = cached.UserEmail, cached.UserID
+	}
+	meta := SessionMetadata{
+		SessionID:           id.SessionID,
+		ServiceName:         "Codex",
+		UserEmail:           userEmail,
+		UserID:              userID,
+		Provider:            providerOpenAI,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		Hostname:            cached.Hostname,
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		// user.email is the authenticated ChatGPT account's own report, so it
+		// doubles as the observed email kept separate from actor identity.
+		ObservedUserEmail: userEmail,
+		GramOrgID:         id.OrgID,
+		ProjectID:         id.ProjectID,
+	}
+	if err := s.attributeSession(ctx, &meta); err != nil {
+		s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
+			attr.SlogEvent("account_attribution_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(id.SessionID),
+		)
+		// Leave the session unclassified rather than half-attributed:
+		// attributeSession stamps AccountType before the step that failed,
+		// and every fast path keys on AccountType alone — caching the half
+		// state would freeze an empty billing mode for the full TTL.
+		meta.AccountType = ""
+		meta.BillingMode = ""
+	}
+	memo[id.SessionID] = meta
+	// A failed attribution is cached with empty AccountType — the fast path
+	// above rejects it, so the next payload retries.
+	if err := s.cache.Set(ctx, sessionCacheKey(id.SessionID), meta, 24*time.Hour); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(id.SessionID),
+		)
+	}
+	return meta
 }
