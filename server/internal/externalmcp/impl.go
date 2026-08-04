@@ -41,12 +41,13 @@ type Service struct {
 	authz          *authz.Engine
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
+	serverURL      *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, authzEngine *authz.Engine, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -58,6 +59,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:          authzEngine,
 		sessions:       sessions,
 		registryClient: registryClient,
+		serverURL:      serverURL,
 	}
 }
 
@@ -292,8 +294,13 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of server_url or registry_specifier must be provided").LogError(ctx, s.logger)
 	}
 
+	// One stable redirect_uri for every provider and slug
+	// (canonicalCallbackRouteBase in remotesessions/challenge.go). oauth/impl.go
+	// and the dashboard derive it the same way.
+	callbackURL := s.serverURL.JoinPath("mcp", "remote_login_callback").String()
+
 	return &gen.GetSetupDocsResult{
-		Guides: resolveSetupGuides(registrySpecifier, serverURL),
+		Guides: resolveSetupGuides(registrySpecifier, serverURL, callbackURL),
 	}, nil
 }
 

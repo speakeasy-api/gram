@@ -14,17 +14,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+const callbackTemplateKey = "{{ gram.oauth.callback_url }}"
+
 // setupDocsFixture picks a published guide that exercises both lookup keys
 // unambiguously: one registry alias and one endpoint URL each resolve to that
-// guide alone. Deriving the fixture from the SDK rather than naming a vendor
-// keeps these tests pinned to the endpoint's resolution and mapping behaviour,
-// so re-publishing the guide catalog can't silently break them.
+// guide alone. The guide also carries the callback template key, so the
+// rendering assertions have a substitution to observe. Deriving the fixture from
+// the SDK rather than naming a vendor keeps these tests pinned to the endpoint's
+// resolution and mapping behaviour, so re-publishing the guide catalog can't
+// silently break them.
 func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 	t.Helper()
 
 	for _, guide := range guides.Guides() {
 		alias, ok := unambiguousAlias(guide)
-		if !ok {
+		if !ok || !strings.Contains(string(guide.External)+string(guide.Speakeasy), callbackTemplateKey) {
 			continue
 		}
 
@@ -38,7 +42,7 @@ func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 		}
 	}
 
-	t.Fatal("no published setup guide resolves unambiguously by both registry alias and endpoint URL")
+	t.Fatal("no published setup guide carries the callback template key and resolves unambiguously by both registry alias and endpoint URL")
 
 	return guides.Guide{}, "", guides.Remote{}
 }
@@ -83,10 +87,17 @@ func TestExternalMCP_GetSetupDocs_ByRegistrySpecifier(t *testing.T) {
 	require.Equal(t, guide.Title, got.Title)
 	require.Equal(t, guide.Summary, got.Summary)
 	require.Equal(t, guide.Aliases, got.Aliases)
-	require.Equal(t, string(guide.External), got.ExternalMarkdown)
-	require.Equal(t, string(guide.Speakeasy), got.SpeakeasyMarkdown)
+
+	// The callback URL belongs to the deployment, not to the guide, so the
+	// endpoint substitutes it on the way out.
+	vars := guides.Vars{OAuthCallbackURL: testCallbackURL}
+	require.Equal(t, string(guide.RenderExternal(vars)), got.ExternalMarkdown)
+	require.Equal(t, string(guide.RenderSpeakeasy(vars)), got.SpeakeasyMarkdown)
 	require.NotEmpty(t, got.ExternalMarkdown)
 	require.NotEmpty(t, got.SpeakeasyMarkdown)
+	require.NotContains(t, got.ExternalMarkdown, callbackTemplateKey)
+	require.NotContains(t, got.SpeakeasyMarkdown, callbackTemplateKey)
+	require.Contains(t, got.ExternalMarkdown+got.SpeakeasyMarkdown, testCallbackURL)
 
 	require.Len(t, got.Remotes, len(guide.Remotes))
 	for i, remote := range guide.Remotes {
