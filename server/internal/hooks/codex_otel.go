@@ -15,14 +15,27 @@ import (
 )
 
 const (
-	// codexServiceName is the OTEL resource service.name the Codex CLI reports.
-	codexServiceName = "codex_cli_rs"
+	// codexServiceNamePrefix matches the OTEL resource service.name family the
+	// Codex clients report. The name varies by mode — codex_cli_rs
+	// (interactive), codex_exec (headless `codex exec`, what CI and scripted
+	// runs use), plus codex_tui and codex_mcp in the shipped binary — so
+	// matching the single interactive name silently dropped every other
+	// mode's telemetry. Prefix-matching the family means a new mode is
+	// captured on arrival rather than discovered later as missing data;
+	// Claude reports "claude-code"-style names, so it cannot collide.
+	codexServiceNamePrefix = "codex_"
 	// codexOTELLogsURN types a raw Codex OTEL log row, mirroring the
 	// "claude-code:otel:logs" convention.
 	codexOTELLogsURN = "codex:otel:logs"
 	// codexOTELMetricsURN types a raw Codex OTEL metric data point row.
 	codexOTELMetricsURN = "codex:otel:metrics"
 )
+
+// isCodexServiceName reports whether an OTEL resource service.name belongs to
+// the Codex client family (see codexServiceNamePrefix).
+func isCodexServiceName(serviceName string) bool {
+	return strings.HasPrefix(serviceName, codexServiceNamePrefix)
+}
 
 // isCodexLogsPayload reports whether an OTLP logs payload originated from the
 // Codex CLI, identified by its resource service.name. Claude Code reports a
@@ -35,7 +48,7 @@ func isCodexLogsPayload(payload *gen.LogsPayload) bool {
 		if rl == nil {
 			continue
 		}
-		if extractResourceAttribute(rl.Resource, "service.name") == codexServiceName {
+		if isCodexServiceName(extractResourceAttribute(rl.Resource, "service.name")) {
 			return true
 		}
 	}
@@ -173,7 +186,7 @@ func isCodexMetricsPayload(payload *gen.MetricsPayload) bool {
 		if rm == nil {
 			continue
 		}
-		if extractResourceAttribute(rm.Resource, "service.name") == codexServiceName {
+		if isCodexServiceName(extractResourceAttribute(rm.Resource, "service.name")) {
 			return true
 		}
 	}

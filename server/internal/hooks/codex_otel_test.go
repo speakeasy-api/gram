@@ -12,6 +12,10 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
+// codexTestServiceName is the interactive CLI's reported service.name — one
+// member of the codex_ family the ingest matches (see codexServiceNamePrefix).
+const codexTestServiceName = "codex_cli_rs"
+
 // strAttr builds an OTLP string-valued log attribute, the shape Codex emits.
 func strAttr(key, val string) *gen.OTELAttribute {
 	return &gen.OTELAttribute{Key: key, Value: &gen.OTELAttributeValue{StringValue: new(val)}}
@@ -24,7 +28,7 @@ func codexLogsPayload(records ...*gen.OTELLogRecord) *gen.LogsPayload {
 			Resource: &gen.OTELResource{
 				Attributes: []*gen.OTELResourceAttribute{{
 					Key:   "service.name",
-					Value: &gen.OTELAttributeValue{StringValue: new(codexServiceName)},
+					Value: &gen.OTELAttributeValue{StringValue: new(codexTestServiceName)},
 				}},
 			},
 			ScopeLogs: []*gen.OTELScopeLog{{LogRecords: records}},
@@ -57,7 +61,7 @@ func codexMetricsPayload(metrics ...*gen.OTELMetric) *gen.MetricsPayload {
 		ResourceMetrics: []*gen.OTELResourceMetrics{{
 			Resource: &gen.OTELResource{
 				Attributes: []*gen.OTELResourceAttribute{
-					resourceStrAttr("service.name", codexServiceName),
+					resourceStrAttr("service.name", codexTestServiceName),
 				},
 			},
 			ScopeMetrics: []*gen.OTELScopeMetrics{{Metrics: metrics}},
@@ -125,7 +129,7 @@ func TestLogs_PersistsCodexOTELRecords(t *testing.T) {
 	require.Contains(t, first.Attributes, providerOpenAI)
 
 	require.Contains(t, first.ResourceAttributes, "service")
-	require.Contains(t, first.ResourceAttributes, codexServiceName)
+	require.Contains(t, first.ResourceAttributes, codexTestServiceName)
 
 	second := logs[0]
 	require.Equal(t, "codex.tool_decision", second.Body)
@@ -374,7 +378,7 @@ func TestMetrics_PersistsCodexOTELMetricDataPoints(t *testing.T) {
 	// Metrics rows carry the same account attribution as the logs stream
 	// (dev@example.com resolves to the test org member → team).
 	require.Contains(t, row.Attributes, `"account_type":"team"`)
-	require.Contains(t, row.ResourceAttributes, codexServiceName)
+	require.Contains(t, row.ResourceAttributes, codexTestServiceName)
 }
 
 func TestMetrics_CodexPayloadDoesNotWriteClaudeUsageRows(t *testing.T) {
@@ -483,4 +487,36 @@ func TestLogs_ClassifiesUnresolvedCodexEmailPersonal(t *testing.T) {
 	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
 	require.Contains(t, logs[0].Attributes, `"account_type":"personal"`)
 	require.NotContains(t, logs[0].Attributes, "billing_mode")
+}
+
+// TestIsCodexPayloadMatchesServiceNameFamily: Codex reports a different
+// service.name per mode — codex_exec is what headless `codex exec` (CI and
+// scripted runs) emits, verified against the shipped 0.146 binary, alongside
+// codex_tui and codex_mcp. Matching only the interactive codex_cli_rs
+// silently dropped every other mode's telemetry: no rows, no tokens, no
+// error. Claude's service names must still route to the session path.
+func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
+	t.Parallel()
+
+	for _, serviceName := range []string{"codex_cli_rs", "codex_exec", "codex_tui", "codex_mcp"} {
+		logs := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{{
+			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeLogs: nil,
+		}}}
+		require.True(t, isCodexLogsPayload(logs), serviceName)
+
+		metrics := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{{
+			Resource:     &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeMetrics: nil,
+		}}}
+		require.True(t, isCodexMetricsPayload(metrics), serviceName)
+	}
+
+	for _, serviceName := range []string{"claude-code", "claude-code-desktop", "cowork", ""} {
+		logs := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{{
+			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeLogs: nil,
+		}}}
+		require.False(t, isCodexLogsPayload(logs), serviceName)
+	}
 }
