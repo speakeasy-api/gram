@@ -1015,7 +1015,7 @@ LEFT JOIN LATERAL (
   ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
-LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.deleted IS FALSE
+LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
   AND (ep.slug IS NOT NULL OR ump.url IS NOT NULL)

@@ -90,6 +90,23 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+// requireStaffAccess rejects the request unless the caller's email is on the
+// Speakeasy staff domain allowlist. Unproxied MCP servers are staff-only
+// while this workflow is being validated (DNO-697). action is the verb used
+// in the resulting error message, e.g. "added", "viewed", "deleted".
+func (s *Service) requireStaffAccess(ctx context.Context, authCtx *contextvalues.AuthContext, action string) error {
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if access.IsSpeakeasyStaffEmail(email) {
+		return nil
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be %s by Speakeasy staff", action).LogWarn(ctx, logger)
+}
+
 func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPayload) (*types.UnproxiedMcpServer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -102,12 +119,8 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if !access.IsSpeakeasyStaffEmail(email) {
-		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be added by Speakeasy staff").LogWarn(ctx, logger)
+	if err := s.requireStaffAccess(ctx, authCtx, "added"); err != nil {
+		return nil, err
 	}
 
 	if err := validateServerURL(ctx, s.policy, payload.URL); err != nil {
@@ -193,12 +206,8 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, err
 	}
 
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if !access.IsSpeakeasyStaffEmail(email) {
-		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be viewed by Speakeasy staff").LogWarn(ctx, s.logger)
+	if err := s.requireStaffAccess(ctx, authCtx, "viewed"); err != nil {
+		return nil, err
 	}
 
 	servers, err := repo.New(s.db).ListServersByProjectID(ctx, *authCtx.ProjectID)
@@ -224,12 +233,8 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, err
 	}
 
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if !access.IsSpeakeasyStaffEmail(email) {
-		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be viewed by Speakeasy staff").LogWarn(ctx, s.logger)
+	if err := s.requireStaffAccess(ctx, authCtx, "viewed"); err != nil {
+		return nil, err
 	}
 
 	idProvided := payload.ID != nil && *payload.ID != ""
@@ -285,12 +290,8 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, err
 	}
 
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if !access.IsSpeakeasyStaffEmail(email) {
-		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be viewed by Speakeasy staff").LogWarn(ctx, s.logger)
+	if err := s.requireStaffAccess(ctx, authCtx, "viewed"); err != nil {
+		return nil, err
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -374,12 +375,8 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if !access.IsSpeakeasyStaffEmail(email) {
-		return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be deleted by Speakeasy staff").LogWarn(ctx, logger)
+	if err := s.requireStaffAccess(ctx, authCtx, "deleted"); err != nil {
+		return err
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
