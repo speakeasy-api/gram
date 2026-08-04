@@ -152,9 +152,9 @@ SELECT
     ',"event.name":"api_request"',
     ',"input_tokens":', toString(in_tok),
     ',"output_tokens":', toString(out_tok),
-    ',"cache_read_tokens":', toString(intDiv(in_tok, 3)),
-    ',"cache_creation_tokens":', toString(intDiv(in_tok, 10)),
-    ',"cost_usd":', toString(round((in_tok * 3 + out_tok * 15) / 1000000, 6)),
+    ',"cache_read_tokens":', toString(in_tok * 6),
+    ',"cache_creation_tokens":', toString(intDiv(in_tok, 4)),
+    ',"cost_usd":', toString(round((in_tok * 48 + out_tok * 150) / 10000000, 6)),
     ',"model":"', model, '"',
     ',"query_source":"user"',
     ',"skill.name":"', arrayElement(['', 'triage-incident', 'support-refunds'], 1 + (cityHash64('skill', i, turn) % 3)), '"',
@@ -203,8 +203,8 @@ FROM (
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     if(cityHash64('model', number) % 3 = 0, 'claude-opus-4-5', 'claude-sonnet-4-6') AS model,
-    toUInt64(1500 + cityHash64('in', number, turn) % 6000) AS in_tok,
-    toUInt64(200 + cityHash64('out', number, turn) % 2500) AS out_tok,
+    toUInt64(20000 + cityHash64('in', number, turn) % 120000) AS in_tok,
+    toUInt64(800 + cityHash64('out', number, turn) % 3500) AS out_tok,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -342,8 +342,8 @@ SELECT
     '{"gen_ai.conversation.id":"', chat_id, '"',
     ',"gen_ai.usage.input_tokens":', toString(in_tok),
     ',"gen_ai.usage.output_tokens":', toString(out_tok),
-    ',"gen_ai.usage.cache_read.input_tokens":', toString(intDiv(in_tok, 4)),
-    ',"gen_ai.usage.cost":', toString(round((in_tok * 3 + out_tok * 15) / 1000000, 6)),
+    ',"gen_ai.usage.cache_read.input_tokens":', toString(in_tok * 4),
+    ',"gen_ai.usage.cost":', toString(round((in_tok * 42 + out_tok * 150) / 10000000, 6)),
     ',"gen_ai.response.model":"', model, '"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
@@ -385,8 +385,8 @@ FROM (
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     if(cityHash64('model', number) % 2 = 0, 'claude-sonnet-4-6', 'gpt-5.6') AS model,
-    toUInt64(800 + cityHash64('in', number) % 5000) AS in_tok,
-    toUInt64(150 + cityHash64('out', number) % 2000) AS out_tok,
+    toUInt64(15000 + cityHash64('in', number) % 90000) AS in_tok,
+    toUInt64(600 + cityHash64('out', number) % 4000) AS out_tok,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -477,8 +477,8 @@ SELECT
   lower(hex(MD5(concat('gram-demo-wutrace-', toString(i))))),
   concat(
     '{"gram.chat_analysis.work_units":', toString(1 + cityHash64('wu', i) % 5),
-    ',"gram.chat_analysis.scored_cost":', toString(round((5000 + cityHash64('sc', i) % 90000) / 1000000, 6)),
-    ',"gram.chat_analysis.scored_tokens":', toString(2000 + cityHash64('st', i) % 20000),
+    ',"gram.chat_analysis.scored_cost":', toString(round((200000 + cityHash64('sc', i) % 1300000) / 1000000, 6)),
+    ',"gram.chat_analysis.scored_tokens":', toString(50000 + cityHash64('st', i) % 400000),
     ',"gen_ai.conversation.id":"', chat_id, '"',
     ',"gen_ai.response.model":"', if(i % 2 = 1, 'claude-sonnet-4-6', 'gpt-5.6'), '"',
     ',"gram.project.id":"', toString(proj), '"',
@@ -626,7 +626,9 @@ SELECT
 FROM numbers(13);
 
 -- Risk findings mirror (ClickHouse read path for the risk overview): one row
--- per Postgres finding, same md5-derived ids so the two stores agree.
+-- per Postgres finding, same md5-derived ids and the same 5-type rotation as
+-- the Postgres loop (i % 3 = 0 chats, ftype = (i/3) % 5). The constant
+-- start/len arrays match the fixed content prefixes in postgres.sql.
 INSERT INTO risk_findings
   (id, created_at, organization_id, project_id, chat_message_id, chat_id,
    user_id, external_user_id, risk_policy_id, risk_policy_version, rule_id,
@@ -648,28 +650,41 @@ SELECT
                 'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], 1 + (i % 6)),
   'dec0de00-0000-4000-a000-00000000f001',
   1,
-  'stripe-access-token',
-  'Stripe live secret key found in tool output',
-  'gitleaks',
-  0.97,
-  'secrets',
-  ['secret', 'stripe'],
-  58,
-  90,
-  32,
-  concat('sk_l', repeat('*', 26), 'u0'),
+  arrayElement(['stripe-access-token', 'aws-access-token', 'pii.credit_card',
+                'pii.email_address', 'llm_judge'], 1 + k),
+  arrayElement(['Stripe live secret key found in tool output',
+                'AWS secret access key in tool output',
+                'Credit card number in user message',
+                'Customer email address in tool output',
+                'Prompt injection attempt: instruction override + credential exfiltration'], 1 + k),
+  arrayElement(['gitleaks', 'gitleaks', 'presidio', 'presidio', 'llm_judge'], 1 + k),
+  arrayElement([0.97, 0.95, 0.92, 0.88, 0.72], 1 + k),
+  arrayElement(['secrets', 'secrets', 'pii', 'pii', 'prompt_injection'], 1 + k),
+  arrayElement([['secret', 'stripe'], ['secret', 'aws'], ['pii', 'pci'], ['pii'], ['prompt-injection']], 1 + k),
+  arrayElement([58, 48, 41, 41, 0], 1 + k),
+  arrayElement([58, 48, 41, 41, 0], 1 + k) + arrayElement([32, 38, 19, 22, 32], 1 + k),
+  arrayElement([32, 38, 19, 22, 32], 1 + k),
+  arrayElement([concat('sk_l', repeat('*', 26), 'u0'),
+                concat('wJal', repeat('*', 32), 'MO'),
+                concat(repeat('*', 15), '6467'),
+                '***@example.com',
+                ''], 1 + k),
   'content',
   'content',
   ts
 FROM (
   SELECT
-    (number + 1) * 7 AS i,
-    lower(hex(MD5(concat('gram-demo-risk-', toString((number + 1) * 7))))) AS hm,
-    lower(hex(MD5(concat('gram-demo-msg-', toString((number + 1) * 7), '-3')))) AS hmsg,
-    lower(hex(MD5(concat('gram-demo-chat-', toString((number + 1) * 7))))) AS hchat,
-    subtractMinutes(subtractHours(now64(9), 5 * toInt64((number + 1) * 7)),
-                    13 * toInt64(((number + 1) * 7) % 7) - 2) AS ts
-  FROM numbers(8)
+    (number + 1) * 3 AS i,
+    toUInt8((number + 1) % 5) AS k,
+    -- Types 2 and 4 flag the opening user message (position 1); the rest a
+    -- tool output at position 3 — must match the Postgres flagged positions.
+    lower(hex(MD5(concat('gram-demo-risk-', toString((number + 1) * 3))))) AS hm,
+    lower(hex(MD5(concat('gram-demo-msg-', toString((number + 1) * 3), '-',
+                         if((number + 1) % 5 IN (2, 4), '1', '3'))))) AS hmsg,
+    lower(hex(MD5(concat('gram-demo-chat-', toString((number + 1) * 3))))) AS hchat,
+    subtractMinutes(subtractHours(now64(9), 5 * toInt64((number + 1) * 3)),
+                    13 * toInt64(((number + 1) * 3) % 7) - 2) AS ts
+  FROM numbers(20)
 );
 
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
@@ -699,7 +714,7 @@ SELECT throwIf(
   'demo seed postflight: authz_challenges empty');
 
 SELECT throwIf(
-  (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 8,
+  (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 20,
   'demo seed postflight: risk_findings mirror missing rows');
 
 SELECT throwIf(
