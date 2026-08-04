@@ -5592,6 +5592,7 @@ CREATE TABLE IF NOT EXISTS admin_mcp_connections (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT admin_mcp_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_connections_subject_urn_check CHECK (subject_urn <> ''),
   CONSTRAINT admin_mcp_connections_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT admin_mcp_connections_oauth_client_id_fkey
@@ -5604,6 +5605,9 @@ WHERE revoked_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_id_client_id_key
 ON admin_mcp_connections (id, oauth_client_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_id_key
+ON admin_mcp_connections (organization_id, id);
 
 CREATE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_idx
 ON admin_mcp_connections (organization_id);
@@ -5669,12 +5673,15 @@ CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT admin_mcp_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_sessions_id_lineage_key UNIQUE (id, connection_id, oauth_client_id, connection_generation),
   CONSTRAINT admin_mcp_sessions_jti_check CHECK (jti <> ''),
   CONSTRAINT admin_mcp_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
   CONSTRAINT admin_mcp_sessions_connection_client_fkey
     FOREIGN KEY (connection_id, oauth_client_id) REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE,
-  CONSTRAINT admin_mcp_sessions_replaced_by_session_id_fkey
-    FOREIGN KEY (replaced_by_session_id) REFERENCES admin_mcp_sessions (id) ON DELETE SET NULL
+  CONSTRAINT admin_mcp_sessions_replaced_by_session_lineage_fkey
+    FOREIGN KEY (replaced_by_session_id, connection_id, oauth_client_id, connection_generation)
+    REFERENCES admin_mcp_sessions (id, connection_id, oauth_client_id, connection_generation)
+    ON DELETE NO ACTION
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_jti_key
@@ -5711,10 +5718,14 @@ CREATE TABLE IF NOT EXISTS admin_mcp_onboarding_milestones (
   CONSTRAINT admin_mcp_onboarding_milestones_pkey PRIMARY KEY (id),
   CONSTRAINT admin_mcp_onboarding_milestones_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT admin_mcp_onboarding_milestones_connection_id_fkey
-    FOREIGN KEY (connection_id) REFERENCES admin_mcp_connections (id) ON DELETE SET NULL,
-  CONSTRAINT admin_mcp_onboarding_milestones_project_id_fkey
-    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_onboarding_milestones_organization_connection_fkey
+    FOREIGN KEY (organization_id, connection_id)
+    REFERENCES admin_mcp_connections (organization_id, id)
+    ON DELETE NO ACTION,
+  CONSTRAINT admin_mcp_onboarding_milestones_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id)
+    REFERENCES projects (organization_id, id)
+    ON DELETE NO ACTION,
   CONSTRAINT admin_mcp_onboarding_milestones_connection_generation_check CHECK (
     milestone NOT IN (
       'authorization_succeeded',
