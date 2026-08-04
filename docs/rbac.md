@@ -82,6 +82,7 @@ const (
 	ScopeSkillWrite         Scope = "skill:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
+	ScopeRiskPolicyBlock    Scope = "risk_policy:block"
 	ScopeChatRead           Scope = "chat:read"
 )
 ```
@@ -261,6 +262,13 @@ Read that as:
 
 The most important rule: **exclusion grants do not create access by themselves**.
 They only subtract from something that the base side already proved.
+
+`risk_policy:block` is the inverse rule store for allow-by-default (allow_all)
+shadow MCP blocking policies: each grant names a policy and a `server_url`
+selector and is always held by the all-users principal (`user:all`), meaning
+"this server is blocked for everyone in the project". The shadow MCP hook path
+reads these grants directly; they are never evaluated through `Require` and do
+not participate in grant expressions.
 
 ### Risk Policy Example
 

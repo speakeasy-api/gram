@@ -1,12 +1,12 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert } from "@/lib/utils";
 import { Key } from "@gram/client/models/components/key.js";
@@ -16,7 +16,10 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -133,19 +136,19 @@ function OrgApiKeysInner() {
       key: "name",
       header: "Name",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.name}</Type>,
+      render: (key: Key) => <Text variant="body">{key.name}</Text>,
     },
     {
       key: "key",
       header: "Key",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.keyPrefix}</Type>,
+      render: (key: Key) => <Text variant="body">{key.keyPrefix}</Text>,
     },
     {
       key: "scopes",
       header: "Scopes",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.scopes.join(", ")}</Type>,
+      render: (key: Key) => <Text variant="body">{key.scopes.join(", ")}</Text>,
     },
     {
       key: "createdAt",
@@ -189,11 +192,11 @@ function OrgApiKeysInner() {
       <Heading variant="h4" className="mb-2">
         API Keys
       </Heading>
-      <Type muted small className="mb-6">
+      <Text muted small className="mb-6">
         Create and manage API keys to authenticate programmatic access to
         platform services, including MCP service deployments, tool management,
         and other connections.
-      </Type>
+      </Text>
       <Stack
         direction="horizontal"
         justify="space-between"
@@ -224,9 +227,9 @@ function OrgApiKeysInner() {
           role="status"
           className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 rounded-md border p-6"
         >
-          <Type variant="body">
+          <Text variant="body">
             {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-          </Type>
+          </Text>
           {!apiKeySearch && (
             <RequireScope scope="org:admin" level="component">
               <Button
@@ -322,8 +325,8 @@ function OrgApiKeysInner() {
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="hooks" id="r4" />
                         <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can send hook events and OTEL logs from agent
-                          integrations.
+                          Hooks: can ingest authenticated AI traffic, including
+                          hook events and OpenTelemetry data.
                         </Label>
                       </div>
                       <div className="flex items-center gap-3">
@@ -367,11 +370,11 @@ function OrgApiKeysInner() {
             <Dialog.Title>Revoke API Key</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to revoke the API key{" "}
               <span className="font-bold italic">{keyToRevoke?.name}</span>?
               This action cannot be undone.
-            </Type>
+            </Text>
             <div className="flex justify-end space-x-2">
               <Button variant="secondary" onClick={() => setKeyToRevoke(null)}>
                 Cancel

@@ -142,6 +142,43 @@ WHERE (
 ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: ListRemoteSessionIssuersByIssuerURL :many
+-- Every issuer a project may resolve an upstream authorization server URL onto:
+-- its own, plus each inherited tier the caller opts in to, using the same
+-- three-arm tenancy predicate as ListRemoteSessionIssuersByProjectID.
+--
+-- Matching is literal equality against a caller-supplied candidate set rather
+-- than a normalizing expression, because the index this rides on
+-- (remote_session_issuers_issuer_idx) is on the raw column: any expression
+-- around `issuer` would make it unusable and turn this into a sequential scan.
+-- The caller canonicalizes the URL in Go and expands it back into the closed set
+-- of raw spellings that canonicalize to the same thing, so `= ANY` stays a
+-- series of index probes. See matchCandidates for the exact set and for the
+-- spellings deliberately left unmatched.
+--
+-- Returns every candidate rather than picking one: precedence is project >
+-- organization > platform and cannot be expressed by row order here, and the
+-- caller applies it (plus the oldest-first tie-break within a tier) through
+-- resolveIssuerByPrecedence.
+--
+-- Ordered by created_at, NOT by id. generate_uuidv7 overlays only a
+-- millisecond-resolution timestamp onto an otherwise random gen_random_uuid, so
+-- two rows written in the same millisecond sort randomly by id: stable for a
+-- given set of rows, but not chronological. created_at is clock_timestamp() at
+-- microsecond resolution, which makes "oldest" mean what it says. id remains the
+-- final tie-break so the order is still total if two rows somehow share a
+-- created_at.
+SELECT *
+FROM remote_session_issuers
+WHERE issuer = ANY(@issuers::text[])
+  AND (
+    project_id = @project_id
+    OR (@include_organizational::boolean AND project_id IS NULL AND organization_id = @organization_id)
+    OR (@include_global::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC;
+
 -- name: UpdateRemoteSessionIssuer :one
 -- Three-state semantics on the nullable endpoint columns: an omitted narg
 -- (NULL) keeps the existing value, an explicit empty string clears the

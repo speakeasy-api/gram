@@ -105,3 +105,6 @@ __pycache__/
 
 # Personal impeccable ignores (.impeccable/config.json is shared and committed)
 .impeccable/config.local.json
+
+# Storybook build output
+storybook-static/

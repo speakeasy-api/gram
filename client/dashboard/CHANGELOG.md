@@ -1,5 +1,64 @@
 # dashboard
 
+## 0.101.0
+
+### Minor Changes
+
+- 73b9590: Requests and approvals now understand allow-all shadow MCP policies. Approving a bypass request (from the approvals page or the inventory review flow) on an allow_all policy revokes the server URL's risk_policy:block grant — a project-wide unblock with no principal-scoped bypass grants. Revoking restores the block grant; denying leaves it untouched. The request status change is audited like every other bypass-request decision. The approval UIs skip the audience/policy pickers for these requests and explain that approval unblocks the server for everyone in the project.
+- bd3aac6: Shadow MCP inventory and status surfaces are now disposition-aware. Under an allow-all policy the inventory reports servers as allowed by default and blocked only when a block rule lists them, the policy status banner explains the allow-by-default posture, and the primary per-server action flips from managing allow rules to Block Server / Unblock Server — which add and remove the policy's risk_policy:block grants through dedicated inventory endpoints.
+
+## 0.100.0
+
+### Minor Changes
+
+- 944c4df: Shadow MCP policy creation now offers a default-disposition choice: Block all servers (allow exceptions) or Allow all servers (block exceptions). The server selector flips between picking allowed and blocked servers to match, and the disposition is shown read-only when editing since switching posture requires deleting and recreating the policy.
+- b131cea: Project assistant tool calls now render Claude-style: the assistant precedes each tool batch with a terse activity phrase ("Investigating failures in the last 30 days") which becomes the heading of a single collapsed tool group. Consecutive batches merge into one group whose heading advances (with shimmer) as the investigation progresses, groups never auto-expand, and the global thinking loader hides while a tool group is streaming. The dashboard output-channel guidance instructs the model to emit the phrase before every tool call.
+- 41626e6: Add a contract value estimator to the TUM Contract section of the billing page (platform admin only). It approximates what an enterprise account is worth under either commercial model — a committed platform fee with tiered overage, or uncommitted pay-as-you-go — off the org's observed tokens under management, and flags accounts whose overage has grown large enough relative to their base contract to warrant an expansion conversation.
+
+### Patch Changes
+
+- 6ca548f: Add the `chatgpt` and `chatgpt-work` sources to the product-surface taxonomy now that ChatGPT/Work compliance usage is admitted to the summaries. The compliance importer now routes Work rows to the `chatgpt-work` hook source (ChatGPT and unknown surfaces stay `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while the raw `codex.compliance.product` attribute is not, and summaries outlive the raw-row TTL. Also: a `chatgpt` chat source alias, ChatGPT/ChatGPT Work labels and the OpenAI mark in the dashboard label/icon maps and onboarding live-tail, broadened "OpenAI Compliance Logs" settings copy, and local seed fixtures emitting compliance-shaped `chatgpt:usage:metrics` rows for both products.
+- dd9e519: Announce the contract estimator's load failure to screen readers. The message replaces a loading skeleton after the page has settled, so without a live region there was no indication the estimate had failed or that reloading was the way to recover.
+
+## 0.99.0
+
+### Minor Changes
+
+- c0395b5: Selectively extract high-value, reusable business memories from completed chats, omit semantic duplicates, and add an organization-admin corpus browser with semantic search, source-transcript navigation, and a complete content-scope tree with distinct-memory counts.
+
+### Patch Changes
+
+- d243364: The billing page's usage card now follows the selected time range instead of always showing the full billing cycle. A custom range (typed, calendar-picked, or bar-click drill-down) shows the range's billed tokens, a time-attributed overage figure (tokens recorded after the cycle's cumulative usage crossed the allowance, crossing day prorated), and the per-unit average over the range window; the allowance figure, percentage, and meter remain cycle-only concepts and hide on partial ranges. The details table's Overage column uses the same attribution for ranges instead of showing an em dash, so the card and table always agree.
+- 57ff66a: Add a typed, reactive PostHog feature-flag hook that distinguishes loading, enabled, disabled, missing, and error states. Project navigation now uses the hook as an integration proof while preserving existing opt-in and opt-out behavior.
+
+## 0.98.0
+
+### Minor Changes
+
+- 3b66258: Custom domains can now route their root URL to a default MCP server. Pick one of the domain's MCP endpoints as the default and `https://your-domain.com/` serves that server directly — MCP clients connect at the root and browsers see the installation page — while renaming the endpoint's slug updates the routing automatically. Custom domains can also serve an OpenAI app-submission verification token at `/.well-known/openai-apps-challenge`, so ChatGPT app reviews can verify domain ownership without any changes on your site. Both settings live on the custom domain page; the default server can also be set from an MCP server's own settings.
+
+### Patch Changes
+
+- 80b855f: Stop enumerating supported coding agents (Cursor, Claude Code, Codex, …) in Shadow MCP detector copy and other user-facing product strings. Prefer generic wording so new agents like opencode do not require list updates.
+
+## 0.97.0
+
+### Minor Changes
+
+- 2822d51: `remoteSessionIssuers.get` can now look an identity provider up by its upstream issuer URL, returning the one the project would use (preferring project over organization over platform) or 404 when nothing describes that URL yet. The dashboard's automatic setup flows use it to decide whether to reuse an existing provider instead of scanning the provider list in the browser, which also lets them reuse platform-catalog providers for the first time.
+- 56aa9f2: Restructure the Device Agent MDM integrations page around the source → coverage → destination pipeline. A pipeline banner shows live connected counts (updating as connections are enabled/disabled) and the org-wide fleet coverage, over two role-labeled groups. Detail pages are now role-specific: inventory sources keep their device inventory and "synced" language, while evidence destinations drop the inventory table (a sink owns no devices), show what they publish org-wide, use "pushed" language, and surface a "Fleet sourced from" breakdown linking to the sources that feed them.
+- 5bf2d45: Select project skills as additional context for an individual Project Assistant turn.
+
+### Patch Changes
+
+- 936828a: Fix the agent-coverage meter reading as far more filled than its real percentage in dark mode. The track used `bg-muted`, which collapses to the card color in dark mode, hiding the uncovered remainder so the filled portion looked much larger than its true share. The track now uses a foreground tint that stays visible on both light and dark grounds.
+- b5f47cb: Tuck optional device-integration settings behind an "Advanced" disclosure in the connect/configure sheet, so the default view shows only the required fields (e.g. Drata is just Region + API Key + Test — the Custom Connection ID is created automatically). Driven by the descriptor's `required` flag, so it applies to every provider; the section auto-expands when an optional field already holds a value.
+- 19f2841: Apply RBAC grants regardless of account tier and remove the dashboard rollout flag.
+- 1a74d9d: Restore external OAuth configuration on eligible MCP server authentication pages.
+- 36aa306: Improve external OAuth setup with automatic metadata discovery, inline validation, connection testing, and clearer authentication actions.
+- 1ad71b0: Hide Microsoft Intune from the MDM integrations UI until it is fully supported — a central `isProviderVisible` filter removes hidden providers from the list, the pipeline source count, the fleet-source breakdown, and direct-URL access, while leaving backend registration untouched. Also pluralize the pipeline agent-input label to "Active agents" and label its source as "reported by device agent".
+- b5f47cb: Hide the Vanta evidence-push provider from the MDM integrations UI until a supported path exists — Vanta does not support custom resources for partner-built integrations. Uses the existing `isProviderVisible` frontend gate, so backend registration is untouched and revealing it later is a one-line change.
+
 ## 0.96.0
 
 ### Minor Changes

@@ -94,6 +94,16 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
+			Name:    "custom-domain-k8s-namespace",
+			Usage:   "Kubernetes namespace for custom domain ingresses (defaults to gram-<environment>)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_K8S_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-backend-service",
+			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
+		},
+		&cli.StringFlag{
 			Name:    "temporal-address",
 			Usage:   "The address of the temporal server",
 			EnvVars: []string{"TEMPORAL_ADDRESS"},
@@ -307,15 +317,15 @@ func newWorkerCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, redisFlags...)
-	flags = append(flags, clickHouseFlags...)
-	flags = append(flags, functionsFlags...)
-	flags = append(flags, pulseMCPFlags...)
-	flags = append(flags, assistantRuntimeFlags...)
-	flags = append(flags, svixFlags...)
-	flags = append(flags, pluginsFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, gcpFlags...)
+	flags = append(flags, redisFlags()...)
+	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, functionsFlags()...)
+	flags = append(flags, pulseMCPFlags()...)
+	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -432,7 +442,7 @@ func newWorkerCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.String("custom-domain-k8s-namespace"), c.String("custom-domain-backend-service"))
 			if err != nil {
 				return fmt.Errorf("failed to create k8s client: %w", err)
 			}
@@ -713,6 +723,7 @@ func newWorkerCommand() *cli.Command {
 				sessionManager,
 				chatSessionsManager,
 				env,
+				posthogClient,
 				posthogClient,
 				serverURL,
 				nil,

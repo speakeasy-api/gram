@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 
 interface StepContainerProps {
   icon: ReactNode;
@@ -53,7 +53,7 @@ export function StepContainer({
         <div>
           {showBack && (
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={onBack}
               className="text-muted-foreground hover:text-foreground gap-1.5"
             >
@@ -65,7 +65,7 @@ export function StepContainer({
         <div className="flex items-center gap-3">
           {onSkip && (
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={onSkip}
               className="text-muted-foreground hover:text-foreground"
             >

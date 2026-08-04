@@ -16,13 +16,16 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -103,21 +106,32 @@ type Syncer struct {
 	repo     *repo.Queries
 	store    *Store
 	guardian *guardian.Policy
+	features feature.Provider
+	metrics  *syncMetrics
 }
 
 func NewSyncer(
 	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	enc *encryption.Client,
 	guardianPolicy *guardian.Policy,
+	features feature.Provider,
 ) *Syncer {
+	componentLogger := logger.With(attr.SlogComponent("deviceintegrations.syncer"))
 	return &Syncer{
-		logger:   logger.With(attr.SlogComponent("deviceintegrations.syncer")),
+		logger:   componentLogger,
 		db:       db,
 		repo:     repo.New(db),
 		store:    NewStore(logger, db, enc),
 		guardian: guardianPolicy,
+		features: features,
+		metrics:  newSyncMetrics(componentLogger, meterProvider),
 	}
+}
+
+func (s *Syncer) deviceLevelCoverage(ctx context.Context, orgID string) bool {
+	return deviceLevelCoverage(ctx, s.logger, s.db, s.features, orgID)
 }
 
 // ListCandidates returns due, runnable syncs. Due-ness is evaluated on the
@@ -244,6 +258,10 @@ func (s *Syncer) RunSync(ctx context.Context, syncID uuid.UUID) error {
 		logger.WarnContext(ctx, "device integration sync failed", attr.SlogError(errors.New(message)))
 		return s.recordFailure(ctx, target, message, providers.IsAuthError(runErr))
 	}
+	// Reaching here means the switch returned nil: a genuine sync success
+	// (including an evidence push short-circuited by an unchanged digest). The
+	// no-op and stale paths above all return before this point.
+	s.metrics.recordOutcome(ctx, target.Provider, o11y.OutcomeSuccess)
 	return nil
 }
 
@@ -409,11 +427,22 @@ func (s *Syncer) runEvidencePush(ctx context.Context, target repo.GetSyncTargetR
 	return nil
 }
 
-// buildCoverageSnapshot assembles the evidence set for one org. Field
-// semantics are deliberate: the agent heartbeat attests the assigned USER
-// runs the agent somewhere, never that this device is monitored.
+// buildCoverageSnapshot assembles the evidence set for one org. Each device
+// carries its own attestation strength: a serial match proves that machine
+// ran the agent, an email match proves only that its assigned user did
+// somewhere, and the two can coexist in one snapshot.
 func (s *Syncer) buildCoverageSnapshot(ctx context.Context, orgID string, generatedAt time.Time) (providers.CoverageSnapshot, error) {
-	rows, err := s.repo.ListCoverageSnapshotDevices(ctx, orgID)
+	return s.buildCoverageSnapshotWithMode(ctx, orgID, generatedAt, s.deviceLevelCoverage(ctx, orgID))
+}
+
+// buildCoverageSnapshotWithMode takes the matching mode as an argument so the
+// flag resolution stays a single call in buildCoverageSnapshot and tests can
+// exercise both modes without a feature provider.
+func (s *Syncer) buildCoverageSnapshotWithMode(ctx context.Context, orgID string, generatedAt time.Time, deviceLevel bool) (providers.CoverageSnapshot, error) {
+	rows, err := s.repo.ListCoverageSnapshotDevices(ctx, repo.ListCoverageSnapshotDevicesParams{
+		DeviceLevel:    deviceLevel,
+		OrganizationID: orgID,
+	})
 	if err != nil {
 		return providers.CoverageSnapshot{}, oops.E(oops.CodeUnexpected, err, "list coverage snapshot devices")
 	}
@@ -424,6 +453,13 @@ func (s *Syncer) buildCoverageSnapshot(ctx context.Context, orgID string, genera
 		if row.AgentLastSeenAt.Valid {
 			lastSeen = row.AgentLastSeenAt.Time.UTC()
 		}
+		attestation := providers.AttestationUser
+		// pgtype.Bool: the expression cannot actually be NULL (an AND with a
+		// non-null boolean parameter), but an invalid value must read as the
+		// weaker claim, never the stronger one.
+		if row.DeviceAttested.Valid && row.DeviceAttested.Bool {
+			attestation = providers.AttestationDevice
+		}
 		devices = append(devices, providers.CoverageDevice{
 			ExternalID:   row.ExternalID,
 			SerialNumber: row.SerialNumber.String,
@@ -431,8 +467,9 @@ func (s *Syncer) buildCoverageSnapshot(ctx context.Context, orgID string, genera
 			UserEmail:    row.UserEmail.String,
 			// Inclusive at the cutoff so pushed evidence agrees with the
 			// dashboard coverage query (last_seen_at >= cutoff).
-			AssignedUserAgentActive:     row.AgentLastSeenAt.Valid && !row.AgentLastSeenAt.Time.Before(cutoff),
-			AssignedUserAgentLastSeenAt: lastSeen,
+			AgentActive:      row.AgentLastSeenAt.Valid && !row.AgentLastSeenAt.Time.Before(cutoff),
+			AgentAttestation: attestation,
+			AgentLastSeenAt:  lastSeen,
 		})
 	}
 	return providers.CoverageSnapshot{
@@ -453,6 +490,10 @@ func coverageSnapshotDigest(snapshot providers.CoverageSnapshot) string {
 		Hostname     string `json:"hostname"`
 		UserEmail    string `json:"user_email"`
 		Active       bool   `json:"active"`
+		// Attestation is digested: a device moving from user- to
+		// device-attested changes the meaning of the evidence even when
+		// Active did not, so the push must not be short-circuited.
+		Attestation string `json:"attestation"`
 	}
 	devices := make([]digestDevice, 0, len(snapshot.Devices))
 	for _, d := range snapshot.Devices {
@@ -461,7 +502,8 @@ func coverageSnapshotDigest(snapshot providers.CoverageSnapshot) string {
 			SerialNumber: d.SerialNumber,
 			Hostname:     d.Hostname,
 			UserEmail:    d.UserEmail,
-			Active:       d.AssignedUserAgentActive,
+			Active:       d.AgentActive,
+			Attestation:  string(d.AgentAttestation),
 		})
 	}
 	doc, err := json.Marshal(devices)
@@ -526,15 +568,26 @@ func (s *Syncer) recordFailure(ctx context.Context, target repo.GetSyncTargetRow
 	if interval := scheduleInterval(target); backoff > interval {
 		backoff = interval
 	}
-	if err := s.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
+	paused, err := s.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
 		SyncID:          target.SyncID,
 		NextInSeconds:   int32(backoff / time.Second), //nolint:gosec // backoff is bounded by the schedule interval
 		LastPollError:   conv.ToPGText(message),
 		AuthRejection:   authRejection,
 		PauseAfter:      authPauseThreshold,
 		ConfigUpdatedAt: target.ConfigUpdatedAt,
-	}); err != nil {
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// A config save moved updated_at while this sync ran: nothing was
+			// booked, so there is no outcome to record. The reset schedule
+			// re-runs under the new config.
+			return nil
+		}
 		return oops.E(oops.CodeUnexpected, err, "record device integration sync failure")
+	}
+	s.metrics.recordOutcome(ctx, target.Provider, o11y.OutcomeFailure)
+	if paused {
+		s.metrics.recordAutoPause(ctx, target.Provider)
 	}
 	return nil
 }

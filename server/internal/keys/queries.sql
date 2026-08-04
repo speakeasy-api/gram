@@ -28,9 +28,31 @@ WHERE key_hash = @key_hash
 -- name: ListAPIKeysByOrganization :many
 SELECT *
 FROM api_keys
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
+WHERE api_keys.organization_id = @organization_id
+  AND api_keys.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM litellm_instances li
+    WHERE li.organization_id = api_keys.organization_id
+      AND li.project_id = api_keys.project_id
+      AND li.api_key_id = api_keys.id
+      AND li.deleted IS FALSE
+  )
 ORDER BY created_at DESC;
+
+-- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
+SELECT EXISTS (
+  SELECT 1
+  FROM litellm_instances li
+  JOIN api_keys ak
+    ON ak.organization_id = li.organization_id
+   AND ak.project_id = li.project_id
+   AND ak.id = li.api_key_id
+  WHERE ak.id = @id
+    AND ak.organization_id = @organization_id
+    AND ak.deleted IS FALSE
+    AND li.deleted IS FALSE
+);
 
 -- name: DeleteAPIKey :one
 UPDATE api_keys
@@ -39,6 +61,15 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, scopes;
+
+-- name: DeleteAPIKeyByProject :one
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, key_prefix, scopes;
 
 -- name: UpdateAPIKeyLastAccessedAt :exec
 UPDATE api_keys

@@ -21,6 +21,8 @@ type McpEndpoint struct {
 	McpServerID string
 	// The slug
 	Slug McpEndpointSlug
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot bool
 	// When the MCP endpoint was created
 	CreatedAt string
 	// When the MCP endpoint was last updated

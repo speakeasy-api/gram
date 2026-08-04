@@ -55,6 +55,20 @@ vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
     mocks.resolveInventoryRequestMutation,
 }));
 
+vi.mock("@gram/client/react-query/blockShadowMCPInventoryServer.js", () => ({
+  useBlockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
+vi.mock("@gram/client/react-query/unblockShadowMCPInventoryServer.js", () => ({
+  useUnblockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
 vi.mock("@/components/page-layout", () => {
   const Toolbar = Object.assign(
     ({ children }: { children: ReactNode }) => (
@@ -82,7 +96,7 @@ vi.mock("@/components/page-layout", () => {
   return { Page: { Toolbar } };
 });
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
@@ -92,6 +106,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -121,6 +138,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({
     children,
     modal,
@@ -174,9 +194,15 @@ vi.mock("@speakeasy-api/moonshine", () => ({
 
     return <>{children}</>;
   },
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ className }: { className?: string; name: string }) => (
     <span className={className} />
   ),
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: Object.assign(
     ({ children }: { children: ReactNode }) => <table>{children}</table>,
     {
@@ -274,6 +300,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       ),
     },
   ),
+}));
+
+vi.mock("@/components/ui/Table/sorting", () => ({
   sortTableData: (
     data: ShadowMCPInventoryServer[],
     columns: Array<{
@@ -299,7 +328,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   },
 }));
 
-vi.mock("@/components/ui/tooltip", () => ({
+vi.mock("@/components/ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipContent: ({ children }: { children: ReactNode }) => (
     <span>{children}</span>
@@ -321,7 +350,7 @@ vi.mock("@/components/ui/tooltip", () => ({
   },
 }));
 
-vi.mock("@/components/ui/checkbox", () => ({
+vi.mock("@/components/ui/Checkbox", () => ({
   Checkbox: ({
     checked,
     disabled,
@@ -340,7 +369,7 @@ vi.mock("@/components/ui/checkbox", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/radio-group", () => ({
+vi.mock("@/components/ui/RadioGroup", () => ({
   RadioGroup: ({
     children,
     onValueChange,
@@ -362,7 +391,7 @@ vi.mock("@/components/ui/radio-group", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/sheet", () => ({
+vi.mock("@/components/ui/Sheet", () => ({
   Sheet: ({
     children,
     onOpenChange,
@@ -399,6 +428,7 @@ function inventoryServer(
   return {
     access: "none",
     allowedPolicyIds: [],
+    blockedPolicyIds: [],
     canonicalServerUrl,
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,

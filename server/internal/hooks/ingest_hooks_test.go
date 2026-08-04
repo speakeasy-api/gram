@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,12 +18,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -208,6 +212,51 @@ func TestIngest_RejectedCredentialsUnauthorized(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, strings.ToLower(err.Error()), "unauthorized")
+}
+
+func TestIngestAuthenticated_UsesSuppliedIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "authenticated-ingest-" + uuid.NewString()
+	idempotencyKey := "authenticated-ingest-" + uuid.NewString()
+	prompt := "authenticated ingestion prompt " + uuid.NewString()
+	untrustedAPIKey := "must-not-override-authenticated-context"
+	untrustedProjectSlug := "must-not-override-authenticated-project"
+	payload := canonicalIngestPayload("litellm", "prompt.submitted", sessionID)
+	payload.ApikeyToken = &untrustedAPIKey
+	payload.ProjectSlugInput = &untrustedProjectSlug
+	payload.IdempotencyKey = &idempotencyKey
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:      "block",
+		PolicyID:    uuid.NewString(),
+		PolicyName:  "authenticated boundary policy",
+		Description: "blocked by deterministic test scanner",
+	}}
+
+	result, err := ti.service.IngestAuthenticated(t.Context(), authCtx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.True(t, messages[0].ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, messages[0].ProjectID.UUID)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, prompt, messages[0].Content)
 }
 
 // A shared plugins-* key carries no usable identity of its own, but the
@@ -1227,6 +1276,43 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.False(t, results[0].ChatMessageID.Valid)
 	require.Equal(t, attachmentRow.ID, results[0].ChatContentPartID.UUID)
 
+	findingID, err := uuid.NewV7()
+	require.NoError(t, err)
+	chInserter := &recordingRiskFindingInserter{rows: nil}
+	fingerprinter, err := risk.ParsePepperKeyRing(fmt.Appendf(nil, `{"current":"v1","keys":{"v1":%q}}`, base64.StdEncoding.EncodeToString([]byte("test-fingerprint-key-material"))))
+	require.NoError(t, err)
+	chWriter := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), chInserter, fingerprinter)
+	startPos := int32(0)
+	endPos := int32(6)
+	confidence := float64(1)
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	require.NoError(t, chWriter.HandleBatch(ctx, []*riskv1.Finding{
+		riskv1.Finding_builder{
+			Id:                new(findingID.String()),
+			RequestId:         new("req-content-part"),
+			ChatMessageId:     nil,
+			ContentPartId:     new(attachmentRow.ID.String()),
+			ProjectId:         new(authCtx.ProjectID.String()),
+			OrganizationId:    &authCtx.ActiveOrganizationID,
+			RiskPolicyId:      new(policy.ID.String()),
+			RiskPolicyVersion: &policy.Version,
+			CreatedAt:         &createdAt,
+			RuleId:            new("secret.test"),
+			Description:       new("test finding"),
+			Match:             new("secret"),
+			StartPos:          &startPos,
+			EndPos:            &endPos,
+			Tags:              []string{},
+			Source:            new("gitleaks"),
+			Confidence:        &confidence,
+			DeadLetterReason:  nil,
+		}.Build(),
+	}, nil))
+	require.Len(t, chInserter.rows, 1)
+	require.Empty(t, chInserter.rows[0].ChatMessageID)
+	require.Equal(t, attachmentRow.ID.String(), chInserter.rows[0].ContentPartID)
+	require.Equal(t, chatID.String(), chInserter.rows[0].ChatID)
+
 	// A redelivered attachment event must not stamp an unrelated prompt row.
 	redelivery := canonicalIngestPayload("claude", "assistant.responded", sessionID)
 	redelivery.Data = payload.Data
@@ -1529,6 +1615,17 @@ func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPay
 	}
 }
 
+func TestMergeSourceAttributesDoesNotOverrideCanonicalFields(t *testing.T) {
+	t.Parallel()
+	base := map[attr.Key]any{attr.ProjectIDKey: "canonical-project"}
+	mergeSourceAttributes(base, map[attr.Key]any{
+		attr.ProjectIDKey:     "external-project",
+		attr.LiteLLMCallIDKey: "call-id",
+	})
+	require.Equal(t, "canonical-project", base[attr.ProjectIDKey])
+	require.Equal(t, "call-id", base[attr.LiteLLMCallIDKey])
+}
+
 // The gram.hook.event attribute vocabulary is the provider-style HookEvent
 // names — ClickHouse summary predicates match on PostToolUse and friends, so
 // canonical event types must translate back before they reach telemetry.
@@ -1715,4 +1812,13 @@ func TestIngest_ReplayedMessageSortsByOccurredAt(t *testing.T) {
 	require.WithinDuration(t, wantBacklogAt, msgs[1].CreatedAt.Time, time.Second, "created_at must carry the event's occurred_at")
 	require.WithinDuration(t, time.Now(), msgs[3].CreatedAt.Time, 30*time.Second, "a future occurred_at must be clamped to arrival time")
 	require.WithinDuration(t, time.Now().Add(-14*24*time.Hour), msgs[0].CreatedAt.Time, 30*time.Second, "a far-past occurred_at must be floored to the 14-day backdate bound")
+}
+
+type recordingRiskFindingInserter struct {
+	rows []chrepo.RiskFindingRow
+}
+
+func (r *recordingRiskFindingInserter) InsertRiskFindings(_ context.Context, rows []chrepo.RiskFindingRow) error {
+	r.rows = rows
+	return nil
 }

@@ -330,7 +330,7 @@ func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBo
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, body)
+		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	var chatResp OpenAIChatResponse
@@ -470,7 +470,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
-		return nil, classifyHTTPError(ctx, httpResp.StatusCode, body)
+		return nil, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	// Wrap the response body with SSE parser that accumulates metadata
@@ -829,11 +829,11 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	for _, opt := range opts {
 		opt(&resolved)
 	}
-	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions)
+	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions, resolved.KeyType.OrDefault())
 }
 
-func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64) ([][]float32, error) {
-	resolvedKey, err := c.keyResolver.ResolveKey(ctx, orgID, "", "", KeyTypeChat)
+func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64, keyType KeyType) ([][]float32, error) {
+	resolvedKey, err := c.keyResolver.ResolveKey(ctx, orgID, "", "", keyType)
 	if err != nil {
 		return nil, fmt.Errorf("resolving OpenRouter key: %w", err)
 	}

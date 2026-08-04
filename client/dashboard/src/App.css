@@ -1,9 +1,56 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";
-@reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
+@plugin "@tailwindcss/typography";
+
+/* Design system tokens and utilities. Order matters: base tokens must come
+   before the utilities that reference them. */
+@import "./components/ui/styles/base.css";
+@import "./components/ui/styles/utilities.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant interact {
+  &:hover,
+  &:focus-visible {
+    @slot;
+  }
+}
+
+/* Stack, Grid and the responsive prop helpers build these class names at
+   runtime, so Tailwind cannot see them in the source and has to be told to
+   emit them. */
+/* The Gap and Padding prop types accept the whole Tailwind spacing scale, so
+   the unprefixed classes have to cover all of it or values like `gap={1.5}`
+   resolve to nothing. Responsive variants stay on the common subset to keep
+   the generated stylesheet from ballooning. */
+@source inline("{p-,px-,py-,pr-,pb-,pl-,pt-}{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96}");
+@source inline("gap-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96}");
+@source inline(
+  "{sm:,md:,lg:,xl:,2xl:}{p-,px-,py-,pr-,pb-,pl-,pt-}{0,0.5,1,2,3,4,5,6,8,10,12,16}"
+);
+@source inline("{sm:,md:,lg:,xl:,2xl:}gap-{0,0.5,1,2,3,4,5,6,8,10,12,16}");
+@source inline("{,sm:,md:,lg:,xl:,2xl:}grid-cols-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline("{,sm:,md:,lg:,xl:,2xl:}col-span-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}flex-{row,col,nowrap,wrap,wrap-reverse,none,1,auto,initial,grow,shrink}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}justify-{start,center,end,between,evenly}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}items-{start,center,end,stretch,baseline}"
+);
+@source inline("{,sm:,md:,lg:,xl:,2xl:}size-{8,12,16,24,32}");
+
+@theme {
+  --font-sans: var(--font-diatype);
+  --font-mono: var(--font-diatype-mono);
+  --font-display: var(--font-tobias);
+  --font-ascii: var(--font-speakeasy), var(--font-diatype-mono), monospace;
+
+  /* Extended text scale */
+  --text-2xs: 0.5625rem; /* 9px */
+}
 
 @font-face {
   font-family: "Diatype";
@@ -405,4 +452,40 @@ html.chat-launching::view-transition-new(root) {
 .dot-card:hover .scroll-dots-target {
   animation: scroll-dots 3s linear infinite;
   color: oklch(0.553 0.013 58.071 / 0.4);
+}
+
+/* Side panel open/close (see `SidePanelSurface`). The panel is a layout sibling
+   rather than an overlay, so opening it has to move the page: the aside's own
+   width is what animates, and the page reflows into what is left. The content
+   inside is pinned to the panel's final width so it does not re-wrap on every
+   frame — it slides in from behind the right edge as the gap opens. */
+.side-panel-enter {
+  animation: 260ms cubic-bezier(0.32, 0.72, 0, 1) side-panel-in;
+}
+
+/* Faster on the way out, and `forwards` holds it collapsed for the few frames
+   between the animation ending and React unmounting it. */
+.side-panel-exit {
+  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) forwards side-panel-out;
+}
+
+@keyframes side-panel-in {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes side-panel-out {
+  to {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel-enter,
+  .side-panel-exit {
+    animation-duration: 1ms;
+  }
 }

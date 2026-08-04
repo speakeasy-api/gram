@@ -1,4 +1,5 @@
-import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
+import { Icon, IconProps } from "@/components/ui/Icon";
+import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -651,7 +652,32 @@ const ROUTE_STRUCTURE = {
       detail: {
         title: "Plugin",
         url: ":pluginId",
+        // PluginDetail renders every section itself, picking the active one
+        // from the path — the subpages exist to own the URLs (same shape as
+        // mcp.details).
         component: PluginDetail,
+        subPages: {
+          overview: {
+            title: "Plugin Overview",
+            url: "overview",
+          },
+          servers: {
+            title: "Plugin MCP Servers",
+            url: "servers",
+          },
+          skills: {
+            title: "Plugin Skills",
+            url: "skills",
+          },
+          assignments: {
+            title: "Plugin Assignments",
+            url: "assignments",
+          },
+          settings: {
+            title: "Plugin Settings",
+            url: "settings",
+          },
+        },
       },
     },
   },

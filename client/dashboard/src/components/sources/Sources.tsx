@@ -1,9 +1,9 @@
 import { useFilterState, type FilterValue } from "@/components/filters";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DotTable } from "@/components/ui/dot-table";
-import { Type } from "@/components/ui/type";
-import { useViewMode } from "@/components/ui/use-view-mode";
+import { DotTable } from "@/components/ui/DotTable";
+import { Text } from "@/components/ui/Text";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
@@ -32,15 +32,15 @@ import {
   visibleSourceFilters,
   type SourceFacets,
 } from "./source-filter-schema";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import {
-  Button,
-  Dialog,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import {
   ChevronDown,
   CircleAlert,
@@ -498,11 +498,11 @@ export default function Sources(): JSX.Element {
               <SourceCardSkeleton />
             </div>
           ) : showNoMatches ? (
-            <Type muted className="py-8 text-center">
+            <Text muted className="py-8 text-center">
               {search.trim() !== ""
                 ? `No sources matching “${search}”`
                 : "No sources match your filters"}
-            </Type>
+            </Text>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {filteredSources.map((asset: NamedAsset) => (

@@ -51,6 +51,12 @@ type Service interface {
 	UpsertShadowMCPInventoryPolicyBypass(context.Context, *UpsertShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
 	// Remove a Shadow MCP URL allow decision.
 	DeleteShadowMCPInventoryPolicyBypass(context.Context, *DeleteShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
+	// Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking
+	// policy by adding a risk_policy:block grant.
+	BlockShadowMCPInventoryServer(context.Context, *BlockShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryURLState, err error)
+	// Unblock a Shadow MCP server URL under an allow-by-default (allow_all)
+	// blocking policy by removing its risk_policy:block grant.
+	UnblockShadowMCPInventoryServer(context.Context, *UnblockShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryURLState, err error)
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
@@ -86,7 +92,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "resolveShadowMCPInventoryRequest", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [21]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -147,6 +153,15 @@ type AuthzChallenge struct {
 	ResolvedBy *string
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string
+}
+
+// BlockShadowMCPInventoryServerPayload is the payload type of the access
+// service blockShadowMCPInventoryServer method.
+type BlockShadowMCPInventoryServerPayload struct {
+	ProjectID    string
+	ServerURL    string
+	PolicyID     string
+	SessionToken *string
 }
 
 // A group of consecutive challenges with the same dimensions that occurred
@@ -561,6 +576,9 @@ type ShadowMCPInventoryServer struct {
 	RequestCount       int
 	LatestRequest      *ShadowMCPInventoryRequestSummary
 	AllowedPolicyIds   []string
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
@@ -570,6 +588,9 @@ type ShadowMCPInventoryURLState struct {
 	RequestCount     int
 	LatestRequest    *ShadowMCPInventoryRequestSummary
 	AllowedPolicyIds []string
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string
 }
 
 type ShadowMCPInventoryUser struct {
@@ -578,6 +599,15 @@ type ShadowMCPInventoryUser struct {
 	Email            *string
 	LastCalled       string
 	ObservedUseCount int
+}
+
+// UnblockShadowMCPInventoryServerPayload is the payload type of the access
+// service unblockShadowMCPInventoryServer method.
+type UnblockShadowMCPInventoryServerPayload struct {
+	ProjectID    string
+	ServerURL    string
+	PolicyID     string
+	SessionToken *string
 }
 
 // UpdateMemberRolesPayload is the payload type of the access service

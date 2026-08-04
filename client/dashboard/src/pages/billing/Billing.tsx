@@ -1,11 +1,11 @@
 import { Page } from "@/components/page-layout";
 import { ProductTierBadge } from "@/components/product-tier-badge";
 import { productTierColors } from "@/components/product-tier-utils";
-import { Card, Cards, CardSkeleton } from "@/components/ui/card";
-import { Heading } from "@/components/ui/heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Card, Cards, CardSkeleton } from "@/components/ui/Card";
+import { Heading } from "@/components/ui/Heading";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -16,15 +16,15 @@ import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
-import { Button, cn, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
-import {
-  TumAdminSection,
-  TumUsageSection,
-} from "@/components/billing/tum-section";
+import { TumAdminSection } from "@/components/billing/tum-admin-section";
+import { TumUsageSection } from "@/components/billing/tum-section";
 
 export default function Billing(): JSX.Element {
   return (
@@ -95,9 +95,9 @@ const UsageSection = () => {
     return (
       <Stack gap={3} className="mb-6">
         <Stack direction="horizontal" align="center" gap={1}>
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             {label}
-          </Type>
+          </Text>
           <SimpleTooltip tooltip={tooltip}>
             <Info className="text-muted-foreground h-4 w-4" />
           </SimpleTooltip>
@@ -339,7 +339,7 @@ const UsageTiers = () => {
         <Card.Content>
           <Stack gap={8}>
             <Stack gap={1}>
-              <Type
+              <Text
                 mono
                 muted
                 small
@@ -349,7 +349,7 @@ const UsageTiers = () => {
                 {previousTier
                   ? `Everything from ${previousTier}, plus`
                   : "Features"}
-              </Type>
+              </Text>
               <ul className="list-inside space-y-1">
                 {tierLimits.featureBullets.map((bullet) => (
                   <li key={bullet}>
@@ -361,7 +361,7 @@ const UsageTiers = () => {
             {tierLimits.includedBullets &&
               tierLimits.includedBullets.length > 0 && (
                 <Stack gap={1}>
-                  <Type
+                  <Text
                     mono
                     muted
                     small
@@ -369,7 +369,7 @@ const UsageTiers = () => {
                     className="font-medium uppercase"
                   >
                     Included
-                  </Type>
+                  </Text>
                   <ul className="list-inside space-y-1">
                     {tierLimits.includedBullets.map((bullet) => (
                       <li key={bullet}>
@@ -382,7 +382,7 @@ const UsageTiers = () => {
               )}
             {tierLimits.addOnBullets && tierLimits.addOnBullets.length > 0 && (
               <Stack gap={1}>
-                <Type
+                <Text
                   mono
                   muted
                   small
@@ -390,7 +390,7 @@ const UsageTiers = () => {
                   className="font-medium uppercase"
                 >
                   Extras
-                </Type>
+                </Text>
                 <ul className="list-inside space-y-1">
                   {tierLimits.addOnBullets.map((bullet) => (
                     <li key={bullet}>

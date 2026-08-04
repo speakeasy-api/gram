@@ -76,7 +76,7 @@ export function CreateMarketplaceStep({
         </div>
       }
       title="Create plugin marketplace"
-      description="Speakeasy publishes a private GitHub repo that acts as your team's plugin marketplace for Claude Code, Cursor, and Codex. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Speakeasy later get published — so this only needs to be set up once per project."
+      description="Speakeasy publishes a private GitHub repo that acts as your team's plugin marketplace for supported coding agents. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Speakeasy later get published — so this only needs to be set up once per project."
       onContinue={primaryAction}
       continueLabel={primaryLabel}
       isLoading={publishMutation.isPending || isLoading}
@@ -108,7 +108,7 @@ export function CreateMarketplaceStep({
                   Clicking the button below opens a dialog where you can
                   optionally add GitHub usernames who get read access to the
                   repo. At least one user needs access so they can connect the
-                  marketplace to Claude, Cursor, or Codex on their machine.
+                  marketplace to their coding agents.
                 </p>
               </div>
             </div>

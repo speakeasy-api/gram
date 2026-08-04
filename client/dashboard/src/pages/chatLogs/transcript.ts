@@ -456,6 +456,19 @@ export function displayItemRows(item: DisplayItem): TranscriptRow[] {
   return [];
 }
 
+/** Whether a rendered item contains the raw chat message being targeted. A
+ * tool group can contain several rows and each tool row can span its assistant
+ * call plus tool-result messages, so callers should use this instead of
+ * comparing display item IDs directly. */
+export function displayItemContainsMessage(
+  item: DisplayItem,
+  messageId: string,
+): boolean {
+  return displayItemRows(item).some((row) =>
+    rowMessageIds(row).includes(messageId),
+  );
+}
+
 /** Below this, a run of consecutive tool rows stays as individual rows — a lone
  * tool call is already its own collapsed card, so only coalesce actual runs. */
 const MIN_TOOLS_TO_GROUP = 2;

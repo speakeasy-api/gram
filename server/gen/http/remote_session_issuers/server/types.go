@@ -3175,10 +3175,11 @@ func NewListRemoteSessionIssuersPayload(cursor *string, limit *int, sessionToken
 
 // NewGetRemoteSessionIssuerPayload builds a remoteSessionIssuers service
 // getRemoteSessionIssuer endpoint payload.
-func NewGetRemoteSessionIssuerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.GetRemoteSessionIssuerPayload {
+func NewGetRemoteSessionIssuerPayload(id *string, slug *string, issuer *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.GetRemoteSessionIssuerPayload {
 	v := &remotesessionissuers.GetRemoteSessionIssuerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.Issuer = issuer
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

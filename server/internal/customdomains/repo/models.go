@@ -31,3 +31,16 @@ type CustomDomain struct {
 	DeletedAt                pgtype.Timestamptz
 	Deleted                  bool
 }
+
+type McpEndpoint struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	CustomDomainID uuid.NullUUID
+	McpServerID    uuid.UUID
+	Slug           string
+	IsDomainRoot   pgtype.Bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}

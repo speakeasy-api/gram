@@ -79,6 +79,25 @@ func TestHandle_PublishesGitleaksFinding(t *testing.T) {
 	require.NotNil(t, awsFinding, "expected an aws secret access key finding")
 }
 
+func TestHandle_PublishesGitleaksFindingForContentPart(t *testing.T) {
+	t.Parallel()
+
+	pub, published := capturingPub(t)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
+
+	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
+	req := newRequest(content)
+	req.ClearChatMessageId()
+	req.SetContentPartId("part-1")
+	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
+
+	require.NotEmpty(t, *published, "expected at least one finding published")
+	for _, f := range *published {
+		require.Empty(t, f.GetChatMessageId())
+		require.Equal(t, "part-1", f.GetContentPartId())
+	}
+}
+
 func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 	t.Parallel()
 
@@ -87,4 +106,46 @@ func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("hello world, this is a normal message"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)
+}
+
+// The stream handler scans the verbatim request content, so every published
+// finding carries surface "content" and no span attribution.
+func TestHandle_StampsContentSurface(t *testing.T) {
+	t.Parallel()
+
+	pub, published := capturingPub(t)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
+
+	content := `SecretAccessKey: ` + fakeSecret
+	require.NoError(t, h.Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
+
+	require.NotEmpty(t, *published)
+	for _, f := range *published {
+		require.Equal(t, "content", f.GetSurface())
+		require.Empty(t, f.GetField())
+		require.Empty(t, f.GetPath())
+		require.Empty(t, f.GetToolCallId())
+	}
+}
+
+// Redelivering the same scan request republishes every finding under the same
+// deterministic id, so ClickHouse's id-level dedup collapses the duplicates
+// instead of counting them twice (the old uuid.NewV7-per-publish minted a new
+// row per redelivery).
+func TestHandle_RedeliveryKeepsDeterministicIDs(t *testing.T) {
+	t.Parallel()
+
+	firstPub, firstPublished := capturingPub(t)
+	secondPub, secondPublished := capturingPub(t)
+
+	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
+	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), firstPub).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
+	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), secondPub).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
+
+	require.NotEmpty(t, *firstPublished)
+	require.Len(t, *secondPublished, len(*firstPublished))
+	for i, f := range *firstPublished {
+		require.NotEmpty(t, f.GetId())
+		require.Equal(t, f.GetId(), (*secondPublished)[i].GetId(), "ids must be stable across redeliveries")
+	}
 }

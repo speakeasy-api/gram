@@ -47,8 +47,14 @@ const (
 	ObservedTimeUnixNanoKey              = attribute.Key("observed_time_unix_nano")
 	ServerAddressKey                     = semconv.ServerAddressKey
 	ServiceEnvKey                        = semconv.DeploymentEnvironmentNameKey
+	ServiceInstanceIDKey                 = semconv.ServiceInstanceIDKey
 	ServiceNameKey                       = semconv.ServiceNameKey
+	ServiceNamespaceKey                  = semconv.ServiceNamespaceKey
 	ServiceVersionKey                    = semconv.ServiceVersionKey
+	DeploymentEnvironmentKey             = attribute.Key("deployment.environment")
+	TelemetrySDKLanguageKey              = semconv.TelemetrySDKLanguageKey
+	TelemetrySDKNameKey                  = semconv.TelemetrySDKNameKey
+	TelemetrySDKVersionKey               = semconv.TelemetrySDKVersionKey
 	TimeUnixNanoKey                      = attribute.Key("time_unix_nano")
 	URLDomainKey                         = semconv.URLDomainKey
 	URLFullKey                           = semconv.URLFullKey
@@ -69,14 +75,23 @@ const (
 	ReasonKey   = attribute.Key("reason")
 	ValueKey    = attribute.Key("value")
 
-	SpanIDKey              = attribute.Key("span.id")
-	TraceIDKey             = attribute.Key("trace.id")
-	LogSeverityKey         = attribute.Key("gram.log.severity_text")
-	LogBodyKey             = attribute.Key("gram.log.body")
-	DataDogGitCommitSHAKey = attribute.Key("git.commit.sha")
-	DataDogGitRepoURLKey   = attribute.Key("git.repository_url")
-	DataDogTraceIDKey      = attribute.Key("dd.trace_id")
-	DataDogSpanIDKey       = attribute.Key("dd.span_id")
+	SpanIDKey                    = attribute.Key("span.id")
+	SpanParentIDKey              = attribute.Key("span.parent_id")
+	TraceIDKey                   = attribute.Key("trace.id")
+	OTelSpanNameKey              = attribute.Key("otel.span.name")
+	OTelSpanKindKey              = attribute.Key("otel.span.kind")
+	OTelSpanStatusCodeKey        = attribute.Key("otel.span.status_code")
+	OTelSpanStartTimeUnixNanoKey = attribute.Key("otel.span.start_time_unix_nano")
+	OTelSpanEndTimeUnixNanoKey   = attribute.Key("otel.span.end_time_unix_nano")
+	OTelSpanDurationMSKey        = attribute.Key("otel.span.duration_ms")
+	OTelScopeNameKey             = attribute.Key("otel.scope.name")
+	OTelScopeVersionKey          = attribute.Key("otel.scope.version")
+	LogSeverityKey               = attribute.Key("gram.log.severity_text")
+	LogBodyKey                   = attribute.Key("gram.log.body")
+	DataDogGitCommitSHAKey       = attribute.Key("git.commit.sha")
+	DataDogGitRepoURLKey         = attribute.Key("git.repository_url")
+	DataDogTraceIDKey            = attribute.Key("dd.trace_id")
+	DataDogSpanIDKey             = attribute.Key("dd.span_id")
 
 	FlyAppNameKey    = attribute.Key("fly.app.name")
 	FlyOrgIDKey      = attribute.Key("fly.org.id")
@@ -134,17 +149,30 @@ const (
 	// chat_analysis:work_units:score telemetry rows the chat analysis
 	// publisher emits once per scored session, and read back by
 	// attribute_metrics_summaries_mv's work-units measures.
-	ChatAnalysisWorkUnitsKey       = attribute.Key("gram.chat_analysis.work_units")
-	ChatAnalysisScoredCostKey      = attribute.Key("gram.chat_analysis.scored_cost")
-	ChatAnalysisScoredTokensKey    = attribute.Key("gram.chat_analysis.scored_tokens")
-	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
-	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
-	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
-	ExternalMCPSlugKey             = attribute.Key("gram.external_mcp.slug")
-	ExternalMCPNameKey             = attribute.Key("gram.external_mcp.name")
-	URLKey                         = attribute.Key("url")
-	CacheKeyKey                    = attribute.Key("gram.cache.key")
-	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
+	ChatAnalysisWorkUnitsKey    = attribute.Key("gram.chat_analysis.work_units")
+	ChatAnalysisScoredCostKey   = attribute.Key("gram.chat_analysis.scored_cost")
+	ChatAnalysisScoredTokensKey = attribute.Key("gram.chat_analysis.scored_tokens")
+	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
+	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
+	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
+	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
+	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
+	URLKey                      = attribute.Key("url")
+	CacheKeyKey                 = attribute.Key("gram.cache.key")
+	CacheNamespaceKey           = attribute.Key("gram.cache.namespace")
+
+	// CIMDOriginKey is the host of a Client ID Metadata Document URL — the
+	// per-metadata-host dimension on cimd.fetch.* metrics. Attacker-influenced
+	// on the unauthenticated OAuth surface until CIMD admission control
+	// (AIS-371) bounds accepted client_id URLs, so it is deliberately omitted
+	// for client_ids that fail URL-syntax validation before a fetch.
+	CIMDOriginKey = attribute.Key("gram.cimd.origin")
+
+	// CIMDValidationReasonKey is the machine-readable reason a Client ID
+	// Metadata Document (or its client_id URL) failed validation — the
+	// per-reason dimension on cimd.validation.failures.
+	CIMDValidationReasonKey = attribute.Key("gram.cimd.validation_reason")
+
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
@@ -265,6 +293,10 @@ const (
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey         = attribute.Key("gram.openrouter.response.body")
+	OpenRouterRateLimitLimitKey       = attribute.Key("gram.openrouter.ratelimit.limit")
+	OpenRouterRateLimitRemainingKey   = attribute.Key("gram.openrouter.ratelimit.remaining")
+	OpenRouterRateLimitResetKey       = attribute.Key("gram.openrouter.ratelimit.reset")
+	OpenRouterRetryAfterKey           = attribute.Key("gram.openrouter.retry_after")
 	OrganizationAccountTypeKey        = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey           = attribute.Key("gram.org.invite.id")
 	OrganizationInviteEmailKey        = attribute.Key("gram.org.invite.email")
@@ -302,6 +334,7 @@ const (
 	AuditSubjectKey                   = attribute.Key("gram.audit.subject")
 	AuditSubjectIDKey                 = attribute.Key("gram.audit.subject_id")
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
+	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	RiskPolicyCountKey                = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                   = attribute.Key("gram.risk.policy_id")
@@ -386,7 +419,22 @@ const (
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
-	HookBlockReasonKey = attribute.Key("gram.hook.block_reason")
+	HookBlockReasonKey       = attribute.Key("gram.hook.block_reason")
+	LiteLLMInstanceIDKey     = attribute.Key("gram.litellm.instance_id")
+	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
+	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
+	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey      = attribute.Key("gram.litellm.user_email")
+	LiteLLMTeamIDKey         = attribute.Key("gram.litellm.team_id")
+	LiteLLMTeamAliasKey      = attribute.Key("gram.litellm.team_alias")
+	LiteLLMEndUserIDKey      = attribute.Key("gram.litellm.end_user_id")
+	LiteLLMOrganizationIDKey = attribute.Key("gram.litellm.org_id")
+	LiteLLMAPIKeyHashKey     = attribute.Key("gram.litellm.api_key_hash")
+	LiteLLMAPIKeyAliasKey    = attribute.Key("gram.litellm.api_key_alias")
+	LiteLLMInputCostKey      = attribute.Key("litellm.cost.input")
+	LiteLLMOutputCostKey     = attribute.Key("litellm.cost.output")
+	LiteLLMCacheReadCostKey  = attribute.Key("litellm.cost.cache_read")
+	LiteLLMCacheWriteCostKey = attribute.Key("litellm.cost.cache_creation")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -453,6 +501,10 @@ const (
 	GenAIUsageCacheCreationInputTokensKey = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
 	GenAIUsageReasoningTokensKey          = attribute.Key("gen_ai.usage.reasoning_tokens")
 	GenAIUsageCostKey                     = attribute.Key("gen_ai.usage.cost")
+	GenAISystemKey                        = attribute.Key("gen_ai.system")
+	GenAIUsagePromptTokensKey             = attribute.Key("gen_ai.usage.prompt_tokens")
+	GenAIUsageCompletionTokensKey         = attribute.Key("gen_ai.usage.completion_tokens")
+	GenAIRequestIsStreamingKey            = attribute.Key("gen_ai.request.is_streaming")
 
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
@@ -476,6 +528,25 @@ const (
 	CodexComplianceReasoningKey   = attribute.Key("codex.compliance.reasoning")
 	CodexComplianceProductKey     = attribute.Key("codex.compliance.product")
 	CodexComplianceBillingSKUsKey = attribute.Key("codex.compliance.billing_skus")
+
+	// CodexCompliance*TokensKey preserve the raw COSTS token counts on
+	// Codex-product rows WITHOUT entering token metering. Those rows must not
+	// carry gen_ai.usage.* token keys — their codex:usage URN is admitted by
+	// the ClickHouse agent-usage predicates, which would sum them on top of
+	// the codex:otel:logs stream (the Codex token source of truth) and double
+	// count orgs running both feeds. The compliance feed also covers surfaces
+	// OTEL never sees (cloud-delegated tasks, GitHub code review), so the
+	// counts are retained under these namespaced keys — summed by nothing —
+	// until metering can partition by codex.compliance.surface/client.
+	CodexComplianceInputTokensKey       = attribute.Key("codex.compliance.input_tokens")
+	CodexComplianceCachedInputTokensKey = attribute.Key("codex.compliance.cached_input_tokens")
+	CodexComplianceOutputTokensKey      = attribute.Key("codex.compliance.output_tokens")
+	CodexComplianceTotalTokensKey       = attribute.Key("codex.compliance.total_tokens")
+
+	// ChatGPTComplianceTimestampFallbacksKey counts conversation-import
+	// events whose timestamps failed RFC3339 parsing in one log file and
+	// fell back to import time — a canary for upstream format changes.
+	ChatGPTComplianceTimestampFallbacksKey = attribute.Key("chatgpt.compliance.timestamp_fallbacks")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
@@ -652,6 +723,10 @@ func SlogTelemetryPublishFailedCount(v int) slog.Attr {
 	return slog.Int(string(TelemetryPublishFailedCountKey), v)
 }
 
+func SlogChatGPTComplianceTimestampFallbacks(v int) slog.Attr {
+	return slog.Int(string(ChatGPTComplianceTimestampFallbacksKey), v)
+}
+
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
 
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
@@ -728,6 +803,14 @@ func SlogSpanID(v string) slog.Attr      { return slog.String(string(SpanIDKey),
 
 func TraceID(v string) attribute.KeyValue { return TraceIDKey.String(v) }
 func SlogTraceID(v string) slog.Attr      { return slog.String(string(TraceIDKey), v) }
+
+func SlogLiteLLMCallID(v string) slog.Attr {
+	return slog.String(string(LiteLLMCallIDKey), v)
+}
+
+func SlogLiteLLMTraceID(v string) slog.Attr {
+	return slog.String(string(LiteLLMTraceIDKey), v)
+}
 
 func DataDogGitCommitSHA(v string) attribute.KeyValue { return DataDogGitCommitSHAKey.String(v) }
 func SlogDataDogGitCommitSHA(v string) slog.Attr {
@@ -844,6 +927,17 @@ func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyK
 
 func CacheNamespace(v string) attribute.KeyValue { return CacheNamespaceKey.String(v) }
 func SlogCacheNamespace(v string) slog.Attr      { return slog.String(string(CacheNamespaceKey), v) }
+
+func CIMDOrigin(v string) attribute.KeyValue { return CIMDOriginKey.String(v) }
+func SlogCIMDOrigin(v string) slog.Attr      { return slog.String(string(CIMDOriginKey), v) }
+
+func CIMDValidationReason[V ~string](v V) attribute.KeyValue {
+	return CIMDValidationReasonKey.String(string(v))
+}
+
+func SlogCIMDValidationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDValidationReasonKey), string(v))
+}
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
 func SlogComponent(v string) slog.Attr      { return slog.String(string(ComponentKey), v) }
@@ -1121,6 +1215,8 @@ func SlogOAuthPresentedAuthMethod(v string) slog.Attr {
 	return slog.String(string(OAuthPresentedAuthMethodKey), v)
 }
 
+func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
+
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
 
@@ -1217,6 +1313,20 @@ func OpenRouterResponseBody(v string) attribute.KeyValue { return OpenRouterResp
 func SlogOpenRouterResponseBody(v string) slog.Attr {
 	return slog.String(string(OpenRouterResponseBodyKey), v)
 }
+
+func OpenRouterRateLimitLimit(v string) attribute.KeyValue {
+	return OpenRouterRateLimitLimitKey.String(v)
+}
+
+func OpenRouterRateLimitRemaining(v string) attribute.KeyValue {
+	return OpenRouterRateLimitRemainingKey.String(v)
+}
+
+func OpenRouterRateLimitReset(v string) attribute.KeyValue {
+	return OpenRouterRateLimitResetKey.String(v)
+}
+
+func OpenRouterRetryAfter(v string) attribute.KeyValue { return OpenRouterRetryAfterKey.String(v) }
 
 func AccessMemberID(v string) attribute.KeyValue { return AccessMemberIDKey.String(v) }
 func SlogAccessMemberID(v string) slog.Attr      { return slog.String(string(AccessMemberIDKey), v) }
@@ -1361,6 +1471,11 @@ func SlogAuditSubjectID(v string) slog.Attr      { return slog.String(string(Aud
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
+}
+
+func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }
+func SlogUserSessionClientID(v string) slog.Attr {
+	return slog.String(string(UserSessionClientIDKey), v)
 }
 
 func UserSessionClientMigratedCount(v int64) attribute.KeyValue {

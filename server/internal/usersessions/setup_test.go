@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,6 +70,17 @@ type testInstance struct {
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
+	return newTestServiceWithRevoker(t, nil)
+}
+
+// newTestServiceWithRevoker builds the service with a substitute
+// TokenRevoker so revoke tests can exercise the revocation-cache failure path
+// without an unreachable Redis, which would cost ~1.7s per seeded session
+// (1s DialTimeout plus go-redis retries). Pass nil for the real
+// chatsessions.Manager over the test Redis.
+func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
@@ -110,12 +123,17 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		cache.NewRedisCacheAdapter(redisClient),
 	)
 
+	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager
+	if revoker != nil {
+		tokenRevoker = revoker
+	}
+
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
-		chatSessionsManager,
+		tokenRevoker,
 		authzEngine,
 		audit.NewLogger(),
 		usersessions.NewSigner("test-jwt-secret"),
@@ -130,6 +148,62 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		chatSessionsManager: chatSessionsManager,
 		redis:               redisClient,
 	}
+}
+
+// failingTokenRevoker is a usersessions.TokenRevoker whose every push fails,
+// and which records how many pushes were attempted. TokenRevoker is our own
+// interface rather than a vendor type, so a hand-rolled stub is preferred to
+// testify/mock here.
+type failingTokenRevoker struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (f *failingTokenRevoker) RevokeToken(_ context.Context, jti string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return fmt.Errorf("revocation cache unavailable for jti %s", jti)
+}
+
+func (f *failingTokenRevoker) Calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// partialTokenRevoker fails only for the jtis registered with failOn and
+// records every jti it was asked to revoke, so tests can pin the mixed
+// success/failure accounting the handler reports.
+type partialTokenRevoker struct {
+	mu     sync.Mutex
+	failed map[string]bool
+	calls  []string
+}
+
+func (p *partialTokenRevoker) failOn(jti string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.failed == nil {
+		p.failed = map[string]bool{}
+	}
+	p.failed[jti] = true
+}
+
+func (p *partialTokenRevoker) RevokeToken(_ context.Context, jti string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, jti)
+	if p.failed[jti] {
+		return fmt.Errorf("revocation cache rejected jti %s", jti)
+	}
+	return nil
+}
+
+func (p *partialTokenRevoker) Calls() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.calls)
 }
 
 // jtiRevoked reports whether the chat_session_revoked:{jti}: key exists in
@@ -211,15 +285,33 @@ func seedUserSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issu
 	return seedUserSessionWithExpiry(t, ctx, conn, issuerID, principalURN, now.Add(24*time.Hour), now.Add(time.Hour))
 }
 
+// seedUserSessionForClient inserts a user_sessions row bound to a
+// user_session_clients row, so the client-revoke cascade has something to
+// sweep up. Sessions seeded through seedUserSession carry no client id and
+// are deliberately invisible to SoftDeleteUserSessionsByClientID.
+func seedUserSessionForClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID, clientID uuid.UUID, principalURN urn.SessionSubject) (repo.UserSession, error) {
+	t.Helper()
+
+	now := time.Now()
+	return seedUserSessionFull(t, ctx, conn, issuerID, uuid.NullUUID{UUID: clientID, Valid: true}, principalURN, now.Add(24*time.Hour), now.Add(time.Hour))
+}
+
 // seedUserSessionWithExpiry inserts a user_sessions row with explicit access-
 // token (expires_at) and refresh-token (refresh_expires_at) expiry times so
 // tests can exercise the status filter's reliance on refresh_expires_at.
 func seedUserSessionWithExpiry(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, principalURN urn.SessionSubject, expiresAt, refreshExpiresAt time.Time) (repo.UserSession, error) {
 	t.Helper()
 
+	return seedUserSessionFull(t, ctx, conn, issuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, principalURN, expiresAt, refreshExpiresAt)
+}
+
+func seedUserSessionFull(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, clientID uuid.NullUUID, principalURN urn.SessionSubject, expiresAt, refreshExpiresAt time.Time) (repo.UserSession, error) {
+	t.Helper()
+
 	r := repo.New(conn)
 	row, err := r.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: issuerID,
+		UserSessionClientID: clientID,
 		SubjectUrn:          principalURN,
 		Jti:                 "jti-" + uuid.NewString(),
 		RefreshTokenHash:    "hash-" + uuid.NewString(),

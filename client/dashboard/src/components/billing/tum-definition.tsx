@@ -1,5 +1,5 @@
 import { Info } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 
 // How the billing page explains tokens under management. The copy mirrors the
@@ -18,8 +18,8 @@ export function TumDefinitionHint(): JSX.Element {
     <div className="flex max-w-xs flex-col gap-1.5">
       <p>
         The volume of agent traffic the platform observes from your users'
-        sessions each billing cycle — Claude Code, Cowork, Cursor, Codex, and
-        the rest — measured in tokens.
+        sessions each billing cycle — across supported coding agents — measured
+        in tokens.
       </p>
       <p>
         <span className="font-medium">Counted:</span> input tokens, output

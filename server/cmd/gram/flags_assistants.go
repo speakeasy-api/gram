@@ -18,105 +18,111 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
-var assistantRuntimeFlags = []cli.Flag{
-	&cli.StringFlag{
-		Name:    "assistant-runtime-provider",
-		Usage:   "Assistant runtime provider. Allowed values: flyio, gke, local.",
-		Value:   assistants.RuntimeProviderFlyIO,
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
-		Action: func(_ *cli.Context, val string) error {
-			switch val {
-			case "", assistants.RuntimeProviderFlyIO, assistants.RuntimeProviderGKE, assistants.RuntimeProviderLocal:
-				return nil
-			default:
-				return fmt.Errorf("invalid assistant runtime provider: %s", val)
-			}
+// Flag groups are built per call rather than kept in package-level slices
+// because urfave/cli writes the resolved value back onto the flag when it is
+// applied to a flag set. Sharing definitions across flag sets means sharing
+// mutable state.
+func assistantRuntimeFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "assistant-runtime-provider",
+			Usage:   "Assistant runtime provider. Allowed values: flyio, gke, local.",
+			Value:   assistants.RuntimeProviderFlyIO,
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
+			Action: func(_ *cli.Context, val string) error {
+				switch val {
+				case "", assistants.RuntimeProviderFlyIO, assistants.RuntimeProviderGKE, assistants.RuntimeProviderLocal:
+					return nil
+				default:
+					return fmt.Errorf("invalid assistant runtime provider: %s", val)
+				}
+			},
 		},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-local-ca-file",
-		Usage:   "PEM CA bundle mounted into local assistant runtime containers and appended to their trust store, so runners trust the local server's TLS certificate. Typically the mkcert root CA.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-gke-namespace",
-		Usage:   "Kubernetes namespace for GKE Agent Sandbox assistant runtimes. Defaults to gram-{environment}.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_NAMESPACE"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-gke-sandbox-template",
-		Usage:   "SandboxTemplate name that GKE assistant runtime claims reference (a SandboxWarmPool on the same template pre-warms pods).",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_SANDBOX_TEMPLATE"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-gke-cluster-endpoint",
-		Usage:   "API endpoint (host or IP) of the assistant runtime cluster. Setting this enables the GKE backend.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_ENDPOINT"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-gke-cluster-ca",
-		Usage:   "Base64-encoded CA certificate of the assistant runtime cluster.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_CA"},
-	},
-	&cli.StringSliceFlag{
-		Name:    "assistant-runtime-gke-runner-cidr",
-		Usage:   "Pod CIDR(s) the assistant runner pods are reachable on. The server dials runners by pod IP, so these are allowlisted past the guardian egress policy (which blocks RFC1918 by default).",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_RUNNER_CIDR"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-server-url",
-		Usage:   "Optional host-reachable server base URL for assistant runtimes. Defaults to --server-url.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_SERVER_URL"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-flyio-api-token",
-		Usage:   "An organization-scoped API token to use when provisioning assistant runtimes on fly.io.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-flyio-org",
-		Usage:   "The default fly.io organization to deploy assistant runtimes to.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_ORG"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-flyio-region",
-		Usage:   "The default fly.io region to deploy assistant runtimes to.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_REGION"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-flyio-app-name-prefix",
-		Usage:   "Prefix for fly.io assistant runtime app names.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_APP_NAME_PREFIX"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-oci-image",
-		Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-otlp-endpoint",
-		Usage:   "OTLP endpoint assistant runtimes export traces to. Trace export is disabled when unset.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_ENDPOINT"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-otlp-protocol",
-		Usage:   "OTLP transport for assistant runtime traces. Allowed values: grpc, http/protobuf, http/json.",
-		Value:   "grpc",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_PROTOCOL"},
-		Action: func(_ *cli.Context, val string) error {
-			switch val {
-			case "", "grpc", "http/protobuf", "http/json":
-				return nil
-			default:
-				return fmt.Errorf("invalid assistant runtime otlp protocol: %s", val)
-			}
+		&cli.StringFlag{
+			Name:    "assistant-runtime-local-ca-file",
+			Usage:   "PEM CA bundle mounted into local assistant runtime containers and appended to their trust store, so runners trust the local server's TLS certificate. Typically the mkcert root CA.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE"},
 		},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-otlp-headers",
-		Usage:   "Headers for the assistant runtime OTLP exporter as comma-separated key=value pairs.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_HEADERS"},
-	},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-gke-namespace",
+			Usage:   "Kubernetes namespace for GKE Agent Sandbox assistant runtimes. Defaults to gram-{environment}.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-gke-sandbox-template",
+			Usage:   "SandboxTemplate name that GKE assistant runtime claims reference (a SandboxWarmPool on the same template pre-warms pods).",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_SANDBOX_TEMPLATE"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-gke-cluster-endpoint",
+			Usage:   "API endpoint (host or IP) of the assistant runtime cluster. Setting this enables the GKE backend.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_ENDPOINT"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-gke-cluster-ca",
+			Usage:   "Base64-encoded CA certificate of the assistant runtime cluster.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_CA"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "assistant-runtime-gke-runner-cidr",
+			Usage:   "Pod CIDR(s) the assistant runner pods are reachable on. The server dials runners by pod IP, so these are allowlisted past the guardian egress policy (which blocks RFC1918 by default).",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_RUNNER_CIDR"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-server-url",
+			Usage:   "Optional host-reachable server base URL for assistant runtimes. Defaults to --server-url.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_SERVER_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-flyio-api-token",
+			Usage:   "An organization-scoped API token to use when provisioning assistant runtimes on fly.io.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-flyio-org",
+			Usage:   "The default fly.io organization to deploy assistant runtimes to.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_ORG"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-flyio-region",
+			Usage:   "The default fly.io region to deploy assistant runtimes to.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_REGION"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-flyio-app-name-prefix",
+			Usage:   "Prefix for fly.io assistant runtime app names.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_APP_NAME_PREFIX"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-oci-image",
+			Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-otlp-endpoint",
+			Usage:   "OTLP endpoint assistant runtimes export traces to. Trace export is disabled when unset.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_ENDPOINT"},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-otlp-protocol",
+			Usage:   "OTLP transport for assistant runtime traces. Allowed values: grpc, http/protobuf, http/json.",
+			Value:   "grpc",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_PROTOCOL"},
+			Action: func(_ *cli.Context, val string) error {
+				switch val {
+				case "", "grpc", "http/protobuf", "http/json":
+					return nil
+				default:
+					return fmt.Errorf("invalid assistant runtime otlp protocol: %s", val)
+				}
+			},
+		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-otlp-headers",
+			Usage:   "Headers for the assistant runtime OTLP exporter as comma-separated key=value pairs.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_HEADERS"},
+		},
+	}
 }
 
 func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {

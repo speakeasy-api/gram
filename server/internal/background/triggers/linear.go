@@ -170,6 +170,7 @@ func newLinearDefinition() Definition {
 			TimestampSkew:   0,
 		},
 		SupportedEventTypes: supportedLinearEventTypes,
+		Authenticate:        nil,
 		PreVerify:           nil,
 		Ingest:              linearIngest,
 	}

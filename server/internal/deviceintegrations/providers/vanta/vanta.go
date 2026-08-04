@@ -8,15 +8,24 @@
 // Vanta Developer Console with the connectors.self:write-resource scope,
 // define a Custom Resource whose schema mirrors the customProperties below,
 // copy its resource id from the Resources tab, then define a Custom Test
-// over assigned_user_agent_active mapped to the relevant controls.
+// over agent_active mapped to the relevant controls.
 //
-// Evidence precision: agent presence is attested per assigned USER, not per
-// device — the property names say exactly that (assigned_user_agent_active,
-// never "device_monitored"), and assigned_user_agent_last_seen_at is omitted
-// when the assigned user has never synced an agent. The ticket suggested
-// Vanta's built-in Computer resource kind, but built-in kinds carry fixed
-// schemas that cannot express these properties; a Custom Resource is what
-// lets the Custom Test attest exactly what we can prove.
+// Evidence precision: every resource states its own attestation strength.
+// agent_attestation "device" means that machine's agent reported in (matched
+// on hardware serial); "user" means only that its assigned user runs one
+// somewhere (matched on email). Both can appear in one push — a machine whose
+// agent cannot read a serial stays user-attested even for an org on
+// device-level matching — so the strength cannot be stated once for the whole
+// resource set. agent_last_seen_at is an empty string when no agent has ever
+// synced: Vanta's console cannot author a JTD optionalProperties schema, so
+// the customer-defined record schema marks every property required and an
+// omitted field is rejected at sync; an empty string reads as "unknown"
+// without fabricating a heartbeat. The ticket suggested Vanta's built-in
+// Computer resource kind, but built-in kinds carry fixed schemas that cannot
+// express these properties; a Custom Resource is what lets the Custom Test
+// attest exactly what we can prove. Every record must also carry a top-level
+// externalUrl — Vanta's base schema requires it alongside uniqueId and
+// displayName.
 //
 // Endpoints used (Vanta documents a single global API host):
 //
@@ -228,23 +237,43 @@ func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, 
 	return nil
 }
 
+// externalURL is the required base-field link on every pushed resource.
+// Vanta's CustomResource base schema mandates uniqueId, displayName, AND
+// externalUrl — an omitted externalUrl is rejected with 400 "must have
+// property 'externalUrl'". There is no per-device dashboard deep link
+// available in the snapshot (no org slug), so every record carries the same
+// product URL; uniqueId, not this field, is the dedup key.
+const externalURL = "https://app.getgram.ai"
+
 // coverageResource is one device in the pushed full-state set. Base fields
-// (uniqueId, displayName) sit at the top level per Vanta's resource
-// envelope; the evidence properties live in customProperties, named to scope
-// the attestation to the assigned user. A never-seen agent omits the
-// last-seen property entirely rather than sending null or a zero timestamp.
+// (uniqueId, displayName, externalUrl) sit at the top level per Vanta's
+// resource envelope; the evidence properties live in customProperties, named
+// to scope the attestation to the assigned user.
 type coverageResource struct {
 	UniqueID         string           `json:"uniqueId"`
 	DisplayName      string           `json:"displayName"`
+	ExternalURL      string           `json:"externalUrl"`
 	CustomProperties coverageProperty `json:"customProperties"`
 }
 
 type coverageProperty struct {
-	SerialNumber                string  `json:"serial_number"`
-	Hostname                    string  `json:"hostname"`
-	AssignedUserEmail           string  `json:"assigned_user_email"`
-	AssignedUserAgentActive     bool    `json:"assigned_user_agent_active"`
-	AssignedUserAgentLastSeenAt *string `json:"assigned_user_agent_last_seen_at,omitempty"`
+	SerialNumber      string `json:"serial_number"`
+	Hostname          string `json:"hostname"`
+	AssignedUserEmail string `json:"assigned_user_email"`
+	AgentActive       bool   `json:"agent_active"`
+	// agent_attestation is what keeps agent_active honest per row: "device"
+	// means this machine's own agent reported in, "user" means only that its
+	// assigned user runs one somewhere. Both can appear in one push, so the
+	// strength cannot be stated once for the whole resource set.
+	AgentAttestation string `json:"agent_attestation"`
+	// AgentLastSeenAt is always present, empty string when no agent has ever
+	// synced. It is NOT omitted for a never-seen agent: Vanta's console
+	// cannot express a JTD optionalProperties schema, so the customer-defined
+	// record schema marks every property required, and an omitted field is
+	// rejected. An empty string is honestly "unknown" — unlike a null or a
+	// zero timestamp, it fabricates no heartbeat — so it satisfies the
+	// required-property rule without overstating coverage.
+	AgentLastSeenAt string `json:"agent_last_seen_at"`
 }
 
 func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, error) {
@@ -261,10 +290,12 @@ func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, er
 			return nil, fmt.Errorf("duplicate device external id %q in coverage snapshot", d.ExternalID)
 		}
 		seen[d.ExternalID] = true
-		var lastSeen *string
-		if !d.AssignedUserAgentLastSeenAt.IsZero() {
-			formatted := d.AssignedUserAgentLastSeenAt.UTC().Format(time.RFC3339)
-			lastSeen = &formatted
+		// Empty string, not a zero timestamp, when no agent has ever synced:
+		// the field is required by the customer's schema but must not imply a
+		// heartbeat that never happened.
+		lastSeen := ""
+		if !d.AgentLastSeenAt.IsZero() {
+			lastSeen = d.AgentLastSeenAt.UTC().Format(time.RFC3339)
 		}
 		displayName := d.Hostname
 		if displayName == "" {
@@ -273,12 +304,14 @@ func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, er
 		resources = append(resources, coverageResource{
 			UniqueID:    d.ExternalID,
 			DisplayName: displayName,
+			ExternalURL: externalURL,
 			CustomProperties: coverageProperty{
-				SerialNumber:                d.SerialNumber,
-				Hostname:                    d.Hostname,
-				AssignedUserEmail:           d.UserEmail,
-				AssignedUserAgentActive:     d.AssignedUserAgentActive,
-				AssignedUserAgentLastSeenAt: lastSeen,
+				SerialNumber:      d.SerialNumber,
+				Hostname:          d.Hostname,
+				AssignedUserEmail: d.UserEmail,
+				AgentActive:       d.AgentActive,
+				AgentAttestation:  string(d.AgentAttestation),
+				AgentLastSeenAt:   lastSeen,
 			},
 		})
 	}
@@ -323,30 +356,21 @@ func (s *sink) putResources(ctx context.Context, token string, resource string, 
 	if err != nil {
 		return fmt.Errorf("read resource sync response: %w", err)
 	}
-	// Pointer fields track presence: a drifted 2xx envelope (a bare {} or
-	// renamed fields) must fail even for an empty-fleet push, where zero
-	// records sent would otherwise "match" zero-decoded counts.
+	// Vanta's full-state PUT is all-or-nothing: a valid set returns 200
+	// {"success": true}, and any schema violation fails the whole request
+	// with a 4xx {"error": ...} (already handled by the status switch above)
+	// — there is no per-record accepted/rejected accounting, verified against
+	// the live API. Success is confirmed by the body rather than the bare
+	// 2xx: a success field present and false, or a drifted envelope missing
+	// it, must not be read as a completed sync.
 	var result struct {
-		Results *struct {
-			Accepted *int `json:"accepted"`
-			Rejected *int `json:"rejected"`
-		} `json:"results"`
+		Success *bool `json:"success"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("decode resource sync response: %w", err)
 	}
-	if result.Results == nil || result.Results.Accepted == nil || result.Results.Rejected == nil {
-		return fmt.Errorf("resource sync response carried no accepted/rejected accounting")
-	}
-	// Full-state semantics make rejections dangerous, not cosmetic: a
-	// rejected record is missing from the set Vanta accepted, which reads
-	// as "device gone" to any Custom Test. The counts must also account for
-	// every record sent.
-	if *result.Results.Rejected > 0 {
-		return fmt.Errorf("resource sync rejected %d of %d records", *result.Results.Rejected, recordCount)
-	}
-	if *result.Results.Accepted != recordCount {
-		return fmt.Errorf("resource sync response accounted for %d of %d records", *result.Results.Accepted, recordCount)
+	if result.Success == nil || !*result.Success {
+		return fmt.Errorf("resource sync of %d records did not report success", recordCount)
 	}
 	return nil
 }

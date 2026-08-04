@@ -1,5 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { useSession } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -169,6 +169,7 @@ function WizardSteps({
         <ExternalOAuthForm
           hasMultipleOAuth2AuthCode={hasMultipleOAuth2AuthCode}
           oauth2SecurityCount={oauth2SecurityCount}
+          onCancel={onClose}
         />
       )}
 

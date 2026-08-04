@@ -1,7 +1,7 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { DotCard } from "@/components/ui/dot-card";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { DotCard } from "@/components/ui/DotCard";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
@@ -22,7 +22,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 
 export function MCPCard({
   toolset,
@@ -106,19 +106,19 @@ export function MCPCard({
     >
       {/* Header row with name */}
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={toolset.name}
         >
           {toolset.name}
-        </Type>
+        </Text>
         <div className="flex items-center gap-1">
           {installPageUrl && (
             <CopyButton
               text={installPageUrl}
-              size="icon-sm"
+              size="sm"
               icon={Link2}
               tooltip="Copy install page URL"
             />
@@ -126,8 +126,8 @@ export function MCPCard({
           {installSourceTooltip && (
             <Button
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              variant="tertiary"
+              size="sm"
               tooltip={installSourceTooltip}
               aria-label={installSourceTooltip}
               onClick={(e) => e.stopPropagation()}

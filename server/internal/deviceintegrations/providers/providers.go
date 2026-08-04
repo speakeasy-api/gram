@@ -120,7 +120,9 @@ type DevicePage struct {
 // AgentAttestation names which claim a piece of coverage evidence supports.
 // It is per DEVICE, not per organization: even with device-level matching
 // enabled, a machine whose agent cannot report a serial is matched by its
-// assigned user's email and is therefore only user-attested.
+// assigned user's email and is therefore only user-attested. It therefore
+// travels with every pushed record, and the coverage API downgrades a whole
+// response to the weaker value when any active device carries it.
 type AgentAttestation string
 
 const (
@@ -132,20 +134,29 @@ const (
 	AttestationUser AgentAttestation = "user"
 )
 
-// CoverageDevice is one device's entry in an evidence snapshot. Field naming
-// is deliberate: agent presence is attested per assigned user, not per
-// device, so sinks must never present these as "device monitored".
+// CoverageDevice is one device's entry in an evidence snapshot.
+//
+// Attestation is carried as data rather than encoded in field names. Naming
+// the fields for one claim (assignedUserAgentActive, or deviceAgentActive)
+// forces every record into that claim's strength, which is wrong in both
+// directions: the former undersells a serial-matched device, and the latter
+// asserts of an email-matched one something we cannot prove. A stable schema
+// plus an explicit AgentAttestation lets an auditor see exactly which
+// evidence backs each row.
 type CoverageDevice struct {
 	ExternalID   string
 	SerialNumber string
 	Hostname     string
 	UserEmail    string
-	// AssignedUserAgentActive reports whether the device's assigned user has
-	// an agent heartbeat within the freshness window.
-	AssignedUserAgentActive bool
-	// AssignedUserAgentLastSeenAt is the assigned user's latest agent
-	// heartbeat; zero when the user has never synced an agent.
-	AssignedUserAgentLastSeenAt time.Time
+	// AgentActive reports whether the attested agent heartbeat is within the
+	// freshness window. Read it together with AgentAttestation: what it
+	// asserts depends on which match produced it.
+	AgentActive bool
+	// AgentAttestation is the strength of AgentActive for this device.
+	AgentAttestation AgentAttestation
+	// AgentLastSeenAt is the attested agent's latest heartbeat; zero when no
+	// agent has ever synced for this device or its assigned user.
+	AgentLastSeenAt time.Time
 }
 
 // CoverageSnapshot is the full evidence set an EvidenceSink pushes. Pushes
@@ -195,6 +206,34 @@ type EvidenceSink interface {
 	// Implementations must be idempotent: a retried push of the same snapshot
 	// must not duplicate records.
 	PushCoverage(ctx context.Context, creds Credentials, settings Settings, snapshot CoverageSnapshot) error
+}
+
+// Provisioner is an OPTIONAL capability a source or sink may also implement to
+// perform one-time vendor-side setup during connect — creating the object it
+// will read from or push to (e.g. a Drata Custom Connection) so the customer
+// does not have to hand-craft it against the vendor API. The framework calls
+// Provision during the config upsert, after credentials and settings are
+// merged with any stored values, and stores the returned Settings — so a
+// provider can hand back the id of whatever it created (a connection id, a
+// resource id) for later syncs to use. orgID is the Gram organization the
+// config belongs to; encode it into the vendor object's identity so two Gram
+// orgs that share one vendor account each own a distinct object.
+//
+// Two hard requirements:
+//   - Idempotent (find-or-create): a re-save must reuse the existing vendor
+//     object, never create a duplicate. Return the settings unchanged when
+//     nothing needs provisioning. The org-scoped identity above is also what
+//     keeps this correct across orgs: the Gram-side advisory lock only
+//     serializes one (org, provider), so nothing stops two different orgs
+//     sharing a vendor account from provisioning concurrently.
+//   - Self-contained on the vendor: Provision must work from only the orgID,
+//     creds, and settings it is handed. It runs inside the config-upsert
+//     transaction (under the same advisory lock that serializes upserts), so it
+//     must not read Gram-side state that the not-yet-committed transaction would
+//     not see, and it must not block on slow vendor I/O longer than the upsert
+//     can hold that lock — see provisionTimeout in impl.go.
+type Provisioner interface {
+	Provision(ctx context.Context, orgID string, creds Credentials, settings Settings) (Settings, error)
 }
 
 // Descriptor declares one vendor to the framework.

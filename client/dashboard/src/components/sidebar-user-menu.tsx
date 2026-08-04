@@ -10,8 +10,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  ThemeSwitcher,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
 import {
   ActivityIcon,
   BookOpenIcon,
@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();

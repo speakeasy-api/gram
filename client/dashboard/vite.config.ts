@@ -11,9 +11,8 @@ import tailwindcss from "@tailwindcss/vite";
 // pulls the package's shared internals into the group chunk, so the awaited
 // sub-module ends up statically importing the very chunk that is suspended
 // awaiting it — a silent module-evaluation deadlock that blank-screens the
-// app. This took prod down for @speakeasy-api/moonshine (its dist top-level
-// awaits ./speakeasy-logo-*.mjs), which is why it is absent from this list;
-// Rolldown's automatic chunking handles it without creating the cycle.
+// app. This once took prod down via a dependency whose dist top-level awaited
+// a sibling module.
 const manualChunkGroups: [string, string[]][] = [
   ["lucide-react", ["lucide-react"]],
   [

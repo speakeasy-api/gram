@@ -7,7 +7,7 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "./estimated-cost-utils";
-import { SimpleTooltip } from "./ui/tooltip";
+import { SimpleTooltip } from "./ui/Tooltip";
 
 /**
  * A small info affordance disclosing that a cost value is an API-rate estimate.
