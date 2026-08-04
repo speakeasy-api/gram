@@ -97,13 +97,12 @@ func parseClaudeMCPInventory(out string) []mcpInventoryEntry {
 
 // collectCodexMCPInventory asks Codex for its effective server list. Codex has
 // no plugin/connector servers of its own, but the list still resolves the
-// merged config layers (managed, user, project) that a hook event cannot see,
-// and the shadow-MCP guard needs it to prove where a tool call actually
-// routes. Best-effort for the same reason as the Claude collector: a missing
-// or slow CLI must not hold up the hook.
-// Codex merges managed, user and project config layers, and the project layer
-// is resolved relative to the working directory — so the list must be taken
-// from the session's cwd, exactly as the Claude collector does.
+// merged managed/user/project config layers that a hook event cannot see, and
+// the shadow-MCP guard needs it to prove where a tool call actually routes.
+// The project layer resolves relative to the working directory, so the list is
+// taken from the session's cwd exactly as the Claude collector does.
+// Best-effort for the same reason: a missing or slow CLI must not hold up the
+// hook.
 //
 // Not replayed: per-session launch overrides (--profile, -c). agenthooks
 // replays them for its own resolution because they change the effective server

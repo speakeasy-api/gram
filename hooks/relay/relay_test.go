@@ -1649,3 +1649,51 @@ func TestEnvelopeReportsBinaryVersion(t *testing.T) {
 	require.NotNil(t, payload.Source.AdapterVersion)
 	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
 }
+
+// TestCodexSessionStartRelaysMCPInventoryFromSessionCWD: Codex merges managed,
+// user and project config layers, and resolves the project layer relative to
+// the working directory — so the inventory must be listed from the session's
+// cwd, not the hook host's. Getting this wrong yields a snapshot missing the
+// session's real servers, and the shadow-MCP guard then denies meta-tool reads
+// of servers that are in fact Gram-hosted. Mirrors the Claude coverage.
+func TestCodexSessionStartRelaysMCPInventoryFromSessionCWD(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake codex executable uses a POSIX shell")
+	}
+
+	binDir := t.TempDir()
+	// Only the `mcp` invocation records its cwd: SessionStart also shells out
+	// to `codex app-server` for identity, and letting that write would race the
+	// assertion with the hook host's directory.
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(
+		"#!/bin/sh\n"+
+			"if [ \"$1\" = \"mcp\" ]; then\n"+
+			"  pwd > \"$FAKE_CODEX_CWD_FILE\"\n"+
+			"  printf '%s\\n' \"$FAKE_CODEX_MCP_LIST\"\n"+
+			"  exit 0\n"+
+			"fi\n"+
+			"exit 1\n"), 0o700))
+	t.Setenv("PATH", binDir)
+	cwdFile := filepath.Join(t.TempDir(), "cwd")
+	t.Setenv("FAKE_CODEX_CWD_FILE", cwdFile)
+	t.Setenv("FAKE_CODEX_MCP_LIST",
+		`[{"name":"gram","enabled":true,"transport":{"type":"streamable_http","url":"https://app.example.test/mcp"}}]`)
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	cwd := t.TempDir()
+	payload := []byte(`{"session_id":"sess-codex-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	require.NotNil(t, fs.last().Data)
+	require.Len(t, fs.last().Data.McpInventory, 1)
+	require.Equal(t, "gram", *fs.last().Data.McpInventory[0].ServerName)
+
+	invocationCWD, err := os.ReadFile(cwdFile)
+	require.NoError(t, err)
+	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)),
+		"codex mcp list must run from the session cwd so the project config layer resolves")
+}
