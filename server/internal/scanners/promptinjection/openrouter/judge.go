@@ -112,6 +112,12 @@ var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}
 
+// errorResult is the fail-open outcome when the judge could not reach a verdict
+// (canceled context, rate limit, or a failed call). Realtime callers treat it
+// like safeResult — findingFromResult only reacts to INJECTION — but strict
+// callers use the distinct label to retry rather than record a false SAFE.
+var errorResult = promptinjection.Result{Label: promptinjection.LabelError, Score: 0, Rationale: ""}
+
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
@@ -136,9 +142,9 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 
 // Classify judges each message independently and returns one result per input,
 // aligned by index. It never returns an error: a per-message judge failure or
-// rate limit yields a SAFE result for that message (fail open) so the scanner
-// keeps the other verdicts. Messages with no content are
-// SAFE without a call.
+// rate limit yields a LabelError result for that message (fail open) so the
+// scanner keeps the other verdicts, while realtime callers still see no finding.
+// Messages with no content are SAFE without a call.
 func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ []promptinjection.Result, err error) {
 	n := len(req.Messages)
 	if n == 0 {
@@ -177,8 +183,12 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 	var wg sync.WaitGroup
 	for i := range req.Messages {
 		msg := req.Messages[i]
-		if !msg.HasContent() || ctx.Err() != nil {
+		if !msg.HasContent() {
 			results[i] = safeResult
+			continue
+		}
+		if ctx.Err() != nil {
+			results[i] = errorResult
 			continue
 		}
 		wg.Add(1)
@@ -197,13 +207,14 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 	return results, nil
 }
 
-// classifyOne returns SAFE for every fail-open path.
+// classifyOne returns LabelError for every fail-open path and SAFE only when the
+// judge actually returned a not-an-attack verdict.
 func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string, bucket string) promptinjection.Result {
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
 	// org's budget and throttle real requests into fail-open SAFE. (cubic)
 	if ctx.Err() != nil {
-		return safeResult
+		return errorResult
 	}
 	// A Store outage is not a throttle — proceed rather than let limiter infra
 	// silence the scanner.
@@ -218,7 +229,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
 			attr.SlogOrganizationID(req.OrgID),
 		)
-		return safeResult
+		return errorResult
 	}
 
 	start := time.Now()
@@ -231,7 +242,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 			attr.SlogOutcome(string(outcome)),
 			attr.SlogOrganizationID(req.OrgID),
 		)
-		return safeResult
+		return errorResult
 	}
 	if !verdict.IsAttack {
 		return safeResult

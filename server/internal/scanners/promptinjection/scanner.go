@@ -3,6 +3,7 @@ package promptinjection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -17,8 +18,15 @@ const Rule = "prompt_injection"
 // LabelInjection is the positive class an engine returns for a flagged message.
 const LabelInjection = "INJECTION"
 
-// LabelSafe is the fail-open verdict when an engine cannot reach a decision.
+// LabelSafe is the verdict an engine returns when it judged the message and
+// found no attack.
 const LabelSafe = "SAFE"
+
+// LabelError is the outcome an engine returns when it could not reach a verdict
+// (timeout, rate limit, transient failure). Realtime callers treat it exactly
+// like SAFE (fail open, no finding), but strict callers such as the background
+// skill scanner use it to retry instead of persisting a false SAFE.
+const LabelError = "ERROR"
 
 type Request struct {
 	Messages  []judgemessage.Message
@@ -83,6 +91,34 @@ func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID strin
 		return []scanners.Finding{*f}, nil
 	}
 	return nil, nil
+}
+
+// ScanStrict is like Scan but surfaces a non-verdict (classifier error, wrong
+// result count, or a LabelError fail-open outcome) as an error instead of
+// silently returning no findings. Background scanners use it so a version is
+// only recorded once the judge actually reached a SAFE/INJECTION decision;
+// otherwise a transient judge outage would be persisted as a permanent SAFE.
+func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
+	if text == "" && !msg.HasContent() {
+		return nil, nil
+	}
+
+	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+	if err != nil {
+		return nil, fmt.Errorf("classify prompt injection: %w", err)
+	}
+	if len(results) != 1 {
+		return nil, fmt.Errorf("prompt injection judge returned %d results, want 1", len(results))
+	}
+
+	switch results[0].Label {
+	case LabelInjection:
+		return []scanners.Finding{*s.findingFromResult(text, results[0])}, nil
+	case LabelSafe:
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("prompt injection judge reached no verdict (label %q)", results[0].Label)
+	}
 }
 
 func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message) ([][]scanners.Finding, error) {

@@ -112,6 +112,34 @@ func TestPromptInjectionScanner_EngineErrorEmitsNoFinding(t *testing.T) {
 	assert.Equal(t, 1, fc.calls)
 }
 
+func TestPromptInjectionScanner_ScanStrictReturnsVerdicts(t *testing.T) {
+	t.Parallel()
+
+	inj := &fakeEngine{results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.7, Rationale: "bad"}}}
+	findings, err := newScanner(t, inj).ScanStrict(t.Context(), "x", testOrgID, testProjectID, "u", mkMsg("x"))
+	require.NoError(t, err)
+	require.Len(t, findings, 1)
+
+	safe := &fakeEngine{results: []promptinjection.Result{{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}}}
+	findings, err = newScanner(t, safe).ScanStrict(t.Context(), "x", testOrgID, testProjectID, "u", mkMsg("x"))
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// A judge that failed to reach a verdict must surface an error (so the caller
+// retries) rather than silently reporting SAFE.
+func TestPromptInjectionScanner_ScanStrictSurfacesNonVerdicts(t *testing.T) {
+	t.Parallel()
+
+	errEngine := &fakeEngine{err: errors.New("engine exploded")}
+	_, err := newScanner(t, errEngine).ScanStrict(t.Context(), "x", testOrgID, testProjectID, "u", mkMsg("x"))
+	require.Error(t, err)
+
+	failOpen := &fakeEngine{results: []promptinjection.Result{{Label: promptinjection.LabelError, Score: 0, Rationale: ""}}}
+	_, err = newScanner(t, failOpen).ScanStrict(t.Context(), "x", testOrgID, testProjectID, "u", mkMsg("x"))
+	require.Error(t, err)
+}
+
 func TestPromptInjectionScanner_EngineMismatchedResultCountEmitsNoFinding(t *testing.T) {
 	t.Parallel()
 	fc := &fakeEngine{
