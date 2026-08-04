@@ -8,10 +8,25 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	litellm "github.com/speakeasy-api/gram/server/gen/litellm"
 	litellmviews "github.com/speakeasy-api/gram/server/gen/litellm/views"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// CreateInstanceRequestBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP request body.
+type CreateInstanceRequestBody struct {
+	Name           *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	FailurePosture *string `form:"failure_posture,omitempty" json:"failure_posture,omitempty" xml:"failure_posture,omitempty"`
+}
+
+// RotateInstanceKeyRequestBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP request body.
+type RotateInstanceKeyRequestBody struct {
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
 
 // IngestRequestBody is the type of the "litellm" service "ingest" endpoint
 // HTTP request body.
@@ -48,6 +63,26 @@ type MetricsRequestBody struct {
 	ResourceMetrics []any `form:"resourceMetrics,omitempty" json:"resourceMetrics,omitempty" xml:"resourceMetrics,omitempty"`
 }
 
+// CreateInstanceResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body.
+type CreateInstanceResponseBody struct {
+	Instance *LiteLLMInstanceResponseBody `form:"instance" json:"instance" xml:"instance"`
+	Key      string                       `form:"key" json:"key" xml:"key"`
+}
+
+// ListInstancesResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body.
+type ListInstancesResponseBody struct {
+	Instances []*LiteLLMInstanceResponseBody `form:"instances" json:"instances" xml:"instances"`
+}
+
+// RotateInstanceKeyResponseBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP response body.
+type RotateInstanceKeyResponseBody struct {
+	Instance *LiteLLMInstanceResponseBody `form:"instance" json:"instance" xml:"instance"`
+	Key      string                       `form:"key" json:"key" xml:"key"`
+}
+
 // IngestResponseBody is the type of the "litellm" service "ingest" endpoint
 // HTTP response body.
 type IngestResponseBody struct {
@@ -57,6 +92,736 @@ type IngestResponseBody struct {
 	Images              []string `form:"images,omitempty" json:"images,omitempty" xml:"images,omitempty"`
 	Tools               []any    `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	StreamHoldbackChars []int    `form:"stream_holdback_chars,omitempty" json:"stream_holdback_chars,omitempty" xml:"stream_holdback_chars,omitempty"`
+}
+
+// CreateInstanceUnauthorizedResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "unauthorized" error.
+type CreateInstanceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceForbiddenResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "forbidden" error.
+type CreateInstanceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceBadRequestResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "bad_request" error.
+type CreateInstanceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceNotFoundResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "not_found" error.
+type CreateInstanceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceConflictResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "conflict" error.
+type CreateInstanceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceUnsupportedMediaResponseBody is the type of the "litellm"
+// service "createInstance" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateInstanceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceInvalidResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "invalid" error.
+type CreateInstanceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceInvariantViolationResponseBody is the type of the "litellm"
+// service "createInstance" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateInstanceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceUnexpectedResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "unexpected" error.
+type CreateInstanceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateInstanceGatewayErrorResponseBody is the type of the "litellm" service
+// "createInstance" endpoint HTTP response body for the "gateway_error" error.
+type CreateInstanceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesUnauthorizedResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "unauthorized" error.
+type ListInstancesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesForbiddenResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "forbidden" error.
+type ListInstancesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesBadRequestResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "bad_request" error.
+type ListInstancesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesNotFoundResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "not_found" error.
+type ListInstancesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesConflictResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "conflict" error.
+type ListInstancesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesUnsupportedMediaResponseBody is the type of the "litellm"
+// service "listInstances" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListInstancesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesInvalidResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "invalid" error.
+type ListInstancesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesInvariantViolationResponseBody is the type of the "litellm"
+// service "listInstances" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListInstancesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesUnexpectedResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "unexpected" error.
+type ListInstancesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInstancesGatewayErrorResponseBody is the type of the "litellm" service
+// "listInstances" endpoint HTTP response body for the "gateway_error" error.
+type ListInstancesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyUnauthorizedResponseBody is the type of the "litellm"
+// service "rotateInstanceKey" endpoint HTTP response body for the
+// "unauthorized" error.
+type RotateInstanceKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyForbiddenResponseBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP response body for the "forbidden" error.
+type RotateInstanceKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyBadRequestResponseBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP response body for the "bad_request" error.
+type RotateInstanceKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyNotFoundResponseBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP response body for the "not_found" error.
+type RotateInstanceKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyConflictResponseBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP response body for the "conflict" error.
+type RotateInstanceKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyUnsupportedMediaResponseBody is the type of the "litellm"
+// service "rotateInstanceKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RotateInstanceKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyInvalidResponseBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP response body for the "invalid" error.
+type RotateInstanceKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyInvariantViolationResponseBody is the type of the "litellm"
+// service "rotateInstanceKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RotateInstanceKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyUnexpectedResponseBody is the type of the "litellm" service
+// "rotateInstanceKey" endpoint HTTP response body for the "unexpected" error.
+type RotateInstanceKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateInstanceKeyGatewayErrorResponseBody is the type of the "litellm"
+// service "rotateInstanceKey" endpoint HTTP response body for the
+// "gateway_error" error.
+type RotateInstanceKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceUnauthorizedResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "unauthorized" error.
+type RevokeInstanceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceForbiddenResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "forbidden" error.
+type RevokeInstanceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceBadRequestResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "bad_request" error.
+type RevokeInstanceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceNotFoundResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "not_found" error.
+type RevokeInstanceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceConflictResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "conflict" error.
+type RevokeInstanceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceUnsupportedMediaResponseBody is the type of the "litellm"
+// service "revokeInstance" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RevokeInstanceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceInvalidResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "invalid" error.
+type RevokeInstanceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceInvariantViolationResponseBody is the type of the "litellm"
+// service "revokeInstance" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RevokeInstanceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceUnexpectedResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "unexpected" error.
+type RevokeInstanceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeInstanceGatewayErrorResponseBody is the type of the "litellm" service
+// "revokeInstance" endpoint HTTP response body for the "gateway_error" error.
+type RevokeInstanceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // IngestUnauthorizedResponseBody is the type of the "litellm" service "ingest"
@@ -635,6 +1400,49 @@ type MetricsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// LiteLLMInstanceResponseBody is used to define fields on response body types.
+type LiteLLMInstanceResponseBody struct {
+	ID              string                                  `form:"id" json:"id" xml:"id"`
+	OrganizationID  string                                  `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	Project         *ProjectEntryResponseBody               `form:"project" json:"project" xml:"project"`
+	Name            string                                  `form:"name" json:"name" xml:"name"`
+	FailurePosture  string                                  `form:"failure_posture" json:"failure_posture" xml:"failure_posture"`
+	KeyPrefix       string                                  `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	CreatedByUserID string                                  `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	CreatedAt       string                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt       string                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	LastUsedAt      *string                                 `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	Active          bool                                    `form:"active" json:"active" xml:"active"`
+	Diagnostics     *LiteLLMInstanceDiagnosticsResponseBody `form:"diagnostics" json:"diagnostics" xml:"diagnostics"`
+}
+
+// ProjectEntryResponseBody is used to define fields on response body types.
+type ProjectEntryResponseBody struct {
+	// The ID of the project
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the project
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the project
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
+// LiteLLMInstanceDiagnosticsResponseBody is used to define fields on response
+// body types.
+type LiteLLMInstanceDiagnosticsResponseBody struct {
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	LastGuardrailEventAt   *string `form:"last_guardrail_event_at,omitempty" json:"last_guardrail_event_at,omitempty" xml:"last_guardrail_event_at,omitempty"`
+	LastOtelEventAt        *string `form:"last_otel_event_at,omitempty" json:"last_otel_event_at,omitempty" xml:"last_otel_event_at,omitempty"`
+	LastErrorAt            *string `form:"last_error_at,omitempty" json:"last_error_at,omitempty" xml:"last_error_at,omitempty"`
+	LastErrorKind          *string `form:"last_error_kind,omitempty" json:"last_error_kind,omitempty" xml:"last_error_kind,omitempty"`
+	ReportedLitellmVersion *string `form:"reported_litellm_version,omitempty" json:"reported_litellm_version,omitempty" xml:"reported_litellm_version,omitempty"`
+	// Percentage of model requests in the last 24 hours that supplied a
+	// virtual-key email.
+	VirtualKeyEmailPct24h *float64 `form:"virtual_key_email_pct_24h,omitempty" json:"virtual_key_email_pct_24h,omitempty" xml:"virtual_key_email_pct_24h,omitempty"`
+	// Percentage of model requests in the last 24 hours that resolved to a Gram
+	// user.
+	PlatformUserPct24h *float64 `form:"platform_user_pct_24h,omitempty" json:"platform_user_pct_24h,omitempty" xml:"platform_user_pct_24h,omitempty"`
+}
+
 // LiteLLMRequestDataRequestBody is used to define fields on request body types.
 type LiteLLMRequestDataRequestBody struct {
 	UserAPIKeyHash      *string `form:"user_api_key_hash,omitempty" json:"user_api_key_hash,omitempty" xml:"user_api_key_hash,omitempty"`
@@ -652,6 +1460,49 @@ type LiteLLMRequestDataRequestBody struct {
 type LiteLLMStructuredMessageRequestBody struct {
 	Role    *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	Content any     `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+}
+
+// NewCreateInstanceResponseBody builds the HTTP response body from the result
+// of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceResponseBody(res *litellmviews.LitellmInstanceKeyResultView) *CreateInstanceResponseBody {
+	body := &CreateInstanceResponseBody{
+		Key: *res.Key,
+	}
+	if res.Instance != nil {
+		body.Instance = marshalLitellmviewsLiteLLMInstanceViewToLiteLLMInstanceResponseBody(res.Instance)
+	}
+	return body
+}
+
+// NewListInstancesResponseBody builds the HTTP response body from the result
+// of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesResponseBody(res *litellm.ListInstancesResult) *ListInstancesResponseBody {
+	body := &ListInstancesResponseBody{}
+	if res.Instances != nil {
+		body.Instances = make([]*LiteLLMInstanceResponseBody, len(res.Instances))
+		for i, val := range res.Instances {
+			if val == nil {
+				body.Instances[i] = nil
+				continue
+			}
+			body.Instances[i] = marshalLitellmLiteLLMInstanceToLiteLLMInstanceResponseBody(val)
+		}
+	} else {
+		body.Instances = []*LiteLLMInstanceResponseBody{}
+	}
+	return body
+}
+
+// NewRotateInstanceKeyResponseBody builds the HTTP response body from the
+// result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyResponseBody(res *litellmviews.LitellmInstanceKeyResultView) *RotateInstanceKeyResponseBody {
+	body := &RotateInstanceKeyResponseBody{
+		Key: *res.Key,
+	}
+	if res.Instance != nil {
+		body.Instance = marshalLitellmviewsLiteLLMInstanceViewToLiteLLMInstanceResponseBody(res.Instance)
+	}
+	return body
 }
 
 // NewIngestResponseBody builds the HTTP response body from the result of the
@@ -684,6 +1535,570 @@ func NewIngestResponseBody(res *litellmviews.LitellmIngestResultView) *IngestRes
 		for i, val := range res.StreamHoldbackChars {
 			body.StreamHoldbackChars[i] = val
 		}
+	}
+	return body
+}
+
+// NewCreateInstanceUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceUnauthorizedResponseBody(res *goa.ServiceError) *CreateInstanceUnauthorizedResponseBody {
+	body := &CreateInstanceUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceForbiddenResponseBody builds the HTTP response body from
+// the result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceForbiddenResponseBody(res *goa.ServiceError) *CreateInstanceForbiddenResponseBody {
+	body := &CreateInstanceForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceBadRequestResponseBody builds the HTTP response body from
+// the result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceBadRequestResponseBody(res *goa.ServiceError) *CreateInstanceBadRequestResponseBody {
+	body := &CreateInstanceBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceNotFoundResponseBody builds the HTTP response body from the
+// result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceNotFoundResponseBody(res *goa.ServiceError) *CreateInstanceNotFoundResponseBody {
+	body := &CreateInstanceNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceConflictResponseBody builds the HTTP response body from the
+// result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceConflictResponseBody(res *goa.ServiceError) *CreateInstanceConflictResponseBody {
+	body := &CreateInstanceConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateInstanceUnsupportedMediaResponseBody {
+	body := &CreateInstanceUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceInvalidResponseBody builds the HTTP response body from the
+// result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceInvalidResponseBody(res *goa.ServiceError) *CreateInstanceInvalidResponseBody {
+	body := &CreateInstanceInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createInstance" endpoint of the "litellm"
+// service.
+func NewCreateInstanceInvariantViolationResponseBody(res *goa.ServiceError) *CreateInstanceInvariantViolationResponseBody {
+	body := &CreateInstanceInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceUnexpectedResponseBody(res *goa.ServiceError) *CreateInstanceUnexpectedResponseBody {
+	body := &CreateInstanceUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateInstanceGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createInstance" endpoint of the "litellm" service.
+func NewCreateInstanceGatewayErrorResponseBody(res *goa.ServiceError) *CreateInstanceGatewayErrorResponseBody {
+	body := &CreateInstanceGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesUnauthorizedResponseBody(res *goa.ServiceError) *ListInstancesUnauthorizedResponseBody {
+	body := &ListInstancesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesForbiddenResponseBody builds the HTTP response body from the
+// result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesForbiddenResponseBody(res *goa.ServiceError) *ListInstancesForbiddenResponseBody {
+	body := &ListInstancesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesBadRequestResponseBody(res *goa.ServiceError) *ListInstancesBadRequestResponseBody {
+	body := &ListInstancesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesNotFoundResponseBody(res *goa.ServiceError) *ListInstancesNotFoundResponseBody {
+	body := &ListInstancesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesConflictResponseBody builds the HTTP response body from the
+// result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesConflictResponseBody(res *goa.ServiceError) *ListInstancesConflictResponseBody {
+	body := &ListInstancesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListInstancesUnsupportedMediaResponseBody {
+	body := &ListInstancesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesInvalidResponseBody builds the HTTP response body from the
+// result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesInvalidResponseBody(res *goa.ServiceError) *ListInstancesInvalidResponseBody {
+	body := &ListInstancesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesInvariantViolationResponseBody(res *goa.ServiceError) *ListInstancesInvariantViolationResponseBody {
+	body := &ListInstancesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesUnexpectedResponseBody(res *goa.ServiceError) *ListInstancesUnexpectedResponseBody {
+	body := &ListInstancesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInstancesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listInstances" endpoint of the "litellm" service.
+func NewListInstancesGatewayErrorResponseBody(res *goa.ServiceError) *ListInstancesGatewayErrorResponseBody {
+	body := &ListInstancesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyUnauthorizedResponseBody(res *goa.ServiceError) *RotateInstanceKeyUnauthorizedResponseBody {
+	body := &RotateInstanceKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyForbiddenResponseBody builds the HTTP response body from
+// the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyForbiddenResponseBody(res *goa.ServiceError) *RotateInstanceKeyForbiddenResponseBody {
+	body := &RotateInstanceKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyBadRequestResponseBody builds the HTTP response body
+// from the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyBadRequestResponseBody(res *goa.ServiceError) *RotateInstanceKeyBadRequestResponseBody {
+	body := &RotateInstanceKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyNotFoundResponseBody builds the HTTP response body from
+// the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyNotFoundResponseBody(res *goa.ServiceError) *RotateInstanceKeyNotFoundResponseBody {
+	body := &RotateInstanceKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyConflictResponseBody builds the HTTP response body from
+// the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyConflictResponseBody(res *goa.ServiceError) *RotateInstanceKeyConflictResponseBody {
+	body := &RotateInstanceKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "rotateInstanceKey" endpoint of the "litellm"
+// service.
+func NewRotateInstanceKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *RotateInstanceKeyUnsupportedMediaResponseBody {
+	body := &RotateInstanceKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyInvalidResponseBody builds the HTTP response body from
+// the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyInvalidResponseBody(res *goa.ServiceError) *RotateInstanceKeyInvalidResponseBody {
+	body := &RotateInstanceKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "rotateInstanceKey" endpoint of the "litellm"
+// service.
+func NewRotateInstanceKeyInvariantViolationResponseBody(res *goa.ServiceError) *RotateInstanceKeyInvariantViolationResponseBody {
+	body := &RotateInstanceKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyUnexpectedResponseBody builds the HTTP response body
+// from the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyUnexpectedResponseBody(res *goa.ServiceError) *RotateInstanceKeyUnexpectedResponseBody {
+	body := &RotateInstanceKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateInstanceKeyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "rotateInstanceKey" endpoint of the "litellm" service.
+func NewRotateInstanceKeyGatewayErrorResponseBody(res *goa.ServiceError) *RotateInstanceKeyGatewayErrorResponseBody {
+	body := &RotateInstanceKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceUnauthorizedResponseBody(res *goa.ServiceError) *RevokeInstanceUnauthorizedResponseBody {
+	body := &RevokeInstanceUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceForbiddenResponseBody builds the HTTP response body from
+// the result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceForbiddenResponseBody(res *goa.ServiceError) *RevokeInstanceForbiddenResponseBody {
+	body := &RevokeInstanceForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceBadRequestResponseBody builds the HTTP response body from
+// the result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceBadRequestResponseBody(res *goa.ServiceError) *RevokeInstanceBadRequestResponseBody {
+	body := &RevokeInstanceBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceNotFoundResponseBody builds the HTTP response body from the
+// result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceNotFoundResponseBody(res *goa.ServiceError) *RevokeInstanceNotFoundResponseBody {
+	body := &RevokeInstanceNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceConflictResponseBody builds the HTTP response body from the
+// result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceConflictResponseBody(res *goa.ServiceError) *RevokeInstanceConflictResponseBody {
+	body := &RevokeInstanceConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeInstanceUnsupportedMediaResponseBody {
+	body := &RevokeInstanceUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceInvalidResponseBody builds the HTTP response body from the
+// result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceInvalidResponseBody(res *goa.ServiceError) *RevokeInstanceInvalidResponseBody {
+	body := &RevokeInstanceInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "revokeInstance" endpoint of the "litellm"
+// service.
+func NewRevokeInstanceInvariantViolationResponseBody(res *goa.ServiceError) *RevokeInstanceInvariantViolationResponseBody {
+	body := &RevokeInstanceInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceUnexpectedResponseBody builds the HTTP response body from
+// the result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceUnexpectedResponseBody(res *goa.ServiceError) *RevokeInstanceUnexpectedResponseBody {
+	body := &RevokeInstanceUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeInstanceGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "revokeInstance" endpoint of the "litellm" service.
+func NewRevokeInstanceGatewayErrorResponseBody(res *goa.ServiceError) *RevokeInstanceGatewayErrorResponseBody {
+	body := &RevokeInstanceGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -1136,6 +2551,57 @@ func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayEr
 	return body
 }
 
+// NewCreateInstancePayload builds a litellm service createInstance endpoint
+// payload.
+func NewCreateInstancePayload(body *CreateInstanceRequestBody, sessionToken *string, projectSlugInput *string) *litellm.CreateInstancePayload {
+	v := &litellm.CreateInstancePayload{
+		Name: *body.Name,
+	}
+	if body.FailurePosture != nil {
+		v.FailurePosture = litellm.LiteLLMFailurePosture(*body.FailurePosture)
+	}
+	if body.FailurePosture == nil {
+		v.FailurePosture = "fail_closed"
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListInstancesPayload builds a litellm service listInstances endpoint
+// payload.
+func NewListInstancesPayload(sessionToken *string, projectSlugInput *string) *litellm.ListInstancesPayload {
+	v := &litellm.ListInstancesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRotateInstanceKeyPayload builds a litellm service rotateInstanceKey
+// endpoint payload.
+func NewRotateInstanceKeyPayload(body *RotateInstanceKeyRequestBody, sessionToken *string, projectSlugInput *string) *litellm.RotateInstanceKeyPayload {
+	v := &litellm.RotateInstanceKeyPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRevokeInstancePayload builds a litellm service revokeInstance endpoint
+// payload.
+func NewRevokeInstancePayload(id string, sessionToken *string, projectSlugInput *string) *litellm.RevokeInstancePayload {
+	v := &litellm.RevokeInstancePayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewIngestPayload builds a litellm service ingest endpoint payload.
 func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string) *litellm.IngestPayload {
 	v := &litellm.IngestPayload{
@@ -1228,6 +2694,37 @@ func NewMetricsPayload(body *MetricsRequestBody, apikeyToken *string, projectSlu
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateCreateInstanceRequestBody runs the validations defined on
+// CreateInstanceRequestBody
+func ValidateCreateInstanceRequestBody(body *CreateInstanceRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
+		}
+	}
+	if body.FailurePosture != nil {
+		if !(*body.FailurePosture == "fail_closed" || *body.FailurePosture == "fail_open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failure_posture", *body.FailurePosture, []any{"fail_closed", "fail_open"}))
+		}
+	}
+	return
+}
+
+// ValidateRotateInstanceKeyRequestBody runs the validations defined on
+// RotateInstanceKeyRequestBody
+func ValidateRotateInstanceKeyRequestBody(body *RotateInstanceKeyRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
 }
 
 // ValidateIngestRequestBody runs the validations defined on IngestRequestBody

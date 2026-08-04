@@ -11,12 +11,25 @@ import (
 	"context"
 
 	litellmviews "github.com/speakeasy-api/gram/server/gen/litellm/views"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
 
 // Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
 type Service interface {
+	// Provision a LiteLLM integration for a project and return its plaintext
+	// ingestion key once. Requires org:admin.
+	CreateInstance(context.Context, *CreateInstancePayload) (res *LitellmInstanceKeyResult, err error)
+	// List active and revoked LiteLLM integrations for a project. Plaintext keys
+	// are never returned. Requires org:admin.
+	ListInstances(context.Context, *ListInstancesPayload) (res *ListInstancesResult, err error)
+	// Atomically replace a LiteLLM integration key and return the new plaintext
+	// value once. Requires org:admin.
+	RotateInstanceKey(context.Context, *RotateInstanceKeyPayload) (res *LitellmInstanceKeyResult, err error)
+	// Revoke a LiteLLM integration and immediately invalidate its active key.
+	// Requires org:admin.
+	RevokeInstance(context.Context, *RevokeInstancePayload) (err error)
 	// Evaluates and captures a LiteLLM model request before it reaches the
 	// provider.
 	Ingest(context.Context, *IngestPayload) (res *LitellmIngestResult, err error)
@@ -55,7 +68,16 @@ const ServiceName = "litellm"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"ingest", "traces", "metrics"}
+var MethodNames = [7]string{"createInstance", "listInstances", "rotateInstanceKey", "revokeInstance", "ingest", "traces", "metrics"}
+
+// CreateInstancePayload is the payload type of the litellm service
+// createInstance method.
+type CreateInstancePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	Name             string
+	FailurePosture   LiteLLMFailurePosture
+}
 
 // IngestPayload is the payload type of the litellm service ingest method.
 type IngestPayload struct {
@@ -76,7 +98,63 @@ type IngestPayload struct {
 	AdditionalProviderSpecificParams map[string]any
 }
 
+// ListInstancesPayload is the payload type of the litellm service
+// listInstances method.
+type ListInstancesPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListInstancesResult is the result type of the litellm service listInstances
+// method.
+type ListInstancesResult struct {
+	Instances []*LiteLLMInstance
+}
+
+// How LiteLLM behaves when Gram cannot evaluate a request.
+type LiteLLMFailurePosture string
+
 type LiteLLMGuardrailAction string
+
+// A provisioned LiteLLM integration and its project-bound ingestion credential
+// metadata.
+type LiteLLMInstance struct {
+	ID              string
+	OrganizationID  string
+	Project         *ProjectEntry
+	Name            string
+	FailurePosture  LiteLLMFailurePosture
+	KeyPrefix       string
+	CreatedByUserID string
+	CreatedAt       string
+	UpdatedAt       string
+	LastUsedAt      *string
+	Active          bool
+	Diagnostics     *LiteLLMInstanceDiagnostics
+}
+
+// Health and identity-attribution diagnostics for a LiteLLM integration. No
+// prompt, credential, or identity values are returned.
+type LiteLLMInstanceDiagnostics struct {
+	Status                 LiteLLMInstanceHealthStatus
+	LastGuardrailEventAt   *string
+	LastOtelEventAt        *string
+	LastErrorAt            *string
+	LastErrorKind          *LiteLLMInstanceErrorKind
+	ReportedLitellmVersion *string
+	// Percentage of model requests in the last 24 hours that supplied a
+	// virtual-key email.
+	VirtualKeyEmailPct24h *float64
+	// Percentage of model requests in the last 24 hours that resolved to a Gram
+	// user.
+	PlatformUserPct24h *float64
+}
+
+// Safe category for the latest observed ingest error.
+type LiteLLMInstanceErrorKind string
+
+// Derived health of a LiteLLM integration's latest ingest activity.
+type LiteLLMInstanceHealthStatus string
 
 // Sanitized metadata bound to the LiteLLM virtual key and request.
 type LiteLLMRequestData struct {
@@ -106,6 +184,13 @@ type LitellmIngestResult struct {
 	StreamHoldbackChars []int
 }
 
+// LitellmInstanceKeyResult is the result type of the litellm service
+// createInstance method.
+type LitellmInstanceKeyResult struct {
+	Instance *LiteLLMInstance
+	Key      string
+}
+
 // MetricsPayload is the payload type of the litellm service metrics method.
 type MetricsPayload struct {
 	ApikeyToken      *string
@@ -113,6 +198,31 @@ type MetricsPayload struct {
 	// Standard OTLP ResourceMetrics objects. OTLP integer fields use their
 	// canonical decimal-string JSON representation.
 	ResourceMetrics []any
+}
+
+type ProjectEntry struct {
+	// The ID of the project
+	ID string
+	// The name of the project
+	Name string
+	// The slug of the project
+	Slug types.Slug
+}
+
+// RevokeInstancePayload is the payload type of the litellm service
+// revokeInstance method.
+type RevokeInstancePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	ID               string
+}
+
+// RotateInstanceKeyPayload is the payload type of the litellm service
+// rotateInstanceKey method.
+type RotateInstanceKeyPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	ID               string
 }
 
 // TracesPayload is the payload type of the litellm service traces method.
@@ -180,6 +290,20 @@ func MakeRequestTooLarge(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "request_too_large", false, false, false)
 }
 
+// NewLitellmInstanceKeyResult initializes result type LitellmInstanceKeyResult
+// from viewed result type LitellmInstanceKeyResult.
+func NewLitellmInstanceKeyResult(vres *litellmviews.LitellmInstanceKeyResult) *LitellmInstanceKeyResult {
+	return newLitellmInstanceKeyResult(vres.Projected)
+}
+
+// NewViewedLitellmInstanceKeyResult initializes viewed result type
+// LitellmInstanceKeyResult from result type LitellmInstanceKeyResult using the
+// given view.
+func NewViewedLitellmInstanceKeyResult(res *LitellmInstanceKeyResult, view string) *litellmviews.LitellmInstanceKeyResult {
+	p := newLitellmInstanceKeyResultView(res)
+	return &litellmviews.LitellmInstanceKeyResult{Projected: p, View: "default"}
+}
+
 // NewLitellmIngestResult initializes result type LitellmIngestResult from
 // viewed result type LitellmIngestResult.
 func NewLitellmIngestResult(vres *litellmviews.LitellmIngestResult) *LitellmIngestResult {
@@ -192,6 +316,32 @@ func NewLitellmIngestResult(vres *litellmviews.LitellmIngestResult) *LitellmInge
 func NewViewedLitellmIngestResult(res *LitellmIngestResult, view string) *litellmviews.LitellmIngestResult {
 	p := newLitellmIngestResultView(res)
 	return &litellmviews.LitellmIngestResult{Projected: p, View: "default"}
+}
+
+// newLitellmInstanceKeyResult converts projected type LitellmInstanceKeyResult
+// to service type LitellmInstanceKeyResult.
+func newLitellmInstanceKeyResult(vres *litellmviews.LitellmInstanceKeyResultView) *LitellmInstanceKeyResult {
+	res := &LitellmInstanceKeyResult{}
+	if vres.Key != nil {
+		res.Key = *vres.Key
+	}
+	if vres.Instance != nil {
+		res.Instance = transformLitellmviewsLiteLLMInstanceViewToLiteLLMInstance(vres.Instance)
+	}
+	return res
+}
+
+// newLitellmInstanceKeyResultView projects result type
+// LitellmInstanceKeyResult to projected type LitellmInstanceKeyResultView
+// using the "default" view.
+func newLitellmInstanceKeyResultView(res *LitellmInstanceKeyResult) *litellmviews.LitellmInstanceKeyResultView {
+	vres := &litellmviews.LitellmInstanceKeyResultView{
+		Key: &res.Key,
+	}
+	if res.Instance != nil {
+		vres.Instance = transformLiteLLMInstanceToLitellmviewsLiteLLMInstanceView(res.Instance)
+	}
+	return vres
 }
 
 // newLitellmIngestResult converts projected type LitellmIngestResult to
@@ -263,4 +413,126 @@ func newLitellmIngestResultView(res *LitellmIngestResult) *litellmviews.LitellmI
 		}
 	}
 	return vres
+}
+
+// transformLitellmviewsLiteLLMInstanceViewToLiteLLMInstance builds a value of
+// type *LiteLLMInstance from a value of type *litellmviews.LiteLLMInstanceView.
+func transformLitellmviewsLiteLLMInstanceViewToLiteLLMInstance(v *litellmviews.LiteLLMInstanceView) *LiteLLMInstance {
+	if v == nil {
+		return nil
+	}
+	res := &LiteLLMInstance{
+		ID:              *v.ID,
+		OrganizationID:  *v.OrganizationID,
+		Name:            *v.Name,
+		FailurePosture:  LiteLLMFailurePosture(*v.FailurePosture),
+		KeyPrefix:       *v.KeyPrefix,
+		CreatedByUserID: *v.CreatedByUserID,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
+		LastUsedAt:      v.LastUsedAt,
+		Active:          *v.Active,
+	}
+	if v.Project != nil {
+		res.Project = transformLitellmviewsProjectEntryViewToProjectEntry(v.Project)
+	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = transformLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnostics(v.Diagnostics)
+	}
+
+	return res
+}
+
+// transformLitellmviewsProjectEntryViewToProjectEntry builds a value of type
+// *ProjectEntry from a value of type *litellmviews.ProjectEntryView.
+func transformLitellmviewsProjectEntryViewToProjectEntry(v *litellmviews.ProjectEntryView) *ProjectEntry {
+	res := &ProjectEntry{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: types.Slug(*v.Slug),
+	}
+
+	return res
+}
+
+// transformLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnostics
+// builds a value of type *LiteLLMInstanceDiagnostics from a value of type
+// *litellmviews.LiteLLMInstanceDiagnosticsView.
+func transformLitellmviewsLiteLLMInstanceDiagnosticsViewToLiteLLMInstanceDiagnostics(v *litellmviews.LiteLLMInstanceDiagnosticsView) *LiteLLMInstanceDiagnostics {
+	res := &LiteLLMInstanceDiagnostics{
+		Status:                 LiteLLMInstanceHealthStatus(*v.Status),
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	if v.LastErrorKind != nil {
+		lastErrorKind := LiteLLMInstanceErrorKind(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
+	}
+
+	return res
+}
+
+// transformLiteLLMInstanceToLitellmviewsLiteLLMInstanceView builds a value of
+// type *litellmviews.LiteLLMInstanceView from a value of type *LiteLLMInstance.
+func transformLiteLLMInstanceToLitellmviewsLiteLLMInstanceView(v *LiteLLMInstance) *litellmviews.LiteLLMInstanceView {
+	res := &litellmviews.LiteLLMInstanceView{
+		ID:              &v.ID,
+		OrganizationID:  &v.OrganizationID,
+		Name:            &v.Name,
+		KeyPrefix:       &v.KeyPrefix,
+		CreatedByUserID: &v.CreatedByUserID,
+		CreatedAt:       &v.CreatedAt,
+		UpdatedAt:       &v.UpdatedAt,
+		LastUsedAt:      v.LastUsedAt,
+		Active:          &v.Active,
+	}
+	failurePosture := litellmviews.LiteLLMFailurePostureView(v.FailurePosture)
+	res.FailurePosture = &failurePosture
+	if v.Project != nil {
+		res.Project = transformProjectEntryToLitellmviewsProjectEntryView(v.Project)
+	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = transformLiteLLMInstanceDiagnosticsToLitellmviewsLiteLLMInstanceDiagnosticsView(v.Diagnostics)
+	}
+
+	return res
+}
+
+// transformProjectEntryToLitellmviewsProjectEntryView builds a value of type
+// *litellmviews.ProjectEntryView from a value of type *ProjectEntry.
+func transformProjectEntryToLitellmviewsProjectEntryView(v *ProjectEntry) *litellmviews.ProjectEntryView {
+	res := &litellmviews.ProjectEntryView{
+		ID:   &v.ID,
+		Name: &v.Name,
+	}
+	slug := litellmviews.SlugView(v.Slug)
+	res.Slug = &slug
+
+	return res
+}
+
+// transformLiteLLMInstanceDiagnosticsToLitellmviewsLiteLLMInstanceDiagnosticsView
+// builds a value of type *litellmviews.LiteLLMInstanceDiagnosticsView from a
+// value of type *LiteLLMInstanceDiagnostics.
+func transformLiteLLMInstanceDiagnosticsToLitellmviewsLiteLLMInstanceDiagnosticsView(v *LiteLLMInstanceDiagnostics) *litellmviews.LiteLLMInstanceDiagnosticsView {
+	res := &litellmviews.LiteLLMInstanceDiagnosticsView{
+		LastGuardrailEventAt:   v.LastGuardrailEventAt,
+		LastOtelEventAt:        v.LastOtelEventAt,
+		LastErrorAt:            v.LastErrorAt,
+		ReportedLitellmVersion: v.ReportedLitellmVersion,
+		VirtualKeyEmailPct24h:  v.VirtualKeyEmailPct24h,
+		PlatformUserPct24h:     v.PlatformUserPct24h,
+	}
+	status := litellmviews.LiteLLMInstanceHealthStatusView(v.Status)
+	res.Status = &status
+	if v.LastErrorKind != nil {
+		lastErrorKind := litellmviews.LiteLLMInstanceErrorKindView(*v.LastErrorKind)
+		res.LastErrorKind = &lastErrorKind
+	}
+
+	return res
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	collectorv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
@@ -30,6 +31,8 @@ func TestMetricHTTPAcceptsLiteLLMJSONAndProtobuf(t *testing.T) {
 		persisted <- params
 		return nil
 	})
+	instanceID := uuid.New()
+	service.instances.Remember(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.APIKeyID, instanceID)
 	mux := mountedTraceMux(service)
 	jsonBody := testenv.ReadFixture(t, contractFixtureDir+"otlp-metrics.json")
 	protobufBody := testenv.ReadFixture(t, contractFixtureDir+"otlp-metrics.pb")
@@ -44,7 +47,12 @@ func TestMetricHTTPAcceptsLiteLLMJSONAndProtobuf(t *testing.T) {
 		require.Equal(t, http.StatusAccepted, response.Code)
 	}
 	for range responses {
-		require.Len(t, <-persisted, len(litellmMetricNames))
+		params := <-persisted
+		require.Len(t, params, len(litellmMetricNames))
+		for _, param := range params {
+			require.Equal(t, authCtx.APIKeyID, param.Attributes[attr.APIKeyIDKey])
+			require.Equal(t, instanceID.String(), param.Attributes[attr.LiteLLMInstanceIDKey])
+		}
 	}
 }
 

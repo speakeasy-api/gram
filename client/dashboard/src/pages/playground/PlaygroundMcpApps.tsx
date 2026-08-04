@@ -503,6 +503,9 @@ async function handleIframeRequest(init: {
         if (!url) {
           return err(message.id, -32602, "Missing URL");
         }
+        if (!isSafeExternalUrl(url)) {
+          return err(message.id, -32602, "Unsupported URL");
+        }
         window.open(url, "_blank", "noopener,noreferrer");
         return ok(message.id, {});
       }
@@ -569,6 +572,18 @@ async function requestMcpJsonRpc<T>(
   }
 
   return payload.result as T;
+}
+
+// Links surfaced by an embedded MCP app are untrusted input; only allow
+// navigation to web URLs so a frame cannot open javascript:, file:, or
+// arbitrary custom-scheme links from the host page.
+function isSafeExternalUrl(raw: string): boolean {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 function ok(id: JsonRpcId, result: unknown): JsonRpcResponse {
