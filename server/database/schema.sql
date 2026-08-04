@@ -317,7 +317,8 @@ CREATE TABLE IF NOT EXISTS skill_versions (
 
   CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
   CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
-  CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536)
+  CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536),
+  CONSTRAINT skill_versions_injection_verdict_check CHECK (injection_scanned_at IS NULL OR injection_flagged IS NOT NULL)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);

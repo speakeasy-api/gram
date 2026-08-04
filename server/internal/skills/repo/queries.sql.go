@@ -4986,6 +4986,7 @@ FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 JOIN projects p ON p.id = s.project_id
 WHERE sv.injection_scanned_at IS NULL
+  AND s.archived_at IS NULL
 ORDER BY sv.id
 LIMIT $1
 `
@@ -5273,6 +5274,7 @@ FROM skills s
 WHERE sv.skill_id = s.id
   AND s.project_id = $3
   AND sv.id = $4
+  AND sv.injection_scanned_at IS NULL
 `
 
 type MarkSkillVersionInjectionScanParams struct {

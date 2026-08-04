@@ -2670,6 +2670,7 @@ FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 JOIN projects p ON p.id = s.project_id
 WHERE sv.injection_scanned_at IS NULL
+  AND s.archived_at IS NULL
 ORDER BY sv.id
 LIMIT @batch_size;
 
@@ -2682,4 +2683,5 @@ SET
 FROM skills s
 WHERE sv.skill_id = s.id
   AND s.project_id = @project_id
-  AND sv.id = @skill_version_id;
+  AND sv.id = @skill_version_id
+  AND sv.injection_scanned_at IS NULL;
