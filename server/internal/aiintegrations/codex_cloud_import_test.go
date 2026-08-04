@@ -116,13 +116,13 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 			listParams: nil,
 			downloads:  map[string][]byte{file.ID: []byte(codexCloudFixture)},
 		},
-		svc:        svc,
-		cfg:        cfg,
-		pageLimit:  codexCloudPageLimit,
-		users:      newConnectedUserResolver(conn, orgID),
-		chatIDs:    map[string]uuid.UUID{},
-		chatTitles: map[string]string{},
-		progress:   &CodexCloudSyncProgress{},
+		svc:            svc,
+		cfg:            cfg,
+		pageLimit:      codexCloudPageLimit,
+		users:          newConnectedUserResolver(conn, orgID),
+		chatIDs:        map[string]uuid.UUID{},
+		titledSessions: map[string]bool{},
+		progress:       &CodexCloudSyncProgress{},
 	}
 
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
@@ -171,7 +171,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	// Replaying the same file must not duplicate messages: the insert
 	// dedupes on (chat_id, external_message_id).
 	src.chatIDs = map[string]uuid.UUID{}
-	src.chatTitles = map[string]string{}
+	src.titledSessions = map[string]bool{}
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	laterFile := codexCloudFixtureFile(laterWindow)
 	laterFile.ID = "eclf_codex_cloud_2"
 	src.chatIDs = map[string]uuid.UUID{}
-	src.chatTitles = map[string]string{}
+	src.titledSessions = map[string]bool{}
 	src.client = &stubCodexComplianceClient{
 		listPages:  nil,
 		listParams: nil,
@@ -203,14 +203,14 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 
 func newCodexCloudTestSource(cfg Config, client codexComplianceClient) *codexCloudSource {
 	return &codexCloudSource{
-		client:     client,
-		svc:        &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
-		cfg:        cfg,
-		pageLimit:  codexCloudPageLimit,
-		users:      nil,
-		chatIDs:    map[string]uuid.UUID{},
-		chatTitles: map[string]string{},
-		progress:   &CodexCloudSyncProgress{},
+		client:         client,
+		svc:            &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
+		cfg:            cfg,
+		pageLimit:      codexCloudPageLimit,
+		users:          nil,
+		chatIDs:        map[string]uuid.UUID{},
+		titledSessions: map[string]bool{},
+		progress:       &CodexCloudSyncProgress{},
 	}
 }
 
@@ -284,13 +284,13 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 				fileB.ID: []byte(promptLater),
 			},
 		},
-		svc:        svc,
-		cfg:        cfg,
-		pageLimit:  codexCloudPageLimit,
-		users:      newConnectedUserResolver(conn, orgID),
-		chatIDs:    map[string]uuid.UUID{},
-		chatTitles: map[string]string{},
-		progress:   &CodexCloudSyncProgress{},
+		svc:            svc,
+		cfg:            cfg,
+		pageLimit:      codexCloudPageLimit,
+		users:          newConnectedUserResolver(conn, orgID),
+		chatIDs:        map[string]uuid.UUID{},
+		titledSessions: map[string]bool{},
+		progress:       &CodexCloudSyncProgress{},
 	}
 
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{fileA, fileB}))
@@ -302,24 +302,82 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 	require.Equal(t, "Now update the rollback plan", chatRow.Title.String)
 	// The link row is created once; the title refresh only re-upserts.
 	require.Equal(t, 1, src.progress.ChatsUpserted)
+	// The session is now marked titled, so a third file's distinct prompt is
+	// skipped rather than re-upserted: the query is first-wins, so the write
+	// could not change the stored title anyway.
+	require.True(t, src.titledSessions["22222222-3333-4444-8555-666666666666"])
+
+	promptAgain := `{"event_id":"cdx_p2","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T11:10:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"22222222-3333-4444-8555-666666666666","model":"gpt-5.5","prompt_text":"And note the owner"}}` + "\n"
+	fileC := codexCloudFixtureFile(promptAgain)
+	fileC.ID = "eclf_backfill_c"
+	fileC.EndTime = fileB.EndTime.Add(time.Minute)
+	src.client = &stubCodexComplianceClient{
+		listPages:  nil,
+		listParams: nil,
+		downloads:  map[string][]byte{fileC.ID: []byte(promptAgain)},
+	}
+	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{fileC}))
+	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, "Now update the rollback plan", chatRow.Title.String,
+		"a later prompt in the same run must not retitle the chat")
+	require.Equal(t, 1, src.progress.ChatsUpserted)
 }
 
-// TestCodexCloudParseEventTimeCountsOnlyMalformedValues: the chat-row
-// timestamp path treats an absent value as expected (fallback, no canary) —
-// the same event already counted once on the message path — while a
-// present-yet-malformed value counts as a format-change canary.
-func TestCodexCloudParseEventTimeCountsOnlyMalformedValues(t *testing.T) {
+// TestCodexCloudMalformedTimestampCountsOncePerEvent: a session's opening
+// event feeds both the chat row's created_at and its own message row, so its
+// timestamp must be resolved once — resolving it per reader would report two
+// TimestampFallbacks canaries for one bad upstream value.
+func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 	t.Parallel()
 
-	source := newCodexCloudTestSource(chatgptConversationConfig(), nil)
-	fallback := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	require.Equal(t, time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC), source.parseEventTime("2026-07-28T10:00:00Z", fallback))
-	require.Zero(t, source.progress.TimestampFallbacks)
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Codex Cloud Timestamp Canary Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
 
-	require.Equal(t, fallback, source.parseEventTime("", fallback))
-	require.Zero(t, source.progress.TimestampFallbacks)
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, nil)
+	cfg := created.Config
+	cfg.ProjectID = project.ID
 
-	require.Equal(t, fallback, source.parseEventTime("1753694400", fallback))
-	require.Equal(t, 1, source.progress.TimestampFallbacks)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+	// A single admitted event whose timestamp is a unix epoch rather than
+	// RFC3339 — the shape an upstream format change would produce.
+	malformed := `{"event_id":"cdx_bad_ts","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"1753694400","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"33333333-4444-4555-8666-777777777777","model":"gpt-5.5","prompt_text":"Rerun the migration"}}` + "\n"
+	file := codexCloudFixtureFile(malformed)
+	file.ID = "eclf_bad_ts"
+
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	src := &codexCloudSource{
+		client: &stubCodexComplianceClient{
+			listPages:  nil,
+			listParams: nil,
+			downloads:  map[string][]byte{file.ID: []byte(malformed)},
+		},
+		svc:            svc,
+		cfg:            cfg,
+		pageLimit:      codexCloudPageLimit,
+		users:          newConnectedUserResolver(conn, orgID),
+		chatIDs:        map[string]uuid.UUID{},
+		titledSessions: map[string]bool{},
+		progress:       &CodexCloudSyncProgress{},
+	}
+
+	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
+	require.Equal(t, int64(1), src.progress.MessagesWritten)
+	require.Equal(t, 1, src.progress.TimestampFallbacks)
+
+	chatID, ok := src.chatIDs["33333333-4444-4555-8666-777777777777"]
+	require.True(t, ok)
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	// Chat and message share the one resolved import-time fallback.
+	require.WithinDuration(t, time.Now().UTC(), chatRow.CreatedAt.Time.UTC(), time.Minute)
 }

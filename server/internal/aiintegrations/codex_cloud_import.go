@@ -155,15 +155,15 @@ func (s *CodexCloudImportService) SyncCodexCloudSessions(ctx context.Context, cf
 	}
 
 	source := &codexCloudSource{
-		client:     codexapi.NewWorkspaceClient(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
-		svc:        s,
-		cfg:        cfg,
-		pageLimit:  codexCloudPageLimit,
-		users:      newConnectedUserResolver(s.db, cfg.OrganizationID),
-		chatIDs:    map[string]uuid.UUID{},
-		chatTitles: map[string]string{},
-		progressMu: sync.Mutex{},
-		progress:   progress,
+		client:         codexapi.NewWorkspaceClient(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
+		svc:            s,
+		cfg:            cfg,
+		pageLimit:      codexCloudPageLimit,
+		users:          newConnectedUserResolver(s.db, cfg.OrganizationID),
+		chatIDs:        map[string]uuid.UUID{},
+		titledSessions: map[string]bool{},
+		progressMu:     sync.Mutex{},
+		progress:       progress,
 	}
 
 	runner := &timewindowpoller.Poller[[]codexapi.LogFile]{
@@ -203,12 +203,13 @@ type codexCloudSource struct {
 	pageLimit int
 	users     *connectedUserResolver
 	// chatIDs caches session id -> chat row id for the run so link rows and
-	// id lookups happen once per session, not once per event. chatTitles
-	// remembers which sessions have a title recorded this run, so a prompt
-	// arriving in a later file than the session's first upsert still lands
-	// its title (the feed itself carries none).
-	chatIDs    map[string]uuid.UUID
-	chatTitles map[string]string
+	// id lookups happen once per session, not once per event. titledSessions
+	// marks the sessions that have already been offered a title this run, so
+	// a prompt arriving in a later file than the session's first upsert still
+	// lands its title (the feed itself carries none) while later prompts for
+	// the same session skip a re-upsert the first-wins query would ignore.
+	chatIDs        map[string]uuid.UUID
+	titledSessions map[string]bool
 	// progressMu guards progress: the poller pipelines FetchPage (producer
 	// goroutine) with ProcessPage (consumer goroutine), and both record
 	// progress.
@@ -346,13 +347,14 @@ func (src *codexCloudSource) RetryAfter(err error) (time.Duration, bool) {
 }
 
 // codexCloudSessionState carries per-session metadata accumulated across one
-// file's events: the earliest admitted event (its timestamp approximates the
-// session start within the window), the newest one (freshest actor identity),
-// and the first prompt text seen, which seeds the chat title.
+// file's events: the earliest admitted event's resolved timestamp (which
+// approximates the session start within the window), the newest event
+// (freshest actor identity), and the first prompt text seen, which seeds the
+// chat title.
 type codexCloudSessionState struct {
-	first       codexCloudEvent
-	latest      codexCloudEvent
-	firstPrompt string
+	firstCreatedAt time.Time
+	latest         codexCloudEvent
+	firstPrompt    string
 }
 
 // writeFile persists one log file's web-task events: each session is upserted
@@ -370,6 +372,12 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	order := make([]string, 0, len(events))
 	skippedClients, skippedDetails := 0, 0
 	admitted := make([]codexCloudEvent, 0, len(events))
+	// Each admitted event's timestamp is resolved exactly once, here, and then
+	// reused by both the chat row and the event's message row: resolving it
+	// per reader would count a single malformed value twice in the
+	// TimestampFallbacks canary.
+	admittedAt := make([]time.Time, 0, len(events))
+	fallbacksBefore := src.timestampFallbacks()
 	for _, event := range events {
 		if !strings.EqualFold(strings.TrimSpace(event.ClientID), codexCloudClientWeb) {
 			skippedClients++
@@ -383,10 +391,12 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		if event.EventDetails.SessionID == "" || event.EventID == "" {
 			continue
 		}
+		createdAt := src.eventCreatedAt(event)
 		admitted = append(admitted, event)
+		admittedAt = append(admittedAt, createdAt)
 		state, ok := sessions[event.EventDetails.SessionID]
 		if !ok {
-			state = &codexCloudSessionState{first: event, latest: event, firstPrompt: ""}
+			state = &codexCloudSessionState{firstCreatedAt: createdAt, latest: event, firstPrompt: ""}
 			sessions[event.EventDetails.SessionID] = state
 			order = append(order, event.EventDetails.SessionID)
 		}
@@ -403,15 +413,20 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		src.progress.SkippedDetails += skippedDetails
 		src.progressMu.Unlock()
 	}
+	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {
+		src.svc.logger.WarnContext(ctx, "codex cloud event timestamps failed to parse; messages stamped with import time",
+			attr.SlogFilePath(file.FileName),
+			attr.SlogCodexCloudTimestampFallbacks(fallbacks),
+		)
+	}
 	for _, sessionID := range order {
 		if err := src.upsertSessionChat(ctx, sessionID, sessions[sessionID]); err != nil {
 			return err
 		}
 	}
 
-	fallbacksBefore := src.timestampFallbacks()
 	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(admitted))
-	for _, event := range admitted {
+	for i, event := range admitted {
 		var role, content string
 		switch event.EventDetails.DetailType {
 		case codexCloudDetailPromptSent:
@@ -458,14 +473,8 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			Source:      conv.ToPGText(codexCloudSourceSlug),
 			ContentHash: nil,
 			Generation:  0,
-			CreatedAt:   conv.ToPGTimestamptz(src.eventCreatedAt(event)),
+			CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
 		})
-	}
-	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {
-		src.svc.logger.WarnContext(ctx, "codex cloud event timestamps failed to parse; messages stamped with import time",
-			attr.SlogFilePath(file.FileName),
-			attr.SlogCodexCloudTimestampFallbacks(fallbacks),
-		)
 	}
 	if len(rows) == 0 {
 		return nil
@@ -486,9 +495,9 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 
 // upsertSessionChat writes the session's chat row with a prompt-derived title
 // (the feed itself carries none). A session already upserted this run is
-// re-upserted only when a title has newly become available — a PROMPT_SENT
-// can land in a later file than the session's first-seen (response-only)
-// window — and the query's COALESCE preserves stored titles on replays.
+// re-upserted only once a title first becomes available — a PROMPT_SENT can
+// land in a later file than the session's first-seen (response-only) window —
+// and the query's COALESCE preserves stored titles on replays.
 // The chat's created_at comes from the window's earliest admitted event, the
 // closest available approximation of the session start.
 //
@@ -500,11 +509,14 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID string, state *codexCloudSessionState) error {
 	title := codexCloudChatTitle(state.firstPrompt)
 	_, known := src.chatIDs[sessionID]
-	if known && (title == "" || title == src.chatTitles[sessionID]) {
+	// A title already offered this run is terminal: the query is first-wins,
+	// so no later prompt can change what is stored and re-upserting for one
+	// would only burn a write.
+	if known && (title == "" || src.titledSessions[sessionID]) {
 		return nil
 	}
 
-	createdAt := src.parseEventTime(state.first.Timestamp, time.Now())
+	createdAt := state.firstCreatedAt
 	userID, err := src.users.resolve(ctx, state.latest.Actor.UserEmail)
 	if err != nil {
 		return err
@@ -544,15 +556,17 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 
 	src.chatIDs[sessionID] = chatID
 	if title != "" {
-		src.chatTitles[sessionID] = title
+		src.titledSessions[sessionID] = true
 	}
 	return nil
 }
 
-// eventCreatedAt resolves a message event's timestamp, counting a fallback to
-// import time — the outcome that rewrites chronology — as a canary for
-// upstream format changes. Used for message rows, where every event is
-// expected to carry a timestamp, so absence counts too.
+// eventCreatedAt resolves an admitted event's timestamp, counting a fallback
+// to import time — the outcome that rewrites chronology — as a canary for
+// upstream format changes. Every event is expected to carry a timestamp, so
+// absence counts too. Called once per admitted event (see writeFile), whose
+// result both the chat row and the message row read, so one bad value cannot
+// count twice.
 func (src *codexCloudSource) eventCreatedAt(event codexCloudEvent) time.Time {
 	if event.Timestamp != "" {
 		if t, err := time.Parse(time.RFC3339, event.Timestamp); err == nil {
@@ -563,24 +577,6 @@ func (src *codexCloudSource) eventCreatedAt(event codexCloudEvent) time.Time {
 	src.progress.TimestampFallbacks++
 	src.progressMu.Unlock()
 	return time.Now().UTC()
-}
-
-// parseEventTime resolves the chat row's timestamp with template semantics:
-// an absent value takes the fallback silently (expected, and the same event
-// already counted once on the message path), while a present-yet-malformed
-// value counts as a format-change canary.
-func (src *codexCloudSource) parseEventTime(value string, fallback time.Time) time.Time {
-	if value == "" {
-		return fallback.UTC()
-	}
-	t, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		src.progressMu.Lock()
-		src.progress.TimestampFallbacks++
-		src.progressMu.Unlock()
-		return fallback.UTC()
-	}
-	return t.UTC()
 }
 
 func (src *codexCloudSource) timestampFallbacks() int {
