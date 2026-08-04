@@ -298,12 +298,12 @@ func TestResolveActivatedSkillCursorProjectCurrentKey(t *testing.T) {
 func TestResolveActivatedSkillFollowsSymlinkedSkillDir(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	workspace := t.TempDir()
-	externalDir := filepath.Join(t.TempDir(), "external")
-	writeSkillManifest(t, externalDir, []byte("shared skill body"))
+	sharedDir := filepath.Join(workspace, ".agents", "skills", "shared")
+	writeSkillManifest(t, sharedDir, []byte("shared skill body"))
 	root := filepath.Join(workspace, ".cursor", "skills")
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	linkedDir := filepath.Join(root, "linked")
-	require.NoError(t, os.Symlink(externalDir, linkedDir))
+	require.NoError(t, os.Symlink(sharedDir, linkedDir))
 	linkedPath := filepath.Join(linkedDir, "SKILL.md")
 	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": linkedPath})
 
@@ -320,11 +320,12 @@ func TestResolveActivatedSkillFollowsSymlinkedSkillDir(t *testing.T) {
 func TestResolveActivatedSkillFollowsManifestSymlink(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	workspace := t.TempDir()
-	external := filepath.Join(t.TempDir(), "guide.md")
-	require.NoError(t, os.WriteFile(external, []byte("shared guide body"), 0o644))
+	shared := filepath.Join(workspace, ".cursor", "skills", "shared", "guide.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(shared), 0o755))
+	require.NoError(t, os.WriteFile(shared, []byte("shared guide body"), 0o644))
 	path := filepath.Join(workspace, ".cursor", "skills", "linked", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.Symlink(external, path))
+	require.NoError(t, os.Symlink(shared, path))
 	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
 
 	resolved := resolveActivatedSkill(event, activatedSkillPayload("linked"))
@@ -335,6 +336,25 @@ func TestResolveActivatedSkillFollowsManifestSymlink(t *testing.T) {
 	require.Equal(t, "shared guide body", resolved.content)
 	require.Equal(t, sha256Hex([]byte("shared guide body")), resolved.rawSHA256)
 	require.True(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillRejectsSymlinkEscape(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workspace := t.TempDir()
+	external := filepath.Join(t.TempDir(), "secret")
+	require.NoError(t, os.WriteFile(external, []byte("private key material"), 0o600))
+	path := filepath.Join(workspace, ".cursor", "skills", "escape", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.Symlink(external, path))
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("escape"))
+
+	require.NotNil(t, resolved)
+	require.False(t, resolved.captureReady)
+	require.Empty(t, resolved.content)
+	require.Empty(t, resolved.rawSHA256)
+	require.Empty(t, resolved.sourcePath)
 }
 
 func TestResolveActivatedSkillCursorPluginLegacyKey(t *testing.T) {

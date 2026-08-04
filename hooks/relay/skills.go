@@ -576,6 +576,17 @@ func openValidatedSkill(path, root string) (*os.File, bool) {
 	if err != nil {
 		return nil, false
 	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, false
+	}
+	// Derive the owner before following root symlinks so a linked skill root
+	// cannot redefine its own confinement boundary. Canonicalizing the owner
+	// still admits workspaces reached through symlinked ancestors.
+	resolvedOwner, err := filepath.EvalSymlinks(skillOwningTree(root))
+	if err != nil || !pathWithin(resolvedRoot, resolvedOwner) || !pathWithin(resolved, resolvedOwner) {
+		return nil, false
+	}
 	rootDir, err := os.OpenRoot(filepath.Dir(resolved))
 	if err != nil {
 		return nil, false
@@ -600,6 +611,29 @@ func openValidatedSkill(path, root string) (*os.File, bool) {
 		return nil, false
 	}
 	return file, true
+}
+
+// skillOwningTree returns the tree allowed to own a resolved skill.
+// Provider roots such as <workspace>/.claude/skills are widened to the
+// workspace/home directory so linked skills may live in a sibling provider
+// tree such as .agents/skills. Configured roots ending in skills are confined
+// to their config directory, plugin skill roots to the plugin install tree,
+// and marker-derived plugin roots to themselves.
+func skillOwningTree(root string) string {
+	root = filepath.Clean(root)
+	if filepath.Base(root) == "skills" {
+		configRoot := filepath.Dir(root)
+		switch filepath.Base(configRoot) {
+		case ".agents", ".claude", ".codex", ".cursor":
+			return filepath.Dir(configRoot)
+		default:
+			return configRoot
+		}
+	}
+	if skillsRoot := filepath.Dir(root); filepath.Base(skillsRoot) == "skills" {
+		return filepath.Dir(skillsRoot)
+	}
+	return root
 }
 
 func absoluteSessionPath(path, cwd string) string {
