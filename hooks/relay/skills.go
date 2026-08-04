@@ -37,10 +37,20 @@ type resolvedSkill struct {
 	root         string
 }
 
+type skillAuthorization uint8
+
+const (
+	skillAuthorizationExact skillAuthorization = iota
+	skillAuthorizationProject
+	skillAuthorizationPersonal
+)
+
 type skillLocation struct {
-	path  string
-	level string
-	root  string
+	path          string
+	level         string
+	root          string
+	authorization skillAuthorization
+	owner         string
 }
 
 // resolveActivatedSkill resolves and captures the manifest for a skill already
@@ -80,7 +90,7 @@ func resolveActivatedSkill(typed any, payload *components.IngestRequestBody) *re
 }
 
 func captureResolvedSkill(result *resolvedSkill, location skillLocation) *resolvedSkill {
-	file, ok := openValidatedSkill(location.path, location.root)
+	file, authorizedRoot, ok := openValidatedSkill(location)
 	if !ok {
 		return result
 	}
@@ -98,7 +108,7 @@ func captureResolvedSkill(result *resolvedSkill, location skillLocation) *resolv
 	result.sourceLevel = location.level
 	result.sourcePath = filepath.Clean(location.path)
 	result.rawSHA256 = hex.EncodeToString(hasher.Sum(nil))
-	result.root = filepath.Clean(location.root)
+	result.root = authorizedRoot
 	if len(content) > maxSkillContentBytes || !utf8.Valid(content) {
 		return result
 	}
@@ -152,11 +162,7 @@ func resolveCodexToolSkill(tool *agenthooks.ToolCall, cwd string) skillLocation 
 	if path == "" {
 		return skillLocation{}
 	}
-	level, root := classifyCodexSkill(path, cwd)
-	if level == "" {
-		return skillLocation{}
-	}
-	return skillLocation{path: path, level: level, root: root}
+	return classifyCodexSkill(path, cwd)
 }
 
 func cursorToolSkillName(tool *agenthooks.ToolCall, cwd string, workspaceRoots []string) string {
@@ -195,11 +201,7 @@ func resolveCursorToolSkill(tool *agenthooks.ToolCall, cwd string, workspaceRoot
 	if path == "" {
 		return skillLocation{}
 	}
-	level, root := classifyCursorSkill(path, workspaceRoots)
-	if level == "" {
-		return skillLocation{}
-	}
-	return skillLocation{path: path, level: level, root: root}
+	return classifyCursorSkill(path, workspaceRoots)
 }
 
 func skillNameFromManifestPath(path string, allowSystem bool) string {
@@ -276,45 +278,53 @@ func codexSkillLocations(name, cwd string) []skillLocation {
 	}
 	var locations []skillLocation
 	seen := map[string]bool{}
-	add := func(path, level, root string) {
-		if path == "" {
+	add := func(location skillLocation) {
+		if location.path == "" {
 			return
 		}
-		clean := filepath.Clean(path)
+		clean := filepath.Clean(location.path)
 		if seen[clean] || !readableRegularFile(clean) {
 			return
 		}
 		seen[clean] = true
-		locations = append(locations, skillLocation{path: clean, level: level, root: root})
+		location.path = clean
+		locations = append(locations, location)
 	}
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		root := filepath.Join(home, ".agents", "skills")
-		add(existingSkillManifest(filepath.Join(root, name)), "personal", root)
+		add(personalSkillLocation(existingSkillManifest(filepath.Join(root, name)), "personal", root, home))
 	}
 	codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
 	if codexHome == "" && home != "" {
 		codexHome = filepath.Join(home, ".codex")
 	}
 	roots := []skillLocation{
-		{path: "/etc/codex/skills", level: "admin"},
-		{path: "/opt/codex/skills", level: "system"},
+		exactSkillLocation("", "admin", "/etc/codex/skills"),
+		exactSkillLocation("", "system", "/opt/codex/skills"),
 	}
 	if codexHome != "" {
-		roots = append(roots, skillLocation{path: filepath.Join(codexHome, "skills"), level: "personal"})
+		root := filepath.Join(codexHome, "skills")
+		if home != "" && filepath.Clean(codexHome) == filepath.Join(filepath.Clean(home), ".codex") {
+			roots = append(roots, personalSkillLocation("", "personal", root, home))
+		} else {
+			roots = append(roots, exactSkillLocation("", "personal", root))
+		}
 	}
 	for _, root := range roots {
-		add(existingSkillManifest(filepath.Join(root.path, name)), root.level, root.path)
+		root.path = existingSkillManifest(filepath.Join(root.root, name))
+		add(root)
 		level := root.level
-		if codexHome != "" && root.path == filepath.Join(codexHome, "skills") {
+		if codexHome != "" && root.root == filepath.Join(codexHome, "skills") {
 			level = "system"
 		}
-		add(existingSkillManifest(filepath.Join(root.path, ".system", name)), level, root.path)
+		systemRoot := filepath.Join(root.root, ".system")
+		add(exactSkillLocation(existingSkillManifest(filepath.Join(systemRoot, name)), level, systemRoot))
 	}
 	if filepath.IsAbs(cwd) {
 		for dir := cwd; ; dir = filepath.Dir(dir) {
 			root := filepath.Join(dir, ".agents", "skills")
-			add(existingSkillManifest(filepath.Join(root, name)), "project", root)
+			add(projectSkillLocation(existingSkillManifest(filepath.Join(root, name)), "project", root, dir))
 			if pathExists(filepath.Join(dir, ".git")) {
 				break
 			}
@@ -342,7 +352,7 @@ func resolveClaudeSkill(name, cwd string) skillLocation {
 		switch {
 		case err == nil && info.Mode().IsRegular():
 			if readableRegularFile(path) {
-				return skillLocation{path: path, level: "admin", root: root}
+				return exactSkillLocation(path, "admin", root)
 			}
 			return skillLocation{}
 		case err != nil && !os.IsNotExist(err):
@@ -358,14 +368,17 @@ func resolveClaudeSkill(name, cwd string) skillLocation {
 	if configRoot != "" {
 		root := filepath.Join(configRoot, "skills")
 		if path := existingSkillManifest(filepath.Join(root, name)); path != "" {
-			return skillLocation{path: path, level: "personal", root: root}
+			if home != "" && filepath.Clean(configRoot) == filepath.Join(filepath.Clean(home), ".claude") {
+				return personalSkillLocation(path, "personal", root, home)
+			}
+			return exactSkillLocation(path, "personal", root)
 		}
 	}
 	if filepath.IsAbs(cwd) {
 		for dir := cwd; ; dir = filepath.Dir(dir) {
 			root := filepath.Join(dir, ".claude", "skills")
 			if path := existingSkillManifest(filepath.Join(root, name)); path != "" {
-				return skillLocation{path: path, level: "project", root: root}
+				return projectSkillLocation(path, "project", root, dir)
 			}
 			if pathExists(filepath.Join(dir, ".git")) {
 				break
@@ -465,42 +478,42 @@ func resolveClaudePluginSkill(plugin, skill, cwd string) skillLocation {
 	}
 	for _, dir := range []string{filepath.Join(candidates[0].installPath, "skills", skill), candidates[0].installPath} {
 		if path := existingSkillManifest(dir); path != "" {
-			return skillLocation{path: path, level: "plugin", root: dir}
+			return exactSkillLocation(path, "plugin", candidates[0].installPath)
 		}
 	}
 	return skillLocation{}
 }
 
-func classifyCursorSkill(path string, workspaceRoots []string) (string, string) {
+func classifyCursorSkill(path string, workspaceRoots []string) skillLocation {
 	home, _ := os.UserHomeDir()
 	for _, dir := range []string{".cursor", ".agents", ".claude", ".codex"} {
 		root := filepath.Join(home, dir, "skills")
 		if home != "" && pathWithin(path, root) {
-			return "personal", root
+			return personalSkillLocation(path, "personal", root, home)
 		}
 	}
 	if root := pluginManifestAncestor(path, ".cursor-plugin", containingWorkspaceRoot(path, workspaceRoots)); root != "" {
-		return "plugin", root
+		return exactSkillLocation(path, "plugin", root)
 	}
-	for _, root := range workspaceRoots {
-		if skillRoot := providerSkillRoot(path, root); skillRoot != "" {
-			return "project", skillRoot
+	for _, workspaceRoot := range workspaceRoots {
+		if skillRoot, owner := providerSkillRoot(path, workspaceRoot); skillRoot != "" {
+			return projectSkillLocation(path, "project", skillRoot, owner)
 		}
 	}
-	return "", ""
+	return skillLocation{}
 }
 
-func classifyCodexSkill(path, cwd string) (string, string) {
+func classifyCodexSkill(path, cwd string) skillLocation {
 	home, _ := os.UserHomeDir()
 	root := filepath.Join(home, ".agents", "skills")
 	if home != "" && pathWithin(path, root) {
-		return "personal", root
+		return personalSkillLocation(path, "personal", root, home)
 	}
 	if root = "/etc/codex/skills"; pathWithin(path, root) {
-		return "admin", root
+		return exactSkillLocation(path, "admin", root)
 	}
 	if root = "/opt/codex/skills"; pathWithin(path, root) {
-		return "system", root
+		return exactSkillLocation(path, "system", root)
 	}
 	codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
 	if codexHome == "" && home != "" {
@@ -508,13 +521,14 @@ func classifyCodexSkill(path, cwd string) (string, string) {
 	}
 	root = filepath.Join(codexHome, "skills")
 	if codexHome != "" && pathWithin(path, filepath.Join(root, ".system")) {
-		return "system", root
+		systemRoot := filepath.Join(root, ".system")
+		return exactSkillLocation(path, "system", systemRoot)
 	}
 	if filepath.IsAbs(cwd) {
 		for dir := cwd; ; dir = filepath.Dir(dir) {
 			root = filepath.Join(dir, ".agents", "skills")
 			if pathWithin(path, root) {
-				return "project", root
+				return projectSkillLocation(path, "project", root, dir)
 			}
 			if pathExists(filepath.Join(dir, ".git")) {
 				break
@@ -526,12 +540,27 @@ func classifyCodexSkill(path, cwd string) (string, string) {
 	}
 	root = filepath.Join(codexHome, "skills")
 	if codexHome != "" && pathWithin(path, root) {
-		return "personal", root
+		if home != "" && filepath.Clean(codexHome) == filepath.Join(filepath.Clean(home), ".codex") {
+			return personalSkillLocation(path, "personal", root, home)
+		}
+		return exactSkillLocation(path, "personal", root)
 	}
 	if root = pluginManifestAncestor(path, ".codex-plugin", ""); root != "" {
-		return "plugin", root
+		return exactSkillLocation(path, "plugin", root)
 	}
-	return "", ""
+	return skillLocation{}
+}
+
+func exactSkillLocation(path, level, root string) skillLocation {
+	return skillLocation{path: path, level: level, root: root, authorization: skillAuthorizationExact}
+}
+
+func projectSkillLocation(path, level, root, owner string) skillLocation {
+	return skillLocation{path: path, level: level, root: root, authorization: skillAuthorizationProject, owner: owner}
+}
+
+func personalSkillLocation(path, level, root, owner string) skillLocation {
+	return skillLocation{path: path, level: level, root: root, authorization: skillAuthorizationPersonal, owner: owner}
 }
 
 func existingSkillManifest(dir string) string {
@@ -557,45 +586,35 @@ func readableRegularFile(path string) bool {
 	return statErr == nil && openedInfo.Mode().IsRegular() && closeErr == nil
 }
 
-func openValidatedSkill(path, root string) (*os.File, bool) {
-	if !filepath.IsAbs(path) || !filepath.IsAbs(root) {
-		return nil, false
-	}
-	rel, err := filepath.Rel(root, path)
-	if err != nil || !filepath.IsLocal(rel) {
-		return nil, false
+func openValidatedSkill(location skillLocation) (*os.File, string, bool) {
+	if !filepath.IsAbs(location.path) || !filepath.IsAbs(location.root) {
+		return nil, "", false
 	}
 	// Skill trees commonly use symlinks — a linked skill directory
 	// (.claude/skills/<name> -> ../../.agents/skills/<name>) or a linked
 	// manifest (SKILL.md -> ../shared/guide.md). Agents follow both when
-	// loading the manifest into context, so capture follows them too and
-	// records exactly what the agent read. Resolving first also pins down
-	// the real file so the no-follow open below cannot be redirected
-	// afterwards.
-	resolved, err := filepath.EvalSymlinks(path)
+	// loading the manifest into context, so capture follows them too.
+	resolved, err := filepath.EvalSymlinks(location.path)
 	if err != nil {
-		return nil, false
+		return nil, "", false
 	}
-	resolvedRoot, err := filepath.EvalSymlinks(root)
+	resolvedRoot, err := filepath.EvalSymlinks(location.root)
 	if err != nil {
-		return nil, false
+		return nil, "", false
 	}
-	// Derive the owner before following root symlinks so a linked skill root
-	// cannot redefine its own confinement boundary. Canonicalizing the owner
-	// still admits workspaces reached through symlinked ancestors.
-	resolvedOwner, err := filepath.EvalSymlinks(skillOwningTree(root))
-	if err != nil || !pathWithin(resolvedRoot, resolvedOwner) || !pathWithin(resolved, resolvedOwner) {
-		return nil, false
+	authorizedRoot, ok := authorizedSkillRoot(location, resolvedRoot, resolved)
+	if !ok {
+		return nil, "", false
 	}
 	rootDir, err := os.OpenRoot(filepath.Dir(resolved))
 	if err != nil {
-		return nil, false
+		return nil, "", false
 	}
 	name := filepath.Base(resolved)
 	info, err := rootDir.Stat(name)
 	if err != nil || !info.Mode().IsRegular() {
 		_ = rootDir.Close()
-		return nil, false
+		return nil, "", false
 	}
 	file, err := rootDir.Open(name)
 	closeRootErr := rootDir.Close()
@@ -603,37 +622,68 @@ func openValidatedSkill(path, root string) (*os.File, bool) {
 		if file != nil {
 			_ = file.Close()
 		}
-		return nil, false
+		return nil, "", false
 	}
 	openedInfo, err := file.Stat()
 	if err != nil || !openedInfo.Mode().IsRegular() {
 		_ = file.Close()
-		return nil, false
+		return nil, "", false
 	}
-	return file, true
+	return file, authorizedRoot, true
 }
 
-// skillOwningTree returns the tree allowed to own a resolved skill.
-// Provider roots such as <workspace>/.claude/skills are widened to the
-// workspace/home directory so linked skills may live in a sibling provider
-// tree such as .agents/skills. Configured roots ending in skills are confined
-// to their config directory, plugin skill roots to the plugin install tree,
-// and marker-derived plugin roots to themselves.
-func skillOwningTree(root string) string {
-	root = filepath.Clean(root)
-	if filepath.Base(root) == "skills" {
-		configRoot := filepath.Dir(root)
-		switch filepath.Base(configRoot) {
-		case ".agents", ".claude", ".codex", ".cursor":
-			return filepath.Dir(configRoot)
-		default:
-			return configRoot
+// authorizedSkillRoot applies the boundary selected by the resolver. Project
+// and standard personal skills may link between known provider skill trees
+// under the same owner. Configured, managed, and plugin locations stay within
+// their exact resolved tree.
+func authorizedSkillRoot(location skillLocation, resolvedRoot, resolvedPath string) (string, bool) {
+	switch location.authorization {
+	case skillAuthorizationProject, skillAuthorizationPersonal:
+		if !filepath.IsAbs(location.owner) {
+			return "", false
+		}
+		// The owner is selected from the unresolved provider location so a
+		// linked provider root cannot change which project or home owns it.
+		resolvedOwner, err := filepath.EvalSymlinks(location.owner)
+		if err != nil {
+			return "", false
+		}
+		allowedRoots := providerSkillRoots(resolvedOwner)
+		if !pathWithinAny(resolvedRoot, allowedRoots) {
+			return "", false
+		}
+		sourceRoots := providerSkillRoots(location.owner)
+		for i, root := range allowedRoots {
+			if pathWithin(resolvedPath, root) {
+				return filepath.Clean(sourceRoots[i]), true
+			}
+		}
+		return "", false
+	case skillAuthorizationExact:
+		if pathWithin(resolvedPath, resolvedRoot) {
+			return filepath.Clean(location.root), true
+		}
+		return "", false
+	default:
+		return "", false
+	}
+}
+
+func providerSkillRoots(owner string) []string {
+	roots := make([]string, 0, 4)
+	for _, provider := range []string{".agents", ".claude", ".codex", ".cursor"} {
+		roots = append(roots, filepath.Join(owner, provider, "skills"))
+	}
+	return roots
+}
+
+func pathWithinAny(path string, roots []string) bool {
+	for _, root := range roots {
+		if pathWithin(path, root) {
+			return true
 		}
 	}
-	if skillsRoot := filepath.Dir(root); filepath.Base(skillsRoot) == "skills" {
-		return filepath.Dir(skillsRoot)
-	}
-	return root
+	return false
 }
 
 func absoluteSessionPath(path, cwd string) string {
@@ -670,29 +720,30 @@ func containingWorkspaceRoot(path string, workspaceRoots []string) string {
 	return result
 }
 
-func providerSkillRoot(path, workspaceRoot string) string {
+func providerSkillRoot(path, workspaceRoot string) (string, string) {
 	pathAbs, err := filepath.Abs(path)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	rootAbs, err := filepath.Abs(workspaceRoot)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	rel, err := filepath.Rel(rootAbs, pathAbs)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return ""
+		return "", ""
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
 	for i := 0; i+2 < len(parts); i++ {
 		switch parts[i] {
 		case ".cursor", ".agents", ".claude", ".codex":
 			if parts[i+1] == "skills" {
-				return filepath.Join(append([]string{rootAbs}, parts[:i+2]...)...)
+				owner := filepath.Join(append([]string{rootAbs}, parts[:i]...)...)
+				return filepath.Join(owner, parts[i], "skills"), owner
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 func pluginManifestAncestor(path, markerDir, stop string) string {

@@ -315,6 +315,31 @@ func TestResolveActivatedSkillFollowsSymlinkedSkillDir(t *testing.T) {
 	require.Equal(t, "shared skill body", resolved.content)
 	require.Equal(t, sha256Hex([]byte("shared skill body")), resolved.rawSHA256)
 	require.True(t, resolved.captureReady)
+
+	reopened := captureResolvedSkill(&resolvedSkill{}, skillLocation{path: resolved.sourcePath, root: resolved.root})
+	require.Equal(t, "shared skill body", reopened.content)
+	require.Equal(t, resolved.rawSHA256, reopened.rawSHA256)
+	require.True(t, reopened.captureReady)
+}
+
+func TestResolveActivatedSkillFollowsProviderRootLinkedToSiblingSkillTree(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workspace := t.TempDir()
+	targetDir := filepath.Join(workspace, ".agents", "skills", "root-linked")
+	writeSkillManifest(t, targetDir, []byte("root-linked skill body"))
+	cursorRoot := filepath.Join(workspace, ".cursor")
+	require.NoError(t, os.MkdirAll(cursorRoot, 0o755))
+	require.NoError(t, os.Symlink(filepath.Join("..", ".agents", "skills"), filepath.Join(cursorRoot, "skills")))
+	path := filepath.Join(cursorRoot, "skills", "root-linked", "SKILL.md")
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("root-linked"))
+
+	require.Equal(t, "project", resolved.sourceLevel)
+	require.Equal(t, path, resolved.sourcePath)
+	require.Equal(t, "root-linked skill body", resolved.content)
+	require.Equal(t, sha256Hex([]byte("root-linked skill body")), resolved.rawSHA256)
+	require.True(t, resolved.captureReady)
 }
 
 func TestResolveActivatedSkillFollowsManifestSymlink(t *testing.T) {
@@ -336,6 +361,116 @@ func TestResolveActivatedSkillFollowsManifestSymlink(t *testing.T) {
 	require.Equal(t, "shared guide body", resolved.content)
 	require.Equal(t, sha256Hex([]byte("shared guide body")), resolved.rawSHA256)
 	require.True(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillRejectsWorkspaceFileOutsideSkillTrees(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, ".env")
+	require.NoError(t, os.WriteFile(target, []byte("workspace configuration"), 0o600))
+	path := filepath.Join(workspace, ".cursor", "skills", "workspace-file", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.Symlink(target, path))
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("workspace-file"))
+
+	require.Equal(t, "workspace-file", resolved.name)
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.Empty(t, resolved.rawSHA256)
+	require.False(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillRejectsProviderRootOutsideSkillTrees(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workspace := t.TempDir()
+	shared := filepath.Join(workspace, ".agents", "skills", "shared", "guide.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(shared), 0o755))
+	require.NoError(t, os.WriteFile(shared, []byte("shared guide"), 0o644))
+	redirectedRoot := filepath.Join(workspace, "configuration")
+	pathWithinRedirectedRoot := filepath.Join(redirectedRoot, "root-target", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(pathWithinRedirectedRoot), 0o755))
+	require.NoError(t, os.Symlink(shared, pathWithinRedirectedRoot))
+	cursorRoot := filepath.Join(workspace, ".cursor")
+	require.NoError(t, os.MkdirAll(cursorRoot, 0o755))
+	require.NoError(t, os.Symlink(redirectedRoot, filepath.Join(cursorRoot, "skills")))
+	path := filepath.Join(cursorRoot, "skills", "root-target", "SKILL.md")
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("root-target"))
+
+	require.Equal(t, "root-target", resolved.name)
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.Empty(t, resolved.rawSHA256)
+	require.False(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillRejectsWorkspaceDirectoryTargetOutsideSkillTrees(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workspace := t.TempDir()
+	gitDir := filepath.Join(workspace, ".git")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	configPath := filepath.Join(gitDir, "config")
+	require.NoError(t, os.WriteFile(configPath, []byte("repository configuration"), 0o600))
+	require.NoError(t, os.Symlink("config", filepath.Join(gitDir, "SKILL.md")))
+	skillsRoot := filepath.Join(workspace, ".cursor", "skills")
+	require.NoError(t, os.MkdirAll(skillsRoot, 0o755))
+	linkedDir := filepath.Join(skillsRoot, "repository-config")
+	require.NoError(t, os.Symlink(gitDir, linkedDir))
+	path := filepath.Join(linkedDir, "SKILL.md")
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("repository-config"))
+
+	require.Equal(t, "repository-config", resolved.name)
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.Empty(t, resolved.rawSHA256)
+	require.False(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillRejectsPersonalFileOutsideSkillTrees(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
+	target := filepath.Join(home, "auth.json")
+	require.NoError(t, os.WriteFile(target, []byte("personal configuration"), 0o600))
+	path := filepath.Join(home, ".codex", "skills", "personal-file", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.Symlink(target, path))
+	event := codexToolEvent(t, t.TempDir(), "Read", map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("personal-file"))
+
+	require.Equal(t, "personal-file", resolved.name)
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.Empty(t, resolved.rawSHA256)
+	require.False(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillPluginRootNamedSkillsRemainsExact(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tree := t.TempDir()
+	plugin := filepath.Join(tree, "skills")
+	writeJSONFile(t, filepath.Join(plugin, ".cursor-plugin", "plugin.json"), map[string]string{"name": "quality"})
+	target := filepath.Join(tree, "shared.md")
+	require.NoError(t, os.WriteFile(target, []byte("shared content"), 0o600))
+	path := filepath.Join(plugin, "skills", "review", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.Symlink(target, path))
+	workspace := t.TempDir()
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("review"))
+
+	require.Equal(t, "review", resolved.name)
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.Empty(t, resolved.rawSHA256)
+	require.False(t, resolved.captureReady)
 }
 
 func TestResolveActivatedSkillRejectsSymlinkEscape(t *testing.T) {
