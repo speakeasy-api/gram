@@ -137,16 +137,27 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 			// matched entry carries the full sanitized prefix.
 			evidence.ServerIdentity = matched.ToolPrefix
 		}
-		if matched.URL != "" {
-			evidence.FullURL = matched.URL
-		}
-		if matched.Command != "" {
-			// Pin stdio identity to the launch command, mirroring the Claude
-			// guard — a bypass grant must not follow a renamed config alias.
-			evidence.ServerIdentity = matched.Command
-		}
+		applyMCPEntryToEvidence(&evidence, matched)
 	}
 	return evidence, matched
+}
+
+// applyMCPEntryToEvidence upgrades evidence to the target a matched inventory
+// entry actually routes to. Shared by the legacy Codex endpoint and the
+// canonical ingest guard so the two cannot drift on what a resolved entry
+// means — the guard's allow/deny turns on exactly this mapping.
+func applyMCPEntryToEvidence(evidence *shadowmcp.AccessEvidence, matched *MCPServerEntry) {
+	if matched == nil {
+		return
+	}
+	if matched.URL != "" {
+		evidence.FullURL = matched.URL
+	}
+	if matched.Command != "" {
+		// Pin stdio identity to the launch command, mirroring the Claude
+		// guard — a bypass grant must not follow a renamed config alias.
+		evidence.ServerIdentity = matched.Command
+	}
 }
 
 func codexMCPMetaToolServer(payload *gen.CodexPayload) (string, bool) {

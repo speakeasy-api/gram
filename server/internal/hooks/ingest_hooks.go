@@ -796,16 +796,7 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 	if err != nil {
 		return
 	}
-	matched := matchCodexCachedMCPServerEntry(entries, evidence.ServerIdentity)
-	if matched == nil {
-		return
-	}
-	if matched.URL != "" {
-		evidence.FullURL = matched.URL
-	}
-	if matched.Command != "" {
-		evidence.ServerIdentity = matched.Command
-	}
+	applyMCPEntryToEvidence(evidence, matchCodexCachedMCPServerEntry(entries, evidence.ServerIdentity))
 }
 
 // cacheCanonicalMCPList stores a session's MCP inventory under the same key
