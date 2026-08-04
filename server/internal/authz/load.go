@@ -41,5 +41,39 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		})
 	}
 
-	return grantRows, nil
+	return withAssistantSystemRoleDefaults(grantRows, principals), nil
+}
+
+func withAssistantSystemRoleDefaults(grants []Grant, principals []urn.Principal) []Grant {
+	scopesByRole := map[string][]Scope{
+		SystemRoleAdmin:  {ScopeAssistantRead, ScopeAssistantWrite},
+		SystemRoleMember: {ScopeAssistantRead},
+	}
+
+	for _, principal := range principals {
+		if principal.Type != urn.PrincipalTypeRole {
+			continue
+		}
+		scopes, ok := scopesByRole[principal.ID]
+		if !ok {
+			continue
+		}
+		for _, scope := range scopes {
+			found := false
+			for _, grant := range grants {
+				if grant.Scope == scope && grant.Effect == PolicyEffectAllow && grant.Selector[SelectorKeyResourceKind] == ResourceKindAssistant && grant.Selector[SelectorKeyResourceID] == WildcardResource {
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+			grant := NewGrant(scope, WildcardResource)
+			grant.PrincipalUrn = principal.String()
+			grants = append(grants, grant)
+		}
+	}
+
+	return grants
 }

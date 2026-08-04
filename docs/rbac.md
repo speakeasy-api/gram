@@ -51,6 +51,8 @@ org:read
 org:admin
 project:read
 project:write
+assistant:read
+assistant:write
 mcp:read
 mcp:write
 mcp:connect
@@ -73,6 +75,8 @@ const (
 	ScopeOrgAdmin           Scope = "org:admin"
 	ScopeProjectRead        Scope = "project:read"
 	ScopeProjectWrite       Scope = "project:write"
+	ScopeAssistantRead      Scope = "assistant:read"
+	ScopeAssistantWrite     Scope = "assistant:write"
 	ScopeMCPRead            Scope = "mcp:read"
 	ScopeMCPWrite           Scope = "mcp:write"
 	ScopeMCPConnect         Scope = "mcp:connect"
@@ -104,6 +108,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeOrgAdmin:           nil,
 	ScopeProjectRead:        {ScopeProjectWrite},
 	ScopeProjectWrite:       nil,
+	ScopeAssistantRead:      {ScopeAssistantWrite},
+	ScopeAssistantWrite:     nil,
 	ScopeMCPRead:            {ScopeMCPWrite},
 	ScopeMCPWrite:           nil,
 	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
@@ -117,7 +123,7 @@ var scopeExpansions = map[Scope][]Scope{
 }
 ```
 
-Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, and `skill:write` satisfies `skill:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
+Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, and `skill:write` satisfies `skill:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
@@ -167,6 +173,7 @@ A selector narrows a grant to the resource it applies to. Every persisted select
 
 - `org:*` -> `org`
 - `project:*` -> `project`
+- `assistant:*` -> `assistant` (the `resource_id` is the project UUID)
 - `mcp:*` -> `mcp`
 - `mcp:*` -> `external_mcp` (differentiator between MCPs hosted by us and external ones)
 - `skill:*` -> `skill` (the `resource_id` is the project UUID)
@@ -485,6 +492,8 @@ org:admin
 org:read
 project:read
 project:write
+assistant:read
+assistant:write
 mcp:read
 mcp:write
 mcp:connect
@@ -499,20 +508,21 @@ skill:write
 ```text
 org:read
 project:read
+assistant:read
 mcp:read
 mcp:connect
 skill:read
 ```
 
-`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled for an RBAC-enabled organization. If Skills is enabled before RBAC, an RBAC off-to-on transition seeds the complete system-role defaults and explicitly patches missing Skills defaults when retained role grants cause the general seed to skip a role. Repeated RBAC enable calls, including recurring WorkOS events, intentionally do not restore customized or removed Skills grants. The legacy base seeder continues to preserve any existing customized system-role grant set. Disabling Skills does not remove grants. The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
+`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Assistants and Skills use independent project-selectable scope families: members receive `assistant:read` and `skill:read`, while admins receive their read and write scopes; `project:*` does not imply either family. The grant loader supplies missing Assistant defaults for built-in role principals created before these scopes, and RBAC enablement additively persists them without replacing other grants. Custom roles receive no compatibility grants. Skills defaults are provisioned when the org-level `skills` product feature is enabled for an RBAC-enabled organization. If Skills is enabled before RBAC, an RBAC off-to-on transition seeds the complete system-role defaults and explicitly patches missing Skills defaults when retained role grants cause the general seed to skip a role. Repeated RBAC enable calls, including recurring WorkOS events, intentionally do not restore customized or removed Skills grants. The legacy base seeder continues to preserve any existing customized system-role grant set. Disabling Skills does not remove grants. The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
 
 System roles are seeded when RBAC is enabled for an organization. They are not meant to be edited like custom roles. Changing the default grants of a system role is a product behavior change and should be treated carefully, especially for existing organizations.
 
 ## Dashboard Grant Reference
 
-Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, `environment:write` implies `environment:read`, and `skill:write` implies `skill:read`.
+Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `assistant:write` implies `assistant:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, `environment:write` implies `environment:read`, and `skill:write` implies `skill:read`.
 
-Selectors matter. A project-scoped feature needs the grant selector to match the active project. An MCP feature needs the selector to match the target MCP server or toolset. An unrestricted selector for the scope family covers every resource in that family.
+Selectors matter. A project-scoped or assistant feature needs the grant selector to match the active project. An MCP feature needs the selector to match the target MCP server or toolset. An unrestricted selector for the scope family covers every resource in that family.
 
 | Dashboard feature or question                                                                         | Required grant(s)                                                                                            | Selector target                                                       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -534,7 +544,8 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | View MCP team access                                                                                  | `mcp:read` AND `org:read`                                                                                    | MCP server or toolset ID; active organization                         | Team access reads the organization member and role lists in addition to the MCP resource.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Create a custom remote MCP server                                                                     | `mcp:write`                                                                                                  | MCP selector, usually unrestricted or target server ID after creation | The create route is page-gated on `mcp:write`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Open Deployments                                                                                      | `project:read` OR `project:write`                                                                            | Project ID                                                            | Deployment-triggering and failed-source retry actions require `project:write`.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Open Assistants                                                                                       | `project:read`                                                                                               | Project ID                                                            | Creating or editing assistants is gated by `project:write` OR `mcp:write`; admin-only assistant management sections are `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                        |
+| Open and use Project Assistant                                                                        | `assistant:read`                                                                                             | Active project ID                                                     | Reading or sending messages through the managed assistant requires assistant access. Provisioning it when absent requires `assistant:write`. Selected Skills additionally require `skill:read`.                                                                                                                                                                                                                                                                                                                             |
+| Open Assistants and view assistant details                                                            | `assistant:read`                                                                                             | Active project ID                                                     | Creating, editing, deleting, and changing status or instructions require `assistant:write`. Skill attachment flows additionally retain `skill:read` and `project:write` because they call the public Skills distribution API directly. Trigger management requires `assistant:write` and retains its project mutation gate.                                                                                                                                                                                                 |
 | Open Skills / CLIs                                                                                    | `org:read` to load the entitlement, plus `project:read` when Skills is disabled or `skill:read` when enabled | Organization ID and active project ID                                 | The org-level `skills` product feature controls both the page and navigation gate. Standard Admin and Member roles already include `org:read`. Loading or failed feature checks degrade to the disabled Coming Soon surface and its `project:read` gate. Enabled Skills checks use the active project as the `skill:read` selector. Enabling Skills provisions wildcard `skill:read` for Member and wildcard `skill:read`/`skill:write` for Admin when RBAC is already active; disabling Skills leaves those grants intact. |
 | Open Plugins                                                                                          | `project:read` OR `project:write`                                                                            | Project ID                                                            | Plugin install, update, delete, or configuration actions require `project:write`.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Open Environments list                                                                                | `project:read` OR `project:write`                                                                            | Project ID                                                            | Creating an environment requires `environment:write` (project-scoped); environment card clone actions are `environment:write`.                                                                                                                                                                                                                                                                                                                                                                                              |

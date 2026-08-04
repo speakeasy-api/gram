@@ -173,3 +173,38 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, projectIDs)
 }
+
+func TestWithAssistantSystemRoleDefaultsAddsLegacyAdminGrants(t *testing.T) {
+	t.Parallel()
+
+	grants := withAssistantSystemRoleDefaults(
+		[]Grant{NewGrant(ScopeProjectWrite, WildcardResource)},
+		[]urn.Principal{urn.NewPrincipal(urn.PrincipalTypeRole, SystemRoleAdmin)},
+	)
+
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantWrite, ResourceID: "project_a"}))
+}
+
+func TestWithAssistantSystemRoleDefaultsAddsLegacyMemberReadOnly(t *testing.T) {
+	t.Parallel()
+
+	grants := withAssistantSystemRoleDefaults(
+		nil,
+		[]urn.Principal{urn.NewPrincipal(urn.PrincipalTypeRole, SystemRoleMember)},
+	)
+
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantWrite, ResourceID: "project_a"}))
+}
+
+func TestWithAssistantSystemRoleDefaultsDoesNotGrantCustomRoles(t *testing.T) {
+	t.Parallel()
+
+	grants := withAssistantSystemRoleDefaults(
+		[]Grant{NewGrant(ScopeProjectWrite, WildcardResource)},
+		[]urn.Principal{urn.NewPrincipal(urn.PrincipalTypeRole, "custom")},
+	)
+
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
+}

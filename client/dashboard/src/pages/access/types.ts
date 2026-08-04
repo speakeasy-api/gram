@@ -1,4 +1,4 @@
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
   Disposition as SelectorDisposition,
   Selector,
@@ -25,13 +25,18 @@ export type ResourceType =
   | "mcp"
   | "environment"
   | "skill"
+  | "assistant"
   | "risk_policy"
   | "chat";
 
 export function isProjectSelectableResourceType(
   resourceType: ResourceType,
 ): boolean {
-  return resourceType === "project" || resourceType === "skill";
+  return (
+    resourceType === "project" ||
+    resourceType === "skill" ||
+    resourceType === "assistant"
+  );
 }
 
 /** The 4 MCP tool annotation hint keys. */

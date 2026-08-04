@@ -2294,6 +2294,21 @@ function buildAssistantTools(deps: ToolDeps) {
 
 type OnboardingTools = ReturnType<typeof buildAssistantTools>;
 
+const ASSISTANT_READ_TOOLS = new Set<keyof OnboardingTools>([
+  "list_skills",
+  "list_mcp_servers",
+  "list_toolsets",
+  "list_available_tools",
+  "list_environments",
+  "list_trigger_definitions",
+  "list_triggers",
+  "show_webhook_url",
+  "show_slack_app_guide",
+  "list_integrations",
+  "list_docs",
+  "read_docs",
+]);
+
 export function useOnboardingTools(): {
   frontendTools: Record<string, FrontendTool<Record<string, unknown>, unknown>>;
   components: Record<string, ToolCallMessagePartComponent>;
@@ -2306,39 +2321,53 @@ export function useOnboardingTools(): {
   const { data: productFeatures } = useProductFeatures();
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
+  const canWriteAssistant = hasScope("assistant:write", project.id);
+  const canWriteProject = hasScope("project:write", project.id);
+  const canReadSkills = hasScope("skill:read", project.id);
+  const canMutateSkills = canReadSkills && canWriteAssistant && canWriteProject;
 
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
     const tools = buildAssistantTools({ sdk, organizationId, draft });
-    if (productFeatures?.skillsEnabled !== true) {
-      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
+    let enabledTools: Partial<OnboardingTools> = tools;
+    if (productFeatures?.skillsEnabled !== true || !canReadSkills) {
+      const { list_skills, attach_skill, detach_skill, ...withoutSkills } =
         tools;
       void list_skills;
       void attach_skill;
       void detach_skill;
-      return enabledTools;
+      enabledTools = withoutSkills;
     }
-    if (!hasScope("skill:read", project.id)) {
-      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
-        tools;
-      void list_skills;
+    if (!canMutateSkills) {
+      const { attach_skill, detach_skill, ...withoutSkillMutations } =
+        enabledTools;
       void attach_skill;
       void detach_skill;
-      return enabledTools;
+      enabledTools = withoutSkillMutations;
     }
-    if (!hasScope("project:write", project.id)) {
-      const { attach_skill, detach_skill, ...readableTools } = tools;
-      void attach_skill;
-      void detach_skill;
-      return readableTools;
+    if (!canWriteProject) {
+      const { create_trigger, update_trigger, ...withoutTriggerMutations } =
+        enabledTools;
+      void create_trigger;
+      void update_trigger;
+      enabledTools = withoutTriggerMutations;
     }
-    return tools;
+    if (!canWriteAssistant) {
+      enabledTools = Object.fromEntries(
+        Object.entries(enabledTools).filter(([name]) =>
+          ASSISTANT_READ_TOOLS.has(name as keyof OnboardingTools),
+        ),
+      );
+    }
+    return enabledTools;
   }, [
     sdk,
     organizationId,
     draft,
+    canWriteAssistant,
+    canWriteProject,
+    canReadSkills,
+    canMutateSkills,
     productFeatures?.skillsEnabled,
-    hasScope,
-    project.id,
   ]);
 
   const components = useMemo<Record<string, ToolCallMessagePartComponent>>(

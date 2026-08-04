@@ -16,6 +16,8 @@ import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button } from "@/components/ui/Button";
@@ -78,6 +80,9 @@ const RISK_FILTERS = defineFilters([
 const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canReadAssistants = hasScope("assistant:read", project.id);
   const client = useSdkClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
@@ -178,6 +183,7 @@ export default function RiskEvents(): JSX.Element {
   // findings missing user attribution can be surfaced even before any
   // assistant exists in the project.
   const { data: assistantsData } = useAssistantsList(undefined, undefined, {
+    enabled: canReadAssistants,
     throwOnError: false,
   });
   const assistants = useMemo(

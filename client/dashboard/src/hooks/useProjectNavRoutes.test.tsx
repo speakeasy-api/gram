@@ -179,4 +179,30 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).not.toContain(routes.deployments);
   });
+
+  it("uses assistant read on the active project for assistant surfaces", () => {
+    testState.featureFlags[FEATURE_FLAGS.assistants] = { status: "enabled" };
+
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const assistantRoutes = result.current.filter(
+      (entry) =>
+        entry.route === routes.chat || entry.route === routes.assistants,
+    );
+
+    expect(assistantRoutes).toHaveLength(2);
+    expect(assistantRoutes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          route: routes.chat,
+          scope: ["assistant:read"],
+          resourceId: "project_a",
+        }),
+        expect.objectContaining({
+          route: routes.assistants,
+          scope: ["assistant:read"],
+          resourceId: "project_a",
+        }),
+      ]),
+    );
+  });
 });

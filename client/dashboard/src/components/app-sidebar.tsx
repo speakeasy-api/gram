@@ -23,7 +23,7 @@ import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";

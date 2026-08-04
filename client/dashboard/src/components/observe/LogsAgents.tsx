@@ -38,6 +38,7 @@ import {
 } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useProject } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
@@ -200,6 +201,9 @@ function OwnSessionsNotice(): JSX.Element | null {
 }
 
 export function LogsAgentsContent(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canReadAssistant = hasScope("assistant:read", project.id);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [offset, setOffset] = useState(0);
@@ -304,7 +308,7 @@ export function LogsAgentsContent(): JSX.Element {
     { id: assistantId },
     undefined,
     {
-      enabled: !!assistantId,
+      enabled: canReadAssistant && !!assistantId,
       retry: false,
       throwOnError: false,
       refetchOnWindowFocus: false,

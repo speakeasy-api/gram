@@ -9,6 +9,8 @@ import {
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
@@ -30,12 +32,15 @@ const KBD_CLASS =
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
+  const project = useProject();
+  const { hasScope } = useRBAC();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
+  const canReadAssistants = hasScope("assistant:read", project.id);
 
   // Recently visited pages (client-side; read only while the palette is open).
   // Scoped per user so a shared browser profile doesn't leak history. Gate the
@@ -119,19 +124,20 @@ export function CommandPalette(): JSX.Element {
   // filtering, so keeping this forceMounted row above the matches would steal
   // the highlight from the closest result and force an extra ↓ keypress to reach
   // it (AGE-2807).
-  const askAiGroup = inProject ? (
-    <CommandGroup heading="Assistant">
-      <CommandItem
-        forceMount
-        value="__ask_ai__"
-        onSelect={handleAskAi}
-        className="flex items-center gap-2"
-      >
-        <Icon name="sparkles" className="text-primary size-4 shrink-0" />
-        <span className="truncate">{askAiLabel}</span>
-      </CommandItem>
-    </CommandGroup>
-  ) : null;
+  const askAiGroup =
+    inProject && canReadAssistants ? (
+      <CommandGroup heading="Assistant">
+        <CommandItem
+          forceMount
+          value="__ask_ai__"
+          onSelect={handleAskAi}
+          className="flex items-center gap-2"
+        >
+          <Icon name="sparkles" className="text-primary size-4 shrink-0" />
+          <span className="truncate">{askAiLabel}</span>
+        </CommandItem>
+      </CommandGroup>
+    ) : null;
 
   return (
     <CommandDialog

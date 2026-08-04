@@ -1,6 +1,6 @@
 import { Text } from "@/components/ui/Text";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
-import { Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
+import { Bot, Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
 import { Link } from "react-router";
 
 export function ResourceLink({
@@ -42,6 +42,11 @@ export function ResourceLink({
     label = proj?.name ?? resourceId;
     IconEl = FolderOpen;
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
+  } else if (resourceKind === "assistant") {
+    const proj = projectMap.get(resourceId);
+    label = proj?.name ?? resourceId;
+    IconEl = Bot;
+    to = proj ? `/${orgSlug}/projects/${proj.slug}/assistants` : null;
   } else if (resourceKind === "mcp") {
     IconEl = Plug;
     // Grants store the toolset id for toolset-backed servers and the

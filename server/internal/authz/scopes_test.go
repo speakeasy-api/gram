@@ -72,6 +72,8 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		{scope: ScopeEnvironmentWrite, expected: ScopeEnvironmentBlockedWrite},
 		{scope: ScopeSkillRead, expected: ScopeSkillBlockedRead},
 		{scope: ScopeSkillWrite, expected: ScopeSkillBlockedWrite},
+		{scope: ScopeAssistantRead, expected: ScopeAssistantBlockedRead},
+		{scope: ScopeAssistantWrite, expected: ScopeAssistantBlockedWrite},
 		{scope: ScopeRiskPolicyEvaluate, expected: ScopeRiskPolicyBypass},
 	}
 
@@ -94,6 +96,7 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
+	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, scopeExpansions[ScopeAssistantBlockedWrite])
 }
 
 func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
@@ -167,6 +170,42 @@ func TestSystemRolesIncludeSkillScopes(t *testing.T) {
 	}
 	require.Contains(t, member, string(ScopeSkillRead))
 	require.NotContains(t, member, string(ScopeSkillWrite))
+}
+
+func TestSystemRolesIncludeAssistantScopes(t *testing.T) {
+	t.Parallel()
+
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeAssistantRead))
+	require.Contains(t, admin, string(ScopeAssistantWrite))
+
+	member := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		member = append(member, grant.Scope)
+	}
+	require.Contains(t, member, string(ScopeAssistantRead))
+	require.NotContains(t, member, string(ScopeAssistantWrite))
+}
+
+func TestGrantsHasAccess_assistantWriteSatisfiesAssistantRead(t *testing.T) {
+	t.Parallel()
+
+	projectID := "0196cbd1-9328-74e7-b7bb-6e5357565573"
+	grants := []Grant{NewGrant(ScopeAssistantWrite, projectID)}
+	grant, _, _ := evaluateGrants(grants, Check{Scope: ScopeAssistantRead, ResourceID: projectID}.expand())
+	require.NotNil(t, grant)
+}
+
+func TestGrantsHasAccess_assistantReadDoesNotSatisfyAssistantWrite(t *testing.T) {
+	t.Parallel()
+
+	projectID := "0196cbd1-9328-74e7-b7bb-6e5357565573"
+	grants := []Grant{NewGrant(ScopeAssistantRead, projectID)}
+	grant, _, _ := evaluateGrants(grants, Check{Scope: ScopeAssistantWrite, ResourceID: projectID}.expand())
+	require.Nil(t, grant)
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {
@@ -1276,6 +1315,8 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeEnvironmentWrite), want: []string{string(ScopeEnvironmentRead)}},
 		{scope: string(ScopeSkillRead), want: []string{}},
 		{scope: string(ScopeSkillWrite), want: []string{string(ScopeSkillRead)}},
+		{scope: string(ScopeAssistantRead), want: []string{}},
+		{scope: string(ScopeAssistantWrite), want: []string{string(ScopeAssistantRead)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {

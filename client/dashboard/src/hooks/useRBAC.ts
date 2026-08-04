@@ -1,5 +1,5 @@
 import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -13,6 +13,7 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
   if (scope.startsWith("skill:")) return "skill";
+  if (scope.startsWith("assistant:")) return "assistant";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
   return "*";
@@ -68,6 +69,8 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   ],
   "skill:read": ["skill:blocked_read"],
   "skill:write": ["skill:blocked_write", "skill:blocked_read"],
+  "assistant:read": ["assistant:blocked_read"],
+  "assistant:write": ["assistant:blocked_write", "assistant:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
 };
 

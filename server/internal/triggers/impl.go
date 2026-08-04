@@ -40,6 +40,7 @@ type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	auth   *auth.Auth
+	authz  *authz.Engine
 	app    *bgtriggers.App
 	audit  *audit.Logger
 }
@@ -61,6 +62,7 @@ func NewService(
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/triggers"),
 		logger: logger,
 		auth:   auth.New(logger, db, sessions, authzEngine),
+		authz:  authzEngine,
 		app:    app,
 		audit:  auditLogger,
 	}
@@ -94,7 +96,7 @@ func (s *Service) ListTriggerDefinitions(ctx context.Context, _ *gen.ListTrigger
 }
 
 func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerInstancesPayload) (*gen.ListTriggerInstancesResult, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +124,7 @@ func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerIn
 }
 
 func (s *Service) GetTriggerInstance(ctx context.Context, payload *gen.GetTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +147,7 @@ func (s *Service) GetTriggerInstance(ctx context.Context, payload *gen.GetTrigge
 }
 
 func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.CreateTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +196,7 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 }
 
 func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.UpdateTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +273,7 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 }
 
 func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.DeleteTriggerInstancePayload) error {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectWrite)
 	if err != nil {
 		return err
 	}
@@ -300,7 +302,7 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 }
 
 func (s *Service) PauseTriggerInstance(ctx context.Context, payload *gen.PauseTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +322,7 @@ func (s *Service) PauseTriggerInstance(ctx context.Context, payload *gen.PauseTr
 }
 
 func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.ResumeTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -396,10 +398,13 @@ func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func requireProjectAuthContext(ctx context.Context) (*contextvalues.AuthContext, error) {
+func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
 	}
 	return authCtx, nil
 }

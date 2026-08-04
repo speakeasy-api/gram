@@ -20,13 +20,15 @@ export interface UseServerAssistantTransportResult {
   assistantId: string;
   /** Whether the managed assistant has resolved and the transport is live. */
   ready: boolean;
+  /** Whether the caller can use assistants in the target project. */
+  allowed: boolean;
   /** Connection error message, if resolving the managed assistant failed. */
   error: string | null;
   /**
    * True when the project has no managed assistant yet and the caller lacks
-   * `project:write`. UI should surface "ask an admin to enable this" rather
+   * `assistant:write`. UI should surface "ask an admin to enable this" rather
    * than the connection-error notice — `sendMessage` itself only needs
-   * `project:read`, so once an admin provisions it the same viewer can chat.
+   * `assistant:read`, so once an admin provisions it the same viewer can chat.
    */
   needsAdmin: boolean;
 }
@@ -43,7 +45,7 @@ interface UseServerAssistantTransportOptions {
  * this hook only resolves the assistant and builds the send transport.
  *
  * Read (`assistantsGetManaged`) is decoupled from write
- * (`ensureManagedAssistant`): viewers with `project:read` reach an existing
+ * (`ensureManagedAssistant`): viewers with `assistant:read` reach an existing
  * managed assistant without ever hitting the write-scoped provisioning path.
  * When the assistant is missing, only writers fire ensure; viewers see
  * `needsAdmin` so the caller can show an "ask an admin" notice.
@@ -60,12 +62,14 @@ export function useServerAssistantTransport(
   // The hook can be called with a projectSlug that differs from the URL-active
   // project (e.g. the org audit logs route picks an arbitrary project from
   // organization.projects). Scope the RBAC check to THAT project's id, not
-  // useProject(), so a user with project:write on the target — but not on the
+  // useProject(), so a user with assistant:write on the target — but not on the
   // active one — still gets the writer path.
   const targetProjectId =
     organization.projects.find((p) => p.slug === projectSlug)?.id ?? "";
+  const canRead =
+    !!targetProjectId && hasScope("assistant:read", targetProjectId);
   const canCreate =
-    !!targetProjectId && hasScope("project:write", targetProjectId);
+    !!targetProjectId && hasScope("assistant:write", targetProjectId);
 
   // The fetcher reads the project from the X-Gram-Project header, but react-
   // query only differentiates by query key — pass projectSlug into the request
@@ -75,7 +79,7 @@ export function useServerAssistantTransport(
     { gramProject: projectSlug },
     undefined,
     {
-      enabled: enabled && !!projectSlug,
+      enabled: enabled && canRead && !!projectSlug,
       retry: false,
       throwOnError: false,
       refetchOnWindowFocus: false,
@@ -137,8 +141,8 @@ export function useServerAssistantTransport(
   }, [enabled, projectSlug, is404, canCreate, rbacLoading, ensureMutate]);
 
   const assistantId = fetchedId || provisionedId;
-  const ready = assistantId !== "";
-  const needsAdmin = is404 && !rbacLoading && !canCreate;
+  const ready = canRead && assistantId !== "";
+  const needsAdmin = canRead && is404 && !rbacLoading && !canCreate;
   const error = isOtherError
     ? "Couldn't connect to the Project Assistant. Try reopening the sidebar."
     : provisionError;
@@ -161,5 +165,12 @@ export function useServerAssistantTransport(
     options.onSkillIdsSent,
   ]);
 
-  return { transport, assistantId, ready, error, needsAdmin };
+  return {
+    transport,
+    assistantId,
+    ready,
+    allowed: canRead,
+    error,
+    needsAdmin,
+  };
 }

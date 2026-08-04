@@ -729,7 +729,7 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const hideTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
+  const pageHidesTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const selectedSkillIdsRef = useRef(selectedSkillIds);
@@ -759,12 +759,14 @@ export function InsightsProvider({
     transport: serverTransport,
     assistantId: managedAssistantId,
     ready: assistantReady,
+    allowed: assistantAllowed,
     error: assistantError,
     needsAdmin: assistantNeedsAdmin,
   } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
+  const hideTrigger = pageHidesTrigger || !assistantAllowed;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },

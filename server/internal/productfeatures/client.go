@@ -148,6 +148,35 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	return nil
 }
 
+func provisionAssistantSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeAssistantRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision member Assistant grants: %w", err)
+	}
+
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeAssistantRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+		{
+			Scope:     string(authz.ScopeAssistantWrite),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision admin Assistant grants: %w", err)
+	}
+
+	return nil
+}
+
 // EnableSkillsTx provisions the built-in Skills grants when RBAC is already
 // active, then enables the org-level Skills feature in the caller's transaction.
 // When RBAC is off, EnableRBACTx provisions them after seeding system roles.
@@ -206,6 +235,11 @@ func EnableRBACTx(ctx context.Context, dbtx repo.DBTX, organizationID string) er
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
 		return fmt.Errorf("seed system role grants: %w", err)
+	}
+	// Assistant scopes postdate RBAC, so legacy organizations need their
+	// immutable system-role defaults added without replacing existing grants.
+	if err := provisionAssistantSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
+		return err
 	}
 
 	skillsEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
