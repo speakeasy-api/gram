@@ -230,7 +230,7 @@ func TestOTLPMetricsPersistOnlyOperationalRows(t *testing.T) {
 	body, err := protojson.Marshal(request)
 	require.NoError(t, err)
 	for range 2 {
-		response := serveMetricRequest(t, mountedTraceMux(ti.service), body, "application/json", "", "fixture-key", "fixture-project")
+		response := serveMetricRequest(t, ti.service.metricHTTPHandler(), body, "application/json", "", "fixture-key", "fixture-project")
 		require.Equal(t, http.StatusAccepted, response.Code)
 	}
 	require.NoError(t, ti.service.metrics.Shutdown(t.Context()))
