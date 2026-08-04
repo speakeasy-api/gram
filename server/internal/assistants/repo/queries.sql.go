@@ -2559,6 +2559,35 @@ func (q *Queries) MarkAssistantRuntimeReaped(ctx context.Context, arg MarkAssist
 	return err
 }
 
+const raiseAssistantWarmTtlSeconds = `-- name: RaiseAssistantWarmTtlSeconds :execrows
+UPDATE assistants
+SET warm_ttl_seconds = $1
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+  AND warm_ttl_seconds = $4
+`
+
+type RaiseAssistantWarmTtlSecondsParams struct {
+	WarmTtlSeconds     int64
+	AssistantID        uuid.UUID
+	ProjectID          uuid.UUID
+	FromWarmTtlSeconds int64
+}
+
+func (q *Queries) RaiseAssistantWarmTtlSeconds(ctx context.Context, arg RaiseAssistantWarmTtlSecondsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, raiseAssistantWarmTtlSeconds,
+		arg.WarmTtlSeconds,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.FromWarmTtlSeconds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const reapStuckAssistantRuntimes = `-- name: ReapStuckAssistantRuntimes :many
 UPDATE assistant_runtimes
 SET

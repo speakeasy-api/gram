@@ -493,6 +493,14 @@ WHERE id = @assistant_id
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
 
+-- name: RaiseAssistantWarmTtlSeconds :execrows
+UPDATE assistants
+SET warm_ttl_seconds = @warm_ttl_seconds
+WHERE id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND warm_ttl_seconds = @from_warm_ttl_seconds;
+
 -- name: DeleteAssistant :exec
 UPDATE assistants
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
