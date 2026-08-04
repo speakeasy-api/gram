@@ -56,6 +56,70 @@ export interface CurrentUser {
   workos?: WorkosCurrentUser;
 }
 
+/**
+ * A cross-app access requesting app: a client allowed to ask the IdP for an
+ * ID-JAG on a user's behalf. An empty `client_secret` is a public client.
+ */
+export interface XaaApp {
+  id: string;
+  client_id: string;
+  client_secret: string;
+  name: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * A resource app: one resource authorization server at /resource-as/<slug>.
+ * `issuer` is what an ID-JAG must carry in `aud`; `resource_identifier` is
+ * the MCP server behind it, which is what lands in the `resource` claim.
+ * They are different URLs.
+ */
+export interface XaaResource {
+  id: string;
+  slug: string;
+  name: string;
+  resource_identifier: string;
+  issuer: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Which user may drive which app against which resource, and for what scopes. */
+export interface XaaAppAssignment {
+  id: string;
+  app_id: string;
+  user_id: string;
+  resource_id: string;
+  granted_scopes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Which issuer a resource authorization server accepts ID-JAGs from. */
+export interface XaaTrustRule {
+  id: string;
+  resource_id: string;
+  trusted_issuer: string;
+  allowed_client_ids: string;
+  allowed_scopes: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One entry in the ledger of ID-JAGs the IdP has minted. */
+export interface XaaIssuedJag {
+  jti: string;
+  app_id: string;
+  user_id: string;
+  resource_id: string;
+  scope: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export interface ListResult<T> {
   items: T[];
   next_cursor: string;
@@ -157,5 +221,84 @@ export const api = {
     }) => rpc<typeof p, CurrentUser>("devIdp.setCurrentUser", p),
     clearCurrentUser: (p: { mode: Mode }) =>
       rpc<typeof p, void>("devIdp.clearCurrentUser", p),
+  },
+  xaaApps: {
+    list: (p: ListParams = {}) =>
+      rpc<ListParams, ListResult<XaaApp>>("xaaApps.list", p),
+    create: (p: {
+      client_id: string;
+      client_secret?: string;
+      name?: string;
+      enabled?: boolean;
+    }) => rpc<typeof p, XaaApp>("xaaApps.create", p),
+    update: (p: {
+      id: string;
+      client_id?: string;
+      client_secret?: string;
+      name?: string;
+      enabled?: boolean;
+    }) => rpc<typeof p, XaaApp>("xaaApps.update", p),
+    delete: (p: { id: string }) => rpc<typeof p, void>("xaaApps.delete", p),
+  },
+  xaaResources: {
+    list: (p: ListParams = {}) =>
+      rpc<ListParams, ListResult<XaaResource>>("xaaResources.list", p),
+    create: (p: { slug: string; name?: string; resource_identifier: string }) =>
+      rpc<typeof p, XaaResource>("xaaResources.create", p),
+    update: (p: {
+      id: string;
+      slug?: string;
+      name?: string;
+      resource_identifier?: string;
+    }) => rpc<typeof p, XaaResource>("xaaResources.update", p),
+    delete: (p: { id: string }) =>
+      rpc<typeof p, void>("xaaResources.delete", p),
+  },
+  xaaAppAssignments: {
+    list: (
+      p: ListParams & {
+        app_id?: string;
+        user_id?: string;
+        resource_id?: string;
+      } = {},
+    ) =>
+      rpc<typeof p, ListResult<XaaAppAssignment>>("xaaAppAssignments.list", p),
+    create: (p: {
+      app_id: string;
+      user_id: string;
+      resource_id: string;
+      granted_scopes?: string;
+    }) => rpc<typeof p, XaaAppAssignment>("xaaAppAssignments.create", p),
+    update: (p: { id: string; granted_scopes: string }) =>
+      rpc<typeof p, XaaAppAssignment>("xaaAppAssignments.update", p),
+    delete: (p: { id: string }) =>
+      rpc<typeof p, void>("xaaAppAssignments.delete", p),
+  },
+  xaaTrustRules: {
+    list: (p: ListParams & { resource_id?: string } = {}) =>
+      rpc<typeof p, ListResult<XaaTrustRule>>("xaaTrustRules.list", p),
+    create: (p: {
+      resource_id: string;
+      trusted_issuer: string;
+      allowed_client_ids?: string;
+      allowed_scopes?: string;
+      enabled?: boolean;
+    }) => rpc<typeof p, XaaTrustRule>("xaaTrustRules.create", p),
+    update: (p: {
+      id: string;
+      trusted_issuer?: string;
+      allowed_client_ids?: string;
+      allowed_scopes?: string;
+      enabled?: boolean;
+    }) => rpc<typeof p, XaaTrustRule>("xaaTrustRules.update", p),
+    delete: (p: { id: string }) =>
+      rpc<typeof p, void>("xaaTrustRules.delete", p),
+    listIssuedGrants: (
+      p: { user_id?: string; resource_id?: string; limit?: number } = {},
+    ) =>
+      rpc<typeof p, { items: XaaIssuedJag[] }>(
+        "xaaTrustRules.listIssuedGrants",
+        p,
+      ),
   },
 };
