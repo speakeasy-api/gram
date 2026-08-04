@@ -2673,7 +2673,7 @@ WHERE sv.injection_scanned_at IS NULL
 ORDER BY sv.id
 LIMIT @batch_size;
 
--- name: MarkSkillVersionInjectionScan :exec
+-- name: MarkSkillVersionInjectionScan :execrows
 UPDATE skill_versions sv
 SET
   injection_scanned_at = clock_timestamp(),

@@ -51,10 +51,11 @@ func (s *SkillInjectionScanner) Scan(ctx context.Context, params ScanSkillVersio
 		// The manifest is untrusted content the agent will load as instructions,
 		// so frame it as an attachment; the judge treats the body as data either way.
 		msg := judgemessage.New(message.PromptAttachment, "", row.Content)
-		findings, err := s.scanner.Scan(ctx, row.Content, row.OrganizationID, row.ProjectID.String(), "", msg)
+		// ScanStrict (not Scan) so a judge that failed to reach a verdict returns
+		// an error instead of a false SAFE: we skip the row and leave it in the
+		// queue for the next sweep rather than permanently marking it scanned.
+		findings, err := s.scanner.ScanStrict(ctx, row.Content, row.OrganizationID, row.ProjectID.String(), "", msg)
 		if err != nil {
-			// The judge fails open (returns no findings on error), so a non-nil
-			// error here is unexpected. Skip this row and let the next sweep retry it.
 			s.logger.WarnContext(ctx, "prompt injection scan failed for skill version",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(row.OrganizationID),
@@ -68,13 +69,20 @@ func (s *SkillInjectionScanner) Scan(ctx context.Context, params ScanSkillVersio
 			rationale = findings[0].Description
 		}
 
-		if err := queries.MarkSkillVersionInjectionScan(ctx, repo.MarkSkillVersionInjectionScanParams{
+		marked, err := queries.MarkSkillVersionInjectionScan(ctx, repo.MarkSkillVersionInjectionScanParams{
 			ProjectID:          row.ProjectID,
 			SkillVersionID:     row.SkillVersionID,
 			InjectionFlagged:   pgtype.Bool{Bool: flagged, Valid: true},
 			InjectionRationale: conv.ToPGTextEmpty(rationale),
-		}); err != nil {
+		})
+		if err != nil {
 			return nil, fmt.Errorf("mark skill version injection scan: %w", err)
+		}
+		if marked == 0 {
+			// The version was deleted or moved projects between the list and this
+			// update, so the verdict wasn't persisted. Don't count it as scanned;
+			// if it still exists it stays queued for the next sweep.
+			continue
 		}
 
 		result.Processed++

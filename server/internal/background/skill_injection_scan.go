@@ -26,7 +26,14 @@ const (
 	skillInjectionScanScheduleID       = "v1:skill-injection-scan-schedule"
 	skillInjectionScanWorkflowID       = skillInjectionScanScheduleID + "/scheduled"
 	skillInjectionScanInterval         = time.Minute
-	skillInjectionScanRunTimeout       = 70 * time.Minute
+	// skillInjectionScanBatchTimeout bounds one batch activity. A batch is 8
+	// ~10s judge calls, so this is generous headroom, not the expected duration.
+	skillInjectionScanBatchTimeout = 5 * time.Minute
+	// skillInjectionScanRunTimeout must exceed the worst-case drain loop
+	// (maxBatches * batchTimeout) so a slow-but-succeeding run reaches its natural
+	// continue-as-new instead of being killed mid-batch. Persistent failure bails
+	// earlier via retry exhaustion. The extra 10m absorbs retry/backoff slack.
+	skillInjectionScanRunTimeout = skillInjectionScanMaxBatches*skillInjectionScanBatchTimeout + 10*time.Minute
 )
 
 // ScanSkillVersionsForInjectionWorkflow drains the prompt-injection scan queue.
@@ -34,7 +41,7 @@ const (
 // without a cursor; the workflow is idempotent and safe to overlap-skip.
 func ScanSkillVersionsForInjectionWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: skillInjectionScanBatchTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
 			InitialInterval:    time.Second,

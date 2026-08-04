@@ -5263,7 +5263,7 @@ func (q *Queries) MarkSkillSessionVersionsSynced(ctx context.Context, arg MarkSk
 	return result.RowsAffected(), nil
 }
 
-const markSkillVersionInjectionScan = `-- name: MarkSkillVersionInjectionScan :exec
+const markSkillVersionInjectionScan = `-- name: MarkSkillVersionInjectionScan :execrows
 UPDATE skill_versions sv
 SET
   injection_scanned_at = clock_timestamp(),
@@ -5282,14 +5282,17 @@ type MarkSkillVersionInjectionScanParams struct {
 	SkillVersionID     uuid.UUID
 }
 
-func (q *Queries) MarkSkillVersionInjectionScan(ctx context.Context, arg MarkSkillVersionInjectionScanParams) error {
-	_, err := q.db.Exec(ctx, markSkillVersionInjectionScan,
+func (q *Queries) MarkSkillVersionInjectionScan(ctx context.Context, arg MarkSkillVersionInjectionScanParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSkillVersionInjectionScan,
 		arg.InjectionFlagged,
 		arg.InjectionRationale,
 		arg.ProjectID,
 		arg.SkillVersionID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const promoteObservedSkillToManual = `-- name: PromoteObservedSkillToManual :one
