@@ -9,6 +9,7 @@ import { Text } from "@/components/ui/Text";
 import { clientDocumentOrigin } from "@/lib/user-session-client-source";
 import { UserSessionClientsList } from "./UserSessionClientsList";
 import { UserSessionsList } from "./UserSessionsList";
+import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
 
 /**
  * Body of the Clients and Sessions tab, shared verbatim by the toolset-backed
@@ -77,13 +78,21 @@ export function ClientsAndSessionsTab({
   return (
     <Stack gap={6}>
       <Stack gap={3}>
-        <Stack gap={1}>
-          <Text variant="subheading">Sessions</Text>
-          <Text small muted>
-            Active sessions clients hold via this server's session issuer,
-            established over OAuth. An issuer can gate more than one server, so
-            each row names the issuer that gated it.
-          </Text>
+        <Stack
+          direction="horizontal"
+          align="start"
+          justify="space-between"
+          gap={4}
+        >
+          <Stack gap={1}>
+            <Text variant="subheading">Sessions</Text>
+            <Text small muted>
+              Active sessions clients hold via this server's session issuer,
+              established over OAuth. An issuer can gate more than one server,
+              so each row names the issuer that gated it.
+            </Text>
+          </Stack>
+          <ViewOrgSessionsButton />
         </Stack>
         {sessionFilter && (
           <div className="flex items-center gap-2">

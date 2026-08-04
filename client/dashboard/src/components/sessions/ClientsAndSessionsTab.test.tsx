@@ -61,7 +61,14 @@ vi.mock("@/components/ui/MoreActions", () => ({
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => true, hasAnyScope: () => true }),
+}));
+
+// Reaches for the org route helpers and the PostHog flag context, neither of
+// which this test mounts. Its own gating is covered in
+// ViewOrgSessionsButton.test.tsx.
+vi.mock("./ViewOrgSessionsButton", () => ({
+  ViewOrgSessionsButton: () => null,
 }));
 
 vi.mock("./RevokeClientDialog", () => ({
