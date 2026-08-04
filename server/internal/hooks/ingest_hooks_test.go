@@ -2021,3 +2021,67 @@ func TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters(t *testing.T
 	require.NotNil(t, result)
 	require.NotEqual(t, "deny", result.Decision)
 }
+
+// TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory: bringing the
+// meta-tools under the guard must not blanket-deny them. The guard can only
+// reach its generic "not Gram-hosted" deny without a URL, so a meta-tool
+// reading resources from a Gram-hosted server would be blocked — traffic the
+// legacy endpoint permits. Resolving the name against the session inventory is
+// what separates allowed from denied, and it must name the server when denying.
+func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
+	t.Parallel()
+
+	gramHosted := MCPServerEntry{
+		Source: "codex", Name: "speakeasy-team",
+		URL:    "https://app.getgram.ai/mcp/speakeasy-team-8g3az",
+		Status: "unknown",
+	}
+	external := MCPServerEntry{
+		Source: "codex", Name: "someone-else",
+		URL:    "https://mcp.example.test/mcp",
+		Status: "unknown",
+	}
+
+	tests := []struct {
+		name       string
+		entry      MCPServerEntry
+		target     string
+		wantDenied bool
+	}{
+		{"gram-hosted target is allowed", gramHosted, "speakeasy-team", false},
+		{"external target is denied", external, "someone-else", true},
+		{"target absent from inventory is denied", gramHosted, "unlisted", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+			sessionID := "codex-meta-inventory-" + tc.name
+			require.NoError(t, ti.service.cache.Set(ctx,
+				sessionMCPListCacheKey(sessionID), []MCPServerEntry{tc.entry}, sessionMCPListTTL))
+
+			toolName := "read_mcp_resource"
+			callID := "call-1"
+			payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+			payload.Data = &gen.HookIngestData{
+				ToolCall: &gen.HookToolCallData{
+					ID: &callID, Name: &toolName,
+					Input: map[string]any{"server": tc.target},
+				},
+			}
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			if !tc.wantDenied {
+				require.NotEqual(t, "deny", result.Decision,
+					"a Gram-hosted meta-tool target must not be blocked")
+				return
+			}
+			require.Equal(t, "deny", result.Decision)
+		})
+	}
+}

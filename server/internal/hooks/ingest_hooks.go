@@ -235,13 +235,15 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		// claimed, so a client disconnect here would otherwise drop the event
 		// for good — the retry gets marked duplicate and skips persistence.
 		persistCtx := context.WithoutCancel(ctx)
+		inventory := canonicalMCPInventoryEntries(payload)
 		s.upsertShadowMCPInventoryURLs(
 			persistCtx,
 			authCtx.ActiveOrganizationID,
 			authCtx.ProjectID.String(),
 			canonicalSessionID(payload),
-			canonicalMCPInventoryEntries(payload),
+			inventory,
 		)
+		s.cacheCanonicalMCPList(persistCtx, canonicalSessionID(payload), inventory)
 		s.recordCanonicalHook(persistCtx, payload, authCtx, actor, timestamp, blockReason)
 	}
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
@@ -724,12 +726,15 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	toolName := toolref.MCPFunctionOf(rawToolName)
 	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
 	// A Codex meta-tool names its target in tool_input.server, so nothing above
-	// can derive an identity from the tool name. Attaching it lets the deny name
-	// the server and lets a bypass grant be scoped to it; leaving it empty still
-	// denies under block_all, just without saying which server.
+	// can derive an identity from the tool name. Resolving that name against the
+	// session's inventory is what lets a Gram-hosted target be allowed at all —
+	// without a URL the guard can only reach its generic "not Gram-hosted" deny,
+	// which would block legitimate reads the legacy endpoint permits. A name we
+	// cannot resolve still denies: unproven is not absent.
 	if evidence.ServerIdentity == "" && evidence.FullURL == "" {
 		if server, isMetaTool := codexMetaToolServer(rawToolName, toolInput); isMetaTool {
 			evidence.ServerIdentity = server
+			s.resolveEvidenceFromSessionInventory(ctx, &evidence, canonicalSessionID(payload))
 		}
 	}
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
@@ -771,6 +776,48 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 		return auditReason, userReason
 	}
 	return "", ""
+}
+
+// resolveEvidenceFromSessionInventory upgrades evidence carrying only a server
+// name to the target that name resolves to in the session's inventory: the URL
+// for HTTP servers, the launch command for stdio ones. Mirrors the legacy
+// codexShadowMCPEvidence resolution — stdio identity is pinned to the command
+// so a bypass grant cannot follow a renamed config alias.
+func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evidence *shadowmcp.AccessEvidence, sessionID string) {
+	if evidence.ServerIdentity == "" || sessionID == "" {
+		return
+	}
+	entries, err := s.getCachedMCPList(ctx, sessionID)
+	if err != nil {
+		return
+	}
+	matched := matchCodexCachedMCPServerEntry(entries, evidence.ServerIdentity)
+	if matched == nil {
+		return
+	}
+	if matched.URL != "" {
+		evidence.FullURL = matched.URL
+	}
+	if matched.Command != "" {
+		evidence.ServerIdentity = matched.Command
+	}
+}
+
+// cacheCanonicalMCPList stores a session's MCP inventory under the same key
+// and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
+// resolve a later tool call's target to a configured server. Best-effort: a
+// cache miss downgrades a deny's detail, it never changes the decision.
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry) {
+	if sessionID == "" || len(entries) == 0 {
+		return
+	}
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
+			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+	}
 }
 
 // canonicalCodexMetaTool reports whether this event is one of Codex's built-in
