@@ -244,8 +244,8 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Attribute("slug", String, "Project-unique slug.")
 	Attribute("authn_challenge_mode", String, "chain | interactive.")
 	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
-	Attribute("client_id_metadata_admission_mode", String, "The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | open. Always populated — an issuer whose mode has never been configured reports the default, 'presets', so clients never have to reason about an unset state.", func() {
-		Enum("disabled", "presets", "open")
+	Attribute("client_id_metadata_admission_mode", String, "The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.", func() {
+		Enum("disabled", "presets", "reporting", "open")
 	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)

@@ -42,6 +42,11 @@ func TestEvaluate_ModeMatrix(t *testing.T) {
 		{name: "presets/custom", mode: ModePresets, clientID: customURL, want: Decision{Outcome: OutcomeCheckCustom, Admit: "", Denial: ""}},
 		{name: "presets/unknown", mode: ModePresets, clientID: unknownURL, want: Decision{Outcome: OutcomeCheckCustom, Admit: "", Denial: ""}},
 
+		{name: "reporting/preset", mode: ModeReporting, clientID: claudeCodeURL, want: Decision{Outcome: OutcomeAdmit, Admit: AdmitCatalogExact, Denial: ""}},
+		{name: "reporting/pattern", mode: ModeReporting, clientID: chatGPTConnectorURL, want: Decision{Outcome: OutcomeAdmit, Admit: AdmitCatalogPattern, Denial: ""}},
+		{name: "reporting/custom", mode: ModeReporting, clientID: customURL, want: Decision{Outcome: OutcomeCheckCustom, Admit: "", Denial: ""}},
+		{name: "reporting/unknown", mode: ModeReporting, clientID: unknownURL, want: Decision{Outcome: OutcomeCheckCustom, Admit: "", Denial: ""}},
+
 		{name: "open/preset", mode: ModeOpen, clientID: claudeCodeURL, want: Decision{Outcome: OutcomeAdmit, Admit: AdmitOpen, Denial: ""}},
 		{name: "open/custom", mode: ModeOpen, clientID: customURL, want: Decision{Outcome: OutcomeAdmit, Admit: AdmitOpen, Denial: ""}},
 		{name: "open/unknown", mode: ModeOpen, clientID: unknownURL, want: Decision{Outcome: OutcomeAdmit, Admit: AdmitOpen, Denial: ""}},
@@ -92,14 +97,30 @@ func TestEvaluate_NeverReturnsAdmitCustom(t *testing.T) {
 	}
 }
 
-// TestEvaluate_UnsetMatchesPresetsExactly is the row the issue calls out
-// explicitly: whatever presets does, an unset mode must do identically.
-func TestEvaluate_UnsetMatchesPresetsExactly(t *testing.T) {
+// TestEvaluate_ReportingDecidesExactlyAsPresets is the property the rollout
+// rests on. Reporting exists to predict what presets will do, so any
+// divergence would make the measurement worthless — an operator would see a
+// clean reporting signal and then break clients on the switch.
+//
+// The unset default resolves to reporting, so this also covers "whatever
+// presets does, an unconfigured issuer evaluates identically".
+func TestEvaluate_ReportingDecidesExactlyAsPresets(t *testing.T) {
 	t.Parallel()
 
 	unsetMode, _ := ResolveMode("", false)
-	for _, clientID := range []string{claudeCodeURL, customURL, unknownURL, strings.Repeat("x", MaxClientIDLength+1)} {
-		require.Equal(t, Evaluate(ModePresets, clientID), Evaluate(unsetMode, clientID))
+	require.Equal(t, ModeReporting, unsetMode)
+
+	inputs := []string{
+		claudeCodeURL,
+		chatGPTConnectorURL,
+		customURL,
+		unknownURL,
+		strings.Repeat("x", MaxClientIDLength+1),
+		"",
+	}
+	for _, clientID := range inputs {
+		require.Equalf(t, Evaluate(ModePresets, clientID), Evaluate(ModeReporting, clientID),
+			"reporting and presets must agree on %q", clientID)
 	}
 }
 

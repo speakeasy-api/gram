@@ -133,13 +133,15 @@ func requireAuthorizeErrorDescription(t *testing.T, w *httptest.ResponseRecorder
 	require.Contains(t, body["error_description"], wantSubstring)
 }
 
-// TestCIMDAdmission_DefaultDeniesUnknownURLWithoutFetching is the core
-// guarantee. A fresh issuer has never had a mode set (NULL → presets), and
-// an arbitrary URL is not in the catalog, so it must be denied — and denied
-// cheaply, with no outbound request to the attacker-named host. The
-// no-request assertion is what makes this admission control rather than
-// post-fetch filtering.
-func TestCIMDAdmission_DefaultDeniesUnknownURLWithoutFetching(t *testing.T) {
+// TestCIMDAdmission_DefaultReportsWithoutEnforcing pins the shipped
+// default. A fresh issuer has never had a mode set, which resolves to
+// reporting: it evaluates exactly what presets would decide, records it,
+// and admits anyway.
+//
+// This is what lets admission control ship without changing anyone's
+// behaviour. The URL below is not in the catalog, so presets would refuse
+// it — and the request still succeeds, right through to the document fetch.
+func TestCIMDAdmission_DefaultReportsWithoutEnforcing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, ds, _, orgID := newTestCIMDService(t)
@@ -151,8 +153,57 @@ func TestCIMDAdmission_DefaultDeniesUnknownURLWithoutFetching(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, fresh.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
+	require.Equal(t, http.StatusFound, w.Code, "the default must not enforce yet")
+	require.Positive(t, ds.requests.Load(), "a reported client_id is still admitted, so the document is fetched")
+}
+
+// TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching is the core
+// guarantee, exercised on an issuer that has explicitly opted in to
+// enforcement (and on the default once ResolveMode's NULL branch moves to
+// presets).
+//
+// The no-request assertion is what makes this admission control rather than
+// post-fetch filtering.
+func TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
+
+	verifier := pkceVerifier(t)
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+
 	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
 	require.Zero(t, ds.requests.Load(), "a denied client_id must not cost an outbound document fetch")
+}
+
+// TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement is the
+// property the whole rollout rests on: the decision recorded under
+// reporting must be the decision presets will make. If these diverged, the
+// measurement would not predict the switch.
+//
+// Both issuers are given the same custom URL, so both should evaluate to
+// admitted; the one difference is what happens to a URL neither admits.
+func TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	// A custom URL is honoured identically under reporting: the DB lookup
+	// runs, so the simulation cannot report a false denial.
+	reporting := seedFreshIssuerToolset(t, ctx, ti)
+	allowCustomCimdURL(t, ctx, ti, reporting, ds.clientID)
+
+	verifier := pkceVerifier(t)
+	w := doCIMDAuthorize(t, ti, reporting.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	// The same URL, unlisted, on a presets issuer: refused.
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
+	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
 }
 
 // TestCIMDAdmission_PresetsDenialIsActionable: the description is the end

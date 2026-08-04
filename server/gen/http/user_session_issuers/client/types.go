@@ -68,9 +68,12 @@ type CreateUserSessionIssuerResponseBody struct {
 	// Issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
-	// presets | open. Always populated — an issuer whose mode has never been
-	// configured reports the default, 'presets', so clients never have to reason
-	// about an unset state.
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -90,9 +93,12 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// Issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
-	// presets | open. Always populated — an issuer whose mode has never been
-	// configured reports the default, 'presets', so clients never have to reason
-	// about an unset state.
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -120,9 +126,12 @@ type GetUserSessionIssuerResponseBody struct {
 	// Issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
-	// presets | open. Always populated — an issuer whose mode has never been
-	// configured reports the default, 'presets', so clients never have to reason
-	// about an unset state.
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -1291,9 +1300,12 @@ type UserSessionIssuerResponseBody struct {
 	// Issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
-	// presets | open. Always populated — an issuer whose mode has never been
-	// configured reports the default, 'presets', so clients never have to reason
-	// about an unset state.
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -2352,8 +2364,8 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {
-		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -2399,8 +2411,8 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {
-		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -2462,8 +2474,8 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {
-		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3971,8 +3983,8 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {
-		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
 	}
 	if body.CreatedAt != nil {

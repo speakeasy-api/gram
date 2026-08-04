@@ -21,13 +21,18 @@ const MaxClientIDLength = 2048
 // It never returns AdmitCustom: that outcome depends on the issuer's own
 // URL rows, which is a database lookup only the caller can perform, and is
 // what OutcomeCheckCustom asks for.
+//
+// ModeReporting returns the identical decision to ModePresets. That is the
+// entire point: the recorded outcome must be comparable to what ModePresets
+// will produce after the switch. The caller consults Mode.Enforces to learn
+// that a denial should be recorded and then discarded.
 func Evaluate(mode Mode, clientID string) Decision {
 	switch mode {
 	case ModeOpen:
 		return admitDecision(AdmitOpen)
 	case ModeDisabled:
 		return denyDecision(DenialDisabled)
-	case ModePresets:
+	case ModePresets, ModeReporting:
 		if reason, ok := CatalogMatch(clientID); ok {
 			return admitDecision(reason)
 		}

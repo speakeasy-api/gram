@@ -207,15 +207,29 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 		return nil
 	}
 
+	// Recorded before the enforcement check, so a reporting-mode issuer
+	// produces the same counter series a presets-mode one would. Comparing
+	// the two across the mode dimension is how the rollout decides whether
+	// enforcement is safe.
 	s.cimdAdmissionMetrics.RecordDenied(ctx, mode, decision.Denial)
+
 	// The presented client_id goes in the log and never in a metric
 	// dimension: this is the URL an operator needs when diagnosing a preset
 	// miss, and it is exactly the value too unbounded to be a metric label.
-	logger.InfoContext(ctx, "cimd admission denied",
+	logAttrs := []any{
 		attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
 		attr.SlogCIMDAdmissionMode(mode),
 		attr.SlogCIMDAdmissionOutcome(decision.Denial),
-	)
+	}
+
+	if !mode.Enforces() {
+		// Reporting mode: the decision was measured, not applied. A distinct
+		// message keeps "denied" honest in the logs, since nothing was.
+		logger.InfoContext(ctx, "cimd admission would deny", logAttrs...)
+		return nil
+	}
+
+	logger.InfoContext(ctx, "cimd admission denied", logAttrs...)
 	return &admission.DenialError{Mode: mode, Reason: decision.Denial}
 }
 

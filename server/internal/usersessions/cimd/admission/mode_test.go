@@ -6,26 +6,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestResolveMode_NullResolvesToPresets pins the default that the whole
-// rollout rests on: an issuer whose mode was never configured stores NULL
-// and must behave exactly like one explicitly set to presets.
-func TestResolveMode_NullResolvesToPresets(t *testing.T) {
+// TestResolveMode_NullResolvesToReporting pins the rollout lever. An issuer
+// whose mode was never configured measures rather than enforces, so
+// admission control ships without changing anyone's behaviour. Flipping
+// this to ModePresets is the deliberate, evidence-gated final step.
+func TestResolveMode_NullResolvesToReporting(t *testing.T) {
 	t.Parallel()
 
 	mode, recognized := ResolveMode("", false)
-	require.Equal(t, ModePresets, mode)
+	require.Equal(t, ModeReporting, mode)
 	require.True(t, recognized, "an absent mode is a valid state, not a data error")
+	require.False(t, mode.Enforces(), "the default must not enforce yet")
 }
 
-// TestResolveMode_EmptyStringResolvesToPresets covers the degenerate stored
+// TestResolveMode_EmptyStringMatchesNull covers the degenerate stored
 // value. A non-NULL empty string is indistinguishable from unset in intent,
-// so it must not fall through to the fail-closed branch.
-func TestResolveMode_EmptyStringResolvesToPresets(t *testing.T) {
+// so it must resolve identically and not fall through to the fail-closed
+// branch.
+func TestResolveMode_EmptyStringMatchesNull(t *testing.T) {
 	t.Parallel()
 
-	mode, recognized := ResolveMode("", true)
-	require.Equal(t, ModePresets, mode)
-	require.True(t, recognized)
+	empty, emptyRecognized := ResolveMode("", true)
+	null, nullRecognized := ResolveMode("", false)
+	require.Equal(t, null, empty)
+	require.Equal(t, nullRecognized, emptyRecognized)
+	require.True(t, emptyRecognized)
 }
 
 func TestResolveMode_ExplicitValues(t *testing.T) {
@@ -57,4 +62,32 @@ func TestIsValidMode(t *testing.T) {
 	require.False(t, IsValidMode(""), "the API requires an explicit choice; unset is not writable")
 	require.False(t, IsValidMode("Presets"), "mode values are case-sensitive")
 	require.False(t, IsValidMode("allow-everything"))
+}
+
+// TestReportingIsNotWritable: reporting is as permissive as open for as
+// long as it is on, so it must never be selectable through the management
+// API. It is a deployment-time default, not a setting an operator can leave
+// switched on.
+func TestReportingIsNotWritable(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, IsValidMode(string(ModeReporting)))
+	require.NotContains(t, Modes(), ModeReporting)
+
+	// ResolveMode must still recognize it, or the rollout lever could not
+	// resolve its own value.
+	mode, recognized := ResolveMode(string(ModeReporting), true)
+	require.Equal(t, ModeReporting, mode)
+	require.True(t, recognized)
+}
+
+// TestEnforces covers the one property that separates reporting from every
+// other mode.
+func TestEnforces(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, ModeReporting.Enforces())
+	for _, mode := range Modes() {
+		require.Truef(t, mode.Enforces(), "%s must enforce its decisions", mode)
+	}
 }
