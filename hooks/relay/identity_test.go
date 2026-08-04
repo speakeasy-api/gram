@@ -230,3 +230,35 @@ func TestCodexBinaryCandidatesProbeTheUnifiedAppFirst(t *testing.T) {
 	require.Less(t, slices.Index(candidates, "/home/dev/.codex/packages/standalone/current/bin/codex"), unified)
 	require.Less(t, slices.Index(candidates, "/home/dev/.local/bin/codex"), unified)
 }
+
+// TestCodexBinaryCandidatesIncludeEditorExtensions: the ChatGPT editor
+// extensions bundle their own codex, and on a machine that runs Codex only
+// from an editor it is the only copy present — no CLI on PATH, no app bundle.
+// Missing it there means no MCP inventory, which the shadow-MCP guard reads as
+// an unprovable target and denies (DNO-771).
+func TestCodexBinaryCandidatesIncludeEditorExtensions(t *testing.T) {
+	home := t.TempDir()
+	// Two versions installed side by side, as an editor leaves them across an
+	// upgrade; the newer must be preferred.
+	older := filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-26.7.1-darwin-arm64", "bin", "macos-aarch64", "codex")
+	newer := filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-26.8.0-darwin-arm64", "bin", "macos-aarch64", "codex")
+	cursor := filepath.Join(home, ".cursor", "extensions", "openai.chatgpt-26.8.0-darwin-arm64", "bin", "macos-aarch64", "codex")
+	for _, path := range []string{older, newer, cursor} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o700))
+	}
+
+	candidates := codexBinaryCandidates(home, filepath.Join(home, ".codex"))
+
+	require.Contains(t, candidates, newer)
+	require.Contains(t, candidates, cursor)
+	require.Less(t, slices.Index(candidates, newer), slices.Index(candidates, older),
+		"a newer extension build must be probed before an older one left behind")
+	require.Less(t, slices.Index(candidates, newer),
+		slices.Index(candidates, "/Applications/Codex.app/Contents/Resources/codex"),
+		"a maintained extension copy outranks the frozen Codex.app")
+
+	// A home with no editor extensions contributes nothing.
+	require.Empty(t, codexEditorExtensionBinaries(t.TempDir()))
+	require.Empty(t, codexEditorExtensionBinaries(""))
+}

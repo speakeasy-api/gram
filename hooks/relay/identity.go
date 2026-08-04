@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -349,13 +350,38 @@ func probeCodexBinary(candidates []string) string {
 // a machine carrying both prefers the maintained copy. Mirrors the ordering
 // the generated install script's find_codex uses.
 func codexBinaryCandidates(home, codexHome string) []string {
-	return []string{
+	candidates := []string{
 		filepath.Join(codexHome, "packages", "standalone", "current", "bin", "codex"),
 		filepath.Join(home, ".local", "bin", "codex"),
 		"/usr/local/bin/codex",
 		"/Applications/ChatGPT.app/Contents/Resources/codex",
-		"/Applications/Codex.app/Contents/Resources/codex",
 	}
+	// The editor extensions ship their own copy, and on a machine that runs
+	// Codex only from an editor it is the only one there is.
+	candidates = append(candidates, codexEditorExtensionBinaries(home)...)
+	// Frozen: superseded by the unified ChatGPT app, so it ranks last.
+	return append(candidates, "/Applications/Codex.app/Contents/Resources/codex")
+}
+
+// codexEditorExtensionBinaries finds the codex copies bundled with the ChatGPT
+// editor extensions. Both path segments vary — the extension directory carries
+// the version and platform, the inner directory the target triple — so they are
+// globbed rather than listed. Matches are returned newest-first by name, which
+// puts the highest version first for the version scheme observed in the wild.
+func codexEditorExtensionBinaries(home string) []string {
+	if home == "" {
+		return nil
+	}
+	var found []string
+	for _, editorDir := range []string{".vscode", ".vscode-insiders", ".vscode-server", ".cursor", ".windsurf"} {
+		matches, err := filepath.Glob(filepath.Join(home, editorDir, "extensions", "openai.chatgpt-*", "bin", "*", "codex"))
+		if err != nil {
+			continue
+		}
+		sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+		found = append(found, matches...)
+	}
+	return found
 }
 
 func codexAuthFileEmail() string {
