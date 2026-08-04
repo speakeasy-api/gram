@@ -16,9 +16,13 @@ import (
 
 // Endpoints wraps the "litellm" service endpoints.
 type Endpoints struct {
-	Ingest  goa.Endpoint
-	Traces  goa.Endpoint
-	Metrics goa.Endpoint
+	CreateInstance    goa.Endpoint
+	ListInstances     goa.Endpoint
+	RotateInstanceKey goa.Endpoint
+	RevokeInstance    goa.Endpoint
+	Ingest            goa.Endpoint
+	Traces            goa.Endpoint
+	Metrics           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "litellm" service with endpoints.
@@ -26,17 +30,175 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Ingest:  NewIngestEndpoint(s, a.APIKeyAuth),
-		Traces:  NewTracesEndpoint(s, a.APIKeyAuth),
-		Metrics: NewMetricsEndpoint(s, a.APIKeyAuth),
+		CreateInstance:    NewCreateInstanceEndpoint(s, a.APIKeyAuth),
+		ListInstances:     NewListInstancesEndpoint(s, a.APIKeyAuth),
+		RotateInstanceKey: NewRotateInstanceKeyEndpoint(s, a.APIKeyAuth),
+		RevokeInstance:    NewRevokeInstanceEndpoint(s, a.APIKeyAuth),
+		Ingest:            NewIngestEndpoint(s, a.APIKeyAuth),
+		Traces:            NewTracesEndpoint(s, a.APIKeyAuth),
+		Metrics:           NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "litellm" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.CreateInstance = m(e.CreateInstance)
+	e.ListInstances = m(e.ListInstances)
+	e.RotateInstanceKey = m(e.RotateInstanceKey)
+	e.RevokeInstance = m(e.RevokeInstance)
 	e.Ingest = m(e.Ingest)
 	e.Traces = m(e.Traces)
 	e.Metrics = m(e.Metrics)
+}
+
+// NewCreateInstanceEndpoint returns an endpoint function that calls the method
+// "createInstance" of service "litellm".
+func NewCreateInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateInstancePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.CreateInstance(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedLitellmInstanceKeyResult(res, "default")
+		return vres, nil
+	}
+}
+
+// NewListInstancesEndpoint returns an endpoint function that calls the method
+// "listInstances" of service "litellm".
+func NewListInstancesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListInstancesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListInstances(ctx, p)
+	}
+}
+
+// NewRotateInstanceKeyEndpoint returns an endpoint function that calls the
+// method "rotateInstanceKey" of service "litellm".
+func NewRotateInstanceKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RotateInstanceKeyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.RotateInstanceKey(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedLitellmInstanceKeyResult(res, "default")
+		return vres, nil
+	}
+}
+
+// NewRevokeInstanceEndpoint returns an endpoint function that calls the method
+// "revokeInstance" of service "litellm".
+func NewRevokeInstanceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeInstancePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RevokeInstance(ctx, p)
+	}
 }
 
 // NewIngestEndpoint returns an endpoint function that calls the method

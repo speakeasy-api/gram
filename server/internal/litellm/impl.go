@@ -16,6 +16,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/litellm/server"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 const (
@@ -41,28 +43,42 @@ type authorizer interface {
 	Authorize(context.Context, string, *security.APIKeyScheme) (context.Context, error)
 }
 
+type featureChecker interface {
+	IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error)
+}
+
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	auth    authorizer
-	hooks   HookIngester
-	calls   *callcache.Cache
-	traces  *TraceProcessor
-	metrics *MetricProcessor
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	auth      authorizer
+	hooks     HookIngester
+	calls     *callcache.Cache
+	traces    *TraceProcessor
+	metrics   *MetricProcessor
+	db        *pgxpool.Pool
+	authz     *authz.Engine
+	features  featureChecker
+	audit     *audit.Logger
+	keyPrefix string
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger:  logger.With(attr.SlogComponent("litellm")),
-		auth:    auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:   hookIngester,
-		calls:   calls,
-		traces:  traces,
-		metrics: metrics,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:    logger.With(attr.SlogComponent("litellm")),
+		auth:      auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:     hookIngester,
+		calls:     calls,
+		traces:    traces,
+		metrics:   metrics,
+		db:        db,
+		authz:     authzEngine,
+		features:  features,
+		audit:     auditLogger,
+		keyPrefix: auth.APIKeyPrefix(environment),
 	}
 }
 

@@ -8,8 +8,19 @@
 package views
 
 import (
+	"unicode/utf8"
+
 	goa "goa.design/goa/v3/pkg"
 )
+
+// LitellmInstanceKeyResult is the viewed result type that is projected based
+// on a view.
+type LitellmInstanceKeyResult struct {
+	// Type to project
+	Projected *LitellmInstanceKeyResultView
+	// View to render
+	View string
+}
 
 // LitellmIngestResult is the viewed result type that is projected based on a
 // view.
@@ -19,6 +30,45 @@ type LitellmIngestResult struct {
 	// View to render
 	View string
 }
+
+// LitellmInstanceKeyResultView is a type that runs validations on a projected
+// type.
+type LitellmInstanceKeyResultView struct {
+	Instance *LiteLLMInstanceView
+	Key      *string
+}
+
+// LiteLLMInstanceView is a type that runs validations on a projected type.
+type LiteLLMInstanceView struct {
+	ID              *string
+	OrganizationID  *string
+	Project         *ProjectEntryView
+	Name            *string
+	FailurePosture  *LiteLLMFailurePostureView
+	KeyPrefix       *string
+	CreatedByUserID *string
+	CreatedAt       *string
+	UpdatedAt       *string
+	LastUsedAt      *string
+	Active          *bool
+}
+
+// ProjectEntryView is a type that runs validations on a projected type.
+type ProjectEntryView struct {
+	// The ID of the project
+	ID *string
+	// The name of the project
+	Name *string
+	// The slug of the project
+	Slug *SlugView
+}
+
+// SlugView is a type that runs validations on a projected type.
+type SlugView string
+
+// LiteLLMFailurePostureView is a type that runs validations on a projected
+// type.
+type LiteLLMFailurePostureView string
 
 // LitellmIngestResultView is a type that runs validations on a projected type.
 type LitellmIngestResultView struct {
@@ -35,6 +85,14 @@ type LitellmIngestResultView struct {
 type LiteLLMGuardrailActionView string
 
 var (
+	// LitellmInstanceKeyResultMap is a map indexing the attribute names of
+	// LitellmInstanceKeyResult by view name.
+	LitellmInstanceKeyResultMap = map[string][]string{
+		"default": {
+			"instance",
+			"key",
+		},
+	}
 	// LitellmIngestResultMap is a map indexing the attribute names of
 	// LitellmIngestResult by view name.
 	LitellmIngestResultMap = map[string][]string{
@@ -49,6 +107,18 @@ var (
 	}
 )
 
+// ValidateLitellmInstanceKeyResult runs the validations defined on the viewed
+// result type LitellmInstanceKeyResult.
+func ValidateLitellmInstanceKeyResult(result *LitellmInstanceKeyResult) (err error) {
+	switch result.View {
+	case "default", "":
+		err = ValidateLitellmInstanceKeyResultView(result.Projected)
+	default:
+		err = goa.InvalidEnumValueError("view", result.View, []any{"default"})
+	}
+	return
+}
+
 // ValidateLitellmIngestResult runs the validations defined on the viewed
 // result type LitellmIngestResult.
 func ValidateLitellmIngestResult(result *LitellmIngestResult) (err error) {
@@ -57,6 +127,121 @@ func ValidateLitellmIngestResult(result *LitellmIngestResult) (err error) {
 		err = ValidateLitellmIngestResultView(result.Projected)
 	default:
 		err = goa.InvalidEnumValueError("view", result.View, []any{"default"})
+	}
+	return
+}
+
+// ValidateLitellmInstanceKeyResultView runs the validations defined on
+// LitellmInstanceKeyResultView using the "default" view.
+func ValidateLitellmInstanceKeyResultView(result *LitellmInstanceKeyResultView) (err error) {
+	if result.Instance == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("instance", "result"))
+	}
+	if result.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "result"))
+	}
+	if result.Instance != nil {
+		if err2 := ValidateLiteLLMInstanceView(result.Instance); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateLiteLLMInstanceView runs the validations defined on
+// LiteLLMInstanceView.
+func ValidateLiteLLMInstanceView(result *LiteLLMInstanceView) (err error) {
+	if result.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "result"))
+	}
+	if result.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "result"))
+	}
+	if result.Project == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project", "result"))
+	}
+	if result.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "result"))
+	}
+	if result.FailurePosture == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_posture", "result"))
+	}
+	if result.KeyPrefix == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_prefix", "result"))
+	}
+	if result.CreatedByUserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_by_user_id", "result"))
+	}
+	if result.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "result"))
+	}
+	if result.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "result"))
+	}
+	if result.Active == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active", "result"))
+	}
+	if result.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.id", *result.ID, goa.FormatUUID))
+	}
+	if result.Project != nil {
+		if err2 := ValidateProjectEntryView(result.Project); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if result.FailurePosture != nil {
+		if !(string(*result.FailurePosture) == "fail_closed" || string(*result.FailurePosture) == "fail_open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.failure_posture", string(*result.FailurePosture), []any{"fail_closed", "fail_open"}))
+		}
+	}
+	if result.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.created_at", *result.CreatedAt, goa.FormatDateTime))
+	}
+	if result.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.updated_at", *result.UpdatedAt, goa.FormatDateTime))
+	}
+	if result.LastUsedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.last_used_at", *result.LastUsedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateProjectEntryView runs the validations defined on ProjectEntryView.
+func ValidateProjectEntryView(result *ProjectEntryView) (err error) {
+	if result.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "result"))
+	}
+	if result.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "result"))
+	}
+	if result.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "result"))
+	}
+	if result.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("result.slug", string(*result.Slug), "^[a-z0-9_-]{1,128}$"))
+	}
+	if result.Slug != nil {
+		if utf8.RuneCountInString(string(*result.Slug)) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("result.slug", string(*result.Slug), utf8.RuneCountInString(string(*result.Slug)), 40, false))
+		}
+	}
+	return
+}
+
+// ValidateSlugView runs the validations defined on SlugView.
+func ValidateSlugView(result SlugView) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("result", string(result), "^[a-z0-9_-]{1,128}$"))
+	if utf8.RuneCountInString(string(result)) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("result", string(result), utf8.RuneCountInString(string(result)), 40, false))
+	}
+	return
+}
+
+// ValidateLiteLLMFailurePostureView runs the validations defined on
+// LiteLLMFailurePostureView.
+func ValidateLiteLLMFailurePostureView(result LiteLLMFailurePostureView) (err error) {
+	if !(string(result) == "fail_closed" || string(result) == "fail_open") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("result", string(result), []any{"fail_closed", "fail_open"}))
 	}
 	return
 }

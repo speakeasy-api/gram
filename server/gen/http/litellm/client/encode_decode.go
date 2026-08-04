@@ -16,8 +16,947 @@ import (
 
 	litellm "github.com/speakeasy-api/gram/server/gen/litellm"
 	litellmviews "github.com/speakeasy-api/gram/server/gen/litellm/views"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
+
+// BuildCreateInstanceRequest instantiates a HTTP request object with method
+// and path set to call the "litellm" service "createInstance" endpoint
+func (c *Client) BuildCreateInstanceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateInstanceLitellmPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("litellm", "createInstance", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateInstanceRequest returns an encoder for requests sent to the
+// litellm createInstance server.
+func EncodeCreateInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*litellm.CreateInstancePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("litellm", "createInstance", "*litellm.CreateInstancePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateInstanceRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("litellm", "createInstance", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateInstanceResponse returns a decoder for responses returned by the
+// litellm createInstance endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCreateInstanceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateInstanceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusCreated:
+			var (
+				body CreateInstanceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			p := NewCreateInstanceLitellmInstanceKeyResultCreated(&body)
+			view := "default"
+			vres := &litellmviews.LitellmInstanceKeyResult{Projected: p, View: view}
+			if err = litellmviews.ValidateLitellmInstanceKeyResult(vres); err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			res := litellm.NewLitellmInstanceKeyResult(vres)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateInstanceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateInstanceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateInstanceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateInstanceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateInstanceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateInstanceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateInstanceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateInstanceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+				}
+				err = ValidateCreateInstanceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+				}
+				return nil, NewCreateInstanceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateInstanceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+				}
+				err = ValidateCreateInstanceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+				}
+				return nil, NewCreateInstanceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("litellm", "createInstance", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateInstanceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "createInstance", err)
+			}
+			err = ValidateCreateInstanceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "createInstance", err)
+			}
+			return nil, NewCreateInstanceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("litellm", "createInstance", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListInstancesRequest instantiates a HTTP request object with method and
+// path set to call the "litellm" service "listInstances" endpoint
+func (c *Client) BuildListInstancesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListInstancesLitellmPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("litellm", "listInstances", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListInstancesRequest returns an encoder for requests sent to the
+// litellm listInstances server.
+func EncodeListInstancesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*litellm.ListInstancesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("litellm", "listInstances", "*litellm.ListInstancesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListInstancesResponse returns a decoder for responses returned by the
+// litellm listInstances endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListInstancesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListInstancesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListInstancesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			res := NewListInstancesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListInstancesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListInstancesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListInstancesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListInstancesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListInstancesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListInstancesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListInstancesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListInstancesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+				}
+				err = ValidateListInstancesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+				}
+				return nil, NewListInstancesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListInstancesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+				}
+				err = ValidateListInstancesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+				}
+				return nil, NewListInstancesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("litellm", "listInstances", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListInstancesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "listInstances", err)
+			}
+			err = ValidateListInstancesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "listInstances", err)
+			}
+			return nil, NewListInstancesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("litellm", "listInstances", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRotateInstanceKeyRequest instantiates a HTTP request object with method
+// and path set to call the "litellm" service "rotateInstanceKey" endpoint
+func (c *Client) BuildRotateInstanceKeyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RotateInstanceKeyLitellmPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("litellm", "rotateInstanceKey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRotateInstanceKeyRequest returns an encoder for requests sent to the
+// litellm rotateInstanceKey server.
+func EncodeRotateInstanceKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*litellm.RotateInstanceKeyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("litellm", "rotateInstanceKey", "*litellm.RotateInstanceKeyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewRotateInstanceKeyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("litellm", "rotateInstanceKey", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRotateInstanceKeyResponse returns a decoder for responses returned by
+// the litellm rotateInstanceKey endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRotateInstanceKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRotateInstanceKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RotateInstanceKeyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			p := NewRotateInstanceKeyLitellmInstanceKeyResultOK(&body)
+			view := "default"
+			vres := &litellmviews.LitellmInstanceKeyResult{Projected: p, View: view}
+			if err = litellmviews.ValidateLitellmInstanceKeyResult(vres); err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			res := litellm.NewLitellmInstanceKeyResult(vres)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RotateInstanceKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RotateInstanceKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RotateInstanceKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RotateInstanceKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RotateInstanceKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RotateInstanceKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RotateInstanceKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RotateInstanceKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+				}
+				err = ValidateRotateInstanceKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+				}
+				return nil, NewRotateInstanceKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RotateInstanceKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+				}
+				err = ValidateRotateInstanceKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+				}
+				return nil, NewRotateInstanceKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("litellm", "rotateInstanceKey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RotateInstanceKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "rotateInstanceKey", err)
+			}
+			err = ValidateRotateInstanceKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "rotateInstanceKey", err)
+			}
+			return nil, NewRotateInstanceKeyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("litellm", "rotateInstanceKey", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRevokeInstanceRequest instantiates a HTTP request object with method
+// and path set to call the "litellm" service "revokeInstance" endpoint
+func (c *Client) BuildRevokeInstanceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeInstanceLitellmPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("litellm", "revokeInstance", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRevokeInstanceRequest returns an encoder for requests sent to the
+// litellm revokeInstance server.
+func EncodeRevokeInstanceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*litellm.RevokeInstancePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("litellm", "revokeInstance", "*litellm.RevokeInstancePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRevokeInstanceResponse returns a decoder for responses returned by the
+// litellm revokeInstance endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeRevokeInstanceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRevokeInstanceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevokeInstanceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevokeInstanceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevokeInstanceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevokeInstanceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevokeInstanceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevokeInstanceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevokeInstanceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevokeInstanceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+				}
+				err = ValidateRevokeInstanceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+				}
+				return nil, NewRevokeInstanceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevokeInstanceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+				}
+				err = ValidateRevokeInstanceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+				}
+				return nil, NewRevokeInstanceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("litellm", "revokeInstance", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RevokeInstanceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "revokeInstance", err)
+			}
+			err = ValidateRevokeInstanceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "revokeInstance", err)
+			}
+			return nil, NewRevokeInstanceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("litellm", "revokeInstance", resp.StatusCode, string(body))
+		}
+	}
+}
 
 // BuildIngestRequest instantiates a HTTP request object with method and path
 // set to call the "litellm" service "ingest" endpoint
@@ -737,6 +1676,75 @@ func DecodeMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			return nil, goahttp.ErrInvalidResponse("litellm", "metrics", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalLiteLLMInstanceResponseBodyToLitellmviewsLiteLLMInstanceView builds
+// a value of type *litellmviews.LiteLLMInstanceView from a value of type
+// *LiteLLMInstanceResponseBody.
+func unmarshalLiteLLMInstanceResponseBodyToLitellmviewsLiteLLMInstanceView(v *LiteLLMInstanceResponseBody) *litellmviews.LiteLLMInstanceView {
+	res := &litellmviews.LiteLLMInstanceView{
+		ID:              v.ID,
+		OrganizationID:  v.OrganizationID,
+		Name:            v.Name,
+		KeyPrefix:       v.KeyPrefix,
+		CreatedByUserID: v.CreatedByUserID,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
+		LastUsedAt:      v.LastUsedAt,
+		Active:          v.Active,
+	}
+	failurePosture := litellmviews.LiteLLMFailurePostureView(*v.FailurePosture)
+	res.FailurePosture = &failurePosture
+	res.Project = unmarshalProjectEntryResponseBodyToLitellmviewsProjectEntryView(v.Project)
+
+	return res
+}
+
+// unmarshalProjectEntryResponseBodyToLitellmviewsProjectEntryView builds a
+// value of type *litellmviews.ProjectEntryView from a value of type
+// *ProjectEntryResponseBody.
+func unmarshalProjectEntryResponseBodyToLitellmviewsProjectEntryView(v *ProjectEntryResponseBody) *litellmviews.ProjectEntryView {
+	res := &litellmviews.ProjectEntryView{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+	slug := litellmviews.SlugView(*v.Slug)
+	res.Slug = &slug
+
+	return res
+}
+
+// unmarshalLiteLLMInstanceResponseBodyToLitellmLiteLLMInstance builds a value
+// of type *litellm.LiteLLMInstance from a value of type
+// *LiteLLMInstanceResponseBody.
+func unmarshalLiteLLMInstanceResponseBodyToLitellmLiteLLMInstance(v *LiteLLMInstanceResponseBody) *litellm.LiteLLMInstance {
+	res := &litellm.LiteLLMInstance{
+		ID:              *v.ID,
+		OrganizationID:  *v.OrganizationID,
+		Name:            *v.Name,
+		FailurePosture:  litellm.LiteLLMFailurePosture(*v.FailurePosture),
+		KeyPrefix:       *v.KeyPrefix,
+		CreatedByUserID: *v.CreatedByUserID,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
+		LastUsedAt:      v.LastUsedAt,
+		Active:          *v.Active,
+	}
+	res.Project = unmarshalProjectEntryResponseBodyToLitellmProjectEntry(v.Project)
+
+	return res
+}
+
+// unmarshalProjectEntryResponseBodyToLitellmProjectEntry builds a value of
+// type *litellm.ProjectEntry from a value of type *ProjectEntryResponseBody.
+func unmarshalProjectEntryResponseBodyToLitellmProjectEntry(v *ProjectEntryResponseBody) *litellm.ProjectEntry {
+	res := &litellm.ProjectEntry{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: types.Slug(*v.Slug),
+	}
+
+	return res
 }
 
 // marshalLitellmLiteLLMRequestDataToLiteLLMRequestDataRequestBody builds a

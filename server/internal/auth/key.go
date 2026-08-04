@@ -47,12 +47,49 @@ const (
 // PluginAPIKeyNamePrefix is reserved for keys minted by plugin distribution
 // flows. Historical user-created keys may still carry this prefix, so callers
 // classifying org-wide hook keys must verify the token/name minting marker.
-const PluginAPIKeyNamePrefix = "plugins-"
+const (
+	PluginAPIKeyNamePrefix  = "plugins-"
+	LiteLLMAPIKeyNamePrefix = "litellm-"
+)
 
-// LiteLLMAPIKeyNamePrefix marks keys minted for LiteLLM integration
-// instances. OTLP ingestion shares routes with harness telemetry, so this
-// prefix is the provenance discriminator for LiteLLM traffic.
-const LiteLLMAPIKeyNamePrefix = "litellm-"
+// IsLiteLLMAPIKeyName recognizes the reserved name shape used by instance keys.
+// Checking the full shape preserves last-access tracking for historical user
+// keys that happened to use the prefix before it was reserved.
+func IsLiteLLMAPIKeyName(name string) bool {
+	suffix, ok := strings.CutPrefix(name, LiteLLMAPIKeyNamePrefix)
+	if !ok {
+		return false
+	}
+	parts := strings.Split(suffix, "-")
+	if len(parts) != 2 || len(parts[0]) != 13 || len(parts[1]) != 8 {
+		return false
+	}
+	for _, char := range parts[0] {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	for _, char := range parts[1] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func GenerateAPIKeyMaterial(keyPrefix string) (plaintext, keyHash, displayPrefix string, err error) {
+	var randomBytes [32]byte
+	if _, err := rand.Read(randomBytes[:]); err != nil {
+		return "", "", "", fmt.Errorf("generate random token bytes: %w", err)
+	}
+	token := hex.EncodeToString(randomBytes[:])
+	plaintext = keyPrefix + token
+	keyHash, err = GetAPIKeyHash(plaintext)
+	if err != nil {
+		return "", "", "", fmt.Errorf("hash api key: %w", err)
+	}
+	return plaintext, keyHash, keyPrefix + token[:5], nil
+}
 
 // IsOrgWidePluginHooksAPIKey recognizes keys minted by plugin publish and
 // observability-download flows. The generated name embeds the first six token
@@ -225,12 +262,15 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
 	}
 
-	// Best-effort update of last accessed timestamp - don't fail auth if this fails
-	if err := k.keyDB.UpdateAPIKeyLastAccessedAt(ctx, apiKey.ID); err != nil {
-		logger.WarnContext(ctx, "failed to update api key last accessed at",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(apiKey.OrganizationID),
-		)
+	// LiteLLM keys are touched only after project-header authorization succeeds.
+	// This keeps rejected project mismatches out of customer-visible last use.
+	if !IsLiteLLMAPIKeyName(apiKey.Name) {
+		if err := k.keyDB.UpdateAPIKeyLastAccessedAt(ctx, apiKey.ID); err != nil {
+			logger.WarnContext(ctx, "failed to update api key last accessed at",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(apiKey.OrganizationID),
+			)
+		}
 	}
 
 	scopes := effectiveScopes(apiKey.Scopes)
