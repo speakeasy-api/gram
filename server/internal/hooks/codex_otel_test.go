@@ -571,7 +571,11 @@ func TestLogs_ClassifiesUnresolvedCodexEmailPersonal(t *testing.T) {
 func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
 	t.Parallel()
 
-	for _, serviceName := range []string{"codex_cli_rs", "codex_exec", "codex_tui", "codex_mcp"} {
+	// Every name below was observed against the shipped 0.146 build.
+	// codex-app-server is Codex mode in the unified ChatGPT desktop app and
+	// is hyphenated, so an underscore-only match would still have misrouted
+	// the desktop surface.
+	for _, serviceName := range []string{"codex", "codex_cli_rs", "codex_exec", "codex_tui", "codex_mcp", "codex-app-server"} {
 		logs := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{{
 			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
 			ScopeLogs: nil,
@@ -585,7 +589,7 @@ func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
 		require.True(t, isCodexMetricsPayload(metrics), serviceName)
 	}
 
-	for _, serviceName := range []string{"claude-code", "claude-code-desktop", "cowork", ""} {
+	for _, serviceName := range []string{"claude-code", "claude-code-desktop", "cowork", "codexish-other", ""} {
 		logs := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{{
 			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
 			ScopeLogs: nil,

@@ -4,9 +4,10 @@
 
 Route Codex OTEL telemetry from every client mode to the Codex stream, not
 just the interactive CLI. Codex reports a different OTEL `service.name` per
-mode — `codex_exec` for headless `codex exec` (what CI and scripted runs
-use), plus `codex_tui` and `codex_mcp` — but the ingest matched only
-`codex_cli_rs`. Those payloads were not dropped: they fell through to the
+mode and does not use one separator convention — `codex_exec` for headless
+`codex exec` (what CI and scripted runs use), `codex_tui`, `codex_mcp`, and
+`codex-app-server` for Codex mode in the unified ChatGPT desktop app — but
+the ingest matched only `codex_cli_rs`. Those payloads were not dropped: they fell through to the
 Claude path and were persisted as `claude-code:otel:logs` rows carrying
 Claude's hook source and account attribution, so Codex traffic silently
 inflated Claude surfaces while never being metered as Codex usage. The

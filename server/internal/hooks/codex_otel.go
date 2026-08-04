@@ -15,19 +15,23 @@ import (
 )
 
 const (
-	// codexServiceNamePrefix matches the OTEL resource service.name family the
-	// Codex clients report. The name varies by mode — codex_cli_rs
-	// (interactive), codex_exec (headless `codex exec`, what CI and scripted
-	// runs use), plus codex_tui and codex_mcp in the shipped binary. Matching
-	// only the interactive name did not drop the other modes: their payloads
-	// fell through to the Claude path and were persisted as
-	// claude-code:otel:logs rows with Claude's hook source and attribution,
-	// so Codex traffic silently inflated Claude surfaces (and, keyed on the
-	// wrong URN, was never metered as Codex usage). Prefix-matching the
-	// family means a new mode routes correctly on arrival rather than being
-	// discovered later as mislabeled data; Claude reports "claude-code"-style
-	// names, so the prefix cannot collide.
-	codexServiceNamePrefix = "codex_"
+	// codexServiceName and the codexServiceName*Prefix pair match the OTEL
+	// resource service.name family the Codex clients report. The name varies
+	// by mode and does NOT use one separator convention — observed against
+	// the shipped 0.146 build: codex_cli_rs (interactive), codex_exec
+	// (headless `codex exec`, what CI and scripted runs use), codex_tui,
+	// codex_mcp, and codex-app-server (Codex mode in the unified ChatGPT
+	// desktop app, hyphenated). Matching a single name did not drop the other
+	// modes: their payloads fell through to the Claude path and were
+	// persisted as claude-code:otel:logs rows with Claude's hook source and
+	// attribution, so Codex traffic silently inflated Claude surfaces (and,
+	// keyed on the wrong URN, was never metered as Codex usage). Matching the
+	// whole family means a new mode routes correctly on arrival rather than
+	// being discovered later as mislabeled data; Claude reports
+	// "claude-code"-style names, so this cannot collide.
+	codexServiceName                 = "codex"
+	codexServiceNameUnderscorePrefix = "codex_"
+	codexServiceNameHyphenPrefix     = "codex-"
 	// codexOTELLogsURN types a raw Codex OTEL log row, mirroring the
 	// "claude-code:otel:logs" convention.
 	codexOTELLogsURN = "codex:otel:logs"
@@ -36,9 +40,13 @@ const (
 )
 
 // isCodexServiceName reports whether an OTEL resource service.name belongs to
-// the Codex client family (see codexServiceNamePrefix).
+// the Codex client family (see codexServiceName). Both separators are matched
+// because Codex uses both; a bare "codex" counts, while an unrelated name
+// that merely starts with those letters does not.
 func isCodexServiceName(serviceName string) bool {
-	return strings.HasPrefix(serviceName, codexServiceNamePrefix)
+	return serviceName == codexServiceName ||
+		strings.HasPrefix(serviceName, codexServiceNameUnderscorePrefix) ||
+		strings.HasPrefix(serviceName, codexServiceNameHyphenPrefix)
 }
 
 // splitCodexLogsPayload partitions a logs payload by resource service.name.
