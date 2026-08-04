@@ -15,11 +15,17 @@ export function PublishingSection({
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
 }): JSX.Element {
-  // A server is publishable once it serves traffic (visibility != disabled) and
-  // has at least one endpoint to address it — mirroring the server-side attach
-  // validation in collections.attachServerToCollection.
+  // Unproxied servers are addressed directly by their vendor URL and never
+  // have an mcp_endpoints row (there's no Gram-managed endpoint to create for
+  // them, see ServerUrlSection, which is hidden for these servers), so they
+  // don't need one to be publishable.
+  const isUnproxied = !!mcpServer.unproxiedMcpServerId;
+  // A server is publishable once it serves traffic (visibility != disabled)
+  // and, for Gram-addressed servers, has at least one endpoint, mirroring the
+  // server-side attach validation in collections.attachServerToCollection.
   const canPublish =
-    mcpServer.visibility !== "disabled" && endpoints.length > 0;
+    mcpServer.visibility !== "disabled" &&
+    (isUnproxied || endpoints.length > 0);
   const disabledMessage =
     mcpServer.visibility === "disabled"
       ? "Enable this MCP server before publishing it to a collection."

@@ -85,7 +85,7 @@ export function BrandingSection({
     trimmedDraft === "" ||
     trimmedDraft.length > NAME_MAX_LENGTH ||
     saving ||
-    metadataUnresolved;
+    (metadataUnresolved && metadataForm.brandingDirty);
   const characterCount = `${nameDraft.length} of ${NAME_MAX_LENGTH} characters used`;
 
   const handleSave = async () => {

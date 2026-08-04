@@ -191,8 +191,10 @@ export const useIsSpeakeasyStaff = (): boolean => {
       // ignore
     }
   }
+  const normalizedEmail = email.toLowerCase();
   return (
-    email.endsWith("@speakeasy.com") || email.endsWith("@speakeasyapi.dev")
+    normalizedEmail.endsWith("@speakeasy.com") ||
+    normalizedEmail.endsWith("@speakeasyapi.dev")
   );
 };
 

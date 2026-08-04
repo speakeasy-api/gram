@@ -11,6 +11,7 @@ import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { UnproxiedMcpUsageBreakdown } from "./UnproxiedMcpUsageBreakdown";
 
 const USAGE_WINDOW_DAYS = 30;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type UnproxiedMcpOverviewTabProps = {
   unproxiedMcpServerId: string;
@@ -41,7 +42,11 @@ export function UnproxiedMcpOverviewTab({
     return { from, to };
   }, []);
 
-  const { data: server } = useGetUnproxiedMcpServer({
+  const {
+    data: server,
+    isLoading: isLoadingServer,
+    isError: isServerError,
+  } = useGetUnproxiedMcpServer({
     id: unproxiedMcpServerId,
   });
 
@@ -75,20 +80,26 @@ export function UnproxiedMcpOverviewTab({
 
   // Zero-fill days the backend omitted so a sparse activity pattern renders
   // with real gaps instead of bars that look visually adjacent in time.
+  // Counts back USAGE_WINDOW_DAYS buckets from `to` (inclusive) rather than
+  // walking date <= to from `from` (inclusive), which double-counts the
+  // boundary and produces one extra bucket.
   const buckets = useMemo(() => {
     const byDate = new Map(
       (data?.buckets ?? []).map((bucket) => [bucket.date, bucket.callCount]),
     );
     const days: { date: string; callCount: number }[] = [];
-    for (let day = new Date(from); day <= to; day.setDate(day.getDate() + 1)) {
-      const date = day.toISOString().slice(0, 10);
+    for (let i = USAGE_WINDOW_DAYS - 1; i >= 0; i--) {
+      const date = new Date(to.getTime() - i * MS_PER_DAY)
+        .toISOString()
+        .slice(0, 10);
       days.push({ date, callCount: byDate.get(date) ?? 0 });
     }
     return days;
-  }, [data, from, to]);
+  }, [data, to]);
   const hasActivity = buckets.some((bucket) => bucket.callCount > 0);
   const maxCount = Math.max(1, ...buckets.map((bucket) => bucket.callCount));
-  const isLoadingUsage = isLoading || !server;
+  const isUsageUnavailable = isUsageError || isServerError;
+  const isLoadingUsage = !isUsageUnavailable && (isLoading || isLoadingServer);
 
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
@@ -115,7 +126,7 @@ export function UnproxiedMcpOverviewTab({
           <div className="mt-6">
             {isLoadingUsage ? (
               <Skeleton className="h-32 w-full" />
-            ) : isUsageError ? (
+            ) : isUsageUnavailable ? (
               <Text small muted>
                 Couldn't load activity for this server. Try refreshing the page.
               </Text>
