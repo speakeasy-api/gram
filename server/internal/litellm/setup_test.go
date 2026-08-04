@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
+	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -171,17 +172,20 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	calls := callcache.New(cacheAdapter)
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
 	metricProcessor := NewMetricProcessor(logger, meterProvider, telemetryLogger)
+	healthProcessor := NewHealthProcessor(logger, conn)
 	traceProcessor.Start(ctx)
 	metricProcessor.Start(ctx)
+	healthProcessor.Start(ctx)
 	t.Cleanup(func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		require.NoError(t, traceProcessor.Shutdown(shutdownCtx))
 		require.NoError(t, metricProcessor.Shutdown(shutdownCtx))
+		require.NoError(t, healthProcessor.Shutdown(shutdownCtx))
 	})
 	features := &testProductFeatures{enabled: false}
 	auditLogger := audit.NewLogger()
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, features, auditLogger, "local")
+	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, features, auditLogger, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
@@ -192,4 +196,9 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		features:  features,
 		keys:      keysservice.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger),
 	}
+}
+
+func newDisabledHealthProcessor(t *testing.T) *HealthProcessor {
+	t.Helper()
+	return newHealthProcessor(testenv.NewLogger(t), time.Hour, func(context.Context, repo.RecordLiteLLMInstanceHealthParams) error { return nil })
 }
