@@ -61,7 +61,7 @@ describe("openSafeExternalUrl", () => {
     const target = open.mock.calls[0]?.[1];
     expect(open).toHaveBeenCalledWith(
       "",
-      expect.stringMatching(/^gram-external-\d+$/),
+      expect.stringMatching(/^gram-external-[0-9a-f-]+$/),
     );
     expect(opened.opener).toBeNull();
     const clicked = click.mock.contexts[0] as HTMLAnchorElement | undefined;

@@ -17,8 +17,6 @@ export function safeExternalHttpUrl(
   }
 }
 
-let externalTabCounter = 0;
-
 /** Keep scheme validation and isolated-tab flags together at navigation sinks. */
 export function openSafeExternalUrl(raw: string | null | undefined): boolean {
   const url = safeExternalHttpUrl(raw);
@@ -27,8 +25,9 @@ export function openSafeExternalUrl(raw: string | null | undefined): boolean {
   // A "noopener"/"noreferrer" feature string makes window.open return null
   // even on success, hiding popup-blocker failures. Instead, open a uniquely
   // named blank tab so null reliably means the popup was blocked, disown it,
-  // then navigate it through an anchor that strips the Referer header.
-  const target = `gram-external-${externalTabCounter++}`;
+  // then navigate it through an anchor that strips the Referer header. The
+  // random name keeps opens from ever reusing an earlier external tab.
+  const target = `gram-external-${crypto.randomUUID()}`;
   const opened = window.open("", target);
   if (!opened) return false;
   opened.opener = null;
