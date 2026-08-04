@@ -52,12 +52,9 @@ describe("openSafeExternalUrl", () => {
   it("opens the normalized URL in an isolated tab without a referrer", () => {
     const opened = { opener: window } as unknown as Window;
     const open = vi.spyOn(window, "open").mockImplementation(() => opened);
-    let clicked: HTMLAnchorElement | undefined;
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
-      function (this: HTMLAnchorElement) {
-        clicked = this;
-      },
-    );
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
 
     expect(openSafeExternalUrl("HTTPS://EXAMPLE.COM:443/docs")).toBe(true);
 
@@ -67,6 +64,7 @@ describe("openSafeExternalUrl", () => {
       expect.stringMatching(/^gram-external-\d+$/),
     );
     expect(opened.opener).toBeNull();
+    const clicked = click.mock.contexts[0] as HTMLAnchorElement | undefined;
     expect(clicked?.href).toBe("https://example.com/docs");
     expect(clicked?.target).toBe(target);
     expect(clicked?.referrerPolicy).toBe("no-referrer");
