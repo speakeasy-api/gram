@@ -861,9 +861,12 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 // hooks upgrade, rather than depending on a server deploy and a hooks release
 // being ordered correctly.
 //
-// A capable client that reports no inventory is a different case: that means
-// no MCP servers are configured, so a meta-tool call has nothing legitimate to
-// target and the guard denies it.
+// A capable client that reports no inventory is a different case and is denied
+// — deliberately, not because no servers exist. It may have none configured,
+// but collection is best-effort and can also come back empty when the codex
+// binary cannot be located, `codex mcp list` errors or times out, or the
+// session's inventory never reached the cache. All of those leave the target
+// unproven, and an unproven target is not an absent one.
 func canonicalClientReportsMCPInventory(payload *gen.IngestPayload) bool {
 	return payload != nil && strings.TrimSpace(conv.PtrValOr(payload.Source.AdapterVersion, "")) != ""
 }

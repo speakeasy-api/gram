@@ -23,6 +23,11 @@ Rolled out on client capability rather than deploy order: releases before this
 one report no adapter version and no MCP inventory, so enforcing on them would
 deny every meta-tool call — including reads of Gram-hosted servers that work
 today. Those clients keep their current behavior and are counted in the logs
-until they upgrade. A client that does report a version but no inventory has no
-MCP servers configured, so a meta-tool call has nothing legitimate to target
-and is denied.
+until they upgrade.
+
+A capable client that reports no inventory is denied. That can mean no MCP
+servers are configured, but collection is best-effort and also comes back empty
+when the codex binary cannot be located, `codex mcp list` fails, or the
+session's inventory never reached the cache — in which case a meta-tool call is
+denied even though servers are configured. That is the intended fail-closed
+posture rather than an accident: the guard cannot clear a target it cannot see.
