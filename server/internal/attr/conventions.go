@@ -547,6 +547,10 @@ const (
 	// events whose timestamps failed RFC3339 parsing in one log file and
 	// fell back to import time — a canary for upstream format changes.
 	ChatGPTComplianceTimestampFallbacksKey = attribute.Key("chatgpt.compliance.timestamp_fallbacks")
+	// CodexCloudTimestampFallbacksKey is the CODEX_LOG transcript import's
+	// counterpart, kept as its own key so a Codex cloud feed regression is
+	// never mis-attributed to the ChatGPT conversation import.
+	CodexCloudTimestampFallbacksKey = attribute.Key("codex.cloud.timestamp_fallbacks")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
@@ -725,6 +729,10 @@ func SlogTelemetryPublishFailedCount(v int) slog.Attr {
 
 func SlogChatGPTComplianceTimestampFallbacks(v int) slog.Attr {
 	return slog.Int(string(ChatGPTComplianceTimestampFallbacksKey), v)
+}
+
+func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
+	return slog.Int(string(CodexCloudTimestampFallbacksKey), v)
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }

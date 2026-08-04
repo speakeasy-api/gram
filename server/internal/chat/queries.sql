@@ -122,7 +122,16 @@ DO UPDATE SET
     project_id = EXCLUDED.project_id
   , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
   , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
-  , title = COALESCE(EXCLUDED.title, chats.title)
+  -- Two title regimes share this upsert. Feeds with authoritative titles
+  -- (ChatGPT conversations, Anthropic compliance) are newest-wins: a non-null
+  -- incoming title refreshes the row. Feeds whose titles are DERIVED from
+  -- content (Codex cloud: the session's first prompt) are first-wins
+  -- (@prefer_stored_title): a later poll window derives a mid-session prompt
+  -- as its "first", and newest-wins would retitle the chat on every window.
+  , title = CASE
+      WHEN @prefer_stored_title::bool THEN COALESCE(chats.title, EXCLUDED.title)
+      ELSE COALESCE(EXCLUDED.title, chats.title)
+    END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 RETURNING id;
 
