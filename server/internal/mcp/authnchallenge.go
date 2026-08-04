@@ -169,7 +169,7 @@ func (g UserSessionGrant) AdditionalCacheKeys() []string { return []string{} }
 
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short
-// enough to limit blast radius if the code leaks.
+// enough to limit exposure if the code leaks.
 func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 
 // errIssuerGateOrgLookup marks the post-validation operational path in
@@ -399,24 +399,34 @@ func (s *Service) ApplyIssuerGate(
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
-// FK still resolves to a live row. Returns CodeNotFound when the issuer
-// was deleted out from under the endpoint, CodeUnexpected on lookup
+// FK still resolves to a live row, and stamps the issuer configuration the
+// OAuth handlers need onto the endpoint. Returns CodeNotFound when the
+// issuer was deleted out from under the endpoint, CodeUnexpected on lookup
 // failure. Callers are responsible for first checking that the endpoint
 // is issuer-gated.
 //
+// This is the single place where issuer config reaches a
+// ResolvedMcpEndpoint: every construction path runs it, and it already had
+// to load the row for the FK check, so carrying config out of it costs no
+// additional query.
+//
 // Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
-// the live-FK check in the same chokepoint as the
+// the live-FK check in the same place as the
 // NewResolvedMcpEndpointFromMcpServer construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
-	if _, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:        endpoint.UserSessionIssuerID,
 		ProjectID: endpoint.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
+	// Carried verbatim, NULL included; admission.ResolveMode is the one
+	// place that decides what an absent or unrecognized value means.
+	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	return nil
 }
 

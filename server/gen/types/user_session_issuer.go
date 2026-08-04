@@ -20,6 +20,11 @@ type UserSessionIssuer struct {
 	AuthnChallengeMode string
 	// Issued user session lifetime, in hours.
 	SessionDurationHours int
-	CreatedAt            string
-	UpdatedAt            string
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | open. Always populated — an issuer whose mode has never been
+	// configured reports the default, 'presets', so clients never have to reason
+	// about an unset state.
+	ClientIDMetadataAdmissionMode string
+	CreatedAt                     string
+	UpdatedAt                     string
 }

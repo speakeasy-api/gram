@@ -35,6 +35,13 @@ type UpdateUserSessionIssuerRequestBody struct {
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
+	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
+	// 'open' admits any spec-valid document; 'disabled' admits none and stops
+	// advertising CIMD support. Omit to leave unchanged. Once set, the issuer can
+	// never return to the unset state — it can only be moved between explicit
+	// modes.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 }
 
 // MigrateLegacyGramRegistrationsRequestBody is the type of the
@@ -59,9 +66,14 @@ type CreateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | open. Always populated — an issuer whose mode has never been
+	// configured reports the default, 'presets', so clients never have to reason
+	// about an unset state.
+	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
+	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -76,9 +88,14 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | open. Always populated — an issuer whose mode has never been
+	// configured reports the default, 'presets', so clients never have to reason
+	// about an unset state.
+	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
+	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -101,9 +118,14 @@ type GetUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | open. Always populated — an issuer whose mode has never been
+	// configured reports the default, 'presets', so clients never have to reason
+	// about an unset state.
+	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
+	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // MigrateLegacyGramRegistrationsResponseBody is the type of the
@@ -1267,9 +1289,14 @@ type UserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | open. Always populated — an issuer whose mode has never been
+	// configured reports the default, 'presets', so clients never have to reason
+	// about an unset state.
+	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
+	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateUserSessionIssuerResponseBody builds the HTTP response body from
@@ -1277,13 +1304,14 @@ type UserSessionIssuerResponseBody struct {
 // "userSessionIssuers" service.
 func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *CreateUserSessionIssuerResponseBody {
 	body := &CreateUserSessionIssuerResponseBody{
-		ID:                   res.ID,
-		ProjectID:            res.ProjectID,
-		Slug:                 res.Slug,
-		AuthnChallengeMode:   res.AuthnChallengeMode,
-		SessionDurationHours: res.SessionDurationHours,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                            res.ID,
+		ProjectID:                     res.ProjectID,
+		Slug:                          res.Slug,
+		AuthnChallengeMode:            res.AuthnChallengeMode,
+		SessionDurationHours:          res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     res.CreatedAt,
+		UpdatedAt:                     res.UpdatedAt,
 	}
 	return body
 }
@@ -1293,13 +1321,14 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 // "userSessionIssuers" service.
 func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *UpdateUserSessionIssuerResponseBody {
 	body := &UpdateUserSessionIssuerResponseBody{
-		ID:                   res.ID,
-		ProjectID:            res.ProjectID,
-		Slug:                 res.Slug,
-		AuthnChallengeMode:   res.AuthnChallengeMode,
-		SessionDurationHours: res.SessionDurationHours,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                            res.ID,
+		ProjectID:                     res.ProjectID,
+		Slug:                          res.Slug,
+		AuthnChallengeMode:            res.AuthnChallengeMode,
+		SessionDurationHours:          res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     res.CreatedAt,
+		UpdatedAt:                     res.UpdatedAt,
 	}
 	return body
 }
@@ -1331,13 +1360,14 @@ func NewListUserSessionIssuersResponseBody(res *usersessionissuers.ListUserSessi
 // service.
 func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserSessionIssuerResponseBody {
 	body := &GetUserSessionIssuerResponseBody{
-		ID:                   res.ID,
-		ProjectID:            res.ProjectID,
-		Slug:                 res.Slug,
-		AuthnChallengeMode:   res.AuthnChallengeMode,
-		SessionDurationHours: res.SessionDurationHours,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                            res.ID,
+		ProjectID:                     res.ProjectID,
+		Slug:                          res.Slug,
+		AuthnChallengeMode:            res.AuthnChallengeMode,
+		SessionDurationHours:          res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     res.CreatedAt,
+		UpdatedAt:                     res.UpdatedAt,
 	}
 	return body
 }
@@ -2271,10 +2301,11 @@ func NewCreateUserSessionIssuerPayload(body *CreateUserSessionIssuerRequestBody,
 // updateUserSessionIssuer endpoint payload.
 func NewUpdateUserSessionIssuerPayload(body *UpdateUserSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.UpdateUserSessionIssuerPayload {
 	v := &usersessionissuers.UpdateUserSessionIssuerPayload{
-		ID:                   *body.ID,
-		Slug:                 body.Slug,
-		AuthnChallengeMode:   body.AuthnChallengeMode,
-		SessionDurationHours: body.SessionDurationHours,
+		ID:                            *body.ID,
+		Slug:                          body.Slug,
+		AuthnChallengeMode:            body.AuthnChallengeMode,
+		SessionDurationHours:          body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2367,6 +2398,11 @@ func ValidateUpdateUserSessionIssuerRequestBody(body *UpdateUserSessionIssuerReq
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
 		}
 	}
 	return

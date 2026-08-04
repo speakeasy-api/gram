@@ -38,6 +38,11 @@ SET
     slug = COALESCE(sqlc.narg('slug')::text, slug),
     authn_challenge_mode = COALESCE(sqlc.narg('authn_challenge_mode')::text, authn_challenge_mode),
     session_duration = COALESCE(sqlc.narg('session_duration')::interval, session_duration),
+    -- Omitting the mode keeps the stored value, including NULL. Once a
+    -- concrete mode is written the column can never return to NULL through
+    -- this endpoint: "never configured" is a one-way state, and the API
+    -- reports the resolved effective mode either way.
+    client_id_metadata_admission_mode = COALESCE(sqlc.narg('client_id_metadata_admission_mode')::text, client_id_metadata_admission_mode),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -162,6 +167,81 @@ UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_client_id = @user_session_client_id AND deleted IS FALSE
 RETURNING *;
+
+-- name: IssuerAdmitsCimdClientURI :one
+-- Admission check for a presented CIMD client_id that missed the compile-time
+-- preset catalog. Runs on the unauthenticated /authorize surface, so project
+-- scoping is intentionally NOT applied — the issuer_id is the authoritative
+-- scope, matching GetUserSessionClientByClientID. Served by the partial
+-- unique index on (user_session_issuer_id, client_id_metadata_uri).
+--
+-- Callers MUST bound the length of @client_id_metadata_uri before reaching
+-- this query: the value is attacker-supplied and otherwise unbounded.
+SELECT EXISTS (
+  SELECT 1
+  FROM user_session_issuer_cimd_clients AS cimd
+  WHERE cimd.user_session_issuer_id = @user_session_issuer_id
+    AND cimd.client_id_metadata_uri = @client_id_metadata_uri
+    AND cimd.deleted IS FALSE
+);
+
+-- name: CreateUserSessionIssuerCimdClient :one
+-- Adds an issuer-specific allowed CIMD document URL. The SELECT source
+-- scopes the write to a live issuer in the caller's project, so a bad
+-- issuer id yields no rows (404) rather than an orphan write. Adding a URL
+-- that is already live is idempotent via ON CONFLICT; adding one that was
+-- previously soft-deleted inserts a fresh row, since the unique index
+-- covers live rows only and the audit trail should show a new grant rather
+-- than silently reviving an old one.
+INSERT INTO user_session_issuer_cimd_clients (project_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT @project_id, iss.id, @client_id_metadata_uri
+FROM user_session_issuers AS iss
+WHERE iss.id = @user_session_issuer_id
+  AND iss.project_id = @project_id
+  AND iss.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetUserSessionIssuerCimdClientByID :one
+SELECT cimd.*
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE cimd.id = @id
+  AND iss.project_id = @project_id
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE;
+
+-- name: ListUserSessionIssuerCimdClientsByIssuerID :many
+-- Operator visibility into an issuer's custom CIMD URLs. Joins through
+-- issuers for project scoping.
+SELECT cimd.*
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE iss.project_id = @project_id
+  AND cimd.user_session_issuer_id = @user_session_issuer_id
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR cimd.id < sqlc.narg('cursor')::uuid)
+ORDER BY cimd.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: DeleteUserSessionIssuerCimdClient :one
+-- The issuer must still be live. Soft-deleting an issuer leaves its CIMD
+-- rows behind (the FK cascade only fires on a hard delete), and those rows
+-- are already inert: admission requires a live issuer, and the list query
+-- filters them out. Without this predicate the handler would soft-delete a
+-- row and then fail looking up its issuer for the audit event, turning an
+-- unreachable resource into a 500.
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cimd.id = @id
+  AND iss.id = cimd.user_session_issuer_id
+  AND iss.project_id = @project_id
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+RETURNING cimd.*;
 
 -- name: GetUserSessionConsentByID :one
 SELECT c.*, cli.user_session_issuer_id AS user_session_issuer_id

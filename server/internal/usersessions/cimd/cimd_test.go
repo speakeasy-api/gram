@@ -12,7 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 func TestIsClientIDURL(t *testing.T) {
@@ -136,7 +136,7 @@ func TestResolve_InvalidJSONRejected(t *testing.T) {
 	// through Gram, so it reports like any other fetch failure.
 	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
 	require.ErrorContains(t, err, "parse client metadata document")
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	require.NotErrorAs(t, err, &oauthErr)
 }
 

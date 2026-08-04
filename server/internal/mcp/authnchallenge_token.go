@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -103,6 +105,27 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	// one with credentials per RFC 6749 §5.2 — a URL-shaped client_id
 	// cannot travel via HTTP Basic (r.BasicAuth does no percent-decoding),
 	// so a legitimate CIMD client always presents form client_id + none.
+	// The `disabled` admission mode is an off switch, so it applies to the
+	// token leg too: an operator who turns CIMD off for an issuer expects
+	// outstanding refresh tokens to stop working, not just new authorize
+	// flows. It is a whole-class deny needing no catalog or custom-URL
+	// consultation, so it costs one in-memory comparison.
+	//
+	// `presets` deliberately does NOT enforce here. Preset membership is
+	// implicit and Gram-mutable — removing a catalog entry de-admits it on
+	// every presets-mode issuer at deploy — so enforcing at /token would let
+	// a one-line catalog edit terminate live sessions fleet-wide, surfacing
+	// as a mid-session failure no client recovers from. Admission for
+	// `presets` is a gate on STARTING a flow, never on continuing one.
+	//
+	// Note this stops the issuance of new tokens; access tokens already
+	// minted stay valid until they expire (see AIS-406).
+	if clientRow.ClientIDMetadataUri.Valid {
+		if mode, _ := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid); mode == admission.ModeDisabled {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
+		}
+	}
 	if clientRow.ClientIDMetadataUri.Valid && presentedAuthMethod != "none" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_client_presented_credentials")
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", `client_id metadata document clients must use token_endpoint_auth_method "none"`)
@@ -402,12 +425,12 @@ func (s *Service) mintSessionAndRespond(
 	return nil
 }
 
-// writeTokenOAuthError unwraps a *usersessions.OAuthError to its code +
+// writeTokenOAuthError unwraps a *oauthwire.Error to its code +
 // description and forwards to writeTokenError. Falls back to a generic
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *OAuthError).
 func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	if errors.As(err, &oauthErr) {
 		return writeTokenError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}

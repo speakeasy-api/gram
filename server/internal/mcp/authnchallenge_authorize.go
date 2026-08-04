@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // HandleAuthorize implements the OAuth 2.1 authorization endpoint (RFC 6749
@@ -61,6 +63,15 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 	req.SetDefaults()
 
+	// Stamp the presented client_id before anything can reject the request.
+	// Without this it only reaches the logs on the post-resolution "oauth
+	// flow started" line, so every REJECTED attempt — an unknown client, a
+	// malformed CIMD document, an admission denial — is invisible by URI.
+	// That URI is the single most useful field when diagnosing why a real
+	// client cannot connect, since the client itself surfaces only the
+	// error_description to its user.
+	logger = logger.With(attr.SlogOAuthClientID(truncateClientIDForLog(req.ClientID)))
+
 	// RFC 6749 §4.1.2.1 wants validation errors carried back to the client
 	// via redirect when we can trust the redirect_uri, and surfaced inline
 	// otherwise. That motivates the two-phase split: validate the fields
@@ -77,7 +88,14 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// no stale fallback).
 	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
 	if err != nil {
-		if oauthErr, ok := errors.AsType[*usersessions.OAuthError](err); ok {
+		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
+			// Checked before the generic *OAuthError branch below, since an
+			// admission denial is policy rather than a spec violation and
+			// carries its own actionable description. Already logged with
+			// the presented client_id inside admitCIMDClient.
+			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+		}
+		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
@@ -94,7 +112,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		if errors.Is(err, errCIMDDisabled) {
 			// Same wire response as an unknown client so the rejection does
 			// not leak per-organization flag state; the log line is what
-			// distinguishes a kill-switch rejection during an incident.
+			// distinguishes a flag-off rejection during an incident.
 			logger.InfoContext(ctx, "rejecting url-shaped client_id while cimd flag is disabled")
 			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
@@ -168,7 +186,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// Flow start: counted exactly once per minted challenge, the unit the
 	// companion completion-ratio monitor divides terminal outcomes against.
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
-	logger.InfoContext(ctx, "oauth flow started", attr.SlogOAuthClientID(req.ClientID))
+	logger.InfoContext(ctx, "oauth flow started")
 
 	if forceIDP {
 		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
@@ -201,12 +219,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	return nil
 }
 
-// writeAuthorizeOAuthError unwraps a *usersessions.OAuthError to its code +
+// writeAuthorizeOAuthError unwraps a *oauthwire.Error to its code +
 // description and forwards to writeAuthorizeError. Falls back to a generic
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *OAuthError).
 func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	if errors.As(err, &oauthErr) {
 		return writeAuthorizeError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
@@ -222,7 +240,7 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, redirectURI, originalState string, err error) error {
 	code := "invalid_request"
 	description := err.Error()
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	if errors.As(err, &oauthErr) {
 		code = oauthErr.Code
 		description = oauthErr.Description
