@@ -201,6 +201,8 @@ export function SetupWizard(): JSX.Element | null {
   // numeric switch would map to the wrong component.
   const renderStep = () => {
     switch (steps[currentStep]?.id) {
+      case undefined:
+        return null;
       case "connect-idp":
         return (
           <ConnectIdpStep
