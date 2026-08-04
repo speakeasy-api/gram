@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("unproxiedMcp", func() {
-	Description("Managing unproxied MCP servers. These are vendor MCP servers that Gram lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved. Restricted to Speakeasy staff.")
+	Description("Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -153,7 +153,7 @@ var CreateServerForm = Type("CreateUnproxiedMcpServerForm", func() {
 	Description("Form for creating a new unproxied MCP server")
 
 	Attribute("name", String, "Optional human-readable name for the unproxied MCP server. Empty values are stored as null.")
-	Attribute("url", String, "The URL of the vendor's MCP server. Gram never proxies tool calls through it; the only outbound request Gram ever makes to it is a live tool listing from the Inspect tab.", func() {
+	Attribute("url", String, "The URL of the vendor's MCP server. Speakeasy never proxies tool calls through it; the only outbound requests Speakeasy ever makes to it are fetching a favicon and, on request, a live tool listing.", func() {
 		Format(FormatURI)
 	})
 	Attribute("description", String, "Optional description shown alongside the server.")

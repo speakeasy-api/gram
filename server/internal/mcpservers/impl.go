@@ -235,7 +235,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	// moment the handler returns. Bounded independently of the request so a
 	// stuck DB call can't leave the goroutine running forever.
 	if ids.UnproxiedMcpServerID.Valid {
-		bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:gosec // cancel is deferred inside the detached goroutine below
 		go func() {
 			defer cancel()
 			s.setDefaultUnproxiedIcon(bgCtx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)

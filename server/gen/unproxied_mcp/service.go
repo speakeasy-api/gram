@@ -15,9 +15,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Managing unproxied MCP servers. These are vendor MCP servers that Gram lists
-// and can attach to a plugin but never proxies, so there is no OAuth callback
-// or upstream allowlisting involved. Restricted to Speakeasy staff.
+// Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy
+// lists and can attach to a plugin but never proxies, so there is no OAuth
+// callback or upstream allowlisting involved.
 type Service interface {
 	// Create a new unproxied MCP server. Restricted to callers whose email is on
 	// the speakeasy.com or speakeasyapi.dev domain.
@@ -67,9 +67,9 @@ type CreateServerPayload struct {
 	// Optional human-readable name for the unproxied MCP server. Empty values are
 	// stored as null.
 	Name *string
-	// The URL of the vendor's MCP server. Gram never proxies tool calls through
-	// it; the only outbound request Gram ever makes to it is a live tool listing
-	// from the Inspect tab.
+	// The URL of the vendor's MCP server. Speakeasy never proxies tool calls
+	// through it; the only outbound requests Speakeasy ever makes to it are
+	// fetching a favicon and, on request, a live tool listing.
 	URL string
 	// Optional description shown alongside the server.
 	Description *string

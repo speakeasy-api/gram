@@ -19895,7 +19895,7 @@ func tunneledMcpDeleteServerUsage() {
 // unproxiedMcpUsage displays the usage of the unproxied-mcp command and its
 // subcommands.
 func unproxiedMcpUsage() {
-	fmt.Fprintln(os.Stderr, `Managing unproxied MCP servers. These are vendor MCP servers that Gram lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved. Restricted to Speakeasy staff.`)
+	fmt.Fprintln(os.Stderr, `Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] unproxied-mcp COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-server: Create a new unproxied MCP server. Restricted to callers whose email is on the speakeasy.com or speakeasyapi.dev domain.`)
