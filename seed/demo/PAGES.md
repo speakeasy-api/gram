@@ -7,33 +7,41 @@ check passes.
 
 Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not seeded.
 
-## Phase 1 (current)
+## Seeded
 
-| Page                                   | Backing data                                                                                                                                             | Status |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Agent sessions list                    | PG `chats`; needs unrestricted `chat:read` AND the org's `rbac` feature row (without it ShouldEnforce=false → own-sessions-only filter hides everything) | `[~]`  |
-| Chat detail sheet (transcript)         | PG `chat_messages`, `risk_results` — blocked while impersonating until README server change 3                                                            | `[ ]`  |
-| Risk events / findings                 | PG `risk_results` + `risk_policies` (enabled)                                                                                                            | `[x]`  |
-| Cost dashboard (by user/model/agent)   | CH `attribute_metrics_summaries` (MV admits ONLY provenance rows: Claude OTEL `api_request`/`tool_result`, `cursor:usage:*`, agent `PostToolUse` hooks)  | `[x]`  |
-| Sessions list (telemetry.listSessions) | CH `chat_session_summaries` (via MV)                                                                                                                     | `[~]`  |
-| Project overview metric cards          | CH `metrics_summaries` (via MV)                                                                                                                          | `[x]`  |
-| Tool logs / traces                     | CH `trace_summaries` — data seeded, but page is enterprise-gated for the demo account type (README server change 7)                                      | `[~]`  |
+| Page                                                           | Backing data                                                                                                                                             | Status |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Agent sessions list                                            | PG `chats` + org `rbac` feature (without it ShouldEnforce=false hides everything)                                                                        | `[x]`  |
+| Chat detail sheet (transcript + per-turn cost + tool payloads) | PG `chat_messages` (`message_id`=prompt id, `tool_call_id`=call_demo_i_k) + CH api_request/tool_result rows; demo-org impersonation lift in chat.load    | `[~]`  |
+| Risk events / findings                                         | PG `risk_results` + per-project enabled `risk_policies`                                                                                                  | `[x]`  |
+| Risk overview (CH mirror ready)                                | PG today; CH `risk_findings` mirror seeded for the flag flip                                                                                             | `[x]`  |
+| Cost dashboard, all pivots                                     | CH `attribute_metrics_summaries` via provenance rows carrying `user.attributes.*`, roles/groups, hostname, skill/agent/mcp attribution                   | `[~]`  |
+| Costs Efficiency dataset                                       | CH `chat_analysis:work_units:score` rows                                                                                                                 | `[~]`  |
+| Sessions list (telemetry.listSessions)                         | CH `chat_session_summaries` (via MV)                                                                                                                     | `[x]`  |
+| Project overview metric cards                                  | CH `metrics_summaries` (via MV)                                                                                                                          | `[x]`  |
+| Tool logs / traces                                             | CH `trace_summaries`; page enterprise-gated for 'demo' account type (README change 7)                                                                    | `[~]`  |
+| Insights (MCP & Tools)                                         | CH `trace_summaries`: unique per-surface trace ids + `gram.toolset.slug` (direct branch) + `gram.event.source=hook` rows (hook branch) + Skill hook rows | `[~]`  |
+| Team page                                                      | PG `organization_user_relationships` + `users.workos_id` + role assignments (global_roles admin/member, skipped if absent)                               | `[~]`  |
+| Employee enrollment                                            | PG memberships + `user_accounts` + `device_owners` + `device_agent_syncs`; roster served via impersonation carve-out                                     | `[~]`  |
+| Org home (activity, facepiles, challenges)                     | PG `audit_logs` (12 rows, both projects) + CH `authz_challenges` (13 rows incl. api_key bucket)                                                          | `[~]`  |
+| Access challenges                                              | CH `authz_challenges` (member user_ids pass the suppression filter)                                                                                      | `[~]`  |
+| Budgets / spend controls                                       | PG `spend_rules` ×2 + `spend_rule_events` ×4, calibrated to CH usage (breach+warning per rule); usage MV already fed by existing rows                    | `[~]`  |
+| Toolsets / MCP / Sources / Deployments / Playground            | PG deployment stack: asset + completed deployment + 8 `http_tool_definitions` (urns match telemetry, doc slug `acme`) + 2 toolsets (+versions)           | `[~]`  |
+| Prompts                                                        | PG `prompt_templates` ×2                                                                                                                                 | `[~]`  |
+| Skills                                                         | PG `skills` ×3 + `skill_versions` + 1 open edit suggestion with diff                                                                                     | `[~]`  |
+| Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×4 + `hooks:` telemetry rows                                                                                              | `[~]`  |
+| Directory dimensions                                           | PG `directory_users`/`directory_groups`/memberships mirroring the CH `user.attributes.*` profiles                                                        | `[~]`  |
 
-## Later phases (not seeded yet)
+## Not seeded (deliberate)
 
-| Page                                                | Backing data                                                                                                            | Status |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------ |
-| Per-turn cost float in chat detail                  | CH `claude_code.api_request` rows with `prompt.id`                                                                      | `[ ]`  |
-| Tool payload sizes in chat detail                   | CH `claude_code.tool_result` rows keyed by `tool_use_id`                                                                | `[ ]`  |
-| Spend control rules/usage                           | PG spend rules + CH `spend_rule_usage_summaries`; urn needs `cursor:`/`codex:` prefix to pass `is_generic_usage_row`    | `[ ]`  |
-| ChatGPT/Work agent usage split                      | CH rows with urn `chatgpt:usage:metrics`, hook `chatgpt`/`chatgpt-work`                                                 | `[ ]`  |
-| Team members / facepile                             | PG `users` + `organization_user_relationships` (demo org has NO memberships by design — check page under impersonation) | `[ ]`  |
-| Directory dimensions (department/title/cost center) | PG `directory_users`/`directory_groups` + `user.attributes.*` on CH rows                                                | `[ ]`  |
-| Toolsets / MCP pages                                | PG `toolsets`, `mcp_servers`, deployments                                                                               | `[ ]`  |
-| Shadow MCP inventory                                | CH `shadow_mcp_inventory_urls`                                                                                          | `[ ]`  |
-| Access challenges                                   | CH `authz_challenges`                                                                                                   | `[ ]`  |
-| Risk overview (CH mirror)                           | CH `risk_findings`                                                                                                      | `[ ]`  |
-| Skills pages                                        | PG `skills`, `skill_versions`, suggestions                                                                              | `[ ]`  |
+| Page                                   | Why                                                          |
+| -------------------------------------- | ------------------------------------------------------------ |
+| Plugins / Assistants                   | Auto-provision on first visit; empty state is intentional    |
+| Catalog                                | Registry-backed, self-populating                             |
+| Environments / Integrations / Triggers | Acceptable empty states                                      |
+| Billing / Device agent / Settings      | Render fine without seed data                                |
+| ChatGPT/Work usage split               | Later phase (`chatgpt:usage:metrics` rows)                   |
+| Logs page content                      | Enterprise-gated for the demo account type (README change 7) |
 
 ## Rules when extending
 
@@ -41,9 +49,15 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
    commit.
 2. All ids derive from the fixed constants in `postgres.sql` (org
    `org_gram_demo_workspace`, projects `dec0de00-…0001`/`…0002`); chat ids are
-   `md5('gram-demo-chat-' || n)` in BOTH stores.
+   `md5('gram-demo-chat-' || n)` in BOTH stores; the owner index formula
+   `1 + (n % 6)` must stay identical in both files.
 3. Timestamps are always relative to `now()`, trailing ≤ 12 days, so every
    chat clears the MV date cutoffs, the daily prod rerun keeps data fresh, and
    MVs populate on INSERT — never hand-backfill an MV target.
 4. Every new CH insert target (or new MV) gets a matching scoped DELETE in
    `clickhouse.sql`, or re-runs double the numbers.
+5. Cost/session MVs are provenance-first: usage rows must be Claude OTEL
+   api_request (+`prompt.id`), `cursor:usage:*`, codex OTEL, or agent
+   PostToolUse hook shapes — generic `chat:completion` rows are ignored.
+6. Give every row surface its own trace-id namespace; shared trace ids merge
+   into one unclassifiable trace in `trace_summaries`.
