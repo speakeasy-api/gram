@@ -17,9 +17,10 @@ when its check passes.
    way in. Chat transcripts ARE readable here — the demo org is exempt from
    the impersonation transcript block (chat.load carve-out).
 
-## Checks (fail = page shows an empty state, error boundary, or zero where a
+## Checks
 
-value is expected)
+A check FAILS when the page shows an empty state, an error boundary, or zero
+where a value is expected.
 
 1. **Agent sessions list** — sessions list shows ~60 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners

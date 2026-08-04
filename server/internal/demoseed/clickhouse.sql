@@ -129,7 +129,7 @@ FROM (
     if((number + 1) % 2 = 1, 'claude-code', 'cursor') AS hook,
     arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
                   'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, arrayJoin([1, 2])) % 8)) AS tool_name,
+                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -207,8 +207,8 @@ FROM (
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     if(cityHash64('model', number) % 3 = 0, 'claude-opus-4-5', 'claude-sonnet-4-6') AS model,
-    toUInt64(1500 + cityHash64('in', number, arrayJoin([1, 2, 3])) % 6000) AS in_tok,
-    toUInt64(200 + cityHash64('out', number, arrayJoin([1, 2, 3])) % 2500) AS out_tok,
+    toUInt64(1500 + cityHash64('in', number, turn) % 6000) AS in_tok,
+    toUInt64(200 + cityHash64('out', number, turn) % 2500) AS out_tok,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -277,7 +277,7 @@ FROM (
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
                   'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, arrayJoin([1, 2])) % 8)) AS tool_name,
+                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -467,7 +467,7 @@ FROM (
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
                   'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, arrayJoin([1, 2])) % 8)) AS tool_name,
+                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -728,3 +728,14 @@ SELECT throwIf(
        (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
    ) > 0,
   'demo seed postflight: demo-seed rows leaked outside demo projects');
+
+-- The inverse closes the loop: every row under the demo projects must carry
+-- the demo-seed marker, so the leak check above provably covers all seeded
+-- telemetry (an insert that forgot the marker would slip past it).
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN
+       (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+     AND toString(resource_attributes.gram.deployment.id) != 'demo-seed'
+   ) > 0,
+  'demo seed postflight: demo-project telemetry rows missing the demo-seed marker');

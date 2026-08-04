@@ -660,6 +660,42 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % chats have no owner (sessions would render as anonymous)', stray;
   END IF;
 
+  -- Every table that carries both the demo org id and a project id must agree
+  -- with the demo constants: a mismatch means an insert escaped its scoping.
+  SELECT count(*) INTO stray FROM (
+    SELECT 1 FROM deployments WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    UNION ALL
+    SELECT 1 FROM toolsets WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    UNION ALL
+    SELECT 1 FROM risk_policies WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    UNION ALL
+    SELECT 1 FROM risk_results WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+    UNION ALL
+    SELECT 1 FROM audit_logs WHERE organization_id = demo_org AND project_id NOT IN (proj_a, proj_b)
+  ) x;
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo projects', stray;
+  END IF;
+
+  -- Global (non-org-scoped) tables must only carry rows for the demo roster:
+  -- memberships/accounts/devices reference user_demo_* ids exclusively.
+  SELECT count(*) INTO stray FROM (
+    SELECT 1 FROM organization_user_relationships
+    WHERE organization_id = demo_org AND user_id NOT LIKE 'user\_demo\_%'
+    UNION ALL
+    SELECT 1 FROM user_accounts
+    WHERE organization_id = demo_org AND user_id NOT LIKE 'user\_demo\_%'
+    UNION ALL
+    SELECT 1 FROM device_owners
+    WHERE organization_id = demo_org AND linked_user_id NOT LIKE 'user\_demo\_%'
+    UNION ALL
+    SELECT 1 FROM directory_users
+    WHERE organization_id = demo_org AND user_id NOT LIKE 'user\_demo\_%'
+  ) x;
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo users', stray;
+  END IF;
+
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',
     chat_count, finding_count, member_count, tool_count;
 END;
