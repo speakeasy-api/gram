@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
-	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 )
 
 const (
@@ -29,12 +29,12 @@ const (
 // actually fired.
 type mintFixture struct {
 	*dbHandler
-	app        repo.XaaApp
+	app        repo.EmaApp
 	user       repo.User
-	resource   repo.XaaResource
+	resource   repo.EmaResource
 	idToken    string
 	audience   string
-	assignment repo.XaaAppAssignment
+	assignment repo.EmaAppAssignment
 }
 
 func newMintFixture(t *testing.T) *mintFixture {
@@ -52,7 +52,7 @@ func newMintFixture(t *testing.T) *mintFixture {
 		user:       user,
 		resource:   resource,
 		idToken:    h.signIDToken(t, user),
-		audience:   xaa.ResourceASIssuer(testExternalURL, testResourceSlug),
+		audience:   ema.ResourceASIssuer(testExternalURL, testResourceSlug),
 		assignment: assignment,
 	}
 }
@@ -61,13 +61,13 @@ func newMintFixture(t *testing.T) *mintFixture {
 // returned values to express the one case under test.
 func (f *mintFixture) form() url.Values {
 	v := url.Values{}
-	v.Set("grant_type", xaa.GrantTypeTokenExchange)
-	v.Set("requested_token_type", xaa.TokenTypeIDJAG)
+	v.Set("grant_type", ema.GrantTypeTokenExchange)
+	v.Set("requested_token_type", ema.TokenTypeIDJAG)
 	v.Set("audience", f.audience)
 	v.Set("resource", testResourceID)
 	v.Set("scope", "chat.read chat.history")
 	v.Set("subject_token", f.idToken)
-	v.Set("subject_token_type", xaa.TokenTypeIDToken)
+	v.Set("subject_token_type", ema.TokenTypeIDToken)
 	v.Set("client_id", testAppClientID)
 	v.Set("client_secret", testAppSecret)
 	return v
@@ -88,10 +88,10 @@ func decodeError(t *testing.T, rec *httptest.ResponseRecorder) map[string]string
 
 // parseIDJAG verifies an ID-JAG against the handler's own key and returns its
 // claims plus the raw header, so tests can assert on both.
-func parseIDJAG(t *testing.T, h *dbHandler, raw string) (xaa.Claims, map[string]any) {
+func parseIDJAG(t *testing.T, h *dbHandler, raw string) (ema.Claims, map[string]any) {
 	t.Helper()
 
-	var claims xaa.Claims
+	var claims ema.Claims
 	token, err := jwt.NewParser(jwt.WithValidMethods([]string{"RS256"})).ParseWithClaims(
 		raw, &claims, func(*jwt.Token) (any, error) { return h.keystore.PublicKey(), nil },
 	)
@@ -112,8 +112,8 @@ func TestMintIDJAGIssuesAProfileConformantGrant(t *testing.T) {
 
 	var body idJAGResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	require.Equal(t, xaa.TokenTypeIDJAG, body.IssuedTokenType)
-	require.Equal(t, xaa.TokenTypeNotApplicable, body.TokenType, "an ID-JAG is a grant, not a bearer credential")
+	require.Equal(t, ema.TokenTypeIDJAG, body.IssuedTokenType)
+	require.Equal(t, ema.TokenTypeNotApplicable, body.TokenType, "an ID-JAG is a grant, not a bearer credential")
 	require.Equal(t, "chat.read chat.history", body.Scope)
 	require.Positive(t, body.ExpiresIn)
 
@@ -121,7 +121,7 @@ func TestMintIDJAGIssuesAProfileConformantGrant(t *testing.T) {
 
 	// The typ header is what stops an ordinary id_token being replayed into
 	// the jwt-bearer grant, so it is not optional.
-	require.Equal(t, xaa.JWTType, header["typ"])
+	require.Equal(t, ema.JWTType, header["typ"])
 	require.Equal(t, f.keystore.KID(), header["kid"])
 
 	require.Equal(t, testExternalURL+Prefix, claims.Issuer)
@@ -150,7 +150,7 @@ func TestMintIDJAGRecordsTheGrantInTheLedger(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	claims, _ := parseIDJAG(t, f.dbHandler, body.AccessToken)
 
-	issued, err := f.queries.ListXaaIssuedJags(t.Context(), repo.ListXaaIssuedJagsParams{
+	issued, err := f.queries.ListEmaIssuedJags(t.Context(), repo.ListEmaIssuedJagsParams{
 		UserID:     uuid.NullUUID{UUID: f.user.ID, Valid: true},
 		ResourceID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MaxRows:    10,
@@ -168,7 +168,7 @@ func TestMintIDJAGAcceptsARefreshTokenSubject(t *testing.T) {
 	f := newMintFixture(t)
 	form := f.form()
 	form.Set("subject_token", f.seedRefreshToken(t, f.user))
-	form.Set("subject_token_type", xaa.TokenTypeRefreshToken)
+	form.Set("subject_token_type", ema.TokenTypeRefreshToken)
 
 	rec := f.mint(t, form)
 	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
@@ -225,7 +225,7 @@ func TestMintIDJAGRejectsUnassignedUser(t *testing.T) {
 	t.Parallel()
 
 	f := newMintFixture(t)
-	require.NoError(t, f.queries.DeleteXaaAppAssignment(t.Context(), f.assignment.ID))
+	require.NoError(t, f.queries.DeleteEmaAppAssignment(t.Context(), f.assignment.ID))
 
 	rec := f.mint(t, f.form())
 	require.Equal(t, http.StatusForbidden, rec.Code)
@@ -238,7 +238,7 @@ func TestMintIDJAGRejectsDisabledApp(t *testing.T) {
 	f := newMintFixture(t)
 	// Every narg left invalid so COALESCE keeps the existing value; only
 	// `enabled` is rewritten.
-	_, err := f.queries.UpdateXaaApp(t.Context(), repo.UpdateXaaAppParams{
+	_, err := f.queries.UpdateEmaApp(t.Context(), repo.UpdateEmaAppParams{
 		ID:           f.app.ID,
 		ClientID:     sql.NullString{String: "", Valid: false},
 		ClientSecret: sql.NullString{String: "", Valid: false},
@@ -282,7 +282,7 @@ func TestMintIDJAGRejectsUnknownAudience(t *testing.T) {
 
 	f := newMintFixture(t)
 	form := f.form()
-	form.Set("audience", xaa.ResourceASIssuer(testExternalURL, "not-registered"))
+	form.Set("audience", ema.ResourceASIssuer(testExternalURL, "not-registered"))
 
 	rec := f.mint(t, form)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -394,6 +394,6 @@ func TestASMetadataAdvertisesIDJAGMinting(t *testing.T) {
 		RequestedTokenTypes []string `json:"identity_chaining_requested_token_types_supported"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
-	require.Contains(t, doc.GrantTypesSupported, xaa.GrantTypeTokenExchange)
-	require.Contains(t, doc.RequestedTokenTypes, xaa.TokenTypeIDJAG)
+	require.Contains(t, doc.GrantTypesSupported, ema.GrantTypeTokenExchange)
+	require.Contains(t, doc.RequestedTokenTypes, ema.TokenTypeIDJAG)
 }

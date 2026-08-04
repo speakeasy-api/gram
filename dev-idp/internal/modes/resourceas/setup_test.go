@@ -23,8 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/bootstrap"
 	"github.com/speakeasy-api/gram/dev-idp/internal/config"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
-	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
 	"github.com/speakeasy-api/gram/plog"
 )
 
@@ -43,7 +43,7 @@ type harness struct {
 	server   *httptest.Server
 	baseURL  string
 	keystore *keystore.Keystore
-	resource repo.XaaResource
+	resource repo.EmaResource
 	user     repo.User
 }
 
@@ -70,7 +70,7 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(server.Close)
 
 	queries := repo.New(db)
-	resource, err := queries.CreateXaaResource(t.Context(), repo.CreateXaaResourceParams{
+	resource, err := queries.CreateEmaResource(t.Context(), repo.CreateEmaResourceParams{
 		ID:                 uuid.New(),
 		Slug:               testResourceSlug,
 		Name:               "Chat",
@@ -104,17 +104,17 @@ func newHarness(t *testing.T) *harness {
 func (h *harness) localIssuer() string { return h.baseURL + "/oauth2-1" }
 
 // audience is the resource authorization server's own issuer identifier.
-func (h *harness) audience() string { return xaa.ResourceASIssuer(h.baseURL, testResourceSlug) }
+func (h *harness) audience() string { return ema.ResourceASIssuer(h.baseURL, testResourceSlug) }
 
 // trustLocalIssuer adds a trust rule accepting this dev-idp's own IdP.
-func (h *harness) trustLocalIssuer(t *testing.T, allowedScopes string) repo.XaaTrustRule {
+func (h *harness) trustLocalIssuer(t *testing.T, allowedScopes string) repo.EmaTrustRule {
 	t.Helper()
 	return h.trustIssuer(t, h.localIssuer(), allowedScopes, "[]")
 }
 
-func (h *harness) trustIssuer(t *testing.T, issuer, allowedScopes, allowedClientIDs string) repo.XaaTrustRule {
+func (h *harness) trustIssuer(t *testing.T, issuer, allowedScopes, allowedClientIDs string) repo.EmaTrustRule {
 	t.Helper()
-	rule, err := h.queries.CreateXaaTrustRule(t.Context(), repo.CreateXaaTrustRuleParams{
+	rule, err := h.queries.CreateEmaTrustRule(t.Context(), repo.CreateEmaTrustRuleParams{
 		ID:               uuid.New(),
 		ResourceID:       h.resource.ID,
 		TrustedIssuer:    issuer,
@@ -159,7 +159,7 @@ func (h *harness) defaultJAG() jagOpts {
 		JTI:      uuid.NewString(),
 		IssuedAt: now,
 		Expires:  now.Add(5 * time.Minute),
-		Typ:      xaa.JWTType,
+		Typ:      ema.JWTType,
 		Key:      nil, // nil means "sign with this dev-idp's own key"
 		KID:      "",
 	}
@@ -168,7 +168,7 @@ func (h *harness) defaultJAG() jagOpts {
 func (h *harness) signJAG(t *testing.T, opts jagOpts) string {
 	t.Helper()
 
-	claims := xaa.Claims{
+	claims := ema.Claims{
 		Email:    opts.Email,
 		Resource: opts.Resource,
 		ClientID: opts.ClientID,
@@ -213,7 +213,7 @@ type response struct {
 func (h *harness) redeem(t *testing.T, assertion, clientID string) response {
 	t.Helper()
 	form := url.Values{}
-	form.Set("grant_type", xaa.GrantTypeJWTBearer)
+	form.Set("grant_type", ema.GrantTypeJWTBearer)
 	form.Set("assertion", assertion)
 	form.Set("client_id", clientID)
 	return h.postForm(t, "/token", form)

@@ -57,10 +57,10 @@ export interface CurrentUser {
 }
 
 /**
- * A cross-app access requesting app: a client allowed to ask the IdP for an
+ * A requesting app: a client allowed to ask the IdP for an
  * ID-JAG on a user's behalf. An empty `client_secret` is a public client.
  */
-export interface XaaApp {
+export interface EmaApp {
   id: string;
   client_id: string;
   client_secret: string;
@@ -76,7 +76,7 @@ export interface XaaApp {
  * the MCP server behind it, which is what lands in the `resource` claim.
  * They are different URLs.
  */
-export interface XaaResource {
+export interface EmaResource {
   id: string;
   slug: string;
   name: string;
@@ -87,7 +87,7 @@ export interface XaaResource {
 }
 
 /** Which user may drive which app against which resource, and for what scopes. */
-export interface XaaAppAssignment {
+export interface EmaAppAssignment {
   id: string;
   app_id: string;
   user_id: string;
@@ -98,7 +98,7 @@ export interface XaaAppAssignment {
 }
 
 /** Which issuer a resource authorization server accepts ID-JAGs from. */
-export interface XaaTrustRule {
+export interface EmaTrustRule {
   id: string;
   resource_id: string;
   trusted_issuer: string;
@@ -110,7 +110,7 @@ export interface XaaTrustRule {
 }
 
 /** One entry in the ledger of ID-JAGs the IdP has minted. */
-export interface XaaIssuedJag {
+export interface EmaIssuedJag {
   jti: string;
   app_id: string;
   user_id: string;
@@ -222,39 +222,39 @@ export const api = {
     clearCurrentUser: (p: { mode: Mode }) =>
       rpc<typeof p, void>("devIdp.clearCurrentUser", p),
   },
-  xaaApps: {
+  emaApps: {
     list: (p: ListParams = {}) =>
-      rpc<ListParams, ListResult<XaaApp>>("xaaApps.list", p),
+      rpc<ListParams, ListResult<EmaApp>>("emaApps.list", p),
     create: (p: {
       client_id: string;
       client_secret?: string;
       name?: string;
       enabled?: boolean;
-    }) => rpc<typeof p, XaaApp>("xaaApps.create", p),
+    }) => rpc<typeof p, EmaApp>("emaApps.create", p),
     update: (p: {
       id: string;
       client_id?: string;
       client_secret?: string;
       name?: string;
       enabled?: boolean;
-    }) => rpc<typeof p, XaaApp>("xaaApps.update", p),
-    delete: (p: { id: string }) => rpc<typeof p, void>("xaaApps.delete", p),
+    }) => rpc<typeof p, EmaApp>("emaApps.update", p),
+    delete: (p: { id: string }) => rpc<typeof p, void>("emaApps.delete", p),
   },
-  xaaResources: {
+  emaResources: {
     list: (p: ListParams = {}) =>
-      rpc<ListParams, ListResult<XaaResource>>("xaaResources.list", p),
+      rpc<ListParams, ListResult<EmaResource>>("emaResources.list", p),
     create: (p: { slug: string; name?: string; resource_identifier: string }) =>
-      rpc<typeof p, XaaResource>("xaaResources.create", p),
+      rpc<typeof p, EmaResource>("emaResources.create", p),
     update: (p: {
       id: string;
       slug?: string;
       name?: string;
       resource_identifier?: string;
-    }) => rpc<typeof p, XaaResource>("xaaResources.update", p),
+    }) => rpc<typeof p, EmaResource>("emaResources.update", p),
     delete: (p: { id: string }) =>
-      rpc<typeof p, void>("xaaResources.delete", p),
+      rpc<typeof p, void>("emaResources.delete", p),
   },
-  xaaAppAssignments: {
+  emaAppAssignments: {
     list: (
       p: ListParams & {
         app_id?: string;
@@ -262,42 +262,42 @@ export const api = {
         resource_id?: string;
       } = {},
     ) =>
-      rpc<typeof p, ListResult<XaaAppAssignment>>("xaaAppAssignments.list", p),
+      rpc<typeof p, ListResult<EmaAppAssignment>>("emaAppAssignments.list", p),
     create: (p: {
       app_id: string;
       user_id: string;
       resource_id: string;
       granted_scopes?: string;
-    }) => rpc<typeof p, XaaAppAssignment>("xaaAppAssignments.create", p),
+    }) => rpc<typeof p, EmaAppAssignment>("emaAppAssignments.create", p),
     update: (p: { id: string; granted_scopes: string }) =>
-      rpc<typeof p, XaaAppAssignment>("xaaAppAssignments.update", p),
+      rpc<typeof p, EmaAppAssignment>("emaAppAssignments.update", p),
     delete: (p: { id: string }) =>
-      rpc<typeof p, void>("xaaAppAssignments.delete", p),
+      rpc<typeof p, void>("emaAppAssignments.delete", p),
   },
-  xaaTrustRules: {
+  emaTrustRules: {
     list: (p: ListParams & { resource_id?: string } = {}) =>
-      rpc<typeof p, ListResult<XaaTrustRule>>("xaaTrustRules.list", p),
+      rpc<typeof p, ListResult<EmaTrustRule>>("emaTrustRules.list", p),
     create: (p: {
       resource_id: string;
       trusted_issuer: string;
       allowed_client_ids?: string;
       allowed_scopes?: string;
       enabled?: boolean;
-    }) => rpc<typeof p, XaaTrustRule>("xaaTrustRules.create", p),
+    }) => rpc<typeof p, EmaTrustRule>("emaTrustRules.create", p),
     update: (p: {
       id: string;
       trusted_issuer?: string;
       allowed_client_ids?: string;
       allowed_scopes?: string;
       enabled?: boolean;
-    }) => rpc<typeof p, XaaTrustRule>("xaaTrustRules.update", p),
+    }) => rpc<typeof p, EmaTrustRule>("emaTrustRules.update", p),
     delete: (p: { id: string }) =>
-      rpc<typeof p, void>("xaaTrustRules.delete", p),
+      rpc<typeof p, void>("emaTrustRules.delete", p),
     listIssuedGrants: (
       p: { user_id?: string; resource_id?: string; limit?: number } = {},
     ) =>
-      rpc<typeof p, { items: XaaIssuedJag[] }>(
-        "xaaTrustRules.listIssuedGrants",
+      rpc<typeof p, { items: EmaIssuedJag[] }>(
+        "emaTrustRules.listIssuedGrants",
         p,
       ),
   },

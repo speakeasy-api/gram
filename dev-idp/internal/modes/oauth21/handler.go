@@ -3,7 +3,8 @@
 // `remote_session_issuer` rows used in remote-session tests and the authorize
 // leg of dashboard login.
 //
-// It also doubles as the enterprise IdP for cross-app access: the token
+// It also doubles as the enterprise IdP for enterprise-managed
+// authorization: the token
 // endpoint mints ID-JAG grants under the RFC 8693 token-exchange grant (see
 // idjag.go). The server that redeems those grants is a different issuer,
 // internal/modes/resourceas.
@@ -44,8 +45,8 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/cimd"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
-	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
 )
 
 // Mode is the current_users slot this handler resolves its subject from.
@@ -188,13 +189,13 @@ func (h *Handler) baseMetadata() asMetadata {
 		RevocationEndpoint:                iss + "/revoke",
 		JwksURI:                           iss + "/.well-known/jwks.json",
 		ResponseTypesSupported:            []string{"code"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token", xaa.GrantTypeTokenExchange},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token", ema.GrantTypeTokenExchange},
 		CodeChallengeMethodsSupported:     []string{"S256"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
 		ScopesSupported:                   []string{"openid", "email", "profile"},
 		ClientIDMetadataDocumentSupported: true,
 
-		IdentityChainingRequestedTokenTypesSupported: []string{xaa.TokenTypeIDJAG},
+		IdentityChainingRequestedTokenTypesSupported: []string{ema.TokenTypeIDJAG},
 	}
 }
 
@@ -437,7 +438,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		h.handleAuthorizationCodeGrant(ctx, w, r)
 	case "refresh_token":
 		h.handleRefreshTokenGrant(ctx, w, r)
-	case xaa.GrantTypeTokenExchange:
+	case ema.GrantTypeTokenExchange:
 		h.handleTokenExchangeGrant(ctx, w, r)
 	case "":
 		oauthError(w, http.StatusBadRequest, "invalid_request", "grant_type is required")

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
-	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 )
 
 func TestRedeemIssuesAnAudienceRestrictedToken(t *testing.T) {
@@ -88,7 +88,7 @@ func TestRedeemRejectsDisabledTrustRule(t *testing.T) {
 
 	h := newHarness(t)
 	rule := h.trustLocalIssuer(t, "")
-	_, err := h.queries.UpdateXaaTrustRule(t.Context(), repo.UpdateXaaTrustRuleParams{
+	_, err := h.queries.UpdateEmaTrustRule(t.Context(), repo.UpdateEmaTrustRuleParams{
 		ID:               rule.ID,
 		TrustedIssuer:    nullString(""),
 		AllowedClientIds: nullString(""),
@@ -121,7 +121,7 @@ func TestRedeemRejectsAssertionForAnotherAudience(t *testing.T) {
 	h.trustLocalIssuer(t, "")
 
 	opts := h.defaultJAG()
-	opts.Audience = xaa.ResourceASIssuer(h.baseURL, "some-other-resource")
+	opts.Audience = ema.ResourceASIssuer(h.baseURL, "some-other-resource")
 
 	resp := h.redeem(t, h.signJAG(t, opts), testClientID)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -254,7 +254,7 @@ func TestUnknownResourceSlugIsNotFound(t *testing.T) {
 	h := newHarness(t)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		xaa.ResourceASIssuer(h.baseURL, "no-such-resource")+"/token", nil)
+		ema.ResourceASIssuer(h.baseURL, "no-such-resource")+"/token", nil)
 	require.NoError(t, err)
 
 	require.Equal(t, http.StatusNotFound, h.do(t, req).StatusCode)
@@ -271,8 +271,8 @@ func TestASMetadataAdvertisesTheIDJAGProfile(t *testing.T) {
 
 	doc := decodeJSON[asMetadata](t, resp)
 	require.Equal(t, h.audience(), doc.Issuer)
-	require.Contains(t, doc.GrantTypesSupported, xaa.GrantTypeJWTBearer)
-	require.Contains(t, doc.AuthorizationGrantProfilesSupported, xaa.GrantProfileIDJAG,
+	require.Contains(t, doc.GrantTypesSupported, ema.GrantTypeJWTBearer)
+	require.Contains(t, doc.AuthorizationGrantProfilesSupported, ema.GrantProfileIDJAG,
 		"this field is how an MCP client detects enterprise-managed authorization support")
 	require.Equal(t, []string{"chat.history", "chat.read"}, doc.ScopesSupported)
 }
@@ -300,7 +300,7 @@ func TestIntrospectRejectsATokenFromAnotherResource(t *testing.T) {
 
 	// A second resource on the same dev-idp must not vouch for the first
 	// resource's tokens.
-	other, err := h.queries.CreateXaaResource(t.Context(), repo.CreateXaaResourceParams{
+	other, err := h.queries.CreateEmaResource(t.Context(), repo.CreateEmaResourceParams{
 		ID:                 uuid.New(),
 		Slug:               "billing",
 		Name:               "Billing",
@@ -311,7 +311,7 @@ func TestIntrospectRejectsATokenFromAnotherResource(t *testing.T) {
 	form := url.Values{}
 	form.Set("token", body.AccessToken)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		xaa.ResourceASIssuer(h.baseURL, other.Slug)+"/introspect", strings.NewReader(form.Encode()))
+		ema.ResourceASIssuer(h.baseURL, other.Slug)+"/introspect", strings.NewReader(form.Encode()))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
