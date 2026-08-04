@@ -40,14 +40,45 @@ type RiskFindingUnmaskRow struct {
 }
 
 // GetRiskFindingForUnmask returns the reveal-relevant state for one finding id,
-// or nil when no live row exists. The filters mirror the Postgres unmask gates
+// or nil when no live row exists. The gates mirror the Postgres unmask ones
 // (GetRiskResultByID): no dead-letter sentinels, no excluded rows, no false
 // positives, tenant-scoped.
 //
 // The table is append-only with at-least-once delivery, so one id can have
-// several rows (redeliveries and false-positive state mirrors); the newest by
-// inserted_at is the finding's current state.
+// several rows (redeliveries and exclusion / false-positive state mirrors).
+// The newest row by inserted_at is the finding's current state, so it is
+// selected FIRST and the visibility gates are applied to it: gating before
+// picking would let an older, still-clean row of a since-dismissed finding
+// survive and be revealed.
 func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingForUnmaskParams) (*RiskFindingUnmaskRow, error) {
+	latest := sq.Select(
+		"id",
+		"created_at",
+		"chat_message_id",
+		"content_part_id",
+		"chat_id",
+		"source",
+		"rule_id",
+		"start_pos",
+		"end_pos",
+		"match_len",
+		"match_redacted",
+		"surface",
+		"field",
+		"path",
+		"tool_call_id",
+		"organization_id",
+		"dead_letter_reason",
+		"excluded_at",
+		"false_positive_at",
+	).
+		From("risk_findings").
+		Where("organization_id = ?", p.OrganizationID).
+		Where("project_id = ?", p.ProjectID).
+		Where("id = ?", p.ID).
+		OrderBy("inserted_at DESC").
+		Limit(1)
+
 	sb := sq.Select(
 		"id",
 		"created_at",
@@ -66,15 +97,10 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"tool_call_id",
 		"organization_id",
 	).
-		From("risk_findings").
-		Where("organization_id = ?", p.OrganizationID).
-		Where("project_id = ?", p.ProjectID).
-		Where("id = ?", p.ID).
+		FromSelect(latest, "latest").
 		Where("dead_letter_reason = ''").
 		Where("excluded_at IS NULL").
-		Where("false_positive_at IS NULL").
-		OrderBy("inserted_at DESC").
-		Limit(1)
+		Where("false_positive_at IS NULL")
 
 	query, args, err := sb.ToSql()
 	if err != nil {

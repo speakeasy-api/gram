@@ -1363,6 +1363,15 @@ FROM chat_content_parts ccp
 WHERE ccp.id = $1
   AND ccp.project_id = $2
   AND ccp.deleted IS FALSE
+  -- Same cross-project guard as GetChatMessageForUnmask, and the same one the
+  -- ingest-side GetChatContentPartAttribution applies: a part whose chat lives
+  -- in another project never exposes its asset url.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = ccp.chat_id
+      AND c.project_id = ccp.project_id
+  )
 `
 
 type GetChatContentPartForUnmaskParams struct {
@@ -1455,6 +1464,16 @@ SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at
 FROM chat_messages cm
 WHERE cm.id = $1
   AND cm.project_id = $2
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright: the
+  -- chat:read gate is evaluated against the finding's chat id, and serving
+  -- content anchored in a foreign chat would bypass it.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = cm.chat_id
+      AND c.project_id = cm.project_id
+  )
 `
 
 type GetChatMessageForUnmaskParams struct {

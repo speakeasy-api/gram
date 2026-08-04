@@ -1772,7 +1772,17 @@ ORDER BY tcb.chat_message_id, tcb.created_at DESC;
 SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at
 FROM chat_messages cm
 WHERE cm.id = @id
-  AND cm.project_id = @project_id;
+  AND cm.project_id = @project_id
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright: the
+  -- chat:read gate is evaluated against the finding's chat id, and serving
+  -- content anchored in a foreign chat would bypass it.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = cm.chat_id
+      AND c.project_id = cm.project_id
+  );
 
 -- name: GetChatContentPartForUnmask :one
 -- Content-part variant of GetChatMessageForUnmask: the part's content lives in
@@ -1782,7 +1792,16 @@ SELECT ccp.id, ccp.chat_id, ccp.content_asset_url
 FROM chat_content_parts ccp
 WHERE ccp.id = @id
   AND ccp.project_id = @project_id
-  AND ccp.deleted IS FALSE;
+  AND ccp.deleted IS FALSE
+  -- Same cross-project guard as GetChatMessageForUnmask, and the same one the
+  -- ingest-side GetChatContentPartAttribution applies: a part whose chat lives
+  -- in another project never exposes its asset url.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = ccp.chat_id
+      AND c.project_id = ccp.project_id
+  );
 
 -- name: GetChatUserAccountEmailForUnmask :one
 -- Reveal candidate for derived account_identity findings: their match is the

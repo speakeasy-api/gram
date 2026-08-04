@@ -80,6 +80,19 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 	} else if anchor.chatID.Valid {
 		chatID = anchor.chatID.UUID
 	}
+
+	// The authorized chat and the chat the content actually comes from must be
+	// the same one. They can diverge if the ingest-stamped chat id is stale or
+	// its message was re-parented, and serving the anchor's content under the
+	// stamped chat's grant would hand a caller another chat's transcript.
+	if anchor.chatID.Valid && chatID != uuid.Nil && anchor.chatID.UUID != chatID {
+		s.logger.WarnContext(ctx, "risk finding chat id diverges from its anchor; refusing reveal",
+			attr.SlogChatID(chatID.String()),
+			attr.SlogValueString(row.ID.String()),
+		)
+		return nil, oops.E(oops.CodeNotFound, nil, "risk result not found")
+	}
+
 	if err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
 		return nil, err
 	}
@@ -407,6 +420,26 @@ func (s *Service) derivedUnmaskCandidates(ctx context.Context, chatID uuid.UUID,
 			out = append(out, []byte(name))
 			if bare := toolref.MCPFunctionOf(name); bare != "" && bare != name {
 				out = append(out, []byte(bare))
+			}
+		}
+		return out
+
+	case "custom":
+		// Custom CEL rules can match on the derived tool.server / tool.function
+		// strings, which are computed from a recorded call name rather than
+		// stored anywhere. Offer both derivations for every recorded call and
+		// let the length gate pick the one the finding stored.
+		var out [][]byte
+		for _, call := range anchor.toolCalls {
+			name := call.Function.Name
+			if name == "" {
+				continue
+			}
+			if fn := toolref.MCPFunctionOf(name); fn != "" {
+				out = append(out, []byte(fn))
+			}
+			if srv := toolref.MCPServerOf(name); srv != "" {
+				out = append(out, []byte(srv))
 			}
 		}
 		return out

@@ -721,3 +721,114 @@ func TestUnmaskRiskResult_FlagOffIgnoresClickHouse(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code, "flag off must resolve against postgres only")
 }
+
+// TestUnmaskRiskResult_ClickHouseDismissedAfterLiveRowNotFound pins the
+// state-gate ordering in the point-read: a finding whose newest event marks it
+// excluded (or a false positive) must not be revealable just because its
+// original, still-clean event is also in the append-only table.
+func TestUnmaskRiskResult_ClickHouseDismissedAfterLiveRowNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	secret := "AKIAIOSFODNN7EXAMPLE"
+	content := "rotate " + secret + " today"
+	start := strings.Index(content, secret)
+
+	repo := riskrepo.New(ti.conn)
+	chatID, err := repo.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID: projectID, OrganizationID: orgID, UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	msgID, err := repo.CreateChatMessageForTest(ctx, riskrepo.CreateChatMessageForTestParams{
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, Content: content,
+		UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+
+	base := unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: msgID.String(),
+		chatID:        chatID.String(),
+		startPos:      int32(start),
+		endPos:        int32(start + len(secret)),
+		matchLen:      uint32(len(secret)),
+		matchRedacted: "AKIA**************LE",
+		surface:       "content",
+	}
+	rowID := insertUnmaskFinding(t, ti, base)
+
+	// The dismissal event: same id, written later, carrying false_positive_at.
+	dismissedAt := time.Now().UTC()
+	base.id = rowID
+	base.falsePositiveAt = &dismissedAt
+	insertUnmaskFinding(t, ti, base)
+
+	_, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestUnmaskRiskResult_ClickHouseForeignChatAnchorNotFound covers the
+// consistency assertion between the chat the caller was authorized against
+// (the ingest-stamped chat id) and the chat the reconstructed content actually
+// comes from: a divergence must refuse rather than serve another chat's text.
+func TestUnmaskRiskResult_ClickHouseForeignChatAnchorNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	secret := "AKIAIOSFODNN7EXAMPLE"
+	content := "rotate " + secret + " today"
+	start := strings.Index(content, secret)
+
+	repo := riskrepo.New(ti.conn)
+	grantedChatID, err := repo.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID: projectID, OrganizationID: orgID, UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	otherChatID, err := repo.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID: projectID, OrganizationID: orgID, UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	// The anchored message lives in the OTHER chat, while the finding row
+	// claims the chat the caller holds chat:read for.
+	msgID, err := repo.CreateChatMessageForTest(ctx, riskrepo.CreateChatMessageForTestParams{
+		ChatID: otherChatID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, Content: content,
+		UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
+		authz.NewGrant(authz.ScopeChatRead, grantedChatID.String()),
+	)
+
+	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: msgID.String(),
+		chatID:        grantedChatID.String(),
+		startPos:      int32(start),
+		endPos:        int32(start + len(secret)),
+		matchLen:      uint32(len(secret)),
+		matchRedacted: "AKIA**************LE",
+		surface:       "content",
+	})
+
+	_, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
