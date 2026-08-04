@@ -203,16 +203,17 @@ func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) 
 
 const createEmaApp = `-- name: CreateEmaApp :one
 
-INSERT INTO ema_apps (id, client_id, client_secret, name, enabled)
-VALUES (?1, ?2, ?3, ?4, ?5)
+INSERT INTO ema_apps (id, client_id, client_secret, jwks, name, enabled)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
 ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
-RETURNING id, client_id, client_secret, name, enabled, created_at, updated_at
+RETURNING id, client_id, client_secret, jwks, name, enabled, created_at, updated_at
 `
 
 type CreateEmaAppParams struct {
 	ID           uuid.UUID
 	ClientID     string
 	ClientSecret string
+	Jwks         string
 	Name         string
 	Enabled      bool
 }
@@ -228,6 +229,7 @@ func (q *Queries) CreateEmaApp(ctx context.Context, arg CreateEmaAppParams) (Ema
 		arg.ID,
 		arg.ClientID,
 		arg.ClientSecret,
+		arg.Jwks,
 		arg.Name,
 		arg.Enabled,
 	)
@@ -236,6 +238,7 @@ func (q *Queries) CreateEmaApp(ctx context.Context, arg CreateEmaAppParams) (Ema
 		&i.ID,
 		&i.ClientID,
 		&i.ClientSecret,
+		&i.Jwks,
 		&i.Name,
 		&i.Enabled,
 		&i.CreatedAt,
@@ -972,7 +975,7 @@ func (q *Queries) GetCurrentUser(ctx context.Context, mode string) (CurrentUser,
 }
 
 const getEmaApp = `-- name: GetEmaApp :one
-SELECT id, client_id, client_secret, name, enabled, created_at, updated_at FROM ema_apps WHERE id = ?1
+SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps WHERE id = ?1
 `
 
 func (q *Queries) GetEmaApp(ctx context.Context, id uuid.UUID) (EmaApp, error) {
@@ -982,6 +985,7 @@ func (q *Queries) GetEmaApp(ctx context.Context, id uuid.UUID) (EmaApp, error) {
 		&i.ID,
 		&i.ClientID,
 		&i.ClientSecret,
+		&i.Jwks,
 		&i.Name,
 		&i.Enabled,
 		&i.CreatedAt,
@@ -1039,7 +1043,7 @@ func (q *Queries) GetEmaAppAssignmentForMint(ctx context.Context, arg GetEmaAppA
 }
 
 const getEmaAppByClientID = `-- name: GetEmaAppByClientID :one
-SELECT id, client_id, client_secret, name, enabled, created_at, updated_at FROM ema_apps WHERE client_id = ?1
+SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps WHERE client_id = ?1
 `
 
 func (q *Queries) GetEmaAppByClientID(ctx context.Context, clientID string) (EmaApp, error) {
@@ -1049,6 +1053,7 @@ func (q *Queries) GetEmaAppByClientID(ctx context.Context, clientID string) (Ema
 		&i.ID,
 		&i.ClientID,
 		&i.ClientSecret,
+		&i.Jwks,
 		&i.Name,
 		&i.Enabled,
 		&i.CreatedAt,
@@ -1417,7 +1422,7 @@ func (q *Queries) ListEmaAppAssignments(ctx context.Context, arg ListEmaAppAssig
 }
 
 const listEmaApps = `-- name: ListEmaApps :many
-SELECT id, client_id, client_secret, name, enabled, created_at, updated_at FROM ema_apps
+SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps
 WHERE id > ?1
 ORDER BY id ASC
 LIMIT ?2
@@ -1441,6 +1446,7 @@ func (q *Queries) ListEmaApps(ctx context.Context, arg ListEmaAppsParams) ([]Ema
 			&i.ID,
 			&i.ClientID,
 			&i.ClientSecret,
+			&i.Jwks,
 			&i.Name,
 			&i.Enabled,
 			&i.CreatedAt,
@@ -2139,16 +2145,18 @@ UPDATE ema_apps
 SET
   client_id = COALESCE(?1, client_id),
   client_secret = COALESCE(?2, client_secret),
-  name = COALESCE(?3, name),
-  enabled = ?4,
-  updated_at = ?5
-WHERE id = ?6
-RETURNING id, client_id, client_secret, name, enabled, created_at, updated_at
+  jwks = COALESCE(?3, jwks),
+  name = COALESCE(?4, name),
+  enabled = ?5,
+  updated_at = ?6
+WHERE id = ?7
+RETURNING id, client_id, client_secret, jwks, name, enabled, created_at, updated_at
 `
 
 type UpdateEmaAppParams struct {
 	ClientID     sql.NullString
 	ClientSecret sql.NullString
+	Jwks         sql.NullString
 	Name         sql.NullString
 	Enabled      bool
 	Ts           time.Time
@@ -2159,6 +2167,7 @@ func (q *Queries) UpdateEmaApp(ctx context.Context, arg UpdateEmaAppParams) (Ema
 	row := q.db.QueryRowContext(ctx, updateEmaApp,
 		arg.ClientID,
 		arg.ClientSecret,
+		arg.Jwks,
 		arg.Name,
 		arg.Enabled,
 		arg.Ts,
@@ -2169,6 +2178,7 @@ func (q *Queries) UpdateEmaApp(ctx context.Context, arg UpdateEmaAppParams) (Ema
 		&i.ID,
 		&i.ClientID,
 		&i.ClientSecret,
+		&i.Jwks,
 		&i.Name,
 		&i.Enabled,
 		&i.CreatedAt,

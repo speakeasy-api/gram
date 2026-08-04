@@ -56,6 +56,7 @@ func (s *EmaAppsService) Create(ctx context.Context, p *gen.CreatePayload) (*gen
 		ID:           uuid.New(),
 		ClientID:     p.ClientID,
 		ClientSecret: conv.PtrValOrEmpty(p.ClientSecret),
+		Jwks:         conv.PtrValOrEmpty(p.Jwks),
 		Name:         name,
 		Enabled:      conv.PtrBool(p.Enabled, true),
 	})
@@ -91,6 +92,7 @@ func (s *EmaAppsService) Update(ctx context.Context, p *gen.UpdatePayload) (*gen
 	row, err := queries.UpdateEmaApp(ctx, repo.UpdateEmaAppParams{
 		ClientID:     conv.PtrToNullString(p.ClientID),
 		ClientSecret: conv.PtrToNullString(p.ClientSecret),
+		Jwks:         conv.PtrToNullString(p.Jwks),
 		Name:         conv.PtrToNullString(p.Name),
 		Enabled:      *enabled,
 		Ts:           time.Now(),
@@ -148,6 +150,7 @@ func emaAppView(r repo.EmaApp) *gen.EmaApp {
 		ID:           r.ID.String(),
 		ClientID:     r.ClientID,
 		ClientSecret: r.ClientSecret,
+		Jwks:         r.Jwks,
 		Name:         r.Name,
 		Enabled:      r.Enabled,
 		CreatedAt:    r.CreatedAt.UTC().Format(timeFormat),

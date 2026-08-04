@@ -19,6 +19,9 @@ type CreateRequestBody struct {
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
 	// Omit or leave empty to register a public client.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// JWKS document holding the app's public key. Set this to require
+	// private_key_jwt.
+	Jwks *string `form:"jwks,omitempty" json:"jwks,omitempty" xml:"jwks,omitempty"`
 	// Display name; defaults to the client id.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Defaults to true.
@@ -34,6 +37,8 @@ type UpdateRequestBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Client secret.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// JWKS document holding the app's public key.
+	Jwks *string `form:"jwks,omitempty" json:"jwks,omitempty" xml:"jwks,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Enabled flag; always rewritten when supplied.
@@ -66,6 +71,9 @@ type CreateResponseBody struct {
 	// Client secret; empty registers a public client that authenticates by
 	// client_id alone.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// JWKS document holding the app's public key. When set the app authenticates
+	// with private_key_jwt and its secret is ignored.
+	Jwks *string `form:"jwks,omitempty" json:"jwks,omitempty" xml:"jwks,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Disabled apps are refused at mint time.
@@ -84,6 +92,9 @@ type UpdateResponseBody struct {
 	// Client secret; empty registers a public client that authenticates by
 	// client_id alone.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// JWKS document holding the app's public key. When set the app authenticates
+	// with private_key_jwt and its secret is ignored.
+	Jwks *string `form:"jwks,omitempty" json:"jwks,omitempty" xml:"jwks,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Disabled apps are refused at mint time.
@@ -110,6 +121,9 @@ type EmaAppResponseBody struct {
 	// Client secret; empty registers a public client that authenticates by
 	// client_id alone.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// JWKS document holding the app's public key. When set the app authenticates
+	// with private_key_jwt and its secret is ignored.
+	Jwks *string `form:"jwks,omitempty" json:"jwks,omitempty" xml:"jwks,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Disabled apps are refused at mint time.
@@ -124,6 +138,7 @@ func NewCreateRequestBody(p *emaapps.CreatePayload) *CreateRequestBody {
 	body := &CreateRequestBody{
 		ClientID:     p.ClientID,
 		ClientSecret: p.ClientSecret,
+		Jwks:         p.Jwks,
 		Name:         p.Name,
 		Enabled:      p.Enabled,
 	}
@@ -137,6 +152,7 @@ func NewUpdateRequestBody(p *emaapps.UpdatePayload) *UpdateRequestBody {
 		ID:           p.ID,
 		ClientID:     p.ClientID,
 		ClientSecret: p.ClientSecret,
+		Jwks:         p.Jwks,
 		Name:         p.Name,
 		Enabled:      p.Enabled,
 	}
@@ -175,6 +191,7 @@ func NewCreateEmaAppOK(body *CreateResponseBody) *emaapps.EmaApp {
 		ID:           *body.ID,
 		ClientID:     *body.ClientID,
 		ClientSecret: *body.ClientSecret,
+		Jwks:         *body.Jwks,
 		Name:         *body.Name,
 		Enabled:      *body.Enabled,
 		CreatedAt:    *body.CreatedAt,
@@ -191,6 +208,7 @@ func NewUpdateEmaAppOK(body *UpdateResponseBody) *emaapps.EmaApp {
 		ID:           *body.ID,
 		ClientID:     *body.ClientID,
 		ClientSecret: *body.ClientSecret,
+		Jwks:         *body.Jwks,
 		Name:         *body.Name,
 		Enabled:      *body.Enabled,
 		CreatedAt:    *body.CreatedAt,
@@ -229,6 +247,9 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.ClientSecret == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
 	}
+	if body.Jwks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("jwks", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -263,6 +284,9 @@ func ValidateUpdateResponseBody(body *UpdateResponseBody) (err error) {
 	}
 	if body.ClientSecret == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
+	}
+	if body.Jwks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("jwks", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -316,6 +340,9 @@ func ValidateEmaAppResponseBody(body *EmaAppResponseBody) (err error) {
 	}
 	if body.ClientSecret == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
+	}
+	if body.Jwks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("jwks", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))

@@ -444,8 +444,8 @@ ORDER BY o.name ASC;
 -- CreateOrganization: the no-op DO UPDATE makes RETURNING fire on the
 -- existing row so callers always get a usable record back.
 -- name: CreateEmaApp :one
-INSERT INTO ema_apps (id, client_id, client_secret, name, enabled)
-VALUES (@id, @client_id, @client_secret, @name, @enabled)
+INSERT INTO ema_apps (id, client_id, client_secret, jwks, name, enabled)
+VALUES (@id, @client_id, @client_secret, @jwks, @name, @enabled)
 ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
 RETURNING *;
 
@@ -454,6 +454,7 @@ UPDATE ema_apps
 SET
   client_id = COALESCE(sqlc.narg('client_id'), client_id),
   client_secret = COALESCE(sqlc.narg('client_secret'), client_secret),
+  jwks = COALESCE(sqlc.narg('jwks'), jwks),
   name = COALESCE(sqlc.narg('name'), name),
   enabled = @enabled,
   updated_at = @ts

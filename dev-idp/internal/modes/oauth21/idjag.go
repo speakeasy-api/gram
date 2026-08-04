@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,12 +17,18 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
+	"github.com/speakeasy-api/gram/dev-idp/internal/jwks"
 )
 
 // idJAGLifetime is how long a minted ID-JAG stays valid. The grant is
 // redeemed immediately by the client that asked for it, so this is short by
 // design -- 5 minutes matches the profile's own examples.
 const idJAGLifetime = 5 * time.Minute
+
+// clientAssertionSkew is how much clock drift a private_key_jwt assertion may
+// carry. Assertions are minted seconds before use, so this only has to cover
+// ordinary drift between the app and this IdP.
+const clientAssertionSkew = 60 * time.Second
 
 // idJAGResponse is the RFC 8693 token-exchange response carrying an ID-JAG.
 // `TokenType` is always ema.TokenTypeNotApplicable: an ID-JAG is an
@@ -185,11 +192,22 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 	})
 }
 
-// authenticateEmaApp resolves and authenticates the requesting app from the
-// form's client credentials. It writes the error response itself and returns
-// nil when the caller should stop.
+// authenticateEmaApp resolves and authenticates the requesting app. It writes
+// the error response itself and returns nil when the caller should stop.
+//
+// Which method applies follows from how the app was registered rather than
+// from anything the caller asserts, so a client cannot pick the weakest one
+// on offer: an app with a JWKS must present a private_key_jwt assertion even
+// if it also has a secret.
 func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter, queries *repo.Queries, r *http.Request) *repo.EmaApp {
+	// With private_key_jwt the client_id form parameter is optional (RFC 7523
+	// §2.2 puts the identity in the assertion's iss/sub), so fall back to the
+	// assertion before deciding the request is unidentified.
 	clientID := r.Form.Get("client_id")
+	assertion := r.Form.Get("client_assertion")
+	if clientID == "" && assertion != "" {
+		clientID = unverifiedAssertionSubject(assertion)
+	}
 	if clientID == "" {
 		oauthError(w, http.StatusUnauthorized, "invalid_client", "client_id is required to mint an ID-JAG")
 		return nil
@@ -211,17 +229,100 @@ func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter,
 		return nil
 	}
 
-	// An app registered without a secret is a public client and authenticates
-	// by client_id alone; one registered with a secret must present it.
-	if app.ClientSecret != "" {
+	switch {
+	case app.Jwks != "":
+		if got := r.Form.Get("client_assertion_type"); got != ema.ClientAssertionTypeJWTBearer {
+			oauthError(w, http.StatusUnauthorized, "invalid_client",
+				fmt.Sprintf("this app authenticates with private_key_jwt; send client_assertion_type=%s", ema.ClientAssertionTypeJWTBearer))
+			return nil
+		}
+		if err := h.verifyClientAssertion(app, assertion); err != nil {
+			h.logger.WarnContext(ctx, "reject client assertion",
+				slog.String("client_id", app.ClientID),
+				slog.Any("error", err),
+			)
+			oauthError(w, http.StatusUnauthorized, "invalid_client", err.Error())
+			return nil
+		}
+
+	case app.ClientSecret != "":
 		presented := r.Form.Get("client_secret")
 		if subtle.ConstantTimeCompare([]byte(presented), []byte(app.ClientSecret)) != 1 {
 			oauthError(w, http.StatusUnauthorized, "invalid_client", "client_secret does not match")
 			return nil
 		}
+
+	default:
+		// A public client: registered with neither credential, so client_id
+		// alone identifies it. Safe here only because the ID-JAG it can obtain
+		// is still gated on an assignment for the resolved user.
 	}
 
 	return &app
+}
+
+// unverifiedAssertionSubject reads `sub` out of a client assertion without
+// checking its signature, purely to know which app's key to check it with.
+// Nothing is trusted on the strength of this -- verifyClientAssertion
+// re-reads every claim from the verified token.
+func unverifiedAssertionSubject(assertion string) string {
+	var claims jwt.RegisteredClaims
+	if _, _, err := jwt.NewParser().ParseUnverified(assertion, &claims); err != nil {
+		return ""
+	}
+	return claims.Subject
+}
+
+// verifyClientAssertion checks an RFC 7523 §2.2 private_key_jwt assertion
+// against the app's registered JWKS.
+//
+// The audience check is what stops an assertion from being replayed: a token
+// the app minted for some other authorization server must not authenticate it
+// here. Both the issuer identifier and the token endpoint URL are accepted,
+// because deployments differ on which one they put in `aud` and rejecting the
+// other reads as a signing bug rather than a configuration one.
+func (h *Handler) verifyClientAssertion(app repo.EmaApp, assertion string) error {
+	if assertion == "" {
+		return errors.New("client_assertion is required")
+	}
+
+	doc, err := jwks.Parse([]byte(app.Jwks))
+	if err != nil {
+		return fmt.Errorf("this app's registered jwks is unusable: %w", err)
+	}
+
+	var probe jwt.RegisteredClaims
+	unverified, _, err := jwt.NewParser().ParseUnverified(assertion, &probe)
+	if err != nil {
+		return fmt.Errorf("client_assertion is not a JWT: %w", err)
+	}
+	kid, _ := unverified.Header["kid"].(string)
+
+	key, err := doc.FindRSA(kid)
+	if err != nil {
+		return fmt.Errorf("no key in this app's jwks matches the assertion: %w", err)
+	}
+
+	var claims jwt.RegisteredClaims
+	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{h.keystore.SigningAlg()}),
+		jwt.WithExpirationRequired(),
+		jwt.WithLeeway(clientAssertionSkew),
+	)
+	if _, err := parser.ParseWithClaims(assertion, &claims, func(*jwt.Token) (any, error) { return key, nil }); err != nil {
+		return fmt.Errorf("client_assertion did not verify: %w", err)
+	}
+
+	if claims.Issuer != app.ClientID || claims.Subject != app.ClientID {
+		return fmt.Errorf("client_assertion iss and sub must both be %q", app.ClientID)
+	}
+
+	iss := h.issuer()
+	if !slices.Contains(claims.Audience, iss) && !slices.Contains(claims.Audience, iss+"/token") {
+		return fmt.Errorf("client_assertion aud %v names neither this issuer (%s) nor its token endpoint", claims.Audience, iss)
+	}
+
+	return nil
 }
 
 // resolveExchangeSubject reads the subject_token / subject_token_type pair

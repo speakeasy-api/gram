@@ -47,7 +47,7 @@ func UsageCommands() []string {
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + " " + "ema-apps create --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"name\": \"abc123\"\n   }'" + "\n" +
+	return os.Args[0] + " " + "ema-apps create --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'" + "\n" +
 		os.Args[0] + " " + "ema-resources create --body '{\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'" + "\n" +
 		os.Args[0] + " " + "ema-app-assignments create --body '{\n      \"app_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"granted_scopes\": \"abc123\",\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'" + "\n" +
 		os.Args[0] + " " + "ema-trust-rules create --body '{\n      \"allowed_client_ids\": \"abc123\",\n      \"allowed_scopes\": \"abc123\",\n      \"enabled\": false,\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"trusted_issuer\": \"abc123\"\n   }'" + "\n" +
@@ -696,7 +696,7 @@ func ParseEndpoint(
 
 // emaAppsUsage displays the usage of the ema-apps command and its subcommands.
 func emaAppsUsage() {
-	fmt.Fprintln(os.Stderr, `Cross-app access requesting apps: the clients allowed to ask the IdP for an ID-JAG. Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Enterprise-managed authorization requesting apps: the clients allowed to ask the IdP for an ID-JAG. Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ema-apps COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Register an app.`)
@@ -722,7 +722,7 @@ func emaAppsCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps create --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"name\": \"abc123\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps create --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
 }
 
 func emaAppsUpdateUsage() {
@@ -740,7 +740,7 @@ func emaAppsUpdateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps update --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps update --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
 }
 
 func emaAppsListUsage() {
@@ -782,7 +782,7 @@ func emaAppsDeleteUsage() {
 // emaResourcesUsage displays the usage of the ema-resources command and its
 // subcommands.
 func emaResourcesUsage() {
-	fmt.Fprintln(os.Stderr, `Cross-app access resource apps. Each is one resource authorization server mounted at /resource-as/<slug>. Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Enterprise-managed authorization resource apps. Each is one resource authorization server mounted at /resource-as/<slug>. Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ema-resources COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Register a resource. Its authorization server becomes reachable immediately.`)

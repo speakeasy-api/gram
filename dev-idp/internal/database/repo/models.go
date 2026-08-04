@@ -33,6 +33,7 @@ type EmaApp struct {
 	ID           uuid.UUID
 	ClientID     string
 	ClientSecret string
+	Jwks         string
 	Name         string
 	Enabled      bool
 	CreatedAt    time.Time

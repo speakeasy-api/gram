@@ -190,6 +190,7 @@ func marshalEmaappsEmaAppToEmaAppResponseBody(v *emaapps.EmaApp) *EmaAppResponse
 		ID:           v.ID,
 		ClientID:     v.ClientID,
 		ClientSecret: v.ClientSecret,
+		Jwks:         v.Jwks,
 		Name:         v.Name,
 		Enabled:      v.Enabled,
 		CreatedAt:    v.CreatedAt,

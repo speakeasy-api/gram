@@ -11,8 +11,9 @@ import (
 	"context"
 )
 
-// Cross-app access resource apps. Each is one resource authorization server
-// mounted at /resource-as/<slug>. Permanently unauthenticated.
+// Enterprise-managed authorization resource apps. Each is one resource
+// authorization server mounted at /resource-as/<slug>. Permanently
+// unauthenticated.
 type Service interface {
 	// Register a resource. Its authorization server becomes reachable immediately.
 	Create(context.Context, *CreatePayload) (res *EmaResource, err error)

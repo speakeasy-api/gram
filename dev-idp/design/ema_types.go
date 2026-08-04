@@ -12,6 +12,7 @@ var EmaApp = Type("EmaApp", func() {
 	})
 	Attribute("client_id", String, "Client id this app authenticates to the token endpoint with (unique).")
 	Attribute("client_secret", String, "Client secret; empty registers a public client that authenticates by client_id alone.")
+	Attribute("jwks", String, "JWKS document holding the app's public key. When set the app authenticates with private_key_jwt and its secret is ignored.")
 	Attribute("name", String, "Display name.")
 	Attribute("enabled", Boolean, "Disabled apps are refused at mint time.")
 	Attribute("created_at", String, func() {
@@ -21,7 +22,7 @@ var EmaApp = Type("EmaApp", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "client_id", "client_secret", "name", "enabled", "created_at", "updated_at")
+	Required("id", "client_id", "client_secret", "jwks", "name", "enabled", "created_at", "updated_at")
 })
 
 // EmaResource mirrors the dev-idp `ema_resources` table: one resource
