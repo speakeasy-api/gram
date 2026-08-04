@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	// codexServiceName and the codexServiceName*Prefix pair match the OTEL
-	// resource service.name family the Codex clients report. The name varies
-	// by mode and does NOT use one separator convention — observed against
+	// codexServiceName is the stem of the OTEL resource service.name family
+	// the Codex clients report (see isCodexServiceName). The name varies by
+	// mode and does NOT use one separator convention — observed against
 	// the shipped 0.146 build: codex_cli_rs (interactive), codex_exec
 	// (headless `codex exec`, what CI and scripted runs use), codex_tui,
 	// codex_mcp, and codex-app-server (Codex mode in the unified ChatGPT
@@ -29,9 +29,7 @@ const (
 	// whole family means a new mode routes correctly on arrival rather than
 	// being discovered later as mislabeled data; Claude reports
 	// "claude-code"-style names, so this cannot collide.
-	codexServiceName                 = "codex"
-	codexServiceNameUnderscorePrefix = "codex_"
-	codexServiceNameHyphenPrefix     = "codex-"
+	codexServiceName = "codex"
 	// codexOTELLogsURN types a raw Codex OTEL log row, mirroring the
 	// "claude-code:otel:logs" convention.
 	codexOTELLogsURN = "codex:otel:logs"
@@ -40,13 +38,16 @@ const (
 )
 
 // isCodexServiceName reports whether an OTEL resource service.name belongs to
-// the Codex client family (see codexServiceName). Both separators are matched
-// because Codex uses both; a bare "codex" counts, while an unrelated name
-// that merely starts with those letters does not.
+// the Codex client family (see codexServiceName): "codex" itself, or "codex"
+// followed by a mode suffix on either separator. Requiring the separator is
+// what keeps an unrelated name that merely starts with those letters —
+// "codexish-tool" — from matching.
 func isCodexServiceName(serviceName string) bool {
-	return serviceName == codexServiceName ||
-		strings.HasPrefix(serviceName, codexServiceNameUnderscorePrefix) ||
-		strings.HasPrefix(serviceName, codexServiceNameHyphenPrefix)
+	suffix, ok := strings.CutPrefix(serviceName, codexServiceName)
+	if !ok {
+		return false
+	}
+	return suffix == "" || suffix[0] == '_' || suffix[0] == '-'
 }
 
 // splitCodexLogsPayload partitions a logs payload by resource service.name.
