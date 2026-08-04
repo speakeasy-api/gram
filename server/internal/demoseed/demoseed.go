@@ -7,7 +7,9 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -16,7 +18,9 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 //go:embed postgres.sql
@@ -25,12 +29,21 @@ var postgresSQL string
 //go:embed clickhouse.sql
 var clickhouseSQL string
 
+//go:embed openapi.yaml
+var openapiDoc []byte
+
+// demoAssetID matches the assets row created by postgres.sql.
+const demoAssetID = "dec0de00-0000-4000-a000-00000000a001"
+
+// demoProjectID matches the single demo project created by postgres.sql.
+const demoProjectID = "dec0de00-0000-4000-a000-000000000001"
+
 // Run applies the demo seed: Postgres first (installs and executes
 // demo.ensure_demo_org(), whose pre/postflight asserts abort the transaction
 // on any isolation violation), then ClickHouse (scoped deletes + inserts with
 // throwIf postflights). Both halves are idempotent; ordering matters only
 // because ClickHouse rows reference Postgres ids.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn) error {
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore) error {
 	logger = logger.With(attr.SlogComponent("demoseed"))
 
 	conn, err := db.Acquire(ctx)
@@ -63,6 +76,30 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		return fmt.Errorf("apply demo seed to postgres: %w", err)
 	}
 	logger.InfoContext(ctx, "demo seed applied to postgres")
+
+	// The Sources page's "OpenAPI Specification" tab serves the asset blob,
+	// which SQL alone cannot place — write the embedded spec through the
+	// asset store (fs locally, GCS in prod) and point the assets row at it.
+	docSHA := sha256.Sum256(openapiDoc)
+	docHex := hex.EncodeToString(docSHA[:])
+	w, objURL, err := blob.Write(ctx, "demoseed/acme-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
+	if err != nil {
+		return fmt.Errorf("open demo openapi asset for writing: %w", err)
+	}
+	if _, err := w.Write(openapiDoc); err != nil {
+		defer o11y.NoLogDefer(w.Close)
+		return fmt.Errorf("write demo openapi asset: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("finalize demo openapi asset: %w", err)
+	}
+	if _, err := conn.Exec(ctx,
+		"UPDATE assets SET url = $1, sha256 = $2, content_length = $3, content_type = 'application/x-yaml' WHERE id = $4 AND project_id = $5",
+		objURL.String(), docHex, len(openapiDoc), demoAssetID, demoProjectID,
+	); err != nil {
+		return fmt.Errorf("point demo assets row at the uploaded spec: %w", err)
+	}
+	logger.InfoContext(ctx, "demo openapi asset uploaded")
 
 	// clickhouse-go executes one statement per call and pools sessions, so the
 	// script's SET line cannot carry across statements — the setting rides on

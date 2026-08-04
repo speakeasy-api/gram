@@ -21,6 +21,18 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars:  []string{"GRAM_DATABASE_URL"},
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "assets-backend",
+				Usage:    "The backend to use for managing assets",
+				EnvVars:  []string{"GRAM_ASSETS_BACKEND"},
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "assets-uri",
+				Usage:    "The location of the assets backend to connect to",
+				EnvVars:  []string{"GRAM_ASSETS_URI"},
+				Required: true,
+			},
 		}, clickHouseFlags()...),
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
@@ -40,7 +52,16 @@ func newDemoSeedCommand() *cli.Command {
 			}
 			defer o11y.NoLogDefer(func() error { return chShutdown(ctx) })
 
-			return demoseed.Run(ctx, logger, db, ch)
+			blob, blobShutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{
+				assetsBackend: c.String("assets-backend"),
+				assetsURI:     c.String("assets-uri"),
+			})
+			if err != nil {
+				return fmt.Errorf("connect to asset storage: %w", err)
+			}
+			defer o11y.NoLogDefer(func() error { return blobShutdown(ctx) })
+
+			return demoseed.Run(ctx, logger, db, ch, blob)
 		},
 	}
 }
