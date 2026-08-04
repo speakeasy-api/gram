@@ -16,6 +16,11 @@ type CompletionClient interface {
 	GetCompletionStream(ctx context.Context, request CompletionRequest) (StreamReader, error)
 	GetObjectCompletion(ctx context.Context, request ObjectCompletionRequest) (*CompletionResponse, error)
 	CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error)
+	// KeyResolver reports which OpenRouter key a completion with the given
+	// billing coordinates spends; judges use it to scope their shared
+	// rate-limit bucket (JudgeRateLimitKey). Resolution may provision a
+	// platform key on an org's first use.
+	KeyResolver
 }
 
 // EmbeddingOption tunes a CreateEmbeddings call. Options are applied in order;
