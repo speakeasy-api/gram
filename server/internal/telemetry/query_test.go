@@ -135,6 +135,57 @@ func insertAttributeClaudeAPIRequestLog(t *testing.T, ctx context.Context, proje
 	require.NoError(t, err)
 }
 
+type liteLLMSpanParams struct {
+	projectID     string
+	timestamp     time.Time
+	chatID        string
+	callID        string
+	gramURN       string
+	eventURN      string
+	requestModel  string
+	responseModel string
+	email         string
+	inputTokens   int
+	outputTokens  int
+	cost          float64
+}
+
+func insertLiteLLMSpan(t *testing.T, ctx context.Context, p liteLLMSpanParams) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+	attributes := map[string]any{
+		"gen_ai.conversation.id":     p.chatID,
+		"gen_ai.request.model":       p.requestModel,
+		"gen_ai.usage.input_tokens":  p.inputTokens,
+		"gen_ai.usage.output_tokens": p.outputTokens,
+		"gen_ai.usage.total_tokens":  p.inputTokens + p.outputTokens,
+		"gen_ai.usage.cost":          p.cost,
+		"gram.event.urn":             p.eventURN,
+		"gram.hook.source":           "litellm",
+		"gram.litellm.call_id":       p.callID,
+		"gram.resource.urn":          p.gramURN,
+		"user.email":                 p.email,
+	}
+	if p.responseModel != "" {
+		attributes["gen_ai.response.model"] = p.responseModel
+	}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "LiteLLM model span",
+		nil, nil, string(attrsJSON), "{}", p.projectID, p.gramURN, "litellm")
+	require.NoError(t, err)
+}
+
 // insertAttributeGramCompletionLog inserts a gram-server LLM completion row
 // tagged with the given usage source (e.g. "playground", "assistants").
 func insertAttributeGramCompletionLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, hookSource, email, department string, roles []string) {
@@ -1005,6 +1056,75 @@ func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
 	require.Len(t, result.Table, 1)
 	require.Equal(t, "claude-code", result.Table[0].GroupValue)
 	require.InDelta(t, 0.25, result.Table[0].Measures.TotalCost, 1e-9)
+}
+
+func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	base := liteLLMSpanParams{
+		projectID: projectID, timestamp: now.Add(-10 * time.Minute), chatID: uuid.NewString(), callID: uuid.NewString(),
+		gramURN: "litellm:otel:traces", eventURN: "urn:telemetry:provider_otel:span:chat",
+		requestModel: "model-group", responseModel: "openai/gpt-4o", email: "litellm@example.test",
+		inputTokens: 11, outputTokens: 7, cost: 0.125,
+	}
+	insertLiteLLMSpan(t, ctx, base)
+	operational := base
+	operational.eventURN = "urn:telemetry:provider_otel:span:unknown"
+	insertLiteLLMSpan(t, ctx, operational)
+	metric := base
+	metric.eventURN = "urn:telemetry:provider_otel:metric:usage"
+	insertLiteLLMSpan(t, ctx, metric)
+	metricResource := metric
+	metricResource.gramURN = "litellm:otel:metrics"
+	insertLiteLLMSpan(t, ctx, metricResource)
+	spoofed := base
+	spoofed.gramURN = "other:otel:traces"
+	insertLiteLLMSpan(t, ctx, spoofed)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, base.timestamp, uuid.NewString(), 0.25, 20, 5, 0, 0, "opus", "claude@example.test", "Engineering", nil, "main", "", "", "", "")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	var result *gen.QueryResult
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
+			TopN: 10, SortBy: "total_cost",
+		})
+		if err != nil || res == nil || len(res.Table) != 2 {
+			return false
+		}
+		result = res
+		return res.Table[0].GroupValue == "claude-code" && res.Table[1].GroupValue == "litellm"
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.EqualValues(t, 20, result.Table[0].Measures.TotalInputTokens)
+	require.EqualValues(t, 5, result.Table[0].Measures.TotalOutputTokens)
+	require.EqualValues(t, 25, result.Table[0].Measures.TotalTokens)
+	require.InDelta(t, 0.25, result.Table[0].Measures.TotalCost, 1e-9)
+	require.EqualValues(t, 11, result.Table[1].Measures.TotalInputTokens)
+	require.EqualValues(t, 7, result.Table[1].Measures.TotalOutputTokens)
+	require.EqualValues(t, 18, result.Table[1].Measures.TotalTokens)
+	require.InDelta(t, 0.125, result.Table[1].Measures.TotalCost, 1e-9)
+
+	filtered, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
+		Filters: []*gen.QueryFilter{{Dimension: "hook_source", Values: []string{"litellm"}}},
+		TopN:    10, SortBy: "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Table, 1)
+	require.Equal(t, "litellm", filtered.Table[0].GroupValue)
 }
 
 func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {

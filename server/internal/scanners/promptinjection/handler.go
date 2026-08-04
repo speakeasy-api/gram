@@ -73,6 +73,15 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		return fmt.Errorf("scan prompt injection: %w", err)
 	}
 
+	// The scan proceeds on empty content as long as the judge message has
+	// content (tool name/calls), but the finding it produces has an empty
+	// match, no fingerprint, and nothing revealable — pure noise as a
+	// persisted row. Skip publishing; the classification (judge telemetry)
+	// and the handled metrics below are unaffected.
+	if m.GetContent() == "" {
+		findings = nil
+	}
+
 	_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),

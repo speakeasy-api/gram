@@ -3,8 +3,6 @@ package risk
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"math"
 	"strings"
@@ -21,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
@@ -33,9 +32,9 @@ type RiskFindingInserter interface {
 
 // FindingCHWriter consumes Finding messages off the shared Pub/Sub topic and
 // writes them to the ClickHouse risk_findings table. It never stores the raw
-// matched value: only its length, a redacted display string, and one-way
-// fingerprints. The verbatim value stays in Postgres for the audited unmask
-// path.
+// matched value: only its length, a partial-mask display string (maskdisplay),
+// and one-way fingerprints. The verbatim value stays in Postgres for the
+// audited unmask path.
 type FindingCHWriter struct {
 	logger        *slog.Logger
 	metrics       *metrics
@@ -118,44 +117,35 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			}
 		}
 
-		// Compute the fingerprints. Keep the raw HMAC bytes around so the
-		// redacted display string can reuse a keyed prefix (see below) instead of
-		// an unkeyed hash. pepperVersion is captured from whichever fingerprint
-		// runs so a global-only finding still records the version needed to
-		// interpret it after a pepper rotation.
+		// Compute the fingerprints. pepperVersion is captured from whichever
+		// fingerprint runs so a global-only finding still records the version
+		// needed to interpret it after a pepper rotation.
 		pepperVersion := ""
 
-		var globalSum []byte
 		globalHS256 := ""
 		if !deadLetter && match != "" {
 			if sum, pepperver, err := w.fingerprinter.HS256([]byte(match)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute global fingerprint", attr.SlogError(err))
 			} else {
-				globalSum = sum
 				globalHS256 = base64.RawURLEncoding.EncodeToString(sum)
 				pepperVersion = pepperver
 			}
 		}
 
-		var tenantSum []byte
 		tenantHS256 := ""
 		if !deadLetter && orgID != "" && match != "" {
 			if sum, pepperver, err := w.fingerprinter.TenantedHS256(orgID, []byte(match), WithKeyCache(tenantKeyCache)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute tenant-qualified fingerprint", attr.SlogError(err))
 			} else {
-				tenantSum = sum
 				tenantHS256 = base64.RawURLEncoding.EncodeToString(sum)
 				pepperVersion = pepperver
 			}
 		}
 
-		// Precompute the redacted display string. Every source is redacted here
-		// including shadow_mcp and account_identity — CH must never hold a
-		// plaintext match or PII. The disambiguator is a prefix of the keyed HMAC
-		// fingerprint (tenant-qualified when available, else global) rather than
-		// an unkeyed SHA-256, so a low-entropy match (e.g. an email) can't be
-		// recovered offline from the stored value. A dead-letter sentinel has no
-		// match, so its redaction stays empty.
+		// Precompute the partial-mask display string via the shared maskdisplay
+		// package, so live rows and the offline backfill stay byte-identical for
+		// the same value. A dead-letter sentinel has no match, so its display
+		// stays empty.
 		matchRedacted := ""
 		matchLen := uint32(0)
 		if !deadLetter && match != "" {
@@ -164,15 +154,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			} else {
 				matchLen = uint32(n)
 			}
-			displaySum := tenantSum
-			if displaySum == nil {
-				displaySum = globalSum
-			}
-			if len(displaySum) >= 4 {
-				matchRedacted = fmt.Sprintf("<redacted len=%d sha=%s>", matchLen, hex.EncodeToString(displaySum[:4]))
-			} else {
-				matchRedacted = fmt.Sprintf("<redacted len=%d>", matchLen)
-			}
+			matchRedacted = maskdisplay.Display(message.GetSource(), message.GetRuleId(), match)
 		}
 
 		tags := message.GetTags()
@@ -275,6 +257,10 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			FalsePositiveAt:          falsePositiveAt,
 			MessageCreatedAt:         messageCreatedAt,
 			AssistantID:              assistantID,
+			Surface:                  message.GetSurface(),
+			Field:                    message.GetField(),
+			Path:                     message.GetPath(),
+			ToolCallID:               message.GetToolCallId(),
 		})
 	}
 

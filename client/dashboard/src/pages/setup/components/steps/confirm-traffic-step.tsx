@@ -27,6 +27,8 @@ const SOURCE_ICONS: Record<string, string> = {
   cowork: "/icons/platforms/claude.svg",
   cursor: "/icons/platforms/cursor.svg",
   codex: "/icons/platforms/openai.svg",
+  chatgpt: "/icons/platforms/openai.svg",
+  "chatgpt-work": "/icons/platforms/openai.svg",
 };
 
 function eventKey(ev: OnboardingHookEvent): string {
@@ -45,6 +47,10 @@ function sourceLabel(source: string): string {
       return "Cursor";
     case "codex":
       return "Codex";
+    case "chatgpt":
+      return "ChatGPT";
+    case "chatgpt-work":
+      return "ChatGPT Work";
     case "cowork":
       return "Cowork";
     default:

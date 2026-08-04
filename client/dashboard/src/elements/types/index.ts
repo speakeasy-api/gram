@@ -721,11 +721,11 @@ export interface ComponentOverrides {
   ReasoningGroup?: ReasoningGroupComponent;
 
   /**
-   * The component to use for the tool group (a group of tool calls returned by the LLM in a single message).
+   * The component to use for the tool group (a run of tool calls, including
+   * the terse annotation text parts preceding each batch). `indices` are the
+   * positions of the run's parts within the assistant message.
    */
-  ToolGroup?: ComponentType<
-    PropsWithChildren<{ startIndex: number; endIndex: number }>
-  >;
+  ToolGroup?: ComponentType<PropsWithChildren<{ indices: number[] }>>;
 }
 
 export type ToolsFilter =

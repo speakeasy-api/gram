@@ -1,4 +1,4 @@
-h1:s95L9NRsqvRnIU/iXmvE9TX5brVSoSNPRMTt72UydnE=
+h1:Wncfr+9y1mIZZCdnKOZB2YHHrfN1bHjzWXevmiMFrmo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -310,3 +310,4 @@ h1:s95L9NRsqvRnIU/iXmvE9TX5brVSoSNPRMTt72UydnE=
 20260729235455_dno643-device-agent-device-syncs.sql h1:2xYuc2B1oopRAdvkZ57ys+5kncKCyM1Zw78D/M8bCXM=
 20260730125106_custom-domain-root-mcp-and-challenge.sql h1:RBOpyM/n3XVpvcfMBEhhY2FojQ9DYg4UwVuFtqTYzno=
 20260730222817_business-memories.sql h1:yk1Da+musAggroaqFiaKhRYD9cn09Y1i2V9DCrHu03M=
+20260803143506_device_agent_configurations.sql h1:YpqUdgZ+/o0LmPn8B8ioz3Kxvdo2xehJbJtNoJDVGCs=

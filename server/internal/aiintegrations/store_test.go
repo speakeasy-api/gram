@@ -386,3 +386,20 @@ func countAIIntegrationConfigs(t *testing.T, ctx context.Context, conn *pgxpool.
 	require.NoError(t, err)
 	return count
 }
+
+func TestUpsertRejectsNonUUIDWorkspaceIDForChatGPTCompliance(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	// The chatgpt_compliance scope id is a ChatGPT workspace UUID; an org-…
+	// API organization id (valid for codex_compliance) must be rejected at
+	// upsert rather than failing every background poll later.
+	orgStyleID := "org-123abc"
+	err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &orgStyleID, nil, nil)
+		return err
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ChatGPT workspace UUID")
+}

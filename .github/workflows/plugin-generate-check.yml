@@ -7,6 +7,10 @@ on:
       - "server/cmd/export-hook-plugin/**"
       - "hooks/relay/config.go"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   check-generator-versions:
     runs-on: ubuntu-latest

@@ -29,6 +29,19 @@ func TestNormalizeExtraction(t *testing.T) {
 	}}, got)
 }
 
+// A decoded NUL is re-escaped to its literal \u0000 text rather than
+// failing the extraction; Postgres cannot store the codepoint.
+func TestNormalizeExtractionEscapesNUL(t *testing.T) {
+	t.Parallel()
+
+	raw := `{"memories":[{"body":"broken \u0000 memory","memory_type":"result","content_scope":[],"source_turn":1}]}`
+	got, err := normalizeExtraction(raw, map[int]struct{}{1: {}})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "broken "+`\u0000`+" memory", got[0].Body)
+	require.NotContains(t, got[0].Body, "\x00")
+}
+
 func TestNormalizeExtractionRejectsInvalidCandidates(t *testing.T) {
 	t.Parallel()
 

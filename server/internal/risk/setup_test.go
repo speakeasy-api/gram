@@ -279,7 +279,25 @@ func shadowMCPPolicyAllowedURLs(t *testing.T, ctx context.Context, conn *pgxpool
 	return urls
 }
 
+func shadowMCPPolicyBlockedURLs(t *testing.T, ctx context.Context, conn *pgxpool.Pool, policyID string) []string {
+	t.Helper()
+
+	principals := shadowMCPPolicyURLPrincipalsForScope(t, ctx, conn, authz.ScopeRiskPolicyBlock, policyID)
+	urls := make([]string, 0, len(principals))
+	for serverURL := range principals {
+		urls = append(urls, serverURL)
+	}
+	slices.Sort(urls)
+	return urls
+}
+
 func shadowMCPPolicyURLPrincipals(t *testing.T, ctx context.Context, conn *pgxpool.Pool, policyID string) map[string][]string {
+	t.Helper()
+
+	return shadowMCPPolicyURLPrincipalsForScope(t, ctx, conn, authz.ScopeRiskPolicyBypass, policyID)
+}
+
+func shadowMCPPolicyURLPrincipalsForScope(t *testing.T, ctx context.Context, conn *pgxpool.Pool, scope authz.Scope, policyID string) map[string][]string {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -287,7 +305,7 @@ func shadowMCPPolicyURLPrincipals(t *testing.T, ctx context.Context, conn *pgxpo
 	require.NotNil(t, authCtx)
 	grants, err := authz.ListGrantsForResource(ctx, conn, authz.Resource{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
+		Scope:          scope,
 		ResourceID:     policyID,
 	})
 	require.NoError(t, err)
