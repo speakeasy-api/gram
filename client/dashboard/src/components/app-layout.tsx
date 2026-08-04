@@ -4,6 +4,7 @@ import {
   useSession,
 } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
+import { cn } from "@/lib/utils";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { ModalProvider } from "@/components/ui/context/ModalContext";
@@ -74,28 +75,43 @@ function getAdminOverrideCookie(): string | null {
   return value || null;
 }
 
+// The shared demo workspace is entered through the same override mechanism,
+// but it isn't a customer org being impersonated — brand it as a demo instead
+// of an impersonation warning.
+const DEMO_ORG_SLUG = "acme-demo";
+
 const ImpersonationBanner = () => {
   const organization = useOrganization();
   const client = useSdkClient();
+  const isDemo = organization.slug === DEMO_ORG_SLUG;
+
+  const exit = () => {
+    void (async () => {
+      document.cookie = "gram_admin_override=; path=/; max-age=0;";
+      await client.auth.logout();
+      window.location.href = "/login";
+    })();
+  };
 
   return (
-    <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-sm text-white">
+    <div
+      className={cn(
+        "flex items-center justify-center gap-3 px-4 py-2 text-sm text-white",
+        isDemo ? "bg-purple-600" : "bg-red-600",
+      )}
+    >
       <ShieldAlert className="h-4 w-4 shrink-0" />
       <span className="font-mono font-bold">
-        Impersonating {organization.slug}
+        {isDemo
+          ? "Demo workspace — sample data"
+          : `Impersonating ${organization.slug}`}
       </span>
       <button
         type="button"
         className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
-        onClick={() => {
-          void (async () => {
-            document.cookie = "gram_admin_override=; path=/; max-age=0;";
-            await client.auth.logout();
-            window.location.href = "/login";
-          })();
-        }}
+        onClick={exit}
       >
-        Stop impersonating
+        {isDemo ? "Exit demo" : "Stop impersonating"}
       </button>
     </div>
   );
