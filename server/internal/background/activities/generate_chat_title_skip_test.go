@@ -156,5 +156,5 @@ func TestGenerateChatTitle_WriteSkipsManuallyTitledChat(t *testing.T) {
 }
 
 func (s *completionClientSpy) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
-	return openrouter.PlatformKey, nil
+	return openrouter.PlatformKey(), nil
 }

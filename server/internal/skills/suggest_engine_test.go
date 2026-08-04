@@ -463,7 +463,7 @@ func TestSuggestionEngineRateLimitFailureConsumesNothing(t *testing.T) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), t.Name(), ratelimit.Rate{Tokens: 1, Interval: time.Hour, Burst: 1})
-	key := openrouter.JudgeRateLimitKey(openrouter.PlatformKey, suggest.Model)
+	key := openrouter.JudgeRateLimitKey(openrouter.PlatformKey(), suggest.Model)
 	allowed, err := limiter.Allow(ctx, key)
 	require.NoError(t, err)
 	require.True(t, allowed.Allowed)
@@ -867,5 +867,5 @@ func proposeManifest(base, proposed, rationale string, refCount int) string {
 }
 
 func (s *suggestionCompletionStub) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
-	return openrouter.PlatformKey, nil
+	return openrouter.PlatformKey(), nil
 }

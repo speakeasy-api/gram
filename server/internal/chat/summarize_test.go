@@ -200,5 +200,5 @@ func TestService_ListChats_ExposesPinned(t *testing.T) {
 }
 
 func (m *mockCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
-	return openrouter.PlatformKey, nil
+	return openrouter.PlatformKey(), nil
 }

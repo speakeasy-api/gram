@@ -30,7 +30,9 @@ const (
 // PlatformKey is the ResolvedKey a judge bucket treats as platform-provisioned:
 // every platform key spends the one platform OpenRouter account, so the key
 // material itself does not matter for bucketing, only that Customer is false.
-var PlatformKey = ResolvedKey{Key: "", Customer: false}
+func PlatformKey() ResolvedKey {
+	return ResolvedKey{Key: "", Customer: false}
+}
 
 // NewJudgeRateLimiter returns the shared rate limiter guarding billable LLM
 // judge calls. Pass it to every judge; each keys with JudgeRateLimitKey so
@@ -66,13 +68,19 @@ func JudgeRateLimitKey(key ResolvedKey, model string) string {
 // rather than skipping the limiter, and the completion call surfaces the
 // resolution error itself if it persists.
 func ResolveJudgeRateLimitKey(ctx context.Context, logger *slog.Logger, resolver KeyResolver, orgID string, projectID string, slot billing.ModelUsageSource, model string) string {
+	// The completion path normalizes the model through ResolveModel, so bucket
+	// under the model that is actually called — otherwise de-listed request ids
+	// would each get their own bucket while spending one model's capacity.
+	if normalized := ResolveModel(model); normalized != "" {
+		model = normalized
+	}
 	resolved, err := resolver.ResolveKey(ctx, orgID, projectID, slot, KeyTypeInternal)
 	if err != nil {
 		logger.WarnContext(ctx, "judge key resolution failed, scoping rate limit to platform bucket",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
-		resolved = PlatformKey
+		resolved = PlatformKey()
 	}
 	return JudgeRateLimitKey(resolved, model)
 }
