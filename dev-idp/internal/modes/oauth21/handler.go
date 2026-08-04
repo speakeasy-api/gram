@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -37,6 +36,7 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/dev-idp/internal/cimd"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
@@ -329,17 +329,15 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		// identity non-interactively (there is no session to phish; a caller
 		// who can reach this endpoint already has local access).
 		allowedRedirectURIs = []string{redirectURI}
-	case isCIMDClientID(clientID):
-		doc, derr := h.fetchClientMetadataDocument(ctx, clientID)
-		if derr != nil {
+	case cimd.IsClientID(clientID):
+		doc, derr := cimd.Fetch(ctx, h.httpClient, clientID)
+		switch {
+		case errors.Is(derr, cimd.ErrClientIDMismatch):
+			oauthError(w, http.StatusBadRequest, "invalid_client", cimd.ErrClientIDMismatch.Error())
+			return
+		case derr != nil:
 			h.logger.WarnContext(ctx, "fetch client metadata document", slog.Any("error", derr))
 			oauthError(w, http.StatusBadRequest, "invalid_client", "could not fetch client metadata document")
-			return
-		}
-		// Per the CIMD draft the document's client_id MUST equal the URL it was
-		// fetched from.
-		if doc.ClientID != clientID {
-			oauthError(w, http.StatusBadRequest, "invalid_client", "client metadata document client_id does not match the client_id URL")
 			return
 		}
 		allowedRedirectURIs = doc.RedirectURIs
@@ -397,47 +395,6 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	target.RawQuery = rq.Encode()
 	http.Redirect(w, r, target.String(), http.StatusFound)
-}
-
-// clientMetadataDocument is the subset of an OAuth Client ID Metadata Document
-// (CIMD) the dev-idp validates when a client_id is a URL.
-type clientMetadataDocument struct {
-	ClientID     string   `json:"client_id"`
-	RedirectURIs []string `json:"redirect_uris"`
-}
-
-// isCIMDClientID reports whether a client_id is a Client ID Metadata Document
-// URL (an http or https URL) rather than an opaque registered client id.
-func isCIMDClientID(clientID string) bool {
-	u, err := url.Parse(clientID)
-	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
-}
-
-// fetchClientMetadataDocument dereferences a CIMD client_id URL and parses the
-// hosted metadata document. Dev-only: plain HTTP is allowed (the draft requires
-// HTTPS) so localhost documents work during local development.
-func (h *Handler) fetchClientMetadataDocument(ctx context.Context, clientID string) (clientMetadataDocument, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
-	if err != nil {
-		return clientMetadataDocument{}, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := h.httpClient.Do(req)
-	if err != nil {
-		return clientMetadataDocument{}, fmt.Errorf("get %s: %w", clientID, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return clientMetadataDocument{}, fmt.Errorf("get %s: status %d", clientID, resp.StatusCode)
-	}
-
-	var doc clientMetadataDocument
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxFormBodyBytes)).Decode(&doc); err != nil {
-		return clientMetadataDocument{}, fmt.Errorf("decode document: %w", err)
-	}
-	return doc, nil
 }
 
 // =============================================================================
