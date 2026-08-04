@@ -1,7 +1,9 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { Lock } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures";
 import { OnboardingHeader } from "./onboarding-header";
 import { OnboardingFooter } from "./onboarding-footer";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
@@ -64,8 +66,24 @@ export function SetupWizard(): JSX.Element | null {
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // All steps are accessible — SSO and DSYNC are both skippable.
-  const maxAllowedStep = STEPS.length - 1;
+  // The identity steps (SSO / directory sync) are entitlement-gated: a
+  // self-signup enterprise trial gets everything except sso/scim, so those two
+  // steps are dropped from the wizard entirely (skip, not lock) until the org
+  // is entitled. A fully-entitled enterprise customer still sees all 8 steps.
+  const { data: features } = useProductFeatures();
+  const steps = useMemo(
+    () =>
+      STEPS.filter((step) => {
+        if (step.id === "connect-idp") return features?.ssoEnabled ?? false;
+        if (step.id === "directory-sync") return features?.scimEnabled ?? false;
+        return true;
+      }),
+    [features],
+  );
+  const showUpsell = !features?.ssoEnabled || !features?.scimEnabled;
+
+  // All visible steps are accessible — SSO and DSYNC are both skippable.
+  const maxAllowedStep = steps.length - 1;
 
   const stepSlug = searchParams.get("step");
 
@@ -84,18 +102,25 @@ export function SetupWizard(): JSX.Element | null {
   useEffect(() => {
     if (stepSlug) return;
     if (statusLoading) return; // wait so we don't flash step 0 then jump
-    let resumeStep = 0;
+    // Resume by step id, not index: the visible `steps` set can be shorter than
+    // STEPS, so the target is resolved against `steps` and clamped to a visible
+    // step (a hidden target → findIndex -1 → 0 → create-marketplace).
+    let resumeId = steps[0]!.id;
     if (publishStatus?.connected) {
-      resumeStep = 3; // marketplace done → distribute-servers
+      resumeId = "distribute-servers"; // marketplace done → distribute-servers
     } else if (onboardingStatus?.dsyncConfigured) {
-      resumeStep = 2; // dsync done → create-marketplace
+      resumeId = "create-marketplace"; // dsync done → create-marketplace
     } else if (onboardingStatus?.ssoConfigured) {
-      resumeStep = 1; // sso done → directory-sync
+      resumeId = "directory-sync"; // sso done → directory-sync
     }
+    const resumeIndex = Math.max(
+      0,
+      steps.findIndex((s) => s.id === resumeId),
+    );
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set("step", STEPS[resumeStep]!.id!);
+        next.set("step", steps[resumeIndex]!.id);
         return next;
       },
       { replace: true },
@@ -105,13 +130,14 @@ export function SetupWizard(): JSX.Element | null {
     statusLoading,
     onboardingStatus,
     publishStatus,
+    steps,
     setSearchParams,
   ]);
 
   const requestedStep = stepSlug
     ? Math.max(
         0,
-        STEPS.findIndex((s) => s.id === stepSlug),
+        steps.findIndex((s) => s.id === stepSlug),
       )
     : 0;
 
@@ -122,13 +148,13 @@ export function SetupWizard(): JSX.Element | null {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set("step", STEPS[index]!.id!);
+          next.set("step", steps[index]!.id);
           return next;
         },
         { replace: true },
       );
     },
-    [setSearchParams],
+    [steps, setSearchParams],
   );
 
   // Clicking a step in the stepper previews that step (forward or back) by
@@ -146,12 +172,12 @@ export function SetupWizard(): JSX.Element | null {
 
   const completeCurrentStep = useCallback(() => {
     const nextIndex = currentStep + 1;
-    if (nextIndex < STEPS.length) {
+    if (nextIndex < steps.length) {
       setCurrentStep(nextIndex);
     } else {
       void navigate(`/${orgSlug}`);
     }
-  }, [currentStep, navigate, orgSlug, setCurrentStep]);
+  }, [currentStep, navigate, orgSlug, steps.length, setCurrentStep]);
 
   const goBack = useCallback(() => {
     if (currentStep > 0) {
@@ -171,27 +197,29 @@ export function SetupWizard(): JSX.Element | null {
     return null;
   }
 
+  // Render by step id, not index: filtering `steps` shifts indices, so a
+  // numeric switch would map to the wrong component.
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    switch (steps[currentStep]?.id) {
+      case "connect-idp":
         return (
           <ConnectIdpStep
             onSkip={completeCurrentStep}
             onComplete={completeCurrentStep}
           />
         );
-      case 1:
+      case "directory-sync":
         return (
           <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />
         );
-      case 2:
+      case "create-marketplace":
         return (
           <CreateMarketplaceStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 3:
+      case "distribute-servers":
         return (
           <DistributeServersStep
             onComplete={completeCurrentStep}
@@ -199,14 +227,14 @@ export function SetupWizard(): JSX.Element | null {
             onBack={goBack}
           />
         );
-      case 4:
+      case "instrument-agents":
         return (
           <InstrumentAgentsStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 5:
+      case "additional-agent-config":
         return (
           <AdditionalAgentConfigStep
             onComplete={completeCurrentStep}
@@ -214,14 +242,14 @@ export function SetupWizard(): JSX.Element | null {
             onBack={goBack}
           />
         );
-      case 6:
+      case "confirm-traffic":
         return (
           <ConfirmTrafficStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 7:
+      case "configure-policies":
         return (
           <ConfigurePoliciesStep
             onComplete={completeCurrentStep}
@@ -241,7 +269,7 @@ export function SetupWizard(): JSX.Element | null {
         <div className="flex w-full max-w-5xl gap-24">
           <div className="w-64 flex-shrink-0">
             <OnboardingStepper
-              steps={STEPS}
+              steps={steps}
               currentStep={currentStep}
               onStepClick={goToStep}
               maxAllowedStep={maxAllowedStep}
@@ -249,7 +277,23 @@ export function SetupWizard(): JSX.Element | null {
             />
           </div>
 
-          <div className="min-w-0 flex-1">{renderStep()}</div>
+          <div className="min-w-0 flex-1">
+            {renderStep()}
+            {showUpsell && (
+              <div className="border-border text-muted-foreground mt-6 flex items-center gap-2 rounded-lg border border-dashed px-4 py-3.5 text-sm">
+                <Lock className="size-4 shrink-0" strokeWidth={1.75} />
+                <span>
+                  SSO &amp; directory sync are available on an enterprise plan.
+                </span>
+                <a
+                  href="mailto:gram@speakeasyapi.dev?subject=Unlock%20SSO%20and%20Directory%20Sync"
+                  className="text-foreground font-medium whitespace-nowrap underline underline-offset-2"
+                >
+                  Contact sales to unlock →
+                </a>
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
