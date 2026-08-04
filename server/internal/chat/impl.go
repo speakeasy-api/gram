@@ -678,8 +678,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	// A Speakeasy admin impersonating an org via the dev-tools override holds
 	// every scope (see authz.Engine), so RBAC cannot stop them — block
-	// transcript access explicitly before any session data is read.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin {
+	// transcript access explicitly before any session data is read. The shared
+	// demo org is exempt: its transcripts are fabricated by seed/demo/ and
+	// exist to be read.
+	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin &&
+		authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
 		return nil, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be opened while impersonating an organization")
 	}
 

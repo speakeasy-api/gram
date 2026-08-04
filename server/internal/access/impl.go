@@ -104,8 +104,14 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // ListRoles reads local role records and enriches them with Gram's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
+	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
+	// roleOrgContext, but the listing itself is pure Postgres — serve it.
 	if s.isImpersonatingUnlinkedOrg(ctx) {
-		return &gen.ListRolesResult{Roles: []*gen.Role{}}, nil
+		ac, err := s.authContext(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		}
+		return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -300,8 +306,14 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 // ListMembers follows the original access API contract by returning WorkOS user
 // identifiers while decorating them with the role information the UI needs.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
+	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
+	// roleOrgContext, but the listing itself is pure Postgres — serve it.
 	if s.isImpersonatingUnlinkedOrg(ctx) {
-		return &gen.ListMembersResult{Members: []*gen.AccessMember{}}, nil
+		ac, err := s.authContext(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		}
+		return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
