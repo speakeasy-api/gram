@@ -94,7 +94,14 @@ func reconcileTable(ctx context.Context, tx *sql.Tx, name string, want, got tabl
 		}
 		if _, err := tx.ExecContext(ctx,
 			`ALTER TABLE `+quoteIdent(name)+` DROP COLUMN `+quoteIdent(col)); err != nil {
-			return changed, fmt.Errorf("drop retired column %s.%s: %w", name, col, err)
+			// SQLite refuses to drop a column that is part of the primary key,
+			// is UNIQUE, or is otherwise structural. Those all genuinely need
+			// the table rebuilt, so answer with the same actionable message as
+			// every other in-place-impossible case rather than letting a raw
+			// driver error out -- an unhelpful error here is exactly what this
+			// reconciler exists to prevent.
+			return changed, rebuildRequired(name, col,
+				fmt.Sprintf("retired column cannot be dropped in place: %v", err))
 		}
 		logger.InfoContext(ctx, "dropped retired column",
 			slog.String("table", name), slog.String("column", col))
