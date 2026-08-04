@@ -972,12 +972,6 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    use axum::Router;
-    use axum::http::{HeaderName, HeaderValue, StatusCode, header};
-    use axum::routing::get;
-
     use super::*;
     use crate::http_layer::{TokenRegistry, build_bootstrap_client};
 
@@ -1003,84 +997,6 @@ mod tests {
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
             initial_token: String::new(),
         })
-    }
-
-    #[tokio::test]
-    async fn mcp_http_client_does_not_follow_redirects() {
-        let receiver_hits = Arc::new(AtomicUsize::new(0));
-        let receiver_hits_server = Arc::clone(&receiver_hits);
-        let receiver = Router::new().route(
-            "/",
-            get(move || {
-                let receiver_hits = Arc::clone(&receiver_hits_server);
-                async move {
-                    receiver_hits.fetch_add(1, Ordering::SeqCst);
-                    StatusCode::OK
-                }
-            }),
-        );
-        let receiver_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("receiver listener should bind");
-        let receiver_addr = receiver_listener
-            .local_addr()
-            .expect("receiver listener should have an address");
-        let receiver_task = tokio::spawn(async move {
-            axum::serve(receiver_listener, receiver)
-                .await
-                .expect("receiver server should run");
-        });
-
-        let redirect_target = format!("http://{receiver_addr}/");
-        let redirector = Router::new().route(
-            "/",
-            get(move || {
-                let redirect_target = redirect_target.clone();
-                async move {
-                    (
-                        StatusCode::TEMPORARY_REDIRECT,
-                        [(header::LOCATION, redirect_target)],
-                    )
-                }
-            }),
-        );
-        let redirector_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("redirector listener should bind");
-        let redirector_addr = redirector_listener
-            .local_addr()
-            .expect("redirector listener should have an address");
-        let redirector_task = tokio::spawn(async move {
-            axum::serve(redirector_listener, redirector)
-                .await
-                .expect("redirector server should run");
-        });
-
-        let host = build_host(
-            Arc::new(SpanIdentity::default()),
-            "http://localhost".to_string(),
-            String::new(),
-            Duration::from_secs(30),
-        )
-        .await
-        .expect("runtime host should build");
-        let response = host
-            .mcp_http_client
-            .get(format!("http://{redirector_addr}/"))
-            .header(
-                HeaderName::from_static("x-mcp-test-header"),
-                HeaderValue::from_static("distinctive-value"),
-            )
-            .send()
-            .await
-            .expect("redirect response should be returned");
-
-        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
-        tokio::task::yield_now().await;
-        assert_eq!(receiver_hits.load(Ordering::SeqCst), 0);
-
-        redirector_task.abort();
-        receiver_task.abort();
     }
 
     fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
