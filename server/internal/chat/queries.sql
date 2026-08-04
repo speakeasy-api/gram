@@ -372,7 +372,7 @@ candidate_chats AS (
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-  -- Join users table to enable searching by user display name
+  -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -389,6 +389,8 @@ candidate_chats AS (
       OR c.external_user_id ILIKE '%' || @search || '%'
       OR c.title ILIKE '%' || @search || '%'
       OR u.display_name ILIKE '%' || @search || '%'
+      OR u.email ILIKE '%' || @search || '%'
+      OR ua.email ILIKE '%' || @search || '%'
     )
     AND (
       @assistant_id = ''
@@ -497,7 +499,7 @@ candidate_chats AS (
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-  -- Join users table to enable searching by user display name
+  -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -514,6 +516,8 @@ candidate_chats AS (
       OR c.external_user_id ILIKE '%' || @search || '%'
       OR c.title ILIKE '%' || @search || '%'
       OR u.display_name ILIKE '%' || @search || '%'
+      OR u.email ILIKE '%' || @search || '%'
+      OR ua.email ILIKE '%' || @search || '%'
     )
     AND (
       @assistant_id = ''
