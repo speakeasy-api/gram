@@ -13,4 +13,8 @@ skipped pending the unified-app verification), and the feed's per-turn token
 counts are deliberately not persisted — cloud tokens meter through the
 compliance COSTS promotion, so carrying them here would double count.
 Enforcement over cloud runs remains impossible (post-hoc batch feed); this
-provides visibility and post-hoc review only.
+provides visibility and post-hoc review only. Also fixes a latent
+multi-schedule reset gap: a key or external-scope change on an integration
+now resets every synced sibling schedule's watermark (previously only the
+provider-named schedule reset, so a workspace/org change could leave a
+sibling feed silently skipping the new scope's history).

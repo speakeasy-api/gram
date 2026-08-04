@@ -67,14 +67,12 @@ type codexCloudEvent struct {
 		UserEmail string `json:"user_email"`
 	} `json:"actor"`
 	EventDetails struct {
-		DetailType      string `json:"detail_type"`
-		SessionID       string `json:"session_id"`
-		Model           string `json:"model"`
-		PromptText      string `json:"prompt_text"`
-		ResponseText    string `json:"response_text"`
-		Status          string `json:"status"`
-		ServiceTier     string `json:"service_tier"`
-		ReasoningEffort string `json:"reasoning_effort"`
+		DetailType   string `json:"detail_type"`
+		SessionID    string `json:"session_id"`
+		Model        string `json:"model"`
+		PromptText   string `json:"prompt_text"`
+		ResponseText string `json:"response_text"`
+		Status       string `json:"status"`
 	} `json:"event_details"`
 }
 
@@ -90,6 +88,11 @@ type CodexCloudSyncProgress struct {
 	// CODEX_WEB (see codexCloudClientWeb) — a canary for new cloud surfaces
 	// appearing in the feed.
 	SkippedClients int `json:"skipped_clients"`
+	// SkippedDetails counts web events dropped because their detail_type is
+	// not a known prompt/response shape — a canary for new event kinds
+	// (tool calls, lifecycle events) that would otherwise import as silently
+	// incomplete transcripts.
+	SkippedDetails int `json:"skipped_details"`
 	// TimestampFallbacks counts events whose timestamps failed RFC3339
 	// parsing and fell back to import time — a canary for upstream format
 	// changes that would otherwise silently rewrite history chronology.
@@ -144,6 +147,7 @@ func (s *CodexCloudImportService) SyncCodexCloudSessions(ctx context.Context, cf
 		MessagesWritten:    0,
 		ChatsUpserted:      0,
 		SkippedClients:     0,
+		SkippedDetails:     0,
 		TimestampFallbacks: 0,
 		WatermarkReached:   cfg.PollWatermarkAt,
 	}
@@ -155,6 +159,7 @@ func (s *CodexCloudImportService) SyncCodexCloudSessions(ctx context.Context, cf
 		pageLimit:  codexCloudPageLimit,
 		users:      newConnectedUserResolver(s.db, cfg.OrganizationID),
 		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
 		progressMu: sync.Mutex{},
 		progress:   progress,
 	}
@@ -196,8 +201,12 @@ type codexCloudSource struct {
 	pageLimit int
 	users     *connectedUserResolver
 	// chatIDs caches session id -> chat row id for the run so link rows and
-	// id lookups happen once per session, not once per event.
-	chatIDs map[string]uuid.UUID
+	// id lookups happen once per session, not once per event. chatTitles
+	// remembers which sessions have a title recorded this run, so a prompt
+	// arriving in a later file than the session's first upsert still lands
+	// its title (the feed itself carries none).
+	chatIDs    map[string]uuid.UUID
+	chatTitles map[string]string
 	// progressMu guards progress: the poller pipelines FetchPage (producer
 	// goroutine) with ProcessPage (consumer goroutine), and both record
 	// progress.
@@ -206,7 +215,9 @@ type codexCloudSource struct {
 }
 
 func (src *codexCloudSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
-	after := codexCloudUpperBoundStart(src.cfg, endTime)
+	// Same resume-precedence and lookback as the sibling workspace feed; one
+	// helper keeps the checkpoint/watermark semantics from drifting.
+	after := chatgptUpperBoundStart(src.cfg, endTime)
 	watermark := time.Time{}
 	for pageNum := 0; ; pageNum++ {
 		// The poller only heartbeats before UpperBound; a 30-day first sync
@@ -333,9 +344,11 @@ func (src *codexCloudSource) RetryAfter(err error) (time.Duration, bool) {
 }
 
 // codexCloudSessionState carries per-session metadata accumulated across one
-// file's events: the newest event (actor identity, timestamps) and the first
-// prompt text seen, which seeds the chat title.
+// file's events: the earliest admitted event (its timestamp approximates the
+// session start within the window), the newest one (freshest actor identity),
+// and the first prompt text seen, which seeds the chat title.
 type codexCloudSessionState struct {
+	first       codexCloudEvent
 	latest      codexCloudEvent
 	firstPrompt string
 }
@@ -343,18 +356,26 @@ type codexCloudSessionState struct {
 // writeFile persists one log file's web-task events: each session is upserted
 // as a chat, then every prompt/response lands in one batched write. The feed
 // carries no conversation titles, so a session's title derives from the first
-// prompt seen for it (truncated by runes, matching live capture); the
-// upsert's COALESCE preserves an existing title on replays and later files.
-// Non-web clients (CODEX_DESKTOP_APP) are counted and skipped — see
-// codexCloudClientWeb.
+// prompt seen for it (truncated by runes, matching live capture); a prompt
+// arriving in a later file still lands its title via a title-refresh
+// re-upsert, and the upsert's COALESCE preserves stored titles on replays.
+// Only prompt/response events on the web client are admitted: non-web clients
+// (CODEX_DESKTOP_APP) and unknown detail types are counted and skipped, so a
+// window carrying only lifecycle events can never create an empty, untitled
+// chat.
 func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFile, events []codexCloudEvent) error {
 	sessions := map[string]*codexCloudSessionState{}
 	order := make([]string, 0, len(events))
-	skipped := 0
+	skippedClients, skippedDetails := 0, 0
 	admitted := make([]codexCloudEvent, 0, len(events))
 	for _, event := range events {
 		if !strings.EqualFold(strings.TrimSpace(event.ClientID), codexCloudClientWeb) {
-			skipped++
+			skippedClients++
+			continue
+		}
+		if event.EventDetails.DetailType != codexCloudDetailPromptSent &&
+			event.EventDetails.DetailType != codexCloudDetailResponseReceived {
+			skippedDetails++
 			continue
 		}
 		if event.EventDetails.SessionID == "" || event.EventID == "" {
@@ -363,7 +384,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		admitted = append(admitted, event)
 		state, ok := sessions[event.EventDetails.SessionID]
 		if !ok {
-			state = &codexCloudSessionState{latest: event, firstPrompt: ""}
+			state = &codexCloudSessionState{first: event, latest: event, firstPrompt: ""}
 			sessions[event.EventDetails.SessionID] = state
 			order = append(order, event.EventDetails.SessionID)
 		}
@@ -374,13 +395,14 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			state.firstPrompt = strings.TrimSpace(event.EventDetails.PromptText)
 		}
 	}
-	if skipped > 0 {
+	if skippedClients > 0 || skippedDetails > 0 {
 		src.progressMu.Lock()
-		src.progress.SkippedClients += skipped
+		src.progress.SkippedClients += skippedClients
+		src.progress.SkippedDetails += skippedDetails
 		src.progressMu.Unlock()
 	}
 	for _, sessionID := range order {
-		if err := src.upsertSessionChat(ctx, sessions[sessionID]); err != nil {
+		if err := src.upsertSessionChat(ctx, sessionID, sessions[sessionID]); err != nil {
 			return err
 		}
 	}
@@ -395,6 +417,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		case codexCloudDetailResponseReceived:
 			role, content = "assistant", event.EventDetails.ResponseText
 		default:
+			// Unreachable: admission above only passes the two shapes.
 			continue
 		}
 
@@ -439,7 +462,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {
 		src.svc.logger.WarnContext(ctx, "codex cloud event timestamps failed to parse; messages stamped with import time",
 			attr.SlogFilePath(file.FileName),
-			attr.SlogChatGPTComplianceTimestampFallbacks(fallbacks),
+			attr.SlogCodexCloudTimestampFallbacks(fallbacks),
 		)
 	}
 	if len(rows) == 0 {
@@ -459,17 +482,27 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	return nil
 }
 
-// upsertSessionChat writes the session's chat row. The feed has no titles, so
-// a prompt-derived title is sent only on the first upsert of the run; the
-// query's COALESCE preserves any title already stored, so replays and later
-// files never clobber it.
-func (src *codexCloudSource) upsertSessionChat(ctx context.Context, state *codexCloudSessionState) error {
-	sessionID := state.latest.EventDetails.SessionID
-	if _, known := src.chatIDs[sessionID]; known {
+// upsertSessionChat writes the session's chat row with a prompt-derived title
+// (the feed itself carries none). A session already upserted this run is
+// re-upserted only when a title has newly become available — a PROMPT_SENT
+// can land in a later file than the session's first-seen (response-only)
+// window — and the query's COALESCE preserves stored titles on replays.
+// The chat's created_at comes from the window's earliest admitted event, the
+// closest available approximation of the session start.
+//
+// The title is deliberately a raw truncated prompt, not the DefaultChatTitle
+// sentinel the async LLM titler replaces: external imports never enter that
+// pipeline today, and a sentinel here would leave every chat titled "New
+// Chat" indefinitely. If imports ever join the titler, this divergence must
+// be revisited (a raw-prompt title reads as deliberately set and is skipped).
+func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID string, state *codexCloudSessionState) error {
+	title := codexCloudChatTitle(state.firstPrompt)
+	_, known := src.chatIDs[sessionID]
+	if known && (title == "" || title == src.chatTitles[sessionID]) {
 		return nil
 	}
 
-	createdAt := src.eventCreatedAt(state.latest)
+	createdAt := src.parseEventTime(state.first.Timestamp, time.Now())
 	userID, err := src.users.resolve(ctx, state.latest.Actor.UserEmail)
 	if err != nil {
 		return err
@@ -484,30 +517,36 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, state *codex
 		UserID:         conv.ToPGTextEmpty(userID),
 		ExternalUserID: conv.ToPGTextEmpty(state.latest.Actor.UserID),
 		ExternalChatID: conv.ToPGText(sessionID),
-		Title:          conv.ToPGTextEmpty(codexCloudChatTitle(state.firstPrompt)),
+		Title:          conv.ToPGTextEmpty(title),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(createdAt),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert codex cloud chat")
 	}
-	if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
-		AiIntegrationConfigID: src.cfg.ID,
-		ChatID:                chatID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "link codex cloud chat")
+	if !known {
+		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
+			AiIntegrationConfigID: src.cfg.ID,
+			ChatID:                chatID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "link codex cloud chat")
+		}
+		src.progressMu.Lock()
+		src.progress.ChatsUpserted++
+		src.progressMu.Unlock()
 	}
-	src.progressMu.Lock()
-	src.progress.ChatsUpserted++
-	src.progressMu.Unlock()
 
 	src.chatIDs[sessionID] = chatID
+	if title != "" {
+		src.chatTitles[sessionID] = title
+	}
 	return nil
 }
 
-// eventCreatedAt resolves an event's timestamp, counting a fallback to import
-// time — the outcome that rewrites chronology — as a canary for upstream
-// format changes.
+// eventCreatedAt resolves a message event's timestamp, counting a fallback to
+// import time — the outcome that rewrites chronology — as a canary for
+// upstream format changes. Used for message rows, where every event is
+// expected to carry a timestamp, so absence counts too.
 func (src *codexCloudSource) eventCreatedAt(event codexCloudEvent) time.Time {
 	if event.Timestamp != "" {
 		if t, err := time.Parse(time.RFC3339, event.Timestamp); err == nil {
@@ -518,6 +557,24 @@ func (src *codexCloudSource) eventCreatedAt(event codexCloudEvent) time.Time {
 	src.progress.TimestampFallbacks++
 	src.progressMu.Unlock()
 	return time.Now().UTC()
+}
+
+// parseEventTime resolves the chat row's timestamp with template semantics:
+// an absent value takes the fallback silently (expected, and the same event
+// already counted once on the message path), while a present-yet-malformed
+// value counts as a format-change canary.
+func (src *codexCloudSource) parseEventTime(value string, fallback time.Time) time.Time {
+	if value == "" {
+		return fallback.UTC()
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		src.progressMu.Lock()
+		src.progress.TimestampFallbacks++
+		src.progressMu.Unlock()
+		return fallback.UTC()
+	}
+	return t.UTC()
 }
 
 func (src *codexCloudSource) timestampFallbacks() int {
@@ -557,23 +614,5 @@ func parseCodexCloudEvents(file codexapi.LogFile, body []byte) ([]codexCloudEven
 // truncated by runes so multi-byte text stays valid. Empty when no prompt was
 // seen — the upsert then sends NULL and preserves any stored title.
 func codexCloudChatTitle(prompt string) string {
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		return ""
-	}
-	runes := []rune(prompt)
-	if len(runes) <= codexCloudTitleMaxRunes {
-		return prompt
-	}
-	return string(runes[:codexCloudTitleMaxRunes])
-}
-
-func codexCloudUpperBoundStart(cfg Config, endTime time.Time) time.Time {
-	if cfg.PollCheckpoint.Partial() {
-		return cfg.PollCheckpoint.Watermark
-	}
-	if !cfg.PollWatermarkAt.IsZero() {
-		return cfg.PollWatermarkAt
-	}
-	return endTime.UTC().Add(-chatgptComplianceInitialLookback)
+	return conv.TruncateString(strings.TrimSpace(prompt), codexCloudTitleMaxRunes)
 }

@@ -13,7 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
@@ -420,4 +423,69 @@ func TestUpsertWithTxStartsChatGPTSchedules(t *testing.T) {
 		ScheduleChatGPTCompliance:  SyncKindTime,
 		ScheduleCodexCloudSessions: SyncKindTime,
 	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
+// TestUpsertResetsAllProviderScheduleWatermarks: a key or external-scope
+// change resets every SYNCED schedule on the config, not just the
+// provider-named one — all of a provider's feeds key on the same
+// credentials/scope, and a sibling left on the old scope's watermark would
+// silently skip the new scope's history (e.g. a ChatGPT workspace-id fix
+// re-backfilling conversations but not Codex cloud transcripts). A
+// never-synced sibling keeps its epoch sentinel: that state drives first-sync
+// behavior (initial lookback, finality probing) and must not be erased.
+func TestUpsertResetsAllProviderScheduleWatermarks(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, nil)
+
+	// The transcript sibling has synced: its stale watermark must reset.
+	syncedAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	siblingCfg, err := store.GetUsagePollConfig(ctx, created.Config.ID, ScheduleCodexCloudSessions)
+	require.NoError(t, err)
+	require.NoError(t, store.AdvanceWatermark(ctx, siblingCfg.SyncID, timewindowpoller.CompletedCheckpoint(syncedAt)))
+
+	resetAt := time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC)
+	otherWorkspace := "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+	upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", false, true, &otherWorkspace, &resetAt)
+
+	rows, err := repo.New(conn).ListSyncSchedules(ctx, created.Config.ID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Equal(t, resetAt.Add(chatgptCompliancePollInterval), row.NextPollAfter.Time.UTC(), row.Schedule)
+	}
+	siblingCfg, err = store.GetUsagePollConfig(ctx, created.Config.ID, ScheduleCodexCloudSessions)
+	require.NoError(t, err)
+	require.Equal(t, resetAt, siblingCfg.PollWatermarkAt.UTC())
+
+	// A fresh config's never-synced sibling keeps its epoch sentinel through
+	// a reset (only the provider-named schedule always resets).
+	orgB := "org_" + uuid.NewString()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgB,
+		Name:        "Reset Fresh Org",
+		Slug:        orgB,
+		WorkosID:    pgtype.Text{String: orgB, Valid: true},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Reset Fresh Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: orgB,
+	})
+	require.NoError(t, err)
+	freshWorkspace := "cccccccc-dddd-4eee-8fff-000000000000"
+	fresh := upsertConfigWithTx(t, ctx, conn, store, orgB, ProviderChatGPTCompliance, "chatgpt-key", true, true, &freshWorkspace, &resetAt)
+	freshRows, err := repo.New(conn).ListSyncSchedules(ctx, fresh.Config.ID)
+	require.NoError(t, err)
+	require.Len(t, freshRows, 2)
+	for _, row := range freshRows {
+		if row.Schedule == ScheduleCodexCloudSessions {
+			require.Equal(t, time.Unix(0, 0).UTC(), row.NextPollAfter.Time.UTC(), "never-synced sibling stays due-immediately at epoch")
+		}
+	}
 }

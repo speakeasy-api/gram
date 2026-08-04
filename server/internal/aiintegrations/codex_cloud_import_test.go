@@ -24,8 +24,9 @@ import (
 // The fixture exercises the importer's edge handling: a web prompt/response
 // pair (imported), a CODEX_DESKTOP_APP event (counted and skipped — device
 // surface pending the unified-app verification), an unknown detail_type on
-// the web client (admitted as an event but skipped from message rows), and a
-// foreign event type (dropped at parse).
+// the web client (counted and skipped at admission, so it can neither create
+// a chat nor land a message row), and a foreign event type (dropped at
+// parse).
 const codexCloudFixture = `{"event_id":"cdx_1","type":"CODEX_LOG","workspace_id":"ws_1","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T10:00:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"11111111-2222-4333-8444-555555555555","model":"gpt-5.5","prompt_text":"Fix the flaky retry test in CI"}}
 {"event_id":"cdx_2","type":"CODEX_LOG","workspace_id":"ws_1","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T10:00:20Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_RESPONSE_RECEIVED","session_id":"11111111-2222-4333-8444-555555555555","model":"gpt-5.5","response_text":"I updated the retry helper to poll instead of sleeping.","status":"completed","service_tier":"default","reasoning_effort":"medium","token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":10}}}
 {"event_id":"cdx_3","type":"CODEX_LOG","workspace_id":"ws_1","principal":{"id":"ws_1","type":"CHATGPT_WORKSPACE"},"actor":{"type":"ACCOUNT_USER","user_id":"oai_user_2","user_email":"lin@example.com"},"timestamp":"2026-07-28T10:01:00Z","client_id":"CODEX_DESKTOP_APP","event_details":{"detail_type":"PROMPT_SENT","session_id":"99999999-8888-4777-8666-555555555555","model":"gpt-5.5","prompt_text":"desktop prompt"}}
@@ -115,12 +116,13 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 			listParams: nil,
 			downloads:  map[string][]byte{file.ID: []byte(codexCloudFixture)},
 		},
-		svc:       svc,
-		cfg:       cfg,
-		pageLimit: codexCloudPageLimit,
-		users:     newConnectedUserResolver(conn, orgID),
-		chatIDs:   map[string]uuid.UUID{},
-		progress:  &CodexCloudSyncProgress{},
+		svc:        svc,
+		cfg:        cfg,
+		pageLimit:  codexCloudPageLimit,
+		users:      newConnectedUserResolver(conn, orgID),
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progress:   &CodexCloudSyncProgress{},
 	}
 
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
@@ -131,6 +133,8 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	// The desktop-app event is counted and skipped, never imported.
 	require.Equal(t, 1, src.progress.SkippedClients)
 	require.NotContains(t, src.chatIDs, "99999999-8888-4777-8666-555555555555")
+	// The unknown detail_type (SESSION_ARCHIVED) trips its own canary.
+	require.Equal(t, 1, src.progress.SkippedDetails)
 
 	chatID, ok := src.chatIDs["11111111-2222-4333-8444-555555555555"]
 	require.True(t, ok, "web session must be upserted")
@@ -140,6 +144,9 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	require.Equal(t, "Fix the flaky retry test in CI", chatRow.Title.String)
 	require.Equal(t, "11111111-2222-4333-8444-555555555555", chatRow.ExternalChatID.String)
 	require.Equal(t, userRow.ID, chatRow.UserID.String)
+	// created_at comes from the window's earliest admitted event (the session
+	// start), not the newest — a trailing lifecycle event must not skew it.
+	require.Equal(t, time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC), chatRow.CreatedAt.Time.UTC())
 
 	messages, err := chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
@@ -164,6 +171,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	// Replaying the same file must not duplicate messages: the insert
 	// dedupes on (chat_id, external_message_id).
 	src.chatIDs = map[string]uuid.UUID{}
+	src.chatTitles = map[string]string{}
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{file}))
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
@@ -176,13 +184,14 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 
 func newCodexCloudTestSource(cfg Config, client codexComplianceClient) *codexCloudSource {
 	return &codexCloudSource{
-		client:    client,
-		svc:       &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
-		cfg:       cfg,
-		pageLimit: codexCloudPageLimit,
-		users:     nil,
-		chatIDs:   map[string]uuid.UUID{},
-		progress:  &CodexCloudSyncProgress{},
+		client:     client,
+		svc:        &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
+		cfg:        cfg,
+		pageLimit:  codexCloudPageLimit,
+		users:      nil,
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progress:   &CodexCloudSyncProgress{},
 	}
 }
 
@@ -210,4 +219,88 @@ func TestCodexCloudEventCreatedAtCountsFallbacks(t *testing.T) {
 	got = source.eventCreatedAt(event)
 	require.WithinDuration(t, time.Now().UTC(), got, time.Minute)
 	require.Equal(t, 2, source.progress.TimestampFallbacks)
+}
+
+// TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile: a session first
+// seen through a response-only file (its opening prompt straddled a file
+// boundary) is created untitled; when the prompt lands in a later file of the
+// same run, the title-refresh re-upsert writes it instead of the known-cache
+// skipping the session forever.
+func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Codex Cloud Title Backfill Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, nil)
+	cfg := created.Config
+	cfg.ProjectID = project.ID
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+	responseOnly := `{"event_id":"cdx_r1","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T11:00:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_RESPONSE_RECEIVED","session_id":"22222222-3333-4444-8555-666666666666","model":"gpt-5.5","response_text":"Done, the migration is applied.","status":"completed"}}` + "\n"
+	promptLater := `{"event_id":"cdx_p1","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T11:05:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"22222222-3333-4444-8555-666666666666","model":"gpt-5.5","prompt_text":"Now update the rollback plan"}}` + "\n"
+
+	fileA := codexCloudFixtureFile(responseOnly)
+	fileA.ID = "eclf_backfill_a"
+	fileB := codexCloudFixtureFile(promptLater)
+	fileB.ID = "eclf_backfill_b"
+	fileB.EndTime = fileA.EndTime.Add(time.Minute)
+
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	src := &codexCloudSource{
+		client: &stubCodexComplianceClient{
+			listPages:  nil,
+			listParams: nil,
+			downloads: map[string][]byte{
+				fileA.ID: []byte(responseOnly),
+				fileB.ID: []byte(promptLater),
+			},
+		},
+		svc:        svc,
+		cfg:        cfg,
+		pageLimit:  codexCloudPageLimit,
+		users:      newConnectedUserResolver(conn, orgID),
+		chatIDs:    map[string]uuid.UUID{},
+		chatTitles: map[string]string{},
+		progress:   &CodexCloudSyncProgress{},
+	}
+
+	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{fileA, fileB}))
+
+	chatID, ok := src.chatIDs["22222222-3333-4444-8555-666666666666"]
+	require.True(t, ok)
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, "Now update the rollback plan", chatRow.Title.String)
+	// The link row is created once; the title refresh only re-upserts.
+	require.Equal(t, 1, src.progress.ChatsUpserted)
+}
+
+// TestCodexCloudParseEventTimeCountsOnlyMalformedValues: the chat-row
+// timestamp path treats an absent value as expected (fallback, no canary) —
+// the same event already counted once on the message path — while a
+// present-yet-malformed value counts as a format-change canary.
+func TestCodexCloudParseEventTimeCountsOnlyMalformedValues(t *testing.T) {
+	t.Parallel()
+
+	source := newCodexCloudTestSource(chatgptConversationConfig(), nil)
+	fallback := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+
+	require.Equal(t, time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC), source.parseEventTime("2026-07-28T10:00:00Z", fallback))
+	require.Zero(t, source.progress.TimestampFallbacks)
+
+	require.Equal(t, fallback, source.parseEventTime("", fallback))
+	require.Zero(t, source.progress.TimestampFallbacks)
+
+	require.Equal(t, fallback, source.parseEventTime("1753694400", fallback))
+	require.Equal(t, 1, source.progress.TimestampFallbacks)
 }

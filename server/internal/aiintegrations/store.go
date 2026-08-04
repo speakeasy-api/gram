@@ -430,6 +430,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	// poller begin with its initial lookback; cursor-kind schedules
 	// checkpoint through last_cursor_id, so their watermark starts at now.
 	var syncRow repo.EnsureSyncRow
+	syncRows := map[string]repo.EnsureSyncRow{}
 	for _, sched := range syncSchedulesFor(provider) {
 		initialAt := time.Now().UTC()
 		if sched.kind == SyncKindTime {
@@ -445,6 +446,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 		}
+		syncRows[sched.schedule] = r
 		if sched.schedule == providerSched.schedule {
 			syncRow = r
 		}
@@ -464,13 +466,32 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		syncRow.ConsecutiveFailures = 0
 		syncRow.PollCheckpoint = pgtype.Text{String: "", Valid: false}
 		syncRow.LastCursorID = pgtype.Text{String: "", Valid: false}
-		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
-			AiIntegrationConfigID: row.ID,
-			Schedule:              provider,
-			PollWatermarkAt:       syncRow.PollWatermarkAt,
-			NextPollAfter:         syncRow.NextPollAfter,
-		}); err != nil {
-			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
+		// Reset every schedule on the config that has actually synced, not just
+		// the provider-named one: all of a provider's feeds key on the same
+		// credentials and external scope, so a key or org/workspace change
+		// invalidates every sibling watermark too. A sibling left on the old
+		// scope's watermark would silently skip the new scope's history —
+		// e.g. changing the ChatGPT workspace id would re-backfill
+		// conversations but resume the Codex cloud transcript feed from the
+		// old workspace's position. Never-synced siblings (epoch watermark)
+		// are left untouched: the epoch sentinel drives their first-sync
+		// behavior (initial lookback, finality probing) and overwriting it
+		// would erase that state.
+		for _, sched := range syncSchedulesFor(provider) {
+			if sched.schedule != providerSched.schedule {
+				existing, ok := syncRows[sched.schedule]
+				if !ok || !existing.PollWatermarkAt.Time.After(epochTime()) {
+					continue
+				}
+			}
+			if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
+				AiIntegrationConfigID: row.ID,
+				Schedule:              sched.schedule,
+				PollWatermarkAt:       syncRow.PollWatermarkAt,
+				NextPollAfter:         conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(sched.schedule))),
+			}); err != nil {
+				return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
+			}
 		}
 	}
 
