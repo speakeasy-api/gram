@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -128,6 +129,13 @@ func (s *InMemoryStore) RevokeClient(_ context.Context, clientID string, now tim
 	}
 	client.RevokedAt = &now
 	s.clients[clientID] = client
+	for connectionID, connection := range s.connections {
+		if connection.ClientID == clientID {
+			connection.RevokedAt = &now
+			s.connections[connectionID] = connection
+			s.revokeGeneration(connectionID, connection.Generation, now)
+		}
+	}
 	return nil
 }
 
@@ -166,6 +174,9 @@ func (s *InMemoryStore) IssueGrant(_ context.Context, grant Grant) error {
 	if err := s.validateConnection(grant.Connection, grant.ClientID); err != nil {
 		return err
 	}
+	if !validPKCES256Challenge(grant.CodeChallenge) {
+		return ErrPKCE
+	}
 	if _, exists := s.grants[grant.Code]; exists {
 		return ErrAlreadyUsed
 	}
@@ -184,7 +195,7 @@ func (s *InMemoryStore) ConsumeGrant(_ context.Context, input ConsumeGrantInput)
 	if grant.ClientID != input.ClientID {
 		return Grant{}, ErrClientMismatch
 	}
-	if input.Now.After(grant.ExpiresAt) {
+	if !input.Now.Before(grant.ExpiresAt) {
 		delete(s.grants, input.Code)
 		return Grant{}, ErrExpired
 	}
@@ -229,20 +240,20 @@ func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInpu
 	if session.Connection.ID != input.Replacement.Connection.ID || session.Connection.Generation != input.Generation || input.Replacement.Connection.Generation != input.Generation {
 		return Session{}, ErrGeneration
 	}
+	if _, err := s.validateConnectionRevocation(session.Connection, input.ClientID); err != nil {
+		return Session{}, err
+	}
 	if session.RevokedAt != nil {
 		s.revokeGeneration(session.Connection.ID, session.Connection.Generation, input.Now)
 		return Session{}, ErrAlreadyUsed
 	}
-	if input.Now.After(session.RefreshExpiresAt) {
+	if !input.Now.Before(session.RefreshExpiresAt) {
 		session.RevokedAt = &input.Now
 		s.sessions[input.RefreshHash] = session
 		return Session{}, ErrExpired
 	}
 	if input.Replacement.RefreshHash == input.RefreshHash {
 		return Session{}, ErrAlreadyUsed
-	}
-	if err := s.validateConnection(session.Connection, input.ClientID); err != nil {
-		return Session{}, err
 	}
 	if err := s.validateConnection(input.Replacement.Connection, input.ClientID); err != nil {
 		return Session{}, err
@@ -308,17 +319,11 @@ func (s *InMemoryStore) validateClient(clientID string) error {
 }
 
 func (s *InMemoryStore) validateConnection(connection Connection, clientID string) error {
-	if err := s.validateClient(clientID); err != nil {
+	stored, err := s.validateConnectionRevocation(connection, clientID)
+	if err != nil {
 		return err
 	}
-	stored, ok := s.connections[connection.ID]
-	if !ok {
-		return ErrNotFound
-	}
-	if stored.RevokedAt != nil {
-		return ErrRevoked
-	}
-	if stored.ClientID != clientID || stored.Subject != connection.Subject || stored.OrganizationID != connection.OrganizationID {
+	if connection.ClientID != clientID || stored.ClientID != clientID || stored.Subject != connection.Subject || stored.OrganizationID != connection.OrganizationID {
 		return ErrClientMismatch
 	}
 	if stored.Generation != connection.Generation {
@@ -327,7 +332,42 @@ func (s *InMemoryStore) validateConnection(connection Connection, clientID strin
 	return nil
 }
 
+func (s *InMemoryStore) validateConnectionRevocation(connection Connection, clientID string) (Connection, error) {
+	if err := s.validateClient(clientID); err != nil {
+		return Connection{}, err
+	}
+	stored, ok := s.connections[connection.ID]
+	if !ok {
+		return Connection{}, ErrNotFound
+	}
+	if stored.RevokedAt != nil {
+		return Connection{}, ErrRevoked
+	}
+	return stored, nil
+}
+
 func verifyPKCES256(verifier, challenge string) bool {
+	if !validPKCEVerifier(verifier) || !validPKCES256Challenge(challenge) {
+		return false
+	}
 	hash := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(hash[:]) == challenge
+}
+
+func validPKCEVerifier(verifier string) bool {
+	if len(verifier) < 43 || len(verifier) > 128 {
+		return false
+	}
+	return strings.IndexFunc(verifier, func(r rune) bool {
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || strings.ContainsRune("-._~", r))
+	}) == -1
+}
+
+func validPKCES256Challenge(challenge string) bool {
+	if len(challenge) != 43 {
+		return false
+	}
+	return strings.IndexFunc(challenge, func(r rune) bool {
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_')
+	}) == -1
 }

@@ -90,12 +90,9 @@ func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error
 		},
 		ClientID: "",
 	}
-	parsed, err := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
+	parsed, err := jwt.ParseWithClaims(token, &claims, func(*jwt.Token) (any, error) {
 		return s.key, nil
-	}, jwt.WithAudience(expectedAudience))
+	}, jwt.WithAudience(expectedAudience), jwt.WithExpirationRequired(), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
 		return nil, fmt.Errorf("validate token: %w", err)
 	}
@@ -121,8 +118,8 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	if err != nil {
 		return ValidatedSession{}, err
 	}
-	if claims == nil {
-		return ValidatedSession{}, errors.New("validate token: nil claims")
+	if claims.ID == "" {
+		return ValidatedSession{}, errors.New("validate token: missing jti claim")
 	}
 
 	revoked, err := revocation.IsTokenRevoked(ctx, claims.ID)

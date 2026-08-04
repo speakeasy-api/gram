@@ -44,6 +44,21 @@ func TestInMemoryStore_RejectsGrantForDifferentClientWithoutConsumingIt(t *testi
 	require.NoError(t, err)
 }
 
+func TestInMemoryStore_RejectsMalformedPKCE(t *testing.T) {
+	t.Parallel()
+
+	store, grant := seededGrant(t)
+	malformedChallenge := grant
+	malformedChallenge.Code = "authorization-code-malformed-challenge"
+	malformedChallenge.CodeChallenge = "malformed"
+	require.ErrorIs(t, store.IssueGrant(t.Context(), malformedChallenge), adminoauth.ErrPKCE)
+
+	input := consumeInput(grant)
+	input.CodeVerifier = "short"
+	_, err := store.ConsumeGrant(t.Context(), input)
+	require.ErrorIs(t, err, adminoauth.ErrPKCE)
+}
+
 func TestInMemoryStore_RejectsGrantWithMismatchedRedirectOrPKCE(t *testing.T) {
 	t.Parallel()
 
@@ -152,6 +167,18 @@ func TestInMemoryStore_RotationInvalidatesOldGeneration(t *testing.T) {
 	require.ErrorIs(t, err, adminoauth.ErrAlreadyUsed)
 }
 
+func TestInMemoryStore_ClientRevocationRevokesSessionFamily(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	session := sessionFor(grant.Connection, grant.ClientID, "refresh-old")
+	require.NoError(t, store.CreateSession(t.Context(), session))
+	require.NoError(t, store.RevokeClient(t.Context(), grant.ClientID, time.Now()))
+
+	_, err := store.RotateSession(t.Context(), rotateInput(session, sessionFor(grant.Connection, grant.ClientID, "refresh-new")))
+	require.ErrorIs(t, err, adminoauth.ErrRevoked)
+}
+
 func TestInMemoryStore_ClientRevocationCannotBeUndone(t *testing.T) {
 	t.Parallel()
 
@@ -172,6 +199,25 @@ func TestInMemoryStore_ConnectionRevocationCannotBeRotated(t *testing.T) {
 
 	_, err := store.RotateConnectionGeneration(t.Context(), grant.Connection.ID, "generation-next", time.Now())
 	require.ErrorIs(t, err, adminoauth.ErrRevoked)
+}
+
+func TestInMemoryStore_RejectsCredentialsAtExpiry(t *testing.T) {
+	t.Parallel()
+
+	store, grant := seededGrant(t)
+	input := consumeInput(grant)
+	input.Now = grant.ExpiresAt
+	_, err := store.ConsumeGrant(t.Context(), input)
+	require.ErrorIs(t, err, adminoauth.ErrExpired)
+
+	store, grant = consumedGrant(t)
+	session := sessionFor(grant.Connection, grant.ClientID, "refresh-expiring")
+	session.RefreshExpiresAt = time.Now()
+	require.NoError(t, store.CreateSession(t.Context(), session))
+	inputRotation := rotateInput(session, sessionFor(grant.Connection, grant.ClientID, "refresh-new"))
+	inputRotation.Now = session.RefreshExpiresAt
+	_, err = store.RotateSession(t.Context(), inputRotation)
+	require.ErrorIs(t, err, adminoauth.ErrExpired)
 }
 
 func TestInMemoryStore_RejectsExpiredRefreshToken(t *testing.T) {
@@ -207,7 +253,7 @@ func seededGrant(t *testing.T) (*adminoauth.InMemoryStore, adminoauth.Grant) {
 		ClientID:      client.ID,
 		Connection:    connection,
 		RedirectURI:   "https://client.example/callback",
-		CodeChallenge: pkceChallenge("test-verifier"),
+		CodeChallenge: pkceChallenge(testVerifier),
 		ExpiresAt:     time.Now().Add(time.Minute),
 	}
 	require.NoError(t, store.IssueGrant(t.Context(), grant))
@@ -228,7 +274,7 @@ func consumeInput(grant adminoauth.Grant) adminoauth.ConsumeGrantInput {
 		Code:         grant.Code,
 		ClientID:     grant.ClientID,
 		RedirectURI:  grant.RedirectURI,
-		CodeVerifier: "test-verifier",
+		CodeVerifier: testVerifier,
 		Now:          time.Now(),
 	}
 }
@@ -254,6 +300,8 @@ func sessionFor(connection adminoauth.Connection, clientID, refreshHash string) 
 		RefreshExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 }
+
+const testVerifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abcde"
 
 func pkceChallenge(verifier string) string {
 	hash := sha256.Sum256([]byte(verifier))
