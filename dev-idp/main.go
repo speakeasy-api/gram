@@ -26,8 +26,10 @@
 //     token-exchange grant, gated on the ema_apps / ema_app_assignments
 //     policy tables.
 //   - /resource-as/<slug> is a resource authorization server. It redeems an
-//     ID-JAG under the RFC 7523 jwt-bearer grant and returns an access token
-//     restricted to the MCP server behind it, gated on ema_trust_rules.
+//     ID-JAG under the RFC 7523 jwt-bearer grant and returns an RFC 9068 JWT
+//     access token whose `aud` is the MCP server behind it, gated on
+//     ema_trust_rules. Each publishes a JWKS, so a resource server can
+//     enforce that audience restriction without calling back here.
 //
 // Neither half assumes the other: a resource can be configured to trust a
 // foreign issuer, and a grant this dev-idp minted can still be refused at

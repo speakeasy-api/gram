@@ -311,8 +311,13 @@ CREATE INDEX IF NOT EXISTS ema_redeemed_jags_expires_at_idx
 -- under a different grant, and are audience-restricted to one MCP server --
 -- so `audience` is a column here rather than something inferred. Keeping them
 -- apart also means the whole EMA surface drops in one piece.
+--
+-- The token itself is a signed JWT and is not stored; the row is keyed on its
+-- `jti`. A verifier does not need this table at all -- that is the point of
+-- issuing a JWT -- so what it is for is revocation and showing an operator
+-- what was issued.
 CREATE TABLE IF NOT EXISTS ema_resource_tokens (
-  token TEXT NOT NULL PRIMARY KEY,
+  jti TEXT NOT NULL PRIMARY KEY,
   resource_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   client_id TEXT NOT NULL,

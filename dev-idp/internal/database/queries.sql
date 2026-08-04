@@ -647,19 +647,20 @@ RETURNING *;
 
 -- name: CreateEmaResourceToken :one
 INSERT INTO ema_resource_tokens (
-  token, resource_id, user_id, client_id, audience, scope, expires_at
+  jti, resource_id, user_id, client_id, audience, scope, expires_at
 )
 VALUES (
-  @token, @resource_id, @user_id, @client_id, @audience, @scope, @expires_at
+  @jti, @resource_id, @user_id, @client_id, @audience, @scope, @expires_at
 )
 RETURNING *;
 
--- GetActiveEmaResourceToken resolves a bearer token presented back to the
--- resource authorization server that minted it. Scoped by resource_id so a
--- token minted by one resource cannot be introspected at another.
+-- GetActiveEmaResourceToken resolves the ledger row for a verified access
+-- token's jti. The JWT signature and expiry are checked before this runs, so
+-- what the row adds is revocation state. Scoped by resource_id so a token
+-- minted by one resource cannot be introspected at another.
 -- name: GetActiveEmaResourceToken :one
 SELECT * FROM ema_resource_tokens
-WHERE token = @token
+WHERE jti = @jti
   AND resource_id = @resource_id
   AND revoked_at IS NULL
   AND expires_at > @ts;

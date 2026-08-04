@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
+	"github.com/speakeasy-api/gram/dev-idp/internal/jwks"
 )
 
 func TestRedeemIssuesAnAudienceRestrictedToken(t *testing.T) {
@@ -318,4 +320,69 @@ func TestIntrospectRejectsATokenFromAnotherResource(t *testing.T) {
 	resp := h.do(t, req)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.False(t, decodeJSON[introspectionResponse](t, resp).Active)
+}
+
+// TestRedeemIssuesAVerifiableJWT is the point of issuing JWTs rather than
+// opaque strings: a resource server can enforce the audience restriction
+// itself, from the signature and the claims, without calling back here.
+func TestRedeemIssuesAVerifiableJWT(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.trustLocalIssuer(t, "")
+
+	body := decodeJSON[tokenResponse](t, h.redeem(t, h.signJAG(t, h.defaultJAG()), testClientID))
+	require.NotEmpty(t, body.AccessToken)
+
+	// Verify the way a third party would: fetch the JWKS the metadata
+	// document advertises, then check the signature against it.
+	meta := decodeJSON[asMetadata](t, h.get(t,
+		h.baseURL+"/.well-known/oauth-authorization-server"+Prefix+"/"+testResourceSlug))
+	require.NotEmpty(t, meta.JwksURI, "the metadata must advertise where the keys are")
+
+	doc, err := jwks.Parse(h.get(t, meta.JwksURI).Body)
+	require.NoError(t, err, "parse published jwks")
+
+	var claims AccessTokenClaims
+	token, err := jwt.NewParser(jwt.WithValidMethods([]string{"RS256"})).ParseWithClaims(
+		body.AccessToken, &claims,
+		func(tok *jwt.Token) (any, error) {
+			kid, _ := tok.Header["kid"].(string)
+			return doc.FindRSA(kid)
+		},
+	)
+	require.NoError(t, err, "verify access token against the published jwks")
+	require.True(t, token.Valid)
+
+	require.Equal(t, accessTokenJWTType, token.Header["typ"],
+		"the typ header is what distinguishes an access token from the ID-JAG that bought it")
+	require.Equal(t, jwt.ClaimStrings{testResourceID}, claims.Audience,
+		"aud must be the MCP server, not the authorization server")
+	require.Equal(t, h.audience(), claims.Issuer)
+	require.Equal(t, h.user.ID.String(), claims.Subject)
+	require.Equal(t, testClientID, claims.ClientID)
+	require.Equal(t, "chat.read chat.history", claims.Scope)
+	require.NotEmpty(t, claims.ID, "jti is required so the token can be revoked")
+}
+
+// A token minted for one resource must not verify against another, even
+// though a single dev-idp signs both with the same key. The audience claim is
+// what separates them.
+func TestAccessTokenDoesNotVerifyForAnotherResource(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.trustLocalIssuer(t, "")
+	body := decodeJSON[tokenResponse](t, h.redeem(t, h.signJAG(t, h.defaultJAG()), testClientID))
+
+	other, err := h.queries.CreateEmaResource(t.Context(), repo.CreateEmaResourceParams{
+		ID:                 uuid.New(),
+		Slug:               "billing",
+		Name:               "Billing",
+		ResourceIdentifier: "https://mcp.billing.example/",
+	})
+	require.NoError(t, err)
+
+	_, err = h.parseAccessToken(&other, body.AccessToken)
+	require.Error(t, err, "a chat token must not verify as a billing token")
 }

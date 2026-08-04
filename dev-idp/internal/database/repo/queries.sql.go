@@ -372,16 +372,16 @@ func (q *Queries) CreateEmaResource(ctx context.Context, arg CreateEmaResourcePa
 const createEmaResourceToken = `-- name: CreateEmaResourceToken :one
 
 INSERT INTO ema_resource_tokens (
-  token, resource_id, user_id, client_id, audience, scope, expires_at
+  jti, resource_id, user_id, client_id, audience, scope, expires_at
 )
 VALUES (
   ?1, ?2, ?3, ?4, ?5, ?6, ?7
 )
-RETURNING token, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at
+RETURNING jti, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at
 `
 
 type CreateEmaResourceTokenParams struct {
-	Token      string
+	Jti        string
 	ResourceID uuid.UUID
 	UserID     uuid.UUID
 	ClientID   string
@@ -395,7 +395,7 @@ type CreateEmaResourceTokenParams struct {
 // =============================================================================
 func (q *Queries) CreateEmaResourceToken(ctx context.Context, arg CreateEmaResourceTokenParams) (EmaResourceToken, error) {
 	row := q.db.QueryRowContext(ctx, createEmaResourceToken,
-		arg.Token,
+		arg.Jti,
 		arg.ResourceID,
 		arg.UserID,
 		arg.ClientID,
@@ -405,7 +405,7 @@ func (q *Queries) CreateEmaResourceToken(ctx context.Context, arg CreateEmaResou
 	)
 	var i EmaResourceToken
 	err := row.Scan(
-		&i.Token,
+		&i.Jti,
 		&i.ResourceID,
 		&i.UserID,
 		&i.ClientID,
@@ -898,27 +898,28 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getActiveEmaResourceToken = `-- name: GetActiveEmaResourceToken :one
-SELECT token, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at FROM ema_resource_tokens
-WHERE token = ?1
+SELECT jti, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at FROM ema_resource_tokens
+WHERE jti = ?1
   AND resource_id = ?2
   AND revoked_at IS NULL
   AND expires_at > ?3
 `
 
 type GetActiveEmaResourceTokenParams struct {
-	Token      string
+	Jti        string
 	ResourceID uuid.UUID
 	Ts         time.Time
 }
 
-// GetActiveEmaResourceToken resolves a bearer token presented back to the
-// resource authorization server that minted it. Scoped by resource_id so a
-// token minted by one resource cannot be introspected at another.
+// GetActiveEmaResourceToken resolves the ledger row for a verified access
+// token's jti. The JWT signature and expiry are checked before this runs, so
+// what the row adds is revocation state. Scoped by resource_id so a token
+// minted by one resource cannot be introspected at another.
 func (q *Queries) GetActiveEmaResourceToken(ctx context.Context, arg GetActiveEmaResourceTokenParams) (EmaResourceToken, error) {
-	row := q.db.QueryRowContext(ctx, getActiveEmaResourceToken, arg.Token, arg.ResourceID, arg.Ts)
+	row := q.db.QueryRowContext(ctx, getActiveEmaResourceToken, arg.Jti, arg.ResourceID, arg.Ts)
 	var i EmaResourceToken
 	err := row.Scan(
-		&i.Token,
+		&i.Jti,
 		&i.ResourceID,
 		&i.UserID,
 		&i.ClientID,
