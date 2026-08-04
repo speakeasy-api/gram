@@ -642,11 +642,11 @@ function CodexInstallContent({
         <RelatedLinks
           links={[
             {
-              href: "https://developers.openai.com/codex/hooks",
+              href: "https://learn.chatgpt.com/docs/hooks",
               label: "Hooks Docs",
             },
             {
-              href: "https://developers.openai.com/codex/plugins/build",
+              href: "https://developers.openai.com/plugins/build/plugins",
               label: "Plugin Docs",
             },
           ]}
