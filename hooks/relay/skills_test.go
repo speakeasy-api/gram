@@ -221,6 +221,7 @@ func TestResolveActivatedSkillClaudeFollowsConfiguredRootSymlinkWithinConfigTree
 	require.Equal(t, "configured", resolved.content)
 	require.Equal(t, sha256Hex([]byte("configured")), resolved.rawSHA256)
 	require.True(t, resolved.captureReady)
+	require.Equal(t, filepath.Join(configRoot, "skills"), resolved.root)
 	resolvedPath, err := filepath.EvalSymlinks(resolved.sourcePath)
 	require.NoError(t, err)
 	targetPath, err = filepath.EvalSymlinks(targetPath)
