@@ -153,12 +153,23 @@ func codexMCPMetaToolServer(payload *gen.CodexPayload) (string, bool) {
 	if payload == nil {
 		return "", false
 	}
-	switch conv.PtrValOr(payload.ToolName, "") {
+	return codexMetaToolServer(conv.PtrValOr(payload.ToolName, ""), payload.ToolInput)
+}
+
+// codexMetaToolServer reports whether a tool call is one of Codex's built-in
+// MCP resource tools and, if so, the server it targets. These are the only MCP
+// calls Codex makes that carry no mcp__ prefix — the target lives in
+// tool_input.server instead — so every gate that decides "is this an MCP call"
+// has to ask here as well as checking the tool name. An unreadable input still
+// reports true with an empty server: it is an MCP call whose target could not
+// be established, which callers must treat as unproven rather than absent.
+func codexMetaToolServer(toolName string, toolInput any) (string, bool) {
+	switch toolName {
 	case "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource":
 	default:
 		return "", false
 	}
-	input, ok := payload.ToolInput.(map[string]any)
+	input, ok := toolInput.(map[string]any)
 	if !ok {
 		return "", true
 	}

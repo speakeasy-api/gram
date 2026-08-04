@@ -1563,3 +1563,66 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
 }
+
+// TestParseCodexMCPInventory: the guard uses this snapshot to decide whether a
+// tool call routes to a Gram-hosted server, so a stdio server must surface its
+// full command and a disabled server must not appear at all — a disabled entry
+// left in the list would vouch for a call that routed somewhere else.
+func TestParseCodexMCPInventory(t *testing.T) {
+	// Verbatim `codex mcp list --json` from the shipped 0.146 build (server
+	// names and the disabled entry are ours; every key, the null-heavy
+	// transport fields, and the auth_status values are as Codex emitted them).
+	entries := parseCodexMCPInventory([]byte(`[
+	  {
+	    "name": "everything",
+	    "enabled": true,
+	    "disabled_reason": null,
+	    "transport": {
+	      "type": "stdio",
+	      "command": "npx",
+	      "args": ["-y", "@modelcontextprotocol/server-everything"],
+	      "env": null,
+	      "env_vars": [],
+	      "cwd": null
+	    },
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "unsupported"
+	  },
+	  {
+	    "name": "remote_example",
+	    "enabled": true,
+	    "disabled_reason": null,
+	    "transport": {
+	      "type": "streamable_http",
+	      "url": "https://mcp.example.test/mcp",
+	      "bearer_token_env_var": null,
+	      "http_headers": null,
+	      "env_http_headers": null
+	    },
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "o_auth"
+	  },
+	  {
+	    "name": "disabled_example",
+	    "enabled": false,
+	    "disabled_reason": null,
+	    "transport": {"type": "stdio", "command": "npx", "args": [], "env": null, "env_vars": [], "cwd": null},
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "unsupported"
+	  }
+	]`))
+
+	require.Len(t, entries, 2)
+	require.Equal(t, "everything", entries[0].Name)
+	require.Equal(t, "npx -y @modelcontextprotocol/server-everything", entries[0].Command)
+	require.Empty(t, entries[0].URL)
+	require.Equal(t, "remote_example", entries[1].Name)
+	require.Equal(t, "https://mcp.example.test/mcp", entries[1].URL)
+	require.Empty(t, entries[1].Command)
+
+	require.Empty(t, parseCodexMCPInventory([]byte("not json")))
+	require.Empty(t, parseCodexMCPInventory(nil))
+}

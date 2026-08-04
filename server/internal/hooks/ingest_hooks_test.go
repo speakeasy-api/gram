@@ -1952,3 +1952,72 @@ func TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID(t *te
 	require.Empty(t, metadata.BillingMode)
 	require.Equal(t, "stranger@personal.example", metadata.ObservedUserEmail)
 }
+
+// TestIngest_ShadowMCPGuardCoversCodexMetaTools: Codex's built-in MCP resource
+// tools carry no mcp__ prefix and their target lives in tool_input.server, so
+// neither arm of the gate (resolved MCP data, MCP-shaped tool name) recognizes
+// them. Before DNO-767 they were classified as ordinary tool calls and a
+// block_all shadow-MCP policy never ran, letting a Codex session read any MCP
+// server's resources. A meta-tool whose server cannot be read must still deny —
+// an unproven target is not an absent one.
+func TestIngest_ShadowMCPGuardCoversCodexMetaTools(t *testing.T) {
+	t.Parallel()
+
+	for _, toolName := range []string{"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"} {
+		for name, toolInput := range map[string]any{
+			"named server":      map[string]any{"server": "platform-logs"},
+			"missing server":    map[string]any{},
+			"blank server":      map[string]any{"server": "  "},
+			"non-string server": map[string]any{"server": 42},
+			"nil input":         nil,
+		} {
+			t.Run(toolName+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestHooksService(t)
+				ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+				payload := canonicalIngestPayload("codex", "tool.requested", "codex-meta-"+toolName+"-"+name)
+				callID := "call-1"
+				payload.Data = &gen.HookIngestData{
+					ToolCall: &gen.HookToolCallData{
+						ID:    &callID,
+						Name:  &toolName,
+						Input: toolInput,
+					},
+				}
+
+				result, err := ti.service.Ingest(ctx, payload)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, "deny", result.Decision,
+					"a codex MCP meta-tool must be evaluated by the shadow-MCP policy")
+			})
+		}
+	}
+}
+
+// TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters: the meta-tool
+// names are Codex's, so an unrelated tool of the same name on another agent
+// must not be reclassified as an MCP call.
+func TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "non-codex-meta-tool")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &callID,
+			Name:  &toolName,
+			Input: map[string]any{"server": "platform-logs"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, "deny", result.Decision)
+}

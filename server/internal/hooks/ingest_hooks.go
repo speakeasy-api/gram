@@ -586,7 +586,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 			}
 		}
-		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) {
+		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) || canonicalCodexMetaTool(payload, toolName, toolInput) {
 			ev := hookevents.NewBeforeMCPExecution(event, hookevents.BeforeMCPExecutionParams{
 				ToolName:  toolName,
 				ToolInput: toolInput,
@@ -723,6 +723,15 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 
 	toolName := toolref.MCPFunctionOf(rawToolName)
 	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
+	// A Codex meta-tool names its target in tool_input.server, so nothing above
+	// can derive an identity from the tool name. Attaching it lets the deny name
+	// the server and lets a bypass grant be scoped to it; leaving it empty still
+	// denies under block_all, just without saying which server.
+	if evidence.ServerIdentity == "" && evidence.FullURL == "" {
+		if server, isMetaTool := codexMetaToolServer(rawToolName, toolInput); isMetaTool {
+			evidence.ServerIdentity = server
+		}
+	}
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
@@ -748,8 +757,13 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 				UserID:         actor.UserID,
 				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
 				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				// Deliberately unlinked. chat_id carries an FK to chats, and a
+				// shadow-MCP deny can land before the session's chat row is
+				// persisted — passing chatIDForBlock here violates the FK and
+				// the whole block insert is lost, taking the block URL with it.
+				// Linking needs the chat row guaranteed first (DNO-767).
+				ChatID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatMessageID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 			}
@@ -757,6 +771,19 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 		return auditReason, userReason
 	}
 	return "", ""
+}
+
+// canonicalCodexMetaTool reports whether this event is one of Codex's built-in
+// MCP resource tools. They carry no mcp__ prefix and agenthooks resolves MCP
+// data by that same prefix, so without this check they reach neither arm of the
+// gate and a shadow-MCP policy never sees them (DNO-767). Scoped to the codex
+// adapter: another agent's unrelated tool of the same name is not an MCP call.
+func canonicalCodexMetaTool(payload *gen.IngestPayload, toolName string, toolInput any) bool {
+	if payload == nil || !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
+		return false
+	}
+	_, isMetaTool := codexMetaToolServer(toolName, toolInput)
+	return isMetaTool
 }
 
 func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {

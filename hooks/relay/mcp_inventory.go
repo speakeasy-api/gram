@@ -1,7 +1,9 @@
 package relay
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/url"
 	"os/exec"
 	"strings"
@@ -10,7 +12,12 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
-const claudeMCPInventoryTimeout = 15 * time.Second
+const (
+	claudeMCPInventoryTimeout = 15 * time.Second
+	// Codex resolves its list from config layers rather than by probing
+	// servers, so it returns far faster than Claude's.
+	codexMCPInventoryTimeout = 5 * time.Second
+)
 
 type mcpInventoryEntry struct {
 	Name    string
@@ -84,6 +91,70 @@ func parseClaudeMCPInventory(out string) []mcpInventoryEntry {
 			entry.Command = target
 		}
 		entries = append(entries, entry)
+	}
+	return entries
+}
+
+// collectCodexMCPInventory asks Codex for its effective server list. Codex has
+// no plugin/connector servers of its own, but the list still resolves the
+// merged config layers (managed, user, project) that a hook event cannot see,
+// and the shadow-MCP guard needs it to prove where a tool call actually
+// routes. Best-effort for the same reason as the Claude collector: a missing
+// or slow CLI must not hold up the hook.
+func collectCodexMCPInventory(ctx context.Context) []mcpInventoryEntry {
+	binary := findCodexBinary()
+	if binary == "" {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, codexMCPInventoryTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, binary, "mcp", "list", "--json").Output()
+	if err != nil && len(out) == 0 {
+		return nil
+	}
+	return parseCodexMCPInventory(out)
+}
+
+// parseCodexMCPInventory reads `codex mcp list --json`. The server parses the
+// same document (hooks.ParseCodexMCPList) for the legacy Codex endpoint, so
+// the two must agree on the shape: an array of servers, each with a transport
+// object holding either a url or a command plus args.
+func parseCodexMCPInventory(out []byte) []mcpInventoryEntry {
+	var servers []struct {
+		Name      string `json:"name"`
+		Enabled   *bool  `json:"enabled"`
+		Transport struct {
+			URL     string   `json:"url"`
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		} `json:"transport"`
+	}
+	if json.Unmarshal(bytes.TrimSpace(out), &servers) != nil {
+		return nil
+	}
+
+	var entries []mcpInventoryEntry
+	for _, server := range servers {
+		// An explicitly disabled server cannot serve the call, so listing it
+		// would let a disabled entry vouch for a tool that routed elsewhere.
+		if server.Enabled != nil && !*server.Enabled {
+			continue
+		}
+		name := strings.TrimSpace(server.Name)
+		url := strings.TrimSpace(server.Transport.URL)
+		command := strings.TrimSpace(server.Transport.Command)
+		if command != "" {
+			for _, arg := range server.Transport.Args {
+				if arg = strings.TrimSpace(arg); arg != "" {
+					command += " " + arg
+				}
+			}
+		}
+		if name == "" || (url == "" && command == "") {
+			continue
+		}
+		entries = append(entries, mcpInventoryEntry{Name: name, URL: url, Command: command})
 	}
 	return entries
 }
