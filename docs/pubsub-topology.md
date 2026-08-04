@@ -21,6 +21,8 @@ flowchart LR
   t_gram_ping_v2_processor_dlq(["gram-ping-v2-processor-dlq<br/>(dlq)"]):::dlq
   t_gram_ping_v2_py_processor_dlq(["gram-ping-v2-py-processor-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_custom_rules_analysis(["gram-risk-v1-custom-rules-analysis<br/>(topic)"]):::topic
+  t_gram_risk_v1_enforcement_analysis_request(["gram-risk-v1-enforcement-analysis-request<br/>(topic)"]):::topic
+  t_gram_risk_v1_enforcement_analysis_response(["gram-risk-v1-enforcement-analysis-response<br/>(topic)"]):::topic
   t_gram_risk_v1_finding(["gram-risk-v1-finding<br/>(topic)"]):::topic
   t_gram_risk_v1_gitleaks_analysis(["gram-risk-v1-gitleaks-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_presidio_analysis(["gram-risk-v1-presidio-analysis<br/>(topic)"]):::topic
@@ -30,6 +32,8 @@ flowchart LR
   s_gram_ping_v2_processor["gram-ping-v2-processor<br/>(sub)"]:::sub
   s_gram_ping_v2_py_processor["gram-ping-v2-py-processor<br/>(sub)"]:::sub
   s_gram_risk_v1_custom_rules_analyzer["gram-risk-v1-custom-rules-analyzer<br/>(sub)"]:::sub
+  s_gram_risk_v1_enforcement_analyzer["gram-risk-v1-enforcement-analyzer<br/>(sub)"]:::sub
+  s_gram_risk_v1_enforcement_result_router["gram-risk-v1-enforcement-result-router<br/>(sub)"]:::sub
   s_gram_risk_v1_finding_ch_writer["gram-risk-v1-finding-ch-writer<br/>(sub)"]:::sub
   s_gram_risk_v1_gitleaks_analyzer["gram-risk-v1-gitleaks-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_presidio_analyzer["gram-risk-v1-presidio-analyzer<br/>(sub)"]:::sub
@@ -62,6 +66,8 @@ flowchart LR
   t_gram_ping_v2_message --> s_gram_ping_v2_py_processor
   s_gram_ping_v2_py_processor -. dead-letter .-> t_gram_ping_v2_py_processor_dlq
   t_gram_risk_v1_custom_rules_analysis --> s_gram_risk_v1_custom_rules_analyzer
+  t_gram_risk_v1_enforcement_analysis_request --> s_gram_risk_v1_enforcement_analyzer
+  t_gram_risk_v1_enforcement_analysis_response --> s_gram_risk_v1_enforcement_result_router
   t_gram_risk_v1_finding --> s_gram_risk_v1_finding_ch_writer
   t_gram_risk_v1_gitleaks_analysis --> s_gram_risk_v1_gitleaks_analyzer
   t_gram_risk_v1_presidio_analysis --> s_gram_risk_v1_presidio_analyzer
@@ -98,6 +104,8 @@ flowchart LR
 | [`gram-ping-v2-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
 | [`gram-ping-v2-py-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
 | [`gram-risk-v1-custom-rules-analysis`](../infra/proto/gram/risk/v1/custom_rules_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_custom_rules.go`](../server/internal/background/activities/risk_analysis/scan_custom_rules.go) |
+| [`gram-risk-v1-enforcement-analysis-request`](../infra/proto/gram/risk/v1/enforcement_analysis_request.proto) | topic | 10m | — |
+| [`gram-risk-v1-enforcement-analysis-response`](../infra/proto/gram/risk/v1/enforcement_analysis_response.proto) | topic | 10m | — |
 | [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto) | topic | 7d | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/risk/false_positive.go`](../server/internal/risk/false_positive.go)<br/>[`server/internal/scanners/publish.go`](../server/internal/scanners/publish.go) |
 | [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_gitleaks.go`](../server/internal/background/activities/risk_analysis/scan_gitleaks.go) |
 | [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_presidio.go`](../server/internal/background/activities/risk_analysis/scan_presidio.go) |
@@ -112,6 +120,8 @@ flowchart LR
 | [`gram-ping-v2-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-processor-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-py-processor-dlq` | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
 | [`gram-risk-v1-custom-rules-analyzer`](../infra/proto/gram/risk/v1/custom_rules_analyzer.proto) | `gram-risk-v1-custom-rules-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-enforcement-analyzer`](../infra/proto/gram/risk/v1/enforcement_analyzer.proto) | `gram-risk-v1-enforcement-analysis-request` | 10s | — | — |
+| [`gram-risk-v1-enforcement-result-router`](../infra/proto/gram/risk/v1/enforcement_result_router.proto) | `gram-risk-v1-enforcement-analysis-response` | 10s | — | — |
 | [`gram-risk-v1-finding-ch-writer`](../infra/proto/gram/risk/v1/finding_ch_writer.proto) | `gram-risk-v1-finding` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-gitleaks-analyzer`](../infra/proto/gram/risk/v1/gitleaks_analyzer.proto) | `gram-risk-v1-gitleaks-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto) | `gram-risk-v1-presidio-analysis` | 1m | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
@@ -123,4 +133,8 @@ flowchart LR
 
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
+- Topic `gram-risk-v1-enforcement-analysis-request` has no publisher in `server/` or `pystreams/`.
+- Topic `gram-risk-v1-enforcement-analysis-response` has no publisher in `server/` or `pystreams/`.
+- Subscription `gram-risk-v1-enforcement-analyzer` has no consumer in `server/` or `pystreams/`.
+- Subscription `gram-risk-v1-enforcement-result-router` has no consumer in `server/` or `pystreams/`.
 

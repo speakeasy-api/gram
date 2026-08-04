@@ -1,0 +1,55 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// EnforcementAnalysisResponse carries an analyzer's verdict back to the server
+// pod blocked on the matching EnforcementAnalysisRequest. Detection matches
+// contain customer content (the flagged text), so retention is the GCP minimum
+// and acked messages are not retained.
+message EnforcementAnalysisResponse {
+  // Mirrors EnforcementAnalysisRequest.correlation_id.
+  string correlation_id = 1;
+  string created_at = 2; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+  // Non-empty when the scan failed. Holds the failure class only (e.g. the
+  // exception type), never content. The requester maps any failure to the
+  // pii.dead_letter sentinel so blocking policies fail closed.
+  string error = 3;
+  // Wall-clock scan time on the consumer, for latency attribution separate
+  // from queueing and transport.
+  double scan_duration_ms = 4;
+  // Denormalized discriminator matching the populated result branch; see
+  // EnforcementAnalysisRequest.analyzer.
+  string analyzer = 5;
+
+  oneof result {
+    PresidioResult presidio = 20;
+  }
+
+  message PresidioResult {
+    repeated Detection detections = 1;
+  }
+
+  message Detection {
+    // Presidio entity type, e.g. "EMAIL_ADDRESS".
+    string entity_type = 1;
+    // The matched text. Sensitive: used in-memory for policy evaluation and
+    // never persisted.
+    string match = 2;
+    // UTF-8 byte offsets into the scanned content.
+    int32 start_pos = 3;
+    int32 end_pos = 4;
+    // Recognizer confidence in [0,1].
+    double confidence = 5;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 600 /* 10 minutes: GCP minimum. A reply is worthless once the
+                      requester's wait times out (seconds). */
+    }
+  };
+}

@@ -1,0 +1,27 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// EnforcementResultRouter is the subscription the gram server pods share to
+// receive analyzer responses. Pub/Sub delivers each response to exactly one
+// pod, which forwards it to whichever pod holds the waiting hook request via
+// the reply-waiter bridge. Tuning mirrors EnforcementAnalyzer: fast
+// redelivery, minimum retention, no DLQ — an undeliverable reply is worthless
+// because the waiter has already timed out and sentineled.
+message EnforcementResultRouter {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.EnforcementAnalysisResponse"
+    ack_deadline: {seconds: 10}
+    retention: {
+      seconds: 600 /* 10 minutes */
+    }
+    retry_policy: {
+      minimum_backoff: {seconds: 1}
+      maximum_backoff: {seconds: 5}
+    }
+  };
+}

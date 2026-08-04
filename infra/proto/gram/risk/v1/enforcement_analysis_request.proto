@@ -1,0 +1,53 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// EnforcementAnalysisRequest asks an analyzer to scan content on behalf of a
+// synchronous (blocking or confirming) risk policy evaluation. Unlike the
+// fire-and-forget audit analysis topics, a hook request is blocked waiting on
+// the paired EnforcementAnalysisResponse, so requests are useful for seconds
+// only: the consumer must honor deadline and drop expired work.
+message EnforcementAnalysisRequest {
+  // Correlates this request with its EnforcementAnalysisResponse and keys the
+  // server-side reply waiter. UUID minted per request.
+  string correlation_id = 1;
+  string project_id = 2;
+  string organization_id = 3;
+  string created_at = 4; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+  // Point in time after which the requester has stopped waiting. Must be UTC
+  // RFC3339 with sub-second precision. Consumers ack and drop expired requests
+  // without scanning.
+  string deadline = 5;
+  // Denormalized discriminator matching the populated payload branch. Lets
+  // consumers and metrics label work without proto reflection, and is intended
+  // to be mirrored into a message attribute for subscription filters once more
+  // than one analyzer consumes this topic.
+  string analyzer = 6;
+
+  oneof payload {
+    PresidioPayload presidio = 20;
+  }
+
+  message PresidioPayload {
+    // Text to scan. The publisher pre-processes exactly like the HTTP path:
+    // JSON reformatted as YAML and truncated to the enforcement size cap.
+    string content = 1;
+    // Presidio entity types to detect. Empty means the consumer's default set.
+    // Publisher applies the entity blocklist before sending.
+    repeated string entities = 2;
+    // Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to
+    // be emitted. Zero/unset means the consumer applies its default threshold.
+    double score_threshold = 3;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 600 /* 10 minutes: GCP minimum. Requests are stale once the
+                      deadline passes (seconds), so retain the bare minimum. */
+    }
+  };
+}

@@ -243,6 +243,58 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-enforcement-analysis-request
+    name: gram-risk-v1-enforcement-analysis-request
+    spec:
+      definition: |
+        edition = "2024";
+        message EnforcementAnalysisRequest {
+          string correlation_id = 1;
+          string project_id = 2;
+          string organization_id = 3;
+          string created_at = 4;
+          string deadline = 5;
+          string analyzer = 6;
+          oneof payload {
+            PresidioPayload presidio = 20;
+          }
+          message PresidioPayload {
+            string content = 1;
+            repeated string entities = 2;
+            double score_threshold = 3;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-enforcement-analysis-response
+    name: gram-risk-v1-enforcement-analysis-response
+    spec:
+      definition: |
+        edition = "2024";
+        message EnforcementAnalysisResponse {
+          string correlation_id = 1;
+          string created_at = 2;
+          string error = 3;
+          double scan_duration_ms = 4;
+          string analyzer = 5;
+          oneof result {
+            PresidioResult presidio = 20;
+          }
+          message PresidioResult {
+            repeated Detection detections = 1;
+          }
+          message Detection {
+            string entity_type = 1;
+            string match = 2;
+            int32 start_pos = 3;
+            int32 end_pos = 4;
+            double confidence = 5;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding
     name: gram-risk-v1-finding
     spec:
@@ -454,6 +506,34 @@ pubsub:
         name: gram-risk-v1-custom-rules-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-enforcement-analyzer
+      topic_proto_message: gram-risk-v1-enforcement-analysis-request
+    name: gram-risk-v1-enforcement-analyzer
+    spec:
+      ackDeadlineSeconds: 10
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 5s
+        minimumBackoff: 1s
+      topicRef:
+        name: gram-risk-v1-enforcement-analysis-request
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-enforcement-result-router
+      topic_proto_message: gram-risk-v1-enforcement-analysis-response
+    name: gram-risk-v1-enforcement-result-router
+    spec:
+      ackDeadlineSeconds: 10
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 5s
+        minimumBackoff: 1s
+      topicRef:
+        name: gram-risk-v1-enforcement-analysis-response
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding-ch-writer
       topic_proto_message: gram-risk-v1-finding
     name: gram-risk-v1-finding-ch-writer
@@ -589,6 +669,26 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-custom-rules-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-enforcement-analysis-request
+    name: gram-risk-v1-enforcement-analysis-request
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-enforcement-analysis-request
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-enforcement-analysis-response
+    name: gram-risk-v1-enforcement-analysis-response
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-enforcement-analysis-response
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding
