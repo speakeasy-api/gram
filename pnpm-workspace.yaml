@@ -41,14 +41,6 @@ minimumReleaseAgeExclude:
 overrides:
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.5: 3.1.5
-  # nuqs auto-resolves all optional adapter peers even though the dashboard only
-  # uses its React Router v8 adapter. Drop the unused Next and Router v7 edges so
-  # their full dependency trees do not remain as dead weight in the lockfile.
-  # Works together with the readPackage hook in .pnpmfile.cjs, which strips the
-  # peer declarations themselves (removal overrides alone don't affect peers
-  # under autoInstallPeers).
-  nuqs>next: "-"
-  nuqs>react-router-dom: "-"
   # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
   # releases load multiple copies with separate layer-stack contexts — nested dismiss
   # layers then can't see each other (e.g. the filter sheet closing when dismissing a
