@@ -53,6 +53,14 @@ export type SkillVersion = {
    */
   id: string;
   /**
+   * Whether the prompt-injection scan flagged this manifest version. Absent until the version has been scanned.
+   */
+  injectionFlagged?: boolean | undefined;
+  /**
+   * The judge's reasoning when the prompt-injection scan flagged this version.
+   */
+  injectionRationale?: string | undefined;
+  /**
    * When this exact version was most recently activated.
    */
   lastSeenAt?: Date | undefined;
@@ -100,6 +108,8 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
       ),
       frontmatter: z.record(z.string(), z.any()),
       id: z.string(),
+      injection_flagged: z.optional(z.boolean()),
+      injection_rationale: z.optional(z.string()),
       last_seen_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
@@ -117,6 +127,8 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
         "created_by_user_id": "createdByUserId",
         "derived_from_version_id": "derivedFromVersionId",
         "first_seen_at": "firstSeenAt",
+        "injection_flagged": "injectionFlagged",
+        "injection_rationale": "injectionRationale",
         "last_seen_at": "lastSeenAt",
         "raw_sha256": "rawSha256",
         "seen_count": "seenCount",

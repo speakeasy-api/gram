@@ -5358,6 +5358,8 @@ func marshalTypesSkillVersionToSkillVersionResponseBody(v *types.SkillVersion) *
 		FirstSeenAt:          v.FirstSeenAt,
 		LastSeenAt:           v.LastSeenAt,
 		SeenCount:            v.SeenCount,
+		InjectionFlagged:     v.InjectionFlagged,
+		InjectionRationale:   v.InjectionRationale,
 	}
 	if v.Metadata != nil {
 		res.Metadata = make(map[string]any, len(v.Metadata))

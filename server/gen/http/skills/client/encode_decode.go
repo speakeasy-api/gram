@@ -5373,6 +5373,8 @@ func unmarshalSkillVersionResponseBodyToTypesSkillVersion(v *SkillVersionRespons
 		FirstSeenAt:          v.FirstSeenAt,
 		LastSeenAt:           v.LastSeenAt,
 		SeenCount:            *v.SeenCount,
+		InjectionFlagged:     v.InjectionFlagged,
+		InjectionRationale:   v.InjectionRationale,
 	}
 	res.Metadata = make(map[string]any, len(v.Metadata))
 	for key, val := range v.Metadata {

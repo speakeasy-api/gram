@@ -41,4 +41,9 @@ type SkillVersion struct {
 	LastSeenAt *string
 	// The number of activations attributed to this exact version.
 	SeenCount int64
+	// Whether the prompt-injection scan flagged this manifest version. Absent
+	// until the version has been scanned.
+	InjectionFlagged *bool
+	// The judge's reasoning when the prompt-injection scan flagged this version.
+	InjectionRationale *string
 }

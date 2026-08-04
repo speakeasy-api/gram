@@ -115,6 +115,8 @@ func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.
 		FirstSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(sightings.FirstSeenAt)),
 		LastSeenAt:           conv.PtrEmpty(conv.FromPGTimestamptz(sightings.LastSeenAt)),
 		SeenCount:            sightings.SeenCount,
+		InjectionFlagged:     conv.FromPGBool[bool](version.InjectionFlagged),
+		InjectionRationale:   conv.FromPGText[string](version.InjectionRationale),
 	}, nil
 }
 

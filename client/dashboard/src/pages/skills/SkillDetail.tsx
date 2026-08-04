@@ -4,7 +4,7 @@ import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { ErrorAlert } from "@/components/ui/Alert";
+import { Alert, ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
@@ -295,6 +295,17 @@ function SkillDetailSections({
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
+            {latestVersion?.injectionFlagged && (
+              <Alert variant="warning">
+                <div>
+                  <span className="font-medium">
+                    Possible prompt injection detected.
+                  </span>{" "}
+                  {latestVersion.injectionRationale ??
+                    "This manifest was flagged by the prompt-injection scan. Review it before distributing this skill."}
+                </div>
+              </Alert>
+            )}
             {latestVersion && !latestVersion.specValid && (
               <ValidationErrors errors={latestVersion.validationErrors} />
             )}
