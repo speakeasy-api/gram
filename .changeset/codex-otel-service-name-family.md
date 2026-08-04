@@ -2,10 +2,17 @@
 "server": patch
 ---
 
-Capture Codex OTEL telemetry from every client mode, not just the interactive
-CLI. Codex reports a different OTEL `service.name` per mode — `codex_exec`
-for headless `codex exec` (what CI and scripted runs use), plus `codex_tui`
-and `codex_mcp` — but the ingest matched only `codex_cli_rs`, so every other
-mode's telemetry was dropped with no rows, no token metering, and no error.
-The ingest now matches the `codex_` service-name family, so a new client mode
-is captured on arrival instead of being discovered later as missing data.
+Route Codex OTEL telemetry from every client mode to the Codex stream, not
+just the interactive CLI. Codex reports a different OTEL `service.name` per
+mode — `codex_exec` for headless `codex exec` (what CI and scripted runs
+use), plus `codex_tui` and `codex_mcp` — but the ingest matched only
+`codex_cli_rs`. Those payloads were not dropped: they fell through to the
+Claude path and were persisted as `claude-code:otel:logs` rows carrying
+Claude's hook source and account attribution, so Codex traffic silently
+inflated Claude surfaces while never being metered as Codex usage. The
+ingest now matches the `codex_` service-name family.
+
+Routing is also now per OTEL resource rather than per payload: a collector
+that fans several clients into one export previously had the whole batch
+routed by whichever client matched first, mislabeling the other client's
+records.

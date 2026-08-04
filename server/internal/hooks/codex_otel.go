@@ -18,11 +18,15 @@ const (
 	// codexServiceNamePrefix matches the OTEL resource service.name family the
 	// Codex clients report. The name varies by mode — codex_cli_rs
 	// (interactive), codex_exec (headless `codex exec`, what CI and scripted
-	// runs use), plus codex_tui and codex_mcp in the shipped binary — so
-	// matching the single interactive name silently dropped every other
-	// mode's telemetry. Prefix-matching the family means a new mode is
-	// captured on arrival rather than discovered later as missing data;
-	// Claude reports "claude-code"-style names, so it cannot collide.
+	// runs use), plus codex_tui and codex_mcp in the shipped binary. Matching
+	// only the interactive name did not drop the other modes: their payloads
+	// fell through to the Claude path and were persisted as
+	// claude-code:otel:logs rows with Claude's hook source and attribution,
+	// so Codex traffic silently inflated Claude surfaces (and, keyed on the
+	// wrong URN, was never metered as Codex usage). Prefix-matching the
+	// family means a new mode routes correctly on arrival rather than being
+	// discovered later as mislabeled data; Claude reports "claude-code"-style
+	// names, so the prefix cannot collide.
 	codexServiceNamePrefix = "codex_"
 	// codexOTELLogsURN types a raw Codex OTEL log row, mirroring the
 	// "claude-code:otel:logs" convention.
@@ -35,6 +39,80 @@ const (
 // the Codex client family (see codexServiceNamePrefix).
 func isCodexServiceName(serviceName string) bool {
 	return strings.HasPrefix(serviceName, codexServiceNamePrefix)
+}
+
+// splitCodexLogsPayload partitions a logs payload by resource service.name.
+// Routing must be per resource, not per payload: an OpenTelemetry Collector
+// fanning in several clients can re-batch Claude and Codex resources into one
+// export, and an any-resource match would hand the whole batch to one writer —
+// stamping Claude records as Codex rows (or vice versa) and skipping the
+// Claude session/attribution chain entirely. Either return value is nil when
+// that side has no resources, so a single-client payload allocates nothing.
+func splitCodexLogsPayload(payload *gen.LogsPayload) (codex, claude *gen.LogsPayload) {
+	if payload == nil {
+		return nil, nil
+	}
+	var codexLogs, claudeLogs []*gen.OTELResourceLog
+	for _, rl := range payload.ResourceLogs {
+		if rl == nil {
+			continue
+		}
+		if isCodexServiceName(extractResourceAttribute(rl.Resource, "service.name")) {
+			codexLogs = append(codexLogs, rl)
+			continue
+		}
+		claudeLogs = append(claudeLogs, rl)
+	}
+	// Both halves keep the envelope's auth fields: the split is a routing
+	// concern and must not strip credentials a downstream writer may read.
+	if len(codexLogs) > 0 {
+		codex = &gen.LogsPayload{
+			ResourceLogs:     codexLogs,
+			ApikeyToken:      payload.ApikeyToken,
+			ProjectSlugInput: payload.ProjectSlugInput,
+		}
+	}
+	if len(claudeLogs) > 0 {
+		claude = &gen.LogsPayload{
+			ResourceLogs:     claudeLogs,
+			ApikeyToken:      payload.ApikeyToken,
+			ProjectSlugInput: payload.ProjectSlugInput,
+		}
+	}
+	return codex, claude
+}
+
+// splitCodexMetricsPayload is splitCodexLogsPayload's metrics twin.
+func splitCodexMetricsPayload(payload *gen.MetricsPayload) (codex, claude *gen.MetricsPayload) {
+	if payload == nil {
+		return nil, nil
+	}
+	var codexMetrics, claudeMetrics []*gen.OTELResourceMetrics
+	for _, rm := range payload.ResourceMetrics {
+		if rm == nil {
+			continue
+		}
+		if isCodexServiceName(extractResourceAttribute(rm.Resource, "service.name")) {
+			codexMetrics = append(codexMetrics, rm)
+			continue
+		}
+		claudeMetrics = append(claudeMetrics, rm)
+	}
+	if len(codexMetrics) > 0 {
+		codex = &gen.MetricsPayload{
+			ResourceMetrics:  codexMetrics,
+			ApikeyToken:      payload.ApikeyToken,
+			ProjectSlugInput: payload.ProjectSlugInput,
+		}
+	}
+	if len(claudeMetrics) > 0 {
+		claude = &gen.MetricsPayload{
+			ResourceMetrics:  claudeMetrics,
+			ApikeyToken:      payload.ApikeyToken,
+			ProjectSlugInput: payload.ProjectSlugInput,
+		}
+	}
+	return codex, claude
 }
 
 // isCodexLogsPayload reports whether an OTLP logs payload originated from the

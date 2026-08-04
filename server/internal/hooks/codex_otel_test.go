@@ -518,5 +518,62 @@ func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
 			ScopeLogs: nil,
 		}}}
 		require.False(t, isCodexLogsPayload(logs), serviceName)
+
+		metrics := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{{
+			Resource:     &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeMetrics: nil,
+		}}}
+		require.False(t, isCodexMetricsPayload(metrics), serviceName)
 	}
+}
+
+// TestLogs_MixedCollectorBatchRoutesEachResourceToItsOwnStream: an
+// OpenTelemetry Collector fanning in several clients can re-batch Claude and
+// Codex resources into one export. Routing the whole payload on an
+// any-resource match would stamp one client's records with the other's URN,
+// hook source, and attribution — so the split must be per resource.
+func TestLogs_MixedCollectorBatchRoutesEachResourceToItsOwnStream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	mixed := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "codex_exec")}},
+			ScopeLogs: []*gen.OTELScopeLog{{LogRecords: []*gen.OTELLogRecord{{
+				TimeUnixNano: new(nanoString(timestamp)),
+				Body:         &gen.OTELLogBody{StringValue: new("codex.user_prompt")},
+				Attributes: []*gen.OTELAttribute{
+					strAttr("event.name", "codex.user_prompt"),
+					strAttr("conversation.id", "conv-mixed-batch"),
+					strAttr("user.email", "mixed-codex@example.com"),
+				},
+			}}}},
+		},
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")}},
+			ScopeLogs: []*gen.OTELScopeLog{{LogRecords: []*gen.OTELLogRecord{{
+				TimeUnixNano: new(nanoString(timestamp)),
+				Body:         &gen.OTELLogBody{StringValue: new("claude api request")},
+				Attributes: []*gen.OTELAttribute{
+					strAttr("session.id", "session-mixed-batch"),
+					strAttr("user.email", "mixed-claude@example.com"),
+				},
+			}}}},
+		},
+	}}
+
+	require.NoError(t, ti.service.Logs(ctx, mixed))
+
+	codexRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
+	require.Contains(t, codexRows[0].Attributes, "codex.user_prompt")
+	require.Contains(t, codexRows[0].ResourceAttributes, "codex_exec")
+
+	claudeRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, timestamp, 1)
+	require.Contains(t, claudeRows[0].ResourceAttributes, "claude-code")
+	// The Claude record must NOT have been stamped as Codex traffic.
+	require.NotContains(t, claudeRows[0].Attributes, providerOpenAI)
 }
