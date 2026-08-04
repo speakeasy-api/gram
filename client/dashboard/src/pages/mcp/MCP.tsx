@@ -174,7 +174,10 @@ function MCPOverview() {
   const mcpServers = useMemo(
     () =>
       (mcpServersResult?.mcpServers ?? []).filter(
-        (server) => !!server.remoteMcpServerId || !!server.tunneledMcpServerId,
+        (server) =>
+          !!server.remoteMcpServerId ||
+          !!server.tunneledMcpServerId ||
+          !!server.unproxiedMcpServerId,
       ),
     [mcpServersResult],
   );

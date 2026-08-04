@@ -4,6 +4,7 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./settings/sections/authentication/AuthenticationSection";
+import { UnproxiedMcpToolsSection } from "./UnproxiedMcpToolsSection";
 
 type InspectTabProps = {
   mcpServer: McpServer;
@@ -30,15 +31,22 @@ export function InspectTab({
 
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-      <RemoteMcpToolsSection
-        mcpUrl={mcpUrl}
-        isResolvingUrl={loading}
-        mcpServerId={mcpServer.id}
-        userSessionIssuerId={mcpServer.userSessionIssuerId}
-        remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
-        isDisabled={mcpServer.visibility === "disabled"}
-        authSettingsHref={authSettingsHref}
-      />
+      {mcpServer.unproxiedMcpServerId ? (
+        <UnproxiedMcpToolsSection
+          unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
+          isDisabled={mcpServer.visibility === "disabled"}
+        />
+      ) : (
+        <RemoteMcpToolsSection
+          mcpUrl={mcpUrl}
+          isResolvingUrl={loading}
+          mcpServerId={mcpServer.id}
+          userSessionIssuerId={mcpServer.userSessionIssuerId}
+          remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
+          isDisabled={mcpServer.visibility === "disabled"}
+          authSettingsHref={authSettingsHref}
+        />
+      )}
     </div>
   );
 }

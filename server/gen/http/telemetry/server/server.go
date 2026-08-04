@@ -18,35 +18,39 @@ import (
 
 // Server lists the telemetry service endpoint HTTP handlers.
 type Server struct {
-	Mounts                          []*MountPoint
-	SearchLogs                      http.Handler
-	SearchToolCalls                 http.Handler
-	SearchChats                     http.Handler
-	SearchUsers                     http.Handler
-	CaptureEvent                    http.Handler
-	GetProjectMetricsSummary        http.Handler
-	GetUserMetricsSummary           http.Handler
-	GetEmployeeDataFlowGraph        http.Handler
-	GetObservabilityOverview        http.Handler
-	GetProjectOverview              http.Handler
-	Query                           http.Handler
-	QueryTumDetails                 http.Handler
-	ListSessions                    http.Handler
-	ListFilterOptions               http.Handler
-	ListAttributeKeys               http.Handler
-	GetHooksSummary                 http.Handler
-	GetToolUsageSummary             http.Handler
-	GetToolUsageTotals              http.Handler
-	GetToolUsageTargets             http.Handler
-	GetToolUsageUsers               http.Handler
-	GetToolUsageTargetTimeSeries    http.Handler
-	GetToolUsageUserTimeSeries      http.Handler
-	GetToolUsageUsersByTarget       http.Handler
-	GetToolUsageTargetToolBreakdown http.Handler
-	ListToolUsageTraces             http.Handler
-	GetToolUsageFilterOptions       http.Handler
-	GetMcpServerActivity            http.Handler
-	ListHooksTraces                 http.Handler
+	Mounts                           []*MountPoint
+	SearchLogs                       http.Handler
+	SearchToolCalls                  http.Handler
+	SearchChats                      http.Handler
+	SearchUsers                      http.Handler
+	CaptureEvent                     http.Handler
+	GetProjectMetricsSummary         http.Handler
+	GetUserMetricsSummary            http.Handler
+	GetEmployeeDataFlowGraph         http.Handler
+	GetObservabilityOverview         http.Handler
+	GetProjectOverview               http.Handler
+	GetUnproxiedMcpServerUsage       http.Handler
+	GetUnproxiedMcpServerToolUsage   http.Handler
+	GetUnproxiedMcpServerUserUsage   http.Handler
+	GetUnproxiedMcpServerClientUsage http.Handler
+	Query                            http.Handler
+	QueryTumDetails                  http.Handler
+	ListSessions                     http.Handler
+	ListFilterOptions                http.Handler
+	ListAttributeKeys                http.Handler
+	GetHooksSummary                  http.Handler
+	GetToolUsageSummary              http.Handler
+	GetToolUsageTotals               http.Handler
+	GetToolUsageTargets              http.Handler
+	GetToolUsageUsers                http.Handler
+	GetToolUsageTargetTimeSeries     http.Handler
+	GetToolUsageUserTimeSeries       http.Handler
+	GetToolUsageUsersByTarget        http.Handler
+	GetToolUsageTargetToolBreakdown  http.Handler
+	ListToolUsageTraces              http.Handler
+	GetToolUsageFilterOptions        http.Handler
+	GetMcpServerActivity             http.Handler
+	ListHooksTraces                  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -86,6 +90,10 @@ func New(
 			{"GetEmployeeDataFlowGraph", "POST", "/rpc/telemetry.getEmployeeDataFlowGraph"},
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
+			{"GetUnproxiedMcpServerUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerUsage"},
+			{"GetUnproxiedMcpServerToolUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerToolUsage"},
+			{"GetUnproxiedMcpServerUserUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerUserUsage"},
+			{"GetUnproxiedMcpServerClientUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerClientUsage"},
 			{"Query", "POST", "/rpc/telemetry.query"},
 			{"QueryTumDetails", "POST", "/rpc/telemetry.queryTumDetails"},
 			{"ListSessions", "POST", "/rpc/telemetry.listSessions"},
@@ -105,34 +113,38 @@ func New(
 			{"GetMcpServerActivity", "POST", "/rpc/telemetry.getMcpServerActivity"},
 			{"ListHooksTraces", "POST", "/rpc/telemetry.listHooksTraces"},
 		},
-		SearchLogs:                      NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
-		SearchToolCalls:                 NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
-		SearchChats:                     NewSearchChatsHandler(e.SearchChats, mux, decoder, encoder, errhandler, formatter),
-		SearchUsers:                     NewSearchUsersHandler(e.SearchUsers, mux, decoder, encoder, errhandler, formatter),
-		CaptureEvent:                    NewCaptureEventHandler(e.CaptureEvent, mux, decoder, encoder, errhandler, formatter),
-		GetProjectMetricsSummary:        NewGetProjectMetricsSummaryHandler(e.GetProjectMetricsSummary, mux, decoder, encoder, errhandler, formatter),
-		GetUserMetricsSummary:           NewGetUserMetricsSummaryHandler(e.GetUserMetricsSummary, mux, decoder, encoder, errhandler, formatter),
-		GetEmployeeDataFlowGraph:        NewGetEmployeeDataFlowGraphHandler(e.GetEmployeeDataFlowGraph, mux, decoder, encoder, errhandler, formatter),
-		GetObservabilityOverview:        NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
-		GetProjectOverview:              NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
-		Query:                           NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
-		QueryTumDetails:                 NewQueryTumDetailsHandler(e.QueryTumDetails, mux, decoder, encoder, errhandler, formatter),
-		ListSessions:                    NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
-		ListFilterOptions:               NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
-		ListAttributeKeys:               NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
-		GetHooksSummary:                 NewGetHooksSummaryHandler(e.GetHooksSummary, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageSummary:             NewGetToolUsageSummaryHandler(e.GetToolUsageSummary, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageTotals:              NewGetToolUsageTotalsHandler(e.GetToolUsageTotals, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageTargets:             NewGetToolUsageTargetsHandler(e.GetToolUsageTargets, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageUsers:               NewGetToolUsageUsersHandler(e.GetToolUsageUsers, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageTargetTimeSeries:    NewGetToolUsageTargetTimeSeriesHandler(e.GetToolUsageTargetTimeSeries, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageUserTimeSeries:      NewGetToolUsageUserTimeSeriesHandler(e.GetToolUsageUserTimeSeries, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageUsersByTarget:       NewGetToolUsageUsersByTargetHandler(e.GetToolUsageUsersByTarget, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageTargetToolBreakdown: NewGetToolUsageTargetToolBreakdownHandler(e.GetToolUsageTargetToolBreakdown, mux, decoder, encoder, errhandler, formatter),
-		ListToolUsageTraces:             NewListToolUsageTracesHandler(e.ListToolUsageTraces, mux, decoder, encoder, errhandler, formatter),
-		GetToolUsageFilterOptions:       NewGetToolUsageFilterOptionsHandler(e.GetToolUsageFilterOptions, mux, decoder, encoder, errhandler, formatter),
-		GetMcpServerActivity:            NewGetMcpServerActivityHandler(e.GetMcpServerActivity, mux, decoder, encoder, errhandler, formatter),
-		ListHooksTraces:                 NewListHooksTracesHandler(e.ListHooksTraces, mux, decoder, encoder, errhandler, formatter),
+		SearchLogs:                       NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
+		SearchToolCalls:                  NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
+		SearchChats:                      NewSearchChatsHandler(e.SearchChats, mux, decoder, encoder, errhandler, formatter),
+		SearchUsers:                      NewSearchUsersHandler(e.SearchUsers, mux, decoder, encoder, errhandler, formatter),
+		CaptureEvent:                     NewCaptureEventHandler(e.CaptureEvent, mux, decoder, encoder, errhandler, formatter),
+		GetProjectMetricsSummary:         NewGetProjectMetricsSummaryHandler(e.GetProjectMetricsSummary, mux, decoder, encoder, errhandler, formatter),
+		GetUserMetricsSummary:            NewGetUserMetricsSummaryHandler(e.GetUserMetricsSummary, mux, decoder, encoder, errhandler, formatter),
+		GetEmployeeDataFlowGraph:         NewGetEmployeeDataFlowGraphHandler(e.GetEmployeeDataFlowGraph, mux, decoder, encoder, errhandler, formatter),
+		GetObservabilityOverview:         NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
+		GetProjectOverview:               NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
+		GetUnproxiedMcpServerUsage:       NewGetUnproxiedMcpServerUsageHandler(e.GetUnproxiedMcpServerUsage, mux, decoder, encoder, errhandler, formatter),
+		GetUnproxiedMcpServerToolUsage:   NewGetUnproxiedMcpServerToolUsageHandler(e.GetUnproxiedMcpServerToolUsage, mux, decoder, encoder, errhandler, formatter),
+		GetUnproxiedMcpServerUserUsage:   NewGetUnproxiedMcpServerUserUsageHandler(e.GetUnproxiedMcpServerUserUsage, mux, decoder, encoder, errhandler, formatter),
+		GetUnproxiedMcpServerClientUsage: NewGetUnproxiedMcpServerClientUsageHandler(e.GetUnproxiedMcpServerClientUsage, mux, decoder, encoder, errhandler, formatter),
+		Query:                            NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
+		QueryTumDetails:                  NewQueryTumDetailsHandler(e.QueryTumDetails, mux, decoder, encoder, errhandler, formatter),
+		ListSessions:                     NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
+		ListFilterOptions:                NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
+		ListAttributeKeys:                NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
+		GetHooksSummary:                  NewGetHooksSummaryHandler(e.GetHooksSummary, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageSummary:              NewGetToolUsageSummaryHandler(e.GetToolUsageSummary, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageTotals:               NewGetToolUsageTotalsHandler(e.GetToolUsageTotals, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageTargets:              NewGetToolUsageTargetsHandler(e.GetToolUsageTargets, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageUsers:                NewGetToolUsageUsersHandler(e.GetToolUsageUsers, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageTargetTimeSeries:     NewGetToolUsageTargetTimeSeriesHandler(e.GetToolUsageTargetTimeSeries, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageUserTimeSeries:       NewGetToolUsageUserTimeSeriesHandler(e.GetToolUsageUserTimeSeries, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageUsersByTarget:        NewGetToolUsageUsersByTargetHandler(e.GetToolUsageUsersByTarget, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageTargetToolBreakdown:  NewGetToolUsageTargetToolBreakdownHandler(e.GetToolUsageTargetToolBreakdown, mux, decoder, encoder, errhandler, formatter),
+		ListToolUsageTraces:              NewListToolUsageTracesHandler(e.ListToolUsageTraces, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageFilterOptions:        NewGetToolUsageFilterOptionsHandler(e.GetToolUsageFilterOptions, mux, decoder, encoder, errhandler, formatter),
+		GetMcpServerActivity:             NewGetMcpServerActivityHandler(e.GetMcpServerActivity, mux, decoder, encoder, errhandler, formatter),
+		ListHooksTraces:                  NewListHooksTracesHandler(e.ListHooksTraces, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -151,6 +163,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetEmployeeDataFlowGraph = m(s.GetEmployeeDataFlowGraph)
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.GetProjectOverview = m(s.GetProjectOverview)
+	s.GetUnproxiedMcpServerUsage = m(s.GetUnproxiedMcpServerUsage)
+	s.GetUnproxiedMcpServerToolUsage = m(s.GetUnproxiedMcpServerToolUsage)
+	s.GetUnproxiedMcpServerUserUsage = m(s.GetUnproxiedMcpServerUserUsage)
+	s.GetUnproxiedMcpServerClientUsage = m(s.GetUnproxiedMcpServerClientUsage)
 	s.Query = m(s.Query)
 	s.QueryTumDetails = m(s.QueryTumDetails)
 	s.ListSessions = m(s.ListSessions)
@@ -186,6 +202,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetEmployeeDataFlowGraphHandler(mux, h.GetEmployeeDataFlowGraph)
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
+	MountGetUnproxiedMcpServerUsageHandler(mux, h.GetUnproxiedMcpServerUsage)
+	MountGetUnproxiedMcpServerToolUsageHandler(mux, h.GetUnproxiedMcpServerToolUsage)
+	MountGetUnproxiedMcpServerUserUsageHandler(mux, h.GetUnproxiedMcpServerUserUsage)
+	MountGetUnproxiedMcpServerClientUsageHandler(mux, h.GetUnproxiedMcpServerClientUsage)
 	MountQueryHandler(mux, h.Query)
 	MountQueryTumDetailsHandler(mux, h.QueryTumDetails)
 	MountListSessionsHandler(mux, h.ListSessions)
@@ -721,6 +741,222 @@ func NewGetProjectOverviewHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectOverview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetUnproxiedMcpServerUsageHandler configures the mux to serve the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint.
+func MountGetUnproxiedMcpServerUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getUnproxiedMcpServerUsage", f)
+}
+
+// NewGetUnproxiedMcpServerUsageHandler creates a HTTP handler which loads the
+// HTTP request and calls the "telemetry" service "getUnproxiedMcpServerUsage"
+// endpoint.
+func NewGetUnproxiedMcpServerUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetUnproxiedMcpServerUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetUnproxiedMcpServerUsageResponse(encoder)
+		encodeError    = EncodeGetUnproxiedMcpServerUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getUnproxiedMcpServerUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetUnproxiedMcpServerToolUsageHandler configures the mux to serve the
+// "telemetry" service "getUnproxiedMcpServerToolUsage" endpoint.
+func MountGetUnproxiedMcpServerToolUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getUnproxiedMcpServerToolUsage", f)
+}
+
+// NewGetUnproxiedMcpServerToolUsageHandler creates a HTTP handler which loads
+// the HTTP request and calls the "telemetry" service
+// "getUnproxiedMcpServerToolUsage" endpoint.
+func NewGetUnproxiedMcpServerToolUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetUnproxiedMcpServerToolUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetUnproxiedMcpServerToolUsageResponse(encoder)
+		encodeError    = EncodeGetUnproxiedMcpServerToolUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getUnproxiedMcpServerToolUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetUnproxiedMcpServerUserUsageHandler configures the mux to serve the
+// "telemetry" service "getUnproxiedMcpServerUserUsage" endpoint.
+func MountGetUnproxiedMcpServerUserUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getUnproxiedMcpServerUserUsage", f)
+}
+
+// NewGetUnproxiedMcpServerUserUsageHandler creates a HTTP handler which loads
+// the HTTP request and calls the "telemetry" service
+// "getUnproxiedMcpServerUserUsage" endpoint.
+func NewGetUnproxiedMcpServerUserUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetUnproxiedMcpServerUserUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetUnproxiedMcpServerUserUsageResponse(encoder)
+		encodeError    = EncodeGetUnproxiedMcpServerUserUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getUnproxiedMcpServerUserUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetUnproxiedMcpServerClientUsageHandler configures the mux to serve the
+// "telemetry" service "getUnproxiedMcpServerClientUsage" endpoint.
+func MountGetUnproxiedMcpServerClientUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getUnproxiedMcpServerClientUsage", f)
+}
+
+// NewGetUnproxiedMcpServerClientUsageHandler creates a HTTP handler which
+// loads the HTTP request and calls the "telemetry" service
+// "getUnproxiedMcpServerClientUsage" endpoint.
+func NewGetUnproxiedMcpServerClientUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetUnproxiedMcpServerClientUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetUnproxiedMcpServerClientUsageResponse(encoder)
+		encodeError    = EncodeGetUnproxiedMcpServerClientUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getUnproxiedMcpServerClientUsage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

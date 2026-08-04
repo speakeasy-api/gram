@@ -59,6 +59,7 @@ const SOURCE_TYPE_OPTIONS: FilterOption[] = [
   { value: "externalmcp", label: "Catalog" },
   { value: "remotemcp", label: "Remote MCP" },
   { value: "tunneledmcp", label: "Tunneled MCP" },
+  { value: "unproxiedmcp", label: "Unproxied MCP" },
 ];
 
 /**

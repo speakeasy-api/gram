@@ -21,6 +21,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		RemoteMcpServerID:     conv.FromNullableUUID(server.RemoteMcpServerID),
 		TunneledMcpServerID:   conv.FromNullableUUID(server.TunneledMcpServerID),
 		ToolsetID:             conv.FromNullableUUID(server.ToolsetID),
+		UnproxiedMcpServerID:  conv.FromNullableUUID(server.UnproxiedMcpServerID),
 		ToolVariationsGroupID: conv.FromNullableUUID(server.ToolVariationsGroupID),
 		Visibility:            types.McpServerVisibility(server.Visibility),
 		CreatedAt:             server.CreatedAt.Time.Format(time.RFC3339),

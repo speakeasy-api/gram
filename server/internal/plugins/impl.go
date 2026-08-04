@@ -744,7 +744,9 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify mcp server").LogError(ctx, s.logger)
 		}
-		if server.Visibility == visibility.Disabled || !server.HasEndpoint {
+		// Unproxied-backed servers are never proxied, so they never gain an
+		// mcp_endpoints row; exempt them from the has_endpoint requirement.
+		if server.Visibility == visibility.Disabled || (!server.HasEndpoint && !server.IsUnproxied) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is disabled or has no published endpoint")
 		}
 		if displayName == "" {
