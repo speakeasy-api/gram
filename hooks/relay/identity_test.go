@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -187,4 +188,45 @@ func TestCodexAuthFileEmailPrefersAccessToken(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(auth), 0o600))
 
 	require.Equal(t, "access@example.com", codexAuthFileEmail())
+}
+
+// TestProbeCodexBinarySkipsUnrunnableCandidates: the probe's result is exec'd,
+// so it must return the first candidate that is actually runnable and skip a
+// path that merely exists. Driven through explicit candidates rather than the
+// process environment — pointing PATH or CODEX_HOME at a fixture would let a
+// miss fall through to the real /Applications copy and execute it.
+func TestProbeCodexBinarySkipsUnrunnableCandidates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable-bit fixture is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	notExecutable := filepath.Join(dir, "present-but-not-runnable")
+	runnable := filepath.Join(dir, "codex")
+	require.NoError(t, os.WriteFile(notExecutable, []byte("#!/bin/sh\nexit 0\n"), 0o600))
+	require.NoError(t, os.WriteFile(runnable, []byte("#!/bin/sh\nexit 0\n"), 0o700))
+
+	candidates := []string{filepath.Join(dir, "missing"), notExecutable, runnable}
+	require.Equal(t, runnable, probeCodexBinary(candidates))
+
+	require.Empty(t, probeCodexBinary([]string{filepath.Join(dir, "missing")}))
+	require.Empty(t, probeCodexBinary(nil))
+}
+
+// TestCodexBinaryCandidatesProbeTheUnifiedAppFirst pins the ordering the
+// /Applications entries cannot exercise on a test machine: the frozen
+// Codex.app must never win over the ChatGPT app that supersedes it.
+func TestCodexBinaryCandidatesProbeTheUnifiedAppFirst(t *testing.T) {
+	candidates := codexBinaryCandidates("/home/dev", "/home/dev/.codex")
+
+	unified := slices.Index(candidates, "/Applications/ChatGPT.app/Contents/Resources/codex")
+	frozen := slices.Index(candidates, "/Applications/Codex.app/Contents/Resources/codex")
+
+	require.NotEqual(t, -1, unified, "the unified ChatGPT app bundles the codex binary and must be probed")
+	require.NotEqual(t, -1, frozen)
+	require.Less(t, unified, frozen)
+
+	// Both app bundles rank below a managed or user-owned install.
+	require.Less(t, slices.Index(candidates, "/home/dev/.codex/packages/standalone/current/bin/codex"), unified)
+	require.Less(t, slices.Index(candidates, "/home/dev/.local/bin/codex"), unified)
 }

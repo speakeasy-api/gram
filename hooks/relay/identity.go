@@ -327,21 +327,35 @@ func findCodexBinary() string {
 	}
 	home, _ := os.UserHomeDir()
 	codexHome := firstNonEmpty(os.Getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
-	for _, candidate := range []string{
-		filepath.Join(codexHome, "packages", "standalone", "current", "bin", "codex"),
-		filepath.Join(home, ".local", "bin", "codex"),
-		"/usr/local/bin/codex",
-		// OpenAI merged the standalone Codex app into the ChatGPT app, which
-		// bundles the codex binary at this path. Ordered ahead of the frozen
-		// Codex.app so a machine carrying both prefers the maintained copy.
-		"/Applications/ChatGPT.app/Contents/Resources/codex",
-		"/Applications/Codex.app/Contents/Resources/codex",
-	} {
+	return probeCodexBinary(codexBinaryCandidates(home, codexHome))
+}
+
+// probeCodexBinary returns the first candidate that is a runnable file. A
+// present-but-non-executable path is skipped rather than returned: the caller
+// execs the result, so a path it cannot run is worse than none.
+func probeCodexBinary(candidates []string) string {
+	for _, candidate := range candidates {
 		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
 			return candidate
 		}
 	}
 	return ""
+}
+
+// codexBinaryCandidates lists the install locations to probe, in preference
+// order, when codex is not on PATH. A managed or user install outranks the
+// copies bundled inside an app: OpenAI merged the standalone Codex app into
+// the ChatGPT app, so ChatGPT.app is probed ahead of the frozen Codex.app and
+// a machine carrying both prefers the maintained copy. Mirrors the ordering
+// the generated install script's find_codex uses.
+func codexBinaryCandidates(home, codexHome string) []string {
+	return []string{
+		filepath.Join(codexHome, "packages", "standalone", "current", "bin", "codex"),
+		filepath.Join(home, ".local", "bin", "codex"),
+		"/usr/local/bin/codex",
+		"/Applications/ChatGPT.app/Contents/Resources/codex",
+		"/Applications/Codex.app/Contents/Resources/codex",
+	}
 }
 
 func codexAuthFileEmail() string {
