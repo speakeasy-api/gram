@@ -258,9 +258,10 @@ function Table({
 }
 
 // BinaryDownloadButton renders one binary as a download-affordant button: a
-// download glyph, the role (Daemon vs CLI), and the monospace filename. The
-// `download` attribute makes the browser save the file rather than navigate to
-// it, and the sha256 rides along as the title for verification.
+// download glyph, the role (Daemon vs CLI vs the macOS Installer pkg), and
+// the monospace filename. The `download` attribute makes the browser save
+// the file rather than navigate to it. sha256 rides along as the title for
+// verification when known — the pkg isn't in releases.json, so it has none.
 function BinaryDownloadButton({
   href,
   sha256,
@@ -269,7 +270,7 @@ function BinaryDownloadButton({
   version,
 }: {
   href: string;
-  sha256: string;
+  sha256?: string;
   role: string;
   name: string;
   version: string;
@@ -278,7 +279,7 @@ function BinaryDownloadButton({
     <a
       href={href}
       download
-      title={`sha256: ${sha256}`}
+      title={sha256 ? `sha256: ${sha256}` : undefined}
       className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 rounded-md border px-3 py-2 transition-colors"
     >
       <Download className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -395,7 +396,7 @@ function ManualDownload({ os }: { os: "windows" | "linux" }) {
 // they're alternatives. macOS uses MacInstallStep instead.
 function DownloadStep({ os }: { os: "windows" | "linux" }) {
   const { data } = useAgentReleases();
-  const version = data?.latest["speakeasyd"]?.version ?? null;
+  const version = data?.latest?.["speakeasyd"]?.version ?? null;
   const cfg = OS_CONFIG[os];
 
   return (
@@ -442,11 +443,9 @@ function BinaryLegend() {
 
 // ManualIdentity is the personal/PoC identity path: sign in once with the CLI.
 function ManualIdentity({ os }: { os: OsKey }) {
-  // The macOS pkg deliberately doesn't put the CLI on PATH (ADR-0015: it would
-  // serve a stale binary after the first auto-update), so `speakeasy` alone
-  // is command-not-found there — reach it by its per-user seed path instead,
-  // same as MacVerifyStep. Windows/Linux keep the bare command: their raw
-  // binaries land in the shell's cwd/PATH per the download step above.
+  // macOS: bare `speakeasy` is command-not-found (see MacVerifyStep for why
+  // the CLI isn't on PATH there). Windows/Linux keep the bare command: their
+  // raw binaries land in the shell's cwd/PATH per the download step above.
   const command =
     os === "macos"
       ? `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`
@@ -742,44 +741,10 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
-// PkgDownloadButton is BinaryDownloadButton's single-artifact sibling: no
-// sha256 to show (the pkg isn't in releases.json, so useAgentReleases never
-// resolves one for it), so the title/hover affordance is dropped rather than
-// shown empty.
-function PkgDownloadButton({
-  href,
-  version,
-}: {
-  href: string;
-  version: string;
-}) {
-  return (
-    <a
-      href={href}
-      download
-      className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 rounded-md border px-3 py-2 transition-colors"
-    >
-      <Download className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
-      <span className="flex flex-col leading-tight">
-        <span className="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
-          Installer
-        </span>
-        <span className="text-foreground font-mono text-xs">
-          speakeasy-agent.pkg
-        </span>
-        <span className="text-muted-foreground mt-0.5 text-[10px]">
-          v{version}
-        </span>
-      </span>
-    </a>
-  );
-}
-
-// MacInstallStep is the first (and only pre-identity) setup step on macOS:
-// grab the signed .pkg and install it, either by hand on one machine or
-// pushed through an MDM as a normal Package. Unlike Windows/Linux there's no
-// separate chmod/move or service-registration step — the pkg's postinstall
-// does both (ADR-0015: device-agent, ONBOARDING_JAMF.md).
+// MacInstallStep is the first (and only pre-identity) setup step on macOS.
+// Unlike Windows/Linux there's no separate chmod/move or service-registration
+// step — the pkg's postinstall does both (ADR-0015: device-agent,
+// ONBOARDING_JAMF.md).
 function MacInstallStep() {
   const { data, isError } = useAgentReleases();
   const version = data?.latest?.["speakeasyd"]?.version ?? null;
@@ -813,7 +778,12 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
       <div className="flex flex-col gap-2">
         <SubLabel>Download the installer directly</SubLabel>
         {pkgUrl ? (
-          <PkgDownloadButton href={pkgUrl} version={version ?? ""} />
+          <BinaryDownloadButton
+            href={pkgUrl}
+            role="Installer"
+            name="speakeasy-agent.pkg"
+            version={version ?? ""}
+          />
         ) : (
           <Text small muted>
             {isError
@@ -860,10 +830,11 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
   );
 }
 
-// MacVerifyStep checks the pkg install: the receipt exists, the LaunchAgent is
-// running, and the per-user CLI reports in. The CLI isn't added to PATH (it
-// would collide with the Speakeasy SDK generator's own `speakeasy` on a dev
-// machine), so it's addressed by its per-user install path instead.
+// The pkg deliberately doesn't add the CLI to PATH: it would collide with the
+// Speakeasy SDK generator's own `speakeasy` on a dev machine, and pointing
+// PATH at the pkg's staging copy would serve a stale binary after the first
+// auto-update (ADR-0015: device-agent). Reach it by its per-user seed path
+// instead — every macOS CLI invocation in this file does.
 function MacVerifyStep() {
   return (
     <div className="flex flex-col gap-2">
