@@ -1567,18 +1567,52 @@ func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
 // different bundle path. Without this probe the script silently degrades to
 // "codex executable not found" manual instructions on every machine that only
 // has the post-merge app — the common case now that the legacy app is frozen.
-func TestGenerateCodexInstallScriptProbesUnifiedChatGPTAppBundle(t *testing.T) {
+// find_codex walks a candidate list in order when no codex is on PATH. Run
+// the script against two seeded candidates and observe which binary it
+// actually invokes, so this covers the lookup and its precedence rather than
+// the generated text.
+func TestGenerateCodexInstallScriptResolvesCodexByProbeOrder(t *testing.T) {
 	t.Parallel()
 
 	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
 	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
 	require.NoError(t, err)
 
-	unified := strings.Index(string(script), "/Applications/ChatGPT.app/Contents/Resources/codex")
-	legacy := strings.Index(string(script), "/Applications/Codex.app/Contents/Resources/codex")
-	require.Positive(t, unified, "unified ChatGPT.app bundle must be probed")
-	require.Positive(t, legacy, "legacy Codex.app bundle stays probed for pre-merge installs")
-	require.Less(t, unified, legacy, "the maintained unified app is probed before the frozen legacy bundle")
+	home := t.TempDir()
+	callLog := filepath.Join(home, "codex-calls.log")
+	for marker, dir := range map[string]string{
+		// Candidate 1: the standalone package install.
+		"standalone-wins": filepath.Join(home, ".codex", "packages", "standalone", "current", "bin"),
+		// Candidate 2: ~/.local/bin, which must lose to the earlier match.
+		"local-bin-ran": filepath.Join(home, ".local", "bin"),
+	} {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		stub := "#!/bin/sh\nprintf '" + marker + "\\n' >> \"" + callLog + "\"\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(stub), 0o755))
+	}
+
+	execCodexInstallScript(t, script, home)
+
+	calls := string(requireFileBytes(t, callLog))
+	require.Contains(t, calls, "standalone-wins", "the first matching candidate must be the one invoked")
+	require.NotContains(t, calls, "local-bin-ran", "a later candidate must not run once an earlier one matches")
+}
+
+// The two /Applications candidates cannot be executed here — a test cannot
+// place a bundle under the system Applications directory — so their presence
+// is pinned instead. OpenAI merged the standalone Codex app into the unified
+// ChatGPT app, which is where the codex CLI now ships; dropping that entry
+// silently returns install to "codex executable not found" on any machine
+// with only the post-merge app (verified by hand against 0.146, DNO-737).
+func TestGenerateCodexInstallScriptProbesBothMacAppBundles(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	require.Contains(t, string(script), "/Applications/ChatGPT.app/Contents/Resources/codex")
+	require.Contains(t, string(script), "/Applications/Codex.app/Contents/Resources/codex")
 }
 
 // Root-level dotted keys (features.hooks = true) implicitly define the
