@@ -368,6 +368,13 @@ func TestBuildCodexCostLogParamsPartitionsMeteringByClient(t *testing.T) {
 	t.Parallel()
 
 	cfg := codexCostConfig()
+
+	// Pin the production allowlist itself: expectations below are hand-declared
+	// on purpose (deriving them from codexCloudMeteredClients would make the
+	// assertions tautological), so this equality check is what forces anyone
+	// adding a surface to consciously extend the client list and expectations.
+	require.Equal(t, map[string]bool{"github": true, "web": true}, codexCloudMeteredClients)
+
 	promoted := map[string]bool{"github": true, "web": true, "GitHub": true}
 	for _, client := range []string{"github", "web", "GitHub", "cli", "exec", "desktop_app", "unknown", ""} {
 		clientField := ""
