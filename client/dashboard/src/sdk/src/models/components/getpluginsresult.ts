@@ -11,10 +11,18 @@ import {
   AgentMarketplace$inboundSchema,
 } from "./agentmarketplace.js";
 import { AgentPlugin, AgentPlugin$inboundSchema } from "./agentplugin.js";
+import {
+  DeviceAgentConfiguration,
+  DeviceAgentConfiguration$inboundSchema,
+} from "./deviceagentconfiguration.js";
 
 export type GetPluginsResult = {
   /**
-   * Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.
+   * Versioned organization-wide settings delivered to enrolled device agents. Agents must ignore unknown config keys. Remote settings override the shareable local/MDM settings after a successful fetch; per-device identity and secrets always remain local.
+   */
+  configuration?: DeviceAgentConfiguration | undefined;
+  /**
+   * Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
    */
   etag: string;
   /**
@@ -32,6 +40,7 @@ export const GetPluginsResult$inboundSchema: z.ZodMiniType<
   GetPluginsResult,
   unknown
 > = z.object({
+  configuration: z.optional(DeviceAgentConfiguration$inboundSchema),
   etag: z.string(),
   marketplaces: z.array(AgentMarketplace$inboundSchema),
   plugins: z.array(AgentPlugin$inboundSchema),
