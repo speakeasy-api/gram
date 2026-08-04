@@ -31,13 +31,6 @@ const (
 	defaultFlyRuntimeHealthTimeout  = 45 * time.Second
 	defaultFlyRuntimeRequestTimeout = 2 * time.Minute
 
-	// flyRuntimeHealthPollInterval is the gap between /healthz probes while
-	// waiting for a freshly started runner to come up. The runner becomes ready
-	// at an arbitrary point within an interval, so the interval is the worst-case
-	// slack added to a cold boot after the process is already serving. Kept short
-	// so that slack stays small; the probes are cheap and only run during a boot.
-	flyRuntimeHealthPollInterval = 250 * time.Millisecond
-
 	// flyRuntimeReapCallTimeout caps a single Fly API call during reap so
 	// one wedged row cannot consume the parent activity's deadline.
 	flyRuntimeReapCallTimeout = 30 * time.Second
@@ -1135,7 +1128,7 @@ func (f *FlyRuntimeBackend) waitForRuntimeHealth(ctx context.Context, target fly
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("wait for runtime health: %w", ctx.Err())
-		case <-time.After(flyRuntimeHealthPollInterval):
+		case <-time.After(500 * time.Millisecond):
 		}
 	}
 }
