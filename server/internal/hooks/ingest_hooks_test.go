@@ -2085,3 +2085,33 @@ func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 		})
 	}
 }
+
+// TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix: Codex addresses a
+// server by its sanitized tool prefix as well as its configured name, and the
+// cached-entry fallback matches only on ToolPrefix. Without it a hyphenated
+// server is unresolvable on the ingest path while the legacy endpoint resolves
+// it, so a Gram-hosted target would be denied.
+func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
+	t.Parallel()
+
+	name := "platform-logs"
+	url := "https://app.getgram.ai/mcp/platform-logs"
+	payload := canonicalIngestPayload("codex", "session.started", "codex-tool-prefix")
+	payload.Data = &gen.HookIngestData{
+		McpInventory: []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+	}
+
+	entries := canonicalMCPInventoryEntries(payload)
+	require.Len(t, entries, 1)
+	require.Equal(t, "platform_logs", entries[0].ToolPrefix)
+
+	// The sanitized form must resolve to the configured server, as it does on
+	// the legacy endpoint.
+	matched := matchCodexCachedMCPServerEntry(entries, "platform_logs")
+	require.NotNil(t, matched)
+	require.Equal(t, url, matched.URL)
+
+	// Other adapters keep no codex-specific prefix.
+	payload.Source.Adapter = "claude"
+	require.Empty(t, canonicalMCPInventoryEntries(payload)[0].ToolPrefix)
+}

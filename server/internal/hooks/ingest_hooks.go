@@ -235,17 +235,22 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		// claimed, so a client disconnect here would otherwise drop the event
 		// for good — the retry gets marked duplicate and skips persistence.
 		persistCtx := context.WithoutCancel(ctx)
-		inventory := canonicalMCPInventoryEntries(payload)
 		s.upsertShadowMCPInventoryURLs(
 			persistCtx,
 			authCtx.ActiveOrganizationID,
 			authCtx.ProjectID.String(),
 			canonicalSessionID(payload),
-			inventory,
+			canonicalMCPInventoryEntries(payload),
 		)
-		s.cacheCanonicalMCPList(persistCtx, canonicalSessionID(payload), inventory)
 		s.recordCanonicalHook(persistCtx, payload, authCtx, actor, timestamp, blockReason)
 	}
+	// Cache the inventory and extend its TTL for duplicates too, for the same
+	// reason captureMCPAttribution does below: the write is idempotent, and
+	// skipping retries would leave a session whose first delivery claimed the
+	// idempotency key but failed its cache write with no inventory for its
+	// whole life — under block_all every later meta-tool call would then deny,
+	// including Gram-hosted targets, with no path to recover.
+	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload))
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -808,7 +813,14 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
 func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry) {
-	if sessionID == "" || len(entries) == 0 {
+	if sessionID == "" {
+		return
+	}
+	if len(entries) == 0 {
+		// Every other event in the session extends the snapshot's life, as the
+		// legacy endpoints do. Without this a session outliving the TTL loses
+		// its inventory and every later meta-tool call denies.
+		s.refreshMCPListTTL(ctx, sessionID)
 		return
 	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
@@ -1820,23 +1832,36 @@ func canonicalMCPInventoryEntries(payload *gen.IngestPayload) []MCPServerEntry {
 	if payload == nil || payload.Data == nil || len(payload.Data.McpInventory) == 0 {
 		return nil
 	}
+	adapter := strings.TrimSpace(payload.Source.Adapter)
+	isCodex := strings.EqualFold(adapter, "codex")
 	entries := make([]MCPServerEntry, 0, len(payload.Data.McpInventory))
 	for _, mcp := range payload.Data.McpInventory {
 		if mcp == nil {
 			continue
 		}
+		name := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, ""))
+		// Codex addresses a server by its sanitized tool prefix as well as its
+		// configured name, and the prefix is the only thing the cached-entry
+		// fallback matches on. Leaving it empty makes a hyphenated server
+		// ("platform-logs", addressed as "platform_logs") unresolvable here
+		// while the legacy endpoint resolves it — a Gram-hosted target would
+		// be denied. Mirrors ParseCodexMCPList.
+		toolPrefix := ""
+		if isCodex {
+			toolPrefix = codexSanitizeToolName(name)
+		}
 		entries = append(entries, MCPServerEntry{
 			RawLine:       "",
-			Source:        strings.TrimSpace(payload.Source.Adapter),
+			Source:        adapter,
 			PluginName:    "",
-			Name:          strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")),
+			Name:          name,
 			URL:           strings.TrimSpace(conv.PtrValOr(mcp.URL, "")),
 			Command:       strings.TrimSpace(conv.PtrValOr(mcp.Command, "")),
 			Transport:     "",
 			Status:        "unknown",
 			StatusRaw:     "",
 			ConnectorUUID: "",
-			ToolPrefix:    "",
+			ToolPrefix:    toolPrefix,
 		})
 	}
 	return entries

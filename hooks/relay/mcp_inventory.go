@@ -101,7 +101,17 @@ func parseClaudeMCPInventory(out string) []mcpInventoryEntry {
 // and the shadow-MCP guard needs it to prove where a tool call actually
 // routes. Best-effort for the same reason as the Claude collector: a missing
 // or slow CLI must not hold up the hook.
-func collectCodexMCPInventory(ctx context.Context) []mcpInventoryEntry {
+// Codex merges managed, user and project config layers, and the project layer
+// is resolved relative to the working directory — so the list must be taken
+// from the session's cwd, exactly as the Claude collector does.
+//
+// Not replayed: per-session launch overrides (--profile, -c). agenthooks
+// replays them for its own resolution because they change the effective server
+// set. Without them a profile-only server is missing from the snapshot (its
+// meta-tool reads then deny), and a `-c mcp_servers.x.url=…` override is
+// invisible (the snapshot reports the default target for that name). See
+// DNO-770.
+func collectCodexMCPInventory(ctx context.Context, cwd string) []mcpInventoryEntry {
 	binary := findCodexBinary()
 	if binary == "" {
 		return nil
@@ -109,7 +119,11 @@ func collectCodexMCPInventory(ctx context.Context) []mcpInventoryEntry {
 
 	ctx, cancel := context.WithTimeout(ctx, codexMCPInventoryTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, binary, "mcp", "list", "--json").Output()
+	cmd := exec.CommandContext(ctx, binary, "mcp", "list", "--json")
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
+	out, err := cmd.Output()
 	if err != nil && len(out) == 0 {
 		return nil
 	}

@@ -185,7 +185,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// against, so a block_all policy cannot tell a Gram-hosted server from a
 	// shadow one (DNO-767).
 	if base.Provider == agenthooks.ProviderCodex && base.Kind == agenthooks.KindSessionStart {
-		attachMCPInventory(&payload, collectCodexMCPInventory(ctx))
+		attachMCPInventory(&payload, collectCodexMCPInventory(ctx, base.Session.CWD))
 	}
 	promptAttachmentAdvance := promptAttachmentHighWaterAdvance{}
 	if entries, advance, err := collectClaudePromptAttachments(base); err == nil {
