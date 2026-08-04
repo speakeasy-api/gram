@@ -116,7 +116,7 @@ DECLARE
     'tools:http:acme:fetch_traces', 'tools:http:acme:check_health'];
   audit_actions CONSTANT text[] := ARRAY[
     'toolset:create', 'deployments:create', 'api_key:create',
-    'environment:update', 'toolset:update', 'plugin:publish'];
+    'toolset:update', 'toolset:update', 'plugin:publish'];
 
   skill_content_refunds CONSTANT text :=
 E'---\nname: support-refunds\ndescription: How to process customer refunds safely.\n---\n\n# Refund handling\n\n1. Verify the order id and amount with the customer.\n2. Use the process_refund tool with the confirmed amount.\n3. Never accept full card numbers in chat.\n';

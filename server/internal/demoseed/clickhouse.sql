@@ -530,7 +530,7 @@ VALUES
    now64(9) - INTERVAL 10 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://tools.vendor-x.example/sse',
    'tools.vendor-x.example', 'vendor-x-tools',
-   now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 1 DAY, now64(9)),
+   now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
   (toUUID('dec0de00-0000-4000-a000-000000000002'), 'https://mcp.internal.acme.example/mcp',
    'mcp.internal.acme.example', 'acme-internal-mcp',
    now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
