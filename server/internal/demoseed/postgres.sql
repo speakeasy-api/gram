@@ -104,6 +104,16 @@ DECLARE
     'CC-SUP-4100', 'CC-SUP-4100', 'CC-ENG-2200', 'CC-ENG-2200', 'CC-OPS-3300', 'CC-ENG-2200'];
   demo_teams CONSTANT text[] := ARRAY[
     'Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'];
+  demo_hostnames CONSTANT text[] := ARRAY[
+    'amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local',
+    'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'];
+  demo_skill_names CONSTANT text[] := ARRAY['support-refunds', 'triage-incident', 'runbook'];
+  demo_skill_ids CONSTANT uuid[] := ARRAY[
+    'dec0de00-0000-4000-a000-0000000051a1', 'dec0de00-0000-4000-a000-0000000051a2',
+    'dec0de00-0000-4000-a000-0000000051a3']::uuid[];
+  demo_skill_versions CONSTANT uuid[] := ARRAY[
+    'dec0de00-0000-4000-a000-0000000052a1', 'dec0de00-0000-4000-a000-0000000052a2',
+    'dec0de00-0000-4000-a000-0000000052a3']::uuid[];
 
   tool_names CONSTANT text[] := ARRAY[
     'search_logs', 'get_metrics', 'query_db', 'get_customer',
@@ -149,6 +159,7 @@ E'---\nname: runbook\ndescription: General operational runbook for the Acme stac
   skill_id uuid;
   version_id uuid;
   refunds_version uuid;
+  skill_pos int;
   chat_count int;
   finding_count int;
   member_count int;
@@ -456,6 +467,107 @@ BEGIN
     (proj_a, 'dec0de00-0000-4000-a000-000000005301',
 E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.',
      'Make the PCI guardrail the first checkpoint instead of a trailing note.', 1);
+
+  ------------------------------------------------------------------
+  -- Skill efficacy, activations, and drift.
+  -- Activations: 1-3 reconciled skill_observations per odd (Claude) chat,
+  -- with metrics_synced_at/efficacy_enqueued_at stamped so the metrics-sync
+  -- worker and the efficacy sweeper treat them as already processed (they
+  -- would otherwise re-emit ClickHouse mappings / enqueue real judge work).
+  -- Drift: runbook gets a v2 and one active plugin distribution per skill,
+  -- then a fresh latest-observation per machine splits the fleet into
+  -- on-target / drifted / indeterminate.
+  ------------------------------------------------------------------
+  INSERT INTO skill_versions (id, skill_id, content, canonical_sha256, raw_sha256,
+                              description, spec_valid, created_by_user_id, created_at, promoted_at)
+  SELECT 'dec0de00-0000-4000-a000-0000000052b3', 'dec0de00-0000-4000-a000-0000000051a3', c,
+         encode(sha256(convert_to(c, 'UTF8')), 'hex'),
+         encode(sha256(convert_to(c, 'UTF8')), 'hex'),
+         'Add on-call paging step', TRUE, 'user_demo_lucas',
+         now() - interval '3 days', now() - interval '3 days'
+  FROM (SELECT skill_content_runbook || E'- page the on-call before any manual failover.\n' AS c) s;
+
+  INSERT INTO skill_version_lineages (skill_version_id, skill_id, derived_from_version_id)
+  VALUES ('dec0de00-0000-4000-a000-0000000052b3', 'dec0de00-0000-4000-a000-0000000051a3',
+          'dec0de00-0000-4000-a000-0000000052a3');
+
+  INSERT INTO skill_distributions (id, project_id, skill_id, channel, created_by_user_id, created_at)
+  VALUES
+    ('dec0de00-0000-4000-a000-0000000054a1', proj_a, 'dec0de00-0000-4000-a000-0000000051a1',
+     'plugin', 'user_demo_lucas', now() - interval '9 days'),
+    ('dec0de00-0000-4000-a000-0000000054a2', proj_a, 'dec0de00-0000-4000-a000-0000000051a2',
+     'plugin', 'user_demo_lucas', now() - interval '9 days'),
+    ('dec0de00-0000-4000-a000-0000000054a3', proj_a, 'dec0de00-0000-4000-a000-0000000051a3',
+     'plugin', 'user_demo_lucas', now() - interval '9 days');
+
+  FOR i IN 1 .. bulk_chats LOOP
+    CONTINUE WHEN i % 2 = 0;
+    -- Same skill-per-chat formula as the ClickHouse Skill hook rows and the
+    -- efficacy mappings: skill_pos = 1 + (((i-1)/2) % 3).
+    skill_pos := 1 + (((i - 1) / 2) % 3);
+    -- Runbook activations within the last ~5 days (i <= 24) are on v2: the
+    -- activation timeline shows the version rollout, and the drift split
+    -- below stays consistent with it.
+    version_id := CASE WHEN skill_pos = 3 AND i <= 24
+                       THEN 'dec0de00-0000-4000-a000-0000000052b3'::uuid
+                       ELSE demo_skill_versions[skill_pos] END;
+    chat_ts := now() - (interval '5 hours' * i) - (interval '13 minutes' * (i % 7));
+    FOR m IN 1 .. 1 + (i % 3) LOOP
+      INSERT INTO skill_observations (id, project_id, idempotency_key, provider,
+        user_id, user_email, hostname, session_id, skill_name, source,
+        source_level, source_path, raw_sha256, seen_at, skill_id,
+        skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at)
+      VALUES (demo.det_uuid('gram-demo-skillobs-' || i || '-' || m), proj_a,
+        'demo-skillobs-' || i || '-' || m, 'claude-code',
+        demo_user_ids[1 + (i % 6)], demo_user_emails[1 + (i % 6)],
+        demo_hostnames[1 + (i % 6)],
+        demo.det_uuid('gram-demo-chat-' || i)::text,
+        demo_skill_names[skill_pos], 'plugin', 'project',
+        '.claude/skills/' || demo_skill_names[skill_pos] || '/SKILL.md',
+        (SELECT canonical_sha256 FROM skill_versions WHERE id = version_id),
+        chat_ts + interval '45 seconds' + (interval '2 minutes' * (m - 1)),
+        demo_skill_ids[skill_pos], version_id,
+        chat_ts + interval '50 seconds', chat_ts + interval '55 seconds',
+        chat_ts + interval '55 seconds');
+    END LOOP;
+  END LOOP;
+
+  -- Drift split for runbook (which now has v2): latest observation per
+  -- machine decides its state — 3 on v2 (on-target), 2 on v1 (drifted),
+  -- 1 with no resolvable version (indeterminate).
+  FOR i IN 1 .. 6 LOOP
+    INSERT INTO skill_observations (id, project_id, idempotency_key, provider,
+      user_id, user_email, hostname, skill_name, source, raw_sha256, seen_at,
+      skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at)
+    VALUES (demo.det_uuid('gram-demo-skillobs-drift-' || i), proj_a,
+      'demo-skillobs-drift-' || i, 'claude-code',
+      demo_user_ids[i], demo_user_emails[i], demo_hostnames[i],
+      'runbook', 'plugin',
+      (SELECT canonical_sha256 FROM skill_versions
+       WHERE id = CASE WHEN i <= 3 THEN 'dec0de00-0000-4000-a000-0000000052b3'::uuid
+                       ELSE 'dec0de00-0000-4000-a000-0000000052a3'::uuid END),
+      now() - interval '2 hours' + (interval '7 minutes' * i),
+      'dec0de00-0000-4000-a000-0000000051a3',
+      CASE WHEN i <= 3 THEN 'dec0de00-0000-4000-a000-0000000052b3'::uuid
+           WHEN i <= 5 THEN 'dec0de00-0000-4000-a000-0000000052a3'::uuid
+           ELSE NULL END,
+      now() - interval '110 minutes', now() - interval '109 minutes',
+      now() - interval '109 minutes');
+  END LOOP;
+
+  -- Unknown activations (Skills list footer): reconciled with error codes.
+  INSERT INTO skill_observations (id, project_id, idempotency_key, provider,
+    user_id, user_email, hostname, skill_name, source, raw_sha256, seen_at,
+    reconciled_at, reconcile_error_code)
+  VALUES
+    (demo.det_uuid('gram-demo-skillobs-unknown-1'), proj_a, 'demo-skillobs-unknown-1',
+     'claude-code', 'user_demo_mateo', 'mateo@demo.getgram.ai', 'mateo-mbp.local',
+     'Deploy Checklist!!', 'plugin', NULL,
+     now() - interval '30 hours', now() - interval '30 hours', 'invalid_name'),
+    (demo.det_uuid('gram-demo-skillobs-unknown-2'), proj_a, 'demo-skillobs-unknown-2',
+     'claude-code', 'user_demo_hana', 'hana@demo.getgram.ai', 'hana-mbp.local',
+     'db-failover', 'plugin', encode(sha256(convert_to('demo-unknown-manifest', 'UTF8')), 'hex'),
+     now() - interval '8 hours', now() - interval '8 hours', 'unresolved_hash');
 
   ------------------------------------------------------------------
   -- Risk policies (one per project so both overview pages count an active

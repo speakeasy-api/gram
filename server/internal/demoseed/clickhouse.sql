@@ -68,6 +68,8 @@ ALTER TABLE shadow_mcp_inventory_urls DELETE WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
 ALTER TABLE authz_challenges DELETE WHERE organization_id = 'org_gram_demo_workspace';
 ALTER TABLE risk_findings DELETE WHERE organization_id = 'org_gram_demo_workspace';
+ALTER TABLE skill_session_versions DELETE WHERE organization_id = 'org_gram_demo_workspace';
+ALTER TABLE skill_efficacy_scores DELETE WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Tool-execution rows: 2 per chat. gram.toolset.slug makes the Insights CTE's
 -- direct branch classify each trace as hosted MCP traffic; unique per-call
@@ -319,7 +321,7 @@ FROM (
     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx) AS email,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
-    arrayElement(['support-refunds', 'triage-incident', 'runbook'], 1 + (cityHash64('skl', number) % 3)) AS skill,
+    arrayElement(['support-refunds', 'triage-incident', 'runbook'], 1 + (intDiv(number, 2) % 3)) AS skill,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -687,6 +689,103 @@ FROM (
   FROM numbers(20)
 );
 
+-- Skill efficacy mappings: one skill_session_versions row per Postgres
+-- skill_observation (same det-uuid ids, same skill-per-chat formula
+-- 1 + (((i-1)/2) % 3)). surface='dev' — the insights query joins scores to
+-- mappings on (project, session, surface, skill, version).
+INSERT INTO skill_session_versions
+  (id, created_at, seen_at, organization_id, project_id, session_id,
+   skill_id, skill_version_id, canonical_sha256, surface)
+SELECT
+  toUUID(concat(substring(ho, 1, 8), '-', substring(ho, 9, 4), '-5', substring(ho, 14, 3), '-8',
+                substring(ho, 18, 3), '-', substring(ho, 21, 12))),
+  ts, ts,
+  'org_gram_demo_workspace',
+  toUUID('dec0de00-0000-4000-a000-000000000001'),
+  chat_id,
+  arrayElement([toUUID('dec0de00-0000-4000-a000-0000000051a1'),
+                toUUID('dec0de00-0000-4000-a000-0000000051a2'),
+                toUUID('dec0de00-0000-4000-a000-0000000051a3')], sidx),
+  if(sidx = 3 AND i <= 24, toUUID('dec0de00-0000-4000-a000-0000000052b3'),
+     arrayElement([toUUID('dec0de00-0000-4000-a000-0000000052a1'),
+                   toUUID('dec0de00-0000-4000-a000-0000000052a2'),
+                   toUUID('dec0de00-0000-4000-a000-0000000052a3')], sidx)),
+  '',
+  'dev'
+FROM (
+  SELECT
+    number + 1 AS i,
+    arrayJoin(range(1, toUInt64(2 + ((number + 1) % 3)))) AS k,
+    1 + (intDiv(number, 2) % 3) AS sidx,
+    lower(hex(MD5(concat('gram-demo-skillobs-', toString(number + 1), '-', toString(k))))) AS ho,
+    lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
+    concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
+           substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
+    subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
+                    13 * toInt64((number + 1) % 7)) + toIntervalSecond(45) + toIntervalMinute(2 * (k - 1)) AS ts
+  FROM numbers(60)
+  WHERE (number + 1) % 2 = 1
+);
+
+-- Skill efficacy scores: one judged session per odd chat, joined to the k=1
+-- mapping above. Per-skill quality profiles: support-refunds strong,
+-- triage-incident middling, runbook weak with ignored/misapplied flags.
+INSERT INTO skill_efficacy_scores
+  (id, created_at, organization_id, project_id, session_id,
+   skill_id, skill_version_id, canonical_sha256, surface, trace_id,
+   gram_chat_id, score, rationale, est_turns_saved, est_minutes_saved,
+   roi_confidence, flags, judge_model, judge_prompt_version)
+SELECT
+  toUUID(concat(substring(hs, 1, 8), '-', substring(hs, 9, 4), '-5', substring(hs, 14, 3), '-8',
+                substring(hs, 18, 3), '-', substring(hs, 21, 12))),
+  ts + toIntervalHour(2),
+  'org_gram_demo_workspace',
+  'dec0de00-0000-4000-a000-000000000001',
+  chat_id,
+  arrayElement([toUUID('dec0de00-0000-4000-a000-0000000051a1'),
+                toUUID('dec0de00-0000-4000-a000-0000000051a2'),
+                toUUID('dec0de00-0000-4000-a000-0000000051a3')], sidx),
+  if(sidx = 3 AND i <= 24, toUUID('dec0de00-0000-4000-a000-0000000052b3'),
+     arrayElement([toUUID('dec0de00-0000-4000-a000-0000000052a1'),
+                   toUUID('dec0de00-0000-4000-a000-0000000052a2'),
+                   toUUID('dec0de00-0000-4000-a000-0000000052a3')], sidx)),
+  '',
+  'dev',
+  NULL,
+  chat_id,
+  -- Runbook v2 scores markedly lower than v1: surfaces the regression signal.
+  least(0.99, greatest(0.05,
+    arrayElement([0.87, 0.66, 0.42], sidx)
+    - if(sidx = 3 AND i <= 24, 0.14, 0)
+    + (toInt64(cityHash64('js', i) % 21) - 10) / 100)),
+  arrayElement(['Agent followed the refund checklist and refused the pasted card number.',
+                'Triage steps mostly followed but escalation criteria applied loosely.',
+                'Runbook steps were skipped or applied out of order in this session.'], sidx),
+  arrayElement([3, 2, 1], sidx) + (cityHash64('jt', i) % 3),
+  arrayElement([13, 7, 2], sidx) + (cityHash64('jm', i) % 5),
+  arrayElement(['high', 'med', 'low'], sidx),
+  multiIf(
+    sidx = 3 AND cityHash64('jf', i) % 3 = 0, ['ignored'],
+    sidx = 3 AND cityHash64('jf', i) % 3 = 1, ['misapplied'],
+    sidx = 2 AND cityHash64('jf', i) % 5 = 0, ['partially_followed'],
+    sidx = 1 AND cityHash64('jf', i) % 7 = 0, ['partially_followed'],
+    CAST([] AS Array(String))),
+  'claude-sonnet-4-6',
+  'v1'
+FROM (
+  SELECT
+    number + 1 AS i,
+    1 + (intDiv(number, 2) % 3) AS sidx,
+    lower(hex(MD5(concat('gram-demo-skillscore-', toString(number + 1))))) AS hs,
+    lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
+    concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
+           substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
+    subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
+                    13 * toInt64((number + 1) % 7)) + toIntervalSecond(45) AS ts
+  FROM numbers(60)
+  WHERE (number + 1) % 2 = 1
+);
+
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero
 -- exit for the runner) when violated.
@@ -712,6 +811,14 @@ SELECT throwIf(
 SELECT throwIf(
   (SELECT count() FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace') = 0,
   'demo seed postflight: authz_challenges empty');
+
+SELECT throwIf(
+  (SELECT count() FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace') < 30,
+  'demo seed postflight: skill_session_versions missing rows');
+
+SELECT throwIf(
+  (SELECT count() FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace') < 30,
+  'demo seed postflight: skill_efficacy_scores missing rows');
 
 SELECT throwIf(
   (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 20,
