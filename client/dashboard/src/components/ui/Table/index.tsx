@@ -450,6 +450,7 @@ type BodyProps<T extends object> = {
   data: T[] | Group<T>[];
   rowKey: (row: T) => string | number;
   onRowClick?: (row: T) => void;
+  isRowClickable?: (row: T) => boolean;
   renderRow?: RenderRow<T>;
   noResultsMessage?: ReactNode;
   renderGroupHeader?: (group: Group<T>) => ReactNode;
@@ -495,6 +496,7 @@ const Body = React.forwardRef(function Body<T extends object>(
     rowKey,
     hasMore,
     onRowClick,
+    isRowClickable,
     renderRow,
     noResultsMessage,
     renderGroupHeader,
@@ -514,6 +516,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           renderGroupHeader={renderGroupHeader}
           key={row.key}
           onRowClick={onRowClick}
+          isRowClickable={isRowClickable}
           renderRow={renderRow}
         />
       );
@@ -525,7 +528,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           rowKey={rowKey}
           renderExpandedContent={renderExpandedContent}
           key={rowKey(row)}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       );
@@ -535,7 +538,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           row={row}
           key={rowKey(row)}
           columns={columns}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       );
@@ -722,6 +725,7 @@ function RowGroup<T extends object>({
   renderGroupHeader,
   className,
   onRowClick,
+  isRowClickable,
   renderRow,
 }: {
   group: Group<T>;
@@ -730,6 +734,7 @@ function RowGroup<T extends object>({
   renderGroupHeader?: (group: Group<T>) => ReactNode;
   className?: string;
   onRowClick?: (row: T) => void;
+  isRowClickable?: (row: T) => boolean;
   renderRow?: RenderRow<T>;
 }) {
   return (
@@ -745,7 +750,7 @@ function RowGroup<T extends object>({
           row={row}
           key={rowKey(row)}
           columns={columns}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       ))}

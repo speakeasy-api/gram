@@ -928,6 +928,12 @@ var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
+var ShadowMCPInventoryUserSourceModel = Type("ShadowMCPInventoryUserSource", func() {
+	Required("source", "observed_use_count")
+	Attribute("source", String)
+	Attribute("observed_use_count", Int)
+})
+
 var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
 	Required("user_key", "last_called", "observed_use_count")
 
@@ -938,6 +944,7 @@ var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
+	Attribute("sources", ArrayOf(ShadowMCPInventoryUserSourceModel))
 })
 
 var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult", func() {

@@ -630,6 +630,12 @@ type ShadowMCPInventoryUser struct {
 	Email            *string
 	LastCalled       string
 	ObservedUseCount int
+	Sources          []*ShadowMCPInventoryUserSource
+}
+
+type ShadowMCPInventoryUserSource struct {
+	Source           string
+	ObservedUseCount int
 }
 
 // UnblockShadowMCPInventoryServerPayload is the payload type of the access

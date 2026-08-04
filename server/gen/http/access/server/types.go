@@ -4907,11 +4907,19 @@ type ShadowMCPInventoryRequestSummaryResponseBody struct {
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
 // types.
 type ShadowMCPInventoryUserResponseBody struct {
-	UserKey          string  `form:"user_key" json:"user_key" xml:"user_key"`
-	Name             *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Email            *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
-	LastCalled       string  `form:"last_called" json:"last_called" xml:"last_called"`
-	ObservedUseCount int     `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserKey          string                                      `form:"user_key" json:"user_key" xml:"user_key"`
+	Name             *string                                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Email            *string                                     `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	LastCalled       string                                      `form:"last_called" json:"last_called" xml:"last_called"`
+	ObservedUseCount int                                         `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	Sources          []*ShadowMCPInventoryUserSourceResponseBody `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+}
+
+// ShadowMCPInventoryUserSourceResponseBody is used to define fields on
+// response body types.
+type ShadowMCPInventoryUserSourceResponseBody struct {
+	Source           string `form:"source" json:"source" xml:"source"`
+	ObservedUseCount int    `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
