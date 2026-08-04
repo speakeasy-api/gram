@@ -526,13 +526,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 const createXaaApp = `-- name: CreateXaaApp :one
 
 INSERT INTO xaa_apps (id, client_id, client_secret, name, enabled)
-VALUES (
-  ?1,
-  ?2,
-  COALESCE(?3, ''),
-  ?4,
-  ?5
-)
+VALUES (?1, ?2, ?3, ?4, ?5)
 ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
 RETURNING id, client_id, client_secret, name, enabled, created_at, updated_at
 `
@@ -540,7 +534,7 @@ RETURNING id, client_id, client_secret, name, enabled, created_at, updated_at
 type CreateXaaAppParams struct {
 	ID           uuid.UUID
 	ClientID     string
-	ClientSecret interface{}
+	ClientSecret string
 	Name         string
 	Enabled      bool
 }
