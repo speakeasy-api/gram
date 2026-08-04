@@ -156,14 +156,15 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		siteURL,
 		"test-jwt-secret",
 	)
-	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger)
+	calls := callcache.New(cacheAdapter)
+	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
 	traceProcessor.Start(ctx)
 	t.Cleanup(func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		require.NoError(t, traceProcessor.Shutdown(shutdownCtx))
 	})
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, callcache.New(cacheAdapter), traceProcessor)
+	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor)
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,

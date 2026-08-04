@@ -427,8 +427,12 @@ const (
 	LiteLLMTeamAliasKey      = attribute.Key("gram.litellm.team_alias")
 	LiteLLMEndUserIDKey      = attribute.Key("gram.litellm.end_user_id")
 	LiteLLMOrganizationIDKey = attribute.Key("gram.litellm.org_id")
-	LiteLLMIsStreamingKey    = attribute.Key("litellm.is_streaming")
-	LiteLLMResponseCostKey   = attribute.Key("litellm.response.cost")
+	LiteLLMAPIKeyHashKey     = attribute.Key("gram.litellm.api_key_hash")
+	LiteLLMAPIKeyAliasKey    = attribute.Key("gram.litellm.api_key_alias")
+	LiteLLMInputCostKey      = attribute.Key("litellm.cost.input")
+	LiteLLMOutputCostKey     = attribute.Key("litellm.cost.output")
+	LiteLLMCacheReadCostKey  = attribute.Key("litellm.cost.cache_read")
+	LiteLLMCacheWriteCostKey = attribute.Key("litellm.cost.cache_creation")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -499,7 +503,6 @@ const (
 	GenAIUsagePromptTokensKey             = attribute.Key("gen_ai.usage.prompt_tokens")
 	GenAIUsageCompletionTokensKey         = attribute.Key("gen_ai.usage.completion_tokens")
 	GenAIRequestIsStreamingKey            = attribute.Key("gen_ai.request.is_streaming")
-	GenAIRequestStreamingKey              = attribute.Key("gen_ai.request.streaming")
 
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
