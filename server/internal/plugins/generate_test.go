@@ -1562,6 +1562,25 @@ func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
 	require.Contains(t, calls, "plugin marketplace upgrade "+conv.ToSlug(cfg.OrgName)+"-speakeasy")
 }
 
+// The unified ChatGPT desktop app (Chat + Work + Codex modes) that OpenAI
+// merged the standalone Codex app into on 2026-07-09 ships the codex CLI at a
+// different bundle path. Without this probe the script silently degrades to
+// "codex executable not found" manual instructions on every machine that only
+// has the post-merge app — the common case now that the legacy app is frozen.
+func TestGenerateCodexInstallScriptProbesUnifiedChatGPTAppBundle(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	unified := strings.Index(string(script), "/Applications/ChatGPT.app/Contents/Resources/codex")
+	legacy := strings.Index(string(script), "/Applications/Codex.app/Contents/Resources/codex")
+	require.Positive(t, unified, "unified ChatGPT.app bundle must be probed")
+	require.Positive(t, legacy, "legacy Codex.app bundle stays probed for pre-merge installs")
+	require.Less(t, unified, legacy, "the maintained unified app is probed before the frozen legacy bundle")
+}
+
 // Root-level dotted keys (features.hooks = true) implicitly define the
 // [features] table and make Codex reject the whole config with a duplicate-key
 // error when an explicit [features] table is also present — which is the
