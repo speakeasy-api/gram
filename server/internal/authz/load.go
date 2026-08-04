@@ -41,20 +41,46 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		})
 	}
 
-	return withAssistantSystemRoleDefaults(grantRows, principals), nil
-}
-
-func withAssistantSystemRoleDefaults(grants []Grant, principals []urn.Principal) []Grant {
-	scopesByRole := map[string][]Scope{
-		SystemRoleAdmin:  {ScopeAssistantRead, ScopeAssistantWrite},
-		SystemRoleMember: {ScopeAssistantRead},
+	assistantDefaults, err := assistantSystemRoleDefaults(ctx, db, principals)
+	if err != nil {
+		return nil, err
 	}
 
+	return withAssistantSystemRoleDefaults(grantRows, principals, assistantDefaults), nil
+}
+
+func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal) (map[string][]Scope, error) {
+	hasLegacySystemRole := false
 	for _, principal := range principals {
-		if principal.Type != urn.PrincipalTypeRole {
-			continue
+		if principal.Type == urn.PrincipalTypeRole && (principal.ID == SystemRoleAdmin || principal.ID == SystemRoleMember) {
+			hasLegacySystemRole = true
+			break
 		}
-		scopes, ok := scopesByRole[principal.ID]
+	}
+	if !hasLegacySystemRole {
+		return nil, nil
+	}
+
+	defaults := make(map[string][]Scope, 2)
+	q := accessrepo.New(db)
+	for roleSlug, scopes := range map[string][]Scope{
+		SystemRoleAdmin:  {ScopeAssistantRead, ScopeAssistantWrite},
+		SystemRoleMember: {ScopeAssistantRead},
+	} {
+		role, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
+		if err != nil {
+			return nil, fmt.Errorf("load %s system role: %w", roleSlug, err)
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String())
+		defaults[principal.String()] = scopes
+	}
+
+	return defaults, nil
+}
+
+func withAssistantSystemRoleDefaults(grants []Grant, principals []urn.Principal, scopesByPrincipal map[string][]Scope) []Grant {
+	for _, principal := range principals {
+		scopes, ok := scopesByPrincipal[principal.String()]
 		if !ok {
 			continue
 		}

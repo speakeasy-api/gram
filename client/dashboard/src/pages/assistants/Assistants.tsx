@@ -101,17 +101,21 @@ export default function AssistantsIndex(): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
   const canWrite = hasScope("assistant:write", project.id);
-  const canManageTriggers = canWrite && hasScope("project:write", project.id);
+  const canManageTriggers = hasScope("project:write", project.id);
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
     parseAsStringLiteral(TOP_LEVEL_TABS).withDefault("assistants"),
   );
   const visibleActiveTab =
     activeTab === "triggers" && !canManageTriggers ? "assistants" : activeTab;
-  const { data, isLoading } = useAssistantsList(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-  });
+  const { data, isLoading } = useAssistantsList(
+    { gramProject: project.slug },
+    undefined,
+    {
+      retry: false,
+      throwOnError: false,
+    },
+  );
 
   const assistants = useMemo(() => data?.assistants ?? [], [data]);
 

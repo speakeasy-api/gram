@@ -2293,8 +2293,20 @@ function buildAssistantTools(deps: ToolDeps) {
 }
 
 type OnboardingTools = ReturnType<typeof buildAssistantTools>;
+export type OnboardingToolName = keyof OnboardingTools;
 
-const ASSISTANT_READ_TOOLS = new Set<keyof OnboardingTools>([
+export type OnboardingToolPermissions = {
+  skillsEnabled: boolean;
+  canWriteAssistant: boolean;
+  canReadProject: boolean;
+  canWriteProject: boolean;
+  canReadMCP: boolean;
+  canWriteMCP: boolean;
+  canReadSkills: boolean;
+  canWriteEnvironment: boolean;
+};
+
+const ASSISTANT_READ_TOOLS = new Set<OnboardingToolName>([
   "list_skills",
   "list_mcp_servers",
   "list_toolsets",
@@ -2307,7 +2319,90 @@ const ASSISTANT_READ_TOOLS = new Set<keyof OnboardingTools>([
   "list_integrations",
   "list_docs",
   "read_docs",
+  "finish_onboarding",
 ]);
+
+const PROJECT_READ_TOOLS = new Set<OnboardingToolName>([
+  "list_available_tools",
+  "list_environments",
+  "list_trigger_definitions",
+  "list_triggers",
+  "show_slack_app_guide",
+  "propose_slack_setup",
+]);
+
+const PROJECT_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "create_trigger",
+  "update_trigger",
+  "propose_slack_setup",
+]);
+
+const MCP_READ_TOOLS = new Set<OnboardingToolName>([
+  "list_mcp_servers",
+  "list_toolsets",
+  "propose_slack_setup",
+]);
+
+const MCP_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "create_toolset",
+  "add_tools_to_toolset",
+  "propose_slack_setup",
+]);
+
+const SKILL_TOOLS = new Set<OnboardingToolName>([
+  "list_skills",
+  "attach_skill",
+  "detach_skill",
+]);
+
+const SKILL_MUTATION_TOOLS = new Set<OnboardingToolName>([
+  "attach_skill",
+  "detach_skill",
+]);
+
+const ENVIRONMENT_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "create_environment",
+  "add_environment_keys",
+  "request_environment_secrets",
+  "propose_slack_setup",
+]);
+
+export function isOnboardingToolAllowed(
+  tool: OnboardingToolName,
+  permissions: OnboardingToolPermissions,
+): boolean {
+  if (!permissions.canWriteAssistant && !ASSISTANT_READ_TOOLS.has(tool)) {
+    return false;
+  }
+  if (
+    SKILL_TOOLS.has(tool) &&
+    (!permissions.skillsEnabled || !permissions.canReadSkills)
+  ) {
+    return false;
+  }
+  if (
+    SKILL_MUTATION_TOOLS.has(tool) &&
+    (!permissions.canWriteAssistant || !permissions.canWriteProject)
+  ) {
+    return false;
+  }
+  if (PROJECT_READ_TOOLS.has(tool) && !permissions.canReadProject) {
+    return false;
+  }
+  if (PROJECT_WRITE_TOOLS.has(tool) && !permissions.canWriteProject) {
+    return false;
+  }
+  if (MCP_READ_TOOLS.has(tool) && !permissions.canReadMCP) {
+    return false;
+  }
+  if (MCP_WRITE_TOOLS.has(tool) && !permissions.canWriteMCP) {
+    return false;
+  }
+  if (ENVIRONMENT_WRITE_TOOLS.has(tool) && !permissions.canWriteEnvironment) {
+    return false;
+  }
+  return true;
+}
 
 export function useOnboardingTools(): {
   frontendTools: Record<string, FrontendTool<Record<string, unknown>, unknown>>;
@@ -2322,51 +2417,41 @@ export function useOnboardingTools(): {
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
   const canWriteAssistant = hasScope("assistant:write", project.id);
+  const canReadProject = hasScope("project:read", project.id);
   const canWriteProject = hasScope("project:write", project.id);
+  const canReadMCP = hasScope("mcp:read", project.id);
+  const canWriteMCP = hasScope("mcp:write", project.id);
   const canReadSkills = hasScope("skill:read", project.id);
-  const canMutateSkills = canReadSkills && canWriteAssistant && canWriteProject;
+  const canWriteEnvironment = hasScope("environment:write", project.id);
 
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
     const tools = buildAssistantTools({ sdk, organizationId, draft });
-    let enabledTools: Partial<OnboardingTools> = tools;
-    if (productFeatures?.skillsEnabled !== true || !canReadSkills) {
-      const { list_skills, attach_skill, detach_skill, ...withoutSkills } =
-        tools;
-      void list_skills;
-      void attach_skill;
-      void detach_skill;
-      enabledTools = withoutSkills;
-    }
-    if (!canMutateSkills) {
-      const { attach_skill, detach_skill, ...withoutSkillMutations } =
-        enabledTools;
-      void attach_skill;
-      void detach_skill;
-      enabledTools = withoutSkillMutations;
-    }
-    if (!canWriteProject) {
-      const { create_trigger, update_trigger, ...withoutTriggerMutations } =
-        enabledTools;
-      void create_trigger;
-      void update_trigger;
-      enabledTools = withoutTriggerMutations;
-    }
-    if (!canWriteAssistant) {
-      enabledTools = Object.fromEntries(
-        Object.entries(enabledTools).filter(([name]) =>
-          ASSISTANT_READ_TOOLS.has(name as keyof OnboardingTools),
-        ),
-      );
-    }
-    return enabledTools;
+    const permissions: OnboardingToolPermissions = {
+      skillsEnabled: productFeatures?.skillsEnabled === true,
+      canWriteAssistant,
+      canReadProject,
+      canWriteProject,
+      canReadMCP,
+      canWriteMCP,
+      canReadSkills,
+      canWriteEnvironment,
+    };
+    return Object.fromEntries(
+      Object.entries(tools).filter(([name]) =>
+        isOnboardingToolAllowed(name as OnboardingToolName, permissions),
+      ),
+    );
   }, [
     sdk,
     organizationId,
     draft,
     canWriteAssistant,
+    canReadProject,
     canWriteProject,
+    canReadMCP,
+    canWriteMCP,
     canReadSkills,
-    canMutateSkills,
+    canWriteEnvironment,
     productFeatures?.skillsEnabled,
   ]);
 

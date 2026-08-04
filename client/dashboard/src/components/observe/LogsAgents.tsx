@@ -304,8 +304,8 @@ export function LogsAgentsContent(): JSX.Element {
   const searchQuery = urlSearch ?? "";
   const assistantId = isUuid(urlAssistantId) ? urlAssistantId : "";
 
-  const { data: filteredAssistant } = useAssistantsGet(
-    { id: assistantId },
+  const { data: assistantData } = useAssistantsGet(
+    { id: assistantId, gramProject: project.slug },
     undefined,
     {
       enabled: canReadAssistant && !!assistantId,
@@ -314,6 +314,7 @@ export function LogsAgentsContent(): JSX.Element {
       refetchOnWindowFocus: false,
     },
   );
+  const filteredAssistant = canReadAssistant ? assistantData : undefined;
 
   const timeRange = useMemo(() => {
     if (customRange) {

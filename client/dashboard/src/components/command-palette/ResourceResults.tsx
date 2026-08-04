@@ -199,9 +199,12 @@ function EnvironmentsGroup({ onNavigate }: GroupProps) {
 
 function AssistantsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = useAssistantsListSuspense(undefined, undefined, {
-    retry: false,
-  });
+  const project = useProject();
+  const { data } = useAssistantsListSuspense(
+    { gramProject: project.slug },
+    undefined,
+    { retry: false },
+  );
   const assistants = data?.assistants ?? [];
   if (!assistants.length) return null;
   return (

@@ -11,12 +11,14 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Client struct {
@@ -149,7 +151,13 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 }
 
 func provisionAssistantSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
-	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
+	q := accessrepo.New(dbtx)
+	member, err := q.GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	if err != nil {
+		return fmt.Errorf("resolve member system role: %w", err)
+	}
+	memberPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+member.ID.String())
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, memberPrincipal.String(), []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeAssistantRead),
 			Effect:    authz.PolicyEffectAllow,
@@ -159,7 +167,12 @@ func provisionAssistantSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, o
 		return fmt.Errorf("provision member Assistant grants: %w", err)
 	}
 
-	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
+	admin, err := q.GetGlobalRoleBySlug(ctx, authz.SystemRoleAdmin)
+	if err != nil {
+		return fmt.Errorf("resolve admin system role: %w", err)
+	}
+	adminPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+admin.ID.String())
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, adminPrincipal.String(), []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeAssistantRead),
 			Effect:    authz.PolicyEffectAllow,

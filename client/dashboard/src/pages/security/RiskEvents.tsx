@@ -182,13 +182,17 @@ export default function RiskEvents(): JSX.Element {
   // Powers the assistant filter options; "No assistant" is always offered so
   // findings missing user attribution can be surfaced even before any
   // assistant exists in the project.
-  const { data: assistantsData } = useAssistantsList(undefined, undefined, {
-    enabled: canReadAssistants,
-    throwOnError: false,
-  });
+  const { data: assistantsData } = useAssistantsList(
+    { gramProject: project.slug },
+    undefined,
+    {
+      enabled: canReadAssistants,
+      throwOnError: false,
+    },
+  );
   const assistants = useMemo(
-    () => assistantsData?.assistants ?? [],
-    [assistantsData?.assistants],
+    () => (canReadAssistants ? (assistantsData?.assistants ?? []) : []),
+    [assistantsData?.assistants, canReadAssistants],
   );
 
   // Page-supplied option lists for the schema's select/text dimensions.

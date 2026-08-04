@@ -1181,6 +1181,7 @@ func TestEngineRequire_assistantBlocklistExpansion(t *testing.T) {
 		NewGrant(ScopeAssistantBlockedWrite, "project_a"),
 	})
 
+	require.NoError(t, engine.Require(blockedWriteCtx, Check{Scope: ScopeAssistantWrite, ResourceKind: "", ResourceID: "project_b", Dimensions: nil}))
 	require.NoError(t, engine.Require(blockedWriteCtx, Check{Scope: ScopeAssistantRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil}))
 	err = engine.Require(blockedWriteCtx, Check{Scope: ScopeAssistantWrite, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
 	var oopsErr *oops.ShareableError

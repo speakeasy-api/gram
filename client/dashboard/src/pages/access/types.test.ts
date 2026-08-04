@@ -67,7 +67,10 @@ describe("isProjectSelectableResourceType", () => {
     },
   );
 
-  it("does not treat MCP scopes as project resources", () => {
-    expect(isProjectSelectableResourceType("mcp")).toBe(false);
-  });
+  it.each(["org", "mcp", "environment", "risk_policy", "chat"] as const)(
+    "does not treat %s scopes as project resources",
+    (resourceType) => {
+      expect(isProjectSelectableResourceType(resourceType)).toBe(false);
+    },
+  );
 });
