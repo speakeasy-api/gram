@@ -162,3 +162,133 @@ CREATE TABLE IF NOT EXISTS organization_roles (
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_slug_key
   ON organization_roles (organization_id, slug);
+
+-- =============================================================================
+-- Cross-app access (XAA) tables. Two independent policy surfaces:
+--
+--   * mint side (the IdP) -- xaa_apps + xaa_resources + xaa_app_assignments
+--     decide whether the oauth2-1 server will issue an ID-JAG at all;
+--   * redeem side (each resource authorization server) -- xaa_trust_rules
+--     decide whether an ID-JAG that was issued somewhere is accepted here.
+--
+-- They are deliberately separate: an ID-JAG this dev-idp minted can still be
+-- rejected at redemption, and a resource can be configured to trust a foreign
+-- issuer this dev-idp never mints for. Both are things worth testing.
+-- =============================================================================
+
+-- Requesting apps: the clients allowed to ask the IdP for an ID-JAG on a
+-- user's behalf. `client_id` is the id they authenticate to /token with.
+CREATE TABLE IF NOT EXISTS xaa_apps (
+  id TEXT NOT NULL PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  client_secret TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS xaa_apps_client_id_key ON xaa_apps (client_id);
+
+-- Resource apps. One row is one resource authorization server, mounted at
+-- /resource-as/<slug>, guarding the MCP server named by `resource_identifier`.
+-- The slug-derived issuer URL is what an ID-JAG carries in `aud`;
+-- `resource_identifier` is what it carries in `resource`.
+CREATE TABLE IF NOT EXISTS xaa_resources (
+  id TEXT NOT NULL PRIMARY KEY,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  resource_identifier TEXT NOT NULL,
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS xaa_resources_slug_key ON xaa_resources (slug);
+
+-- Which user may drive which app against which resource, and for what scopes.
+-- The absence of a row IS the denial -- there is no disabled state here, so
+-- "revoke this user's access" is a delete.
+CREATE TABLE IF NOT EXISTS xaa_app_assignments (
+  id TEXT NOT NULL PRIMARY KEY,
+  app_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  granted_scopes TEXT NOT NULL DEFAULT '',
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (app_id) REFERENCES xaa_apps (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS xaa_app_assignments_app_user_resource_key
+  ON xaa_app_assignments (app_id, user_id, resource_id);
+
+CREATE INDEX IF NOT EXISTS xaa_app_assignments_user_id_idx
+  ON xaa_app_assignments (user_id);
+
+-- Trust domain rules. `trusted_issuer` is an ID-JAG `iss` value the resource
+-- accepts; the dev-idp's own oauth2-1 issuer is just one possible value, so a
+-- resource can be pointed at a foreign IdP. `allowed_client_ids` is a JSON
+-- array ('[]' means any client) and `allowed_scopes` is a space-delimited
+-- ceiling ('' means no ceiling) applied on top of whatever the ID-JAG carries.
+CREATE TABLE IF NOT EXISTS xaa_trust_rules (
+  id TEXT NOT NULL PRIMARY KEY,
+  resource_id TEXT NOT NULL,
+  trusted_issuer TEXT NOT NULL,
+  allowed_client_ids TEXT NOT NULL DEFAULT '[]',
+  allowed_scopes TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS xaa_trust_rules_resource_id_trusted_issuer_key
+  ON xaa_trust_rules (resource_id, trusted_issuer);
+
+-- Ledger of every ID-JAG this IdP minted. Inspection only -- the dashboard
+-- reads it to show what policy actually allowed. Replay is enforced by
+-- xaa_redeemed_jags, not here, because a resource may accept ID-JAGs this
+-- dev-idp never issued.
+CREATE TABLE IF NOT EXISTS xaa_issued_jags (
+  jti TEXT NOT NULL PRIMARY KEY,
+  app_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT '',
+  expires_at DATETIME NOT NULL,
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (app_id) REFERENCES xaa_apps (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS xaa_issued_jags_user_id_idx ON xaa_issued_jags (user_id);
+CREATE INDEX IF NOT EXISTS xaa_issued_jags_expires_at_idx ON xaa_issued_jags (expires_at);
+
+-- Redemption ledger, keyed by (issuer, jti) so an ID-JAG is single-use no
+-- matter which issuer minted it. An insert that conflicts IS the replay
+-- signal; there is no separate lookup.
+CREATE TABLE IF NOT EXISTS xaa_redeemed_jags (
+  issuer TEXT NOT NULL,
+  jti TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  expires_at DATETIME NOT NULL,
+
+  redeemed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (issuer, jti),
+  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS xaa_redeemed_jags_expires_at_idx
+  ON xaa_redeemed_jags (expires_at);
