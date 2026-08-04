@@ -150,6 +150,18 @@ type XaaResource struct {
 	UpdatedAt          time.Time
 }
 
+type XaaResourceToken struct {
+	Token      string
+	ResourceID uuid.UUID
+	UserID     uuid.UUID
+	ClientID   string
+	Audience   string
+	Scope      string
+	ExpiresAt  time.Time
+	RevokedAt  sql.NullTime
+	CreatedAt  time.Time
+}
+
 type XaaTrustRule struct {
 	ID               uuid.UUID
 	ResourceID       uuid.UUID

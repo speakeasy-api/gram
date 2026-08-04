@@ -132,3 +132,12 @@ sql:
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
+          # xaa_resource_tokens
+          - column: "xaa_resource_tokens.resource_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "xaa_resource_tokens.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"

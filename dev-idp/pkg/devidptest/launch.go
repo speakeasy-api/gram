@@ -32,7 +32,9 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
+	"github.com/speakeasy-api/gram/dev-idp/internal/modes/resourceas"
 	workosmode "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
+	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
 	"github.com/speakeasy-api/gram/plog"
 )
 
@@ -156,6 +158,13 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21H.Handler()))
 	oauth21H.RegisterRootRoutes(outer)
 
+	// Resource authorization servers are always mounted, mirroring the real
+	// binary. With no xaa_resources rows seeded every slug simply 404s, so
+	// tests that do not exercise cross-app access are unaffected.
+	resourceASH := resourceas.NewHandler(resourceas.Config{ExternalURL: pubURL}, ks, logger, tp, db)
+	outer.Handle(resourceas.Prefix+"/", http.StripPrefix(resourceas.Prefix, resourceASH.Handler()))
+	resourceASH.RegisterRootRoutes(outer)
+
 	var workosURL string
 	if opts.EnableWorkOS {
 		mwH := mockworkos.NewHandler(logger, tp, db)
@@ -189,14 +198,14 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	}
 
 	return &Instance{
-		Issuer:        pubURL,
-		OAuth21URL:    pubURL + oauth21.Prefix,
-		WorkOSURL:     workosURL,
-		DB:            db,
-		Repo:          queries,
-		DefaultUser:   user,
-		server:        server,
-		rsaKey:        rsaKey,
+		Issuer:      pubURL,
+		OAuth21URL:  pubURL + oauth21.Prefix,
+		WorkOSURL:   workosURL,
+		DB:          db,
+		Repo:        queries,
+		DefaultUser: user,
+		server:      server,
+		rsaKey:      rsaKey,
 	}
 }
 
@@ -210,6 +219,22 @@ func (i *Instance) SigningKey() *rsa.PrivateKey { return i.rsaKey }
 func (i *Instance) OAuth21Metadata(t *testing.T) []byte {
 	t.Helper()
 	return fetchMetadata(t, i.Issuer, oauth21.Prefix)
+}
+
+// ResourceASURL is the issuer identifier of the resource authorization server
+// serving `slug`. This is the value an ID-JAG must carry in `aud`, and the
+// base for that server's /token and /introspect endpoints.
+//
+// The resource itself still has to exist -- seed one with CreateResource.
+func (i *Instance) ResourceASURL(slug string) string {
+	return xaa.ResourceASIssuer(i.Issuer, slug)
+}
+
+// ResourceASMetadata fetches the RFC 8414 authorization-server metadata for
+// one resource authorization server.
+func (i *Instance) ResourceASMetadata(t *testing.T, slug string) []byte {
+	t.Helper()
+	return fetchMetadata(t, i.Issuer, resourceas.Prefix+"/"+slug)
 }
 
 // fetchMetadata reads the RFC 8414 authorization-server metadata for an
