@@ -520,6 +520,10 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 		Title:          conv.ToPGTextEmpty(title),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(createdAt),
+		// First-wins: the title is DERIVED from the window's first prompt, and
+		// a later poll window would derive a mid-session prompt as its
+		// "first" — newest-wins would retitle the chat on every window.
+		PreferStoredTitle: true,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert codex cloud chat")

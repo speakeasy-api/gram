@@ -176,10 +176,29 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
-	// The replay re-sends the same prompt-derived title, never a stale one.
+
+	// A later poll window (fresh run: empty caches) sees only the session's
+	// later turns and derives a MID-SESSION prompt as its "first". First-wins
+	// title semantics must keep the original title — newest-wins would
+	// retitle the chat on every window.
+	laterWindow := `{"event_id":"cdx_6","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T10:10:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"11111111-2222-4333-8444-555555555555","model":"gpt-5.5","prompt_text":"Also add a changelog entry"}}` + "\n"
+	laterFile := codexCloudFixtureFile(laterWindow)
+	laterFile.ID = "eclf_codex_cloud_2"
+	src.chatIDs = map[string]uuid.UUID{}
+	src.chatTitles = map[string]string{}
+	src.client = &stubCodexComplianceClient{
+		listPages:  nil,
+		listParams: nil,
+		downloads:  map[string][]byte{laterFile.ID: []byte(laterWindow)},
+	}
+	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{laterFile}))
+	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Len(t, messages, 3)
 	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
 	require.NoError(t, err)
-	require.Equal(t, "Fix the flaky retry test in CI", chatRow.Title.String)
+	require.Equal(t, "Fix the flaky retry test in CI", chatRow.Title.String,
+		"a mid-session prompt from a later window must not retitle the chat")
 }
 
 func newCodexCloudTestSource(cfg Config, client codexComplianceClient) *codexCloudSource {
