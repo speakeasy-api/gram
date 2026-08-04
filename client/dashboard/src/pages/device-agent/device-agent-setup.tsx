@@ -851,9 +851,9 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
           postinstall step registers the per-user LaunchAgents itself.
         </Text>
         <Text small muted>
-          Don't re-push the pkg for routine version bumps — with{" "}
-          <code>auto_update: "automatic"</code> the agent updates itself after
-          the first push. Reserve a re-push for an installer/layout change.
+          You won't need to redeploy this for every agent update — with{" "}
+          <code>auto_update: "automatic"</code>, it stays current on its own
+          after this first install.
         </Text>
       </div>
     </div>

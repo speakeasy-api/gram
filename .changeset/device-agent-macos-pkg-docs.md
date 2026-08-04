@@ -9,3 +9,7 @@ helper together and registers its own LaunchAgents, so the walkthrough now
 covers a manual `installer` run or a normal MDM Package push instead of a
 separate download/chmod/service-register sequence. Windows and Linux are
 unaffected — they still ship as raw binaries.
+
+Also makes Device Agent the default choice (instead of Manual Setup) on the
+"Instrument agent platforms" onboarding step, and drops its "Preview"
+badge — it's out of preview.
