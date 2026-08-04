@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -12,6 +13,10 @@ import (
 )
 
 type ClickhouseClientFunc = testinfra.ClickhouseClientFunc
+
+// The unscoped flush command in the pinned ClickHouse version is not safe to
+// overlap: a concurrent flush can return before another flush commits its rows.
+var flushClickHouseAsyncInsertsMu sync.Mutex
 
 // NewTestClickhouse creates a new ClickHouse container with the schema initialized
 // from migration files. Returns a container reference and a function to create
@@ -32,6 +37,9 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 // visible without polling.
 func FlushClickHouseAsyncInserts(t *testing.T, conn clickhouse.Conn) {
 	t.Helper()
+
+	flushClickHouseAsyncInsertsMu.Lock()
+	defer flushClickHouseAsyncInsertsMu.Unlock()
 
 	require.NoError(t, conn.Exec(t.Context(), "SYSTEM FLUSH ASYNC INSERT QUEUE"))
 }
