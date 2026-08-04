@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -1783,6 +1784,15 @@ func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem
 		return nil, err
 	}
 
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
 	if err != nil {
 		return nil, err
@@ -1824,6 +1834,15 @@ func (s *Service) GetUnproxiedMcpServerToolUsage(ctx context.Context, payload *t
 		return nil, err
 	}
 
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
 	if err != nil {
 		return nil, err
@@ -1847,6 +1866,9 @@ func (s *Service) GetUnproxiedMcpServerToolUsage(ctx context.Context, payload *t
 		Limit:         payload.Limit,
 	})
 	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server tool usage").LogError(ctx, s.logger)
 	}
 
@@ -1875,6 +1897,15 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 		return nil, err
 	}
 
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
 	if err != nil {
 		return nil, err
@@ -1898,6 +1929,9 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 		Limit:         payload.Limit,
 	})
 	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server user usage").LogError(ctx, s.logger)
 	}
 
@@ -1926,6 +1960,15 @@ func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload 
 		return nil, err
 	}
 
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
 	if err != nil {
 		return nil, err
@@ -1949,6 +1992,9 @@ func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload 
 		Limit:         payload.Limit,
 	})
 	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server client usage").LogError(ctx, s.logger)
 	}
 

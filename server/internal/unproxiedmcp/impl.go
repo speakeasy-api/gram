@@ -193,6 +193,14 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, err
 	}
 
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if !access.IsSpeakeasyStaffEmail(email) {
+		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be viewed by Speakeasy staff").LogWarn(ctx, s.logger)
+	}
+
 	servers, err := repo.New(s.db).ListServersByProjectID(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list unproxied mcp servers").LogError(ctx, s.logger)
@@ -214,6 +222,14 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
+	}
+
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if !access.IsSpeakeasyStaffEmail(email) {
+		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be viewed by Speakeasy staff").LogWarn(ctx, s.logger)
 	}
 
 	idProvided := payload.ID != nil && *payload.ID != ""
@@ -267,6 +283,14 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
+	}
+
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if !access.IsSpeakeasyStaffEmail(email) {
+		return nil, oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be viewed by Speakeasy staff").LogWarn(ctx, s.logger)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)

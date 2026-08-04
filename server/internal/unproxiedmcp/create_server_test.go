@@ -141,6 +141,55 @@ func TestCreateServer_RejectsInvalidScheme(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestListServers_NonStaffEmailForbidden(t *testing.T) {
+	t.Parallel()
+
+	// newTestService seeds the default mock user (dev@example.com), which is
+	// not a Speakeasy-owned domain, so ListServers must reject it: unproxied
+	// MCP servers are Speakeasy-staff-only end to end, not just on write.
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.ListServers(ctx, &gen.ListServersPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestGetServer_NonStaffEmailForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	staffCtx := withStaffEmail(t, ctx)
+
+	created, err := ti.service.CreateServer(staffCtx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             nil,
+		URL:              "https://vendor.example.com/mcp",
+		Description:      nil,
+	})
+	require.NoError(t, err)
+
+	// withStaffEmail mutates the shared AuthContext in place, so restore the
+	// original non-staff email before exercising GetServer as non-staff.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	nonStaffEmail := "dev@example.com"
+	authCtx.Email = &nonStaffEmail
+
+	_, err = ti.service.GetServer(ctx, &gen.GetServerPayload{
+		ID:               &created.ID,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestDeleteServer_RejectsNonStaff(t *testing.T) {
 	t.Parallel()
 

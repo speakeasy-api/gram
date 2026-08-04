@@ -2705,24 +2705,39 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	for _, m := range mcpRows {
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
-		// Custom-domain endpoints are served from the domain host; platform
-		// endpoints from the Gram server URL. The query already resolved the
-		// single preferred endpoint per server.
-		mcpBase := s.serverURL
-		if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
-			mcpBase = fmt.Sprintf("https://%s", *cd)
+		// An unproxied-backed server has no mcp_endpoints row (Gram never
+		// proxies it), so the query resolves its own vendor URL instead of an
+		// endpoint slug. The customer connects straight to the vendor, so no
+		// Gram host/slug and no Gram-managed OAuth apply.
+		mcpURL := ""
+		isOAuth := false
+		switch {
+		case m.EndpointSlug != "":
+			// Custom-domain endpoints are served from the domain host; platform
+			// endpoints from the Gram server URL. The query already resolved the
+			// single preferred endpoint per server.
+			mcpBase := s.serverURL
+			if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
+				mcpBase = fmt.Sprintf("https://%s", *cd)
+			}
+			mcpURL = fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug)
+			// Remote MCP-backed servers authenticate via their user session
+			// issuer (OAuth), so the generated config carries no static
+			// Authorization header (IsOAuth).
+			isOAuth = true
+		default:
+			mcpURL = conv.FromPGTextOrEmpty[string](m.UnproxiedUrl)
 		}
-		// Remote MCP-backed servers authenticate via their user session issuer
-		// (OAuth), so the generated config carries no static Authorization
-		// header (IsOAuth). Environments are not yet wired to mcp_servers, so
-		// there are no public env configs to surface.
+
+		// Environments are not yet wired to mcp_servers, so there are no
+		// public env configs to surface.
 		pb.servers = append(pb.servers, serverBuild{
 			info: PluginServerInfo{
 				DisplayName: m.ServerDisplayName,
 				Policy:      m.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug),
+				MCPURL:      mcpURL,
 				IsPublic:    false,
-				IsOAuth:     true,
+				IsOAuth:     isOAuth,
 				EnvConfigs:  nil,
 			},
 			sortOrder: m.ServerSortOrder,

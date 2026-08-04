@@ -327,7 +327,10 @@ ORDER BY p.slug, ps.sort_order ASC;
 -- rule; per-plugin endpoint preference is a follow-up). Resolving the host
 -- inside the selection keeps endpoint choice and URL-host construction in
 -- lockstep, so a dangling custom-domain endpoint is never picked and emitted as
--- a (wrong) platform URL. Servers without a usable endpoint are dropped.
+-- a (wrong) platform URL. A server backed by an unproxied MCP server never has
+-- an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
+-- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
+-- usable endpoint nor an unproxied backing are dropped.
 -- Scoped to project_id; the mcp_server must live in the same project as the
 -- plugin, and disabled servers are excluded.
 SELECT
@@ -340,8 +343,9 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
-  ep.slug AS endpoint_slug,
-  ep.custom_domain AS endpoint_custom_domain
+  COALESCE(ep.slug, '') AS endpoint_slug,
+  ep.custom_domain AS endpoint_custom_domain,
+  ump.url AS unproxied_url
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
@@ -359,9 +363,10 @@ LEFT JOIN LATERAL (
   ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
+LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
-  AND ep.slug IS NOT NULL
+  AND (ep.slug IS NOT NULL OR ump.url IS NOT NULL)
 ORDER BY p.slug, ps.sort_order ASC;
 
 -- name: GetOrganizationName :one

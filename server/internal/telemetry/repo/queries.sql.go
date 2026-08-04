@@ -1242,7 +1242,9 @@ func (q *Queries) GetUnproxiedMcpServerUsageTimeSeries(ctx context.Context, arg 
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		GroupBy("trace_id")
+		GroupBy("trace_id").
+		Having("max(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("max(start_time_unix_nano) <= ?", arg.TimeEnd)
 	innerSb = withTraceWindowScanBounds(innerSb, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	sb := sq.Select(
@@ -1351,7 +1353,9 @@ func unproxiedMcpServerUsagePerTrace(gramProjectID string, timeStart, timeEnd in
 	sb := sq.Select(cols...).
 		From("trace_summaries").
 		Where("gram_project_id = ?", gramProjectID).
-		GroupBy("trace_id")
+		GroupBy("trace_id").
+		Having("max(start_time_unix_nano) >= ?", timeStart).
+		Having("max(start_time_unix_nano) <= ?", timeEnd)
 	return withTraceWindowScanBounds(sb, "start_time_unix_nano", timeStart, timeEnd)
 }
 

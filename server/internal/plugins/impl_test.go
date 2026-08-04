@@ -922,6 +922,48 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 		"codex observability plugin slug %q not found among published files", *status.CodexObservabilityPlugin)
 }
 
+// An unproxied-backed server has no mcp_endpoints row (Gram never proxies
+// it), so ListPluginsWithMcpServersForProject must resolve it via its own
+// unproxied_mcp_servers URL rather than dropping it for lacking an endpoint
+// slug — otherwise a server that AddPluginServer successfully attaches
+// silently never appears in the published bundle.
+func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unproxied Publish Test"})
+	require.NoError(t, err)
+
+	mcpServer := createTestUnproxiedMcpServer(t, ctx, ti.conn, "Vendor Widget", mcpservers.VisibilityPublic)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	mcpConfig, ok := mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]
+	require.True(t, ok, ".mcp.json not found among published files")
+
+	var config struct {
+		MCPServers map[string]struct {
+			URL string `json:"url"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(mcpConfig, &config))
+
+	server, ok := config.MCPServers["Vendor Widget"]
+	require.True(t, ok, "unproxied server missing from published .mcp.json")
+	require.Equal(t, "https://vendor.example.com/mcp", server.URL,
+		"unproxied server must publish its own vendor URL, not a Gram-hosted endpoint")
+}
+
 // Reproduces the plugin_github_connections_installation_repo_key conflict:
 // project A publishes, gets soft-deleted (freeing its slug under the
 // partial projects_organization_id_slug_key index), and project B reuses
@@ -1683,7 +1725,7 @@ func TestPluginsService_PublishPlugins_ObservabilityConfigContainsAPIKey(t *test
 	// Relay configs embed the publish-time hooks key as the org-wide fallback:
 	// per-user browser login still takes precedence when cached, but a machine
 	// with no personal credentials sends through the baked key instead of
-	// degrading to the unauthenticated unproxied.
+	// degrading to the unauthenticated pass-through.
 	for _, root := range []string{claudeObservability, "cursor-plugins/" + cursorObservability} {
 		config := string(mock.lastPushedFiles[root+"/speakeasy.json"])
 		require.NotEmpty(t, config, root+"/speakeasy.json missing")
