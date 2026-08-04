@@ -2,14 +2,38 @@
 // GRAM_DEVIDP_ADDRESS that mounts:
 //
 //   - the Goa management API (under /rpc/...) for /users, /organizations,
-//     /memberships, /organization_roles, /invitations, /devIdp;
+//     /memberships, /organization_roles, /invitations, /devIdp, and the
+//     cross-app access surfaces /xaaApps, /xaaResources,
+//     /xaaAppAssignments, /xaaTrustRules;
 //   - the OAuth 2.1 authorization server at /oauth2-1/;
+//   - a resource authorization server per xaa_resources row, at
+//     /resource-as/<slug>/;
 //   - the WorkOS REST surface at /workos/.
 //
 // GRAM_DEVIDP_BACKEND is the only knob that changes behavior: "local"
 // (default) emulates WorkOS against the dev-idp's own SQLite store,
 // "workos" passes through to a real WorkOS environment. Both mount at the
 // same prefixes, so no URL changes when switching.
+//
+// # Cross-app access
+//
+// The dev-idp plays both halves of the MCP Enterprise-Managed Authorization
+// profile, on separate issuers, so the whole flow is exercisable in one
+// process:
+//
+//   - /oauth2-1 is the enterprise IdP. Its token endpoint mints an Identity
+//     Assertion JWT Authorization Grant (ID-JAG) under the RFC 8693
+//     token-exchange grant, gated on the xaa_apps / xaa_app_assignments
+//     policy tables.
+//   - /resource-as/<slug> is a resource authorization server. It redeems an
+//     ID-JAG under the RFC 7523 jwt-bearer grant and returns an access token
+//     restricted to the MCP server behind it, gated on xaa_trust_rules.
+//
+// Neither half assumes the other: a resource can be configured to trust a
+// foreign issuer, and a grant this dev-idp minted can still be refused at
+// redemption. Both are always mounted -- with no policy rows seeded nothing
+// is reachable, so there is no flag to set. See internal/xaa for the shared
+// wire vocabulary.
 //
 // A second tiny health server is mounted on GRAM_DEVIDP_CONTROL_ADDRESS.
 //
