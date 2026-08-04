@@ -39,6 +39,24 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 	defer conn.Release()
 
+	// Serialize whole runs (Postgres AND ClickHouse) behind one advisory
+	// lock: two overlapping runs would interleave the ClickHouse
+	// delete+insert phases and leave duplicated telemetry/summaries. The
+	// session lock is held on this pooled connection, so it must be released
+	// explicitly before the connection returns to the pool.
+	var locked bool
+	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext('gram-demo-seed'))").Scan(&locked); err != nil {
+		return fmt.Errorf("acquire demo seed advisory lock: %w", err)
+	}
+	if !locked {
+		return fmt.Errorf("another demo seed run holds the advisory lock; refusing to run concurrently")
+	}
+	defer func() {
+		if _, err := conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtext('gram-demo-seed'))"); err != nil {
+			logger.ErrorContext(ctx, "release demo seed advisory lock", attr.SlogError(err))
+		}
+	}()
+
 	// The script is multi-statement (CREATE SCHEMA / CREATE FUNCTION with a
 	// dollar-quoted body / SELECT), which requires the simple query protocol.
 	if err := conn.Conn().PgConn().Exec(ctx, postgresSQL).Close(); err != nil {

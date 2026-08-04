@@ -14,8 +14,8 @@ when its check passes.
 3. Enter the demo org via the platform-admin impersonation panel, org slug
    `acme-demo` (sets the `gram_admin_override` cookie). Until the dedicated
    demo-impersonation path lands (README "Server changes"), this is the only
-   way in — and the chat transcript sheet is expected to be blocked while
-   impersonating.
+   way in. Chat transcripts ARE readable here — the demo org is exempt from
+   the impersonation transcript block (chat.load carve-out).
 
 ## Checks (fail = page shows an empty state, error boundary, or zero where a
 

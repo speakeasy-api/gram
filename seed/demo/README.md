@@ -21,13 +21,13 @@ directory holds the authoring docs:
 
 ## Fixed constants
 
-| Thing      | Value                                                                                                           |
-| ---------- | --------------------------------------------------------------------------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
-| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, `gram_account_type='enterprise'` (unlocks enterprise-gated pages)) |
-| Project A  | `dec0de00-0000-4000-a000-000000000001` (`acme-support`)                                                         |
-| Project B  | `dec0de00-0000-4000-a000-000000000002` (`acme-platform`)                                                        |
-| Chat ids   | `demo.det_uuid('gram-demo-chat-'                                                                                |     | n)`: md5 with version nibble 5, variant 8 (RFC-valid for the SDK's strict uuid checks) — same formula in both stores |
-| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                                             |
+| Thing      | Value                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------- |
+| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, account type `enterprise` for gated pages)       |
+| Project A  | `dec0de00-0000-4000-a000-000000000001` (`acme-support`)                                       |
+| Project B  | `dec0de00-0000-4000-a000-000000000002` (`acme-platform`)                                      |
+| Chat ids   | `demo.det_uuid('gram-demo-chat-' + n)`: md5, version nibble 5, variant 8; same in both stores |
+| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                           |
 
 Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
 rerun regenerates a fresh window, data never goes stale, and no MV backfill is

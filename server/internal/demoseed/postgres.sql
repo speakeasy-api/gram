@@ -479,16 +479,20 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
             titles[1 + (i % array_length(titles, 1))] || ' #' || (1000 + i),
             chat_ts, chat_ts);
 
-    n_msgs := 4 + (i % 3) * 2;
+    -- Odd (Claude) chats use a fixed 8-message layout so ALL THREE ClickHouse
+    -- api_request turns (demo-prompt-<i>-1..3) and BOTH tool_result rows
+    -- (call_demo_<i>_1/2) join the transcript exactly:
+    --   1 user(p1), 2 assistant, 3 tool(_1), 4 user(p2), 5 assistant,
+    --   6 tool(_2), 7 user(p3), 8 assistant
+    -- Even (Cursor) chats keep the varied user/assistant alternation; every
+    -- 7th chat's tool message at position 3 carries the leaked fake key.
+    n_msgs := CASE WHEN i % 2 = 1 THEN 8 ELSE 4 + (i % 3) * 2 END;
     flagged_msg := NULL;
 
     FOR m IN 1 .. n_msgs LOOP
       msg_id := demo.det_uuid('gram-demo-msg-' || i || '-' || m);
 
-      IF (i % 7 = 0 AND m = 3) OR (i % 2 = 1 AND m IN (3, 5) AND m < n_msgs) THEN
-        -- Tool message. call_demo_<i>_1 / _2 join the ClickHouse tool_result
-        -- rows (payload-size chips). Every 7th chat's first tool message
-        -- carries a leaked (fake) key -> risk finding target.
+      IF (i % 7 = 0 AND m = 3) OR (i % 2 = 1 AND m IN (3, 6)) THEN
         IF i % 7 = 0 AND m = 3 THEN
           leak := 'sk_live_DEMO' || lpad(i::text, 4, '0') || 'x9q2v8w1r5t3y7u0';
           INSERT INTO chat_messages (id, chat_id, project_id, role, content, model,
@@ -512,19 +516,25 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
                                    prompt_tokens, completion_tokens, total_tokens,
                                    created_at, risk_analyzed_at)
         VALUES (msg_id, chat_id, chat_proj,
-                CASE WHEN m % 2 = 1 THEN 'user' ELSE 'assistant' END,
-                CASE WHEN m % 2 = 1
+                CASE WHEN i % 2 = 1 AND m IN (1, 4, 7) THEN 'user'
+                     WHEN i % 2 = 1 THEN 'assistant'
+                     WHEN m % 2 = 1 THEN 'user'
+                     ELSE 'assistant' END,
+                CASE WHEN (i % 2 = 1 AND m IN (1, 4, 7)) OR (i % 2 = 0 AND m % 2 = 1)
                      THEN questions[1 + ((i + m) % array_length(questions, 1))]
                      ELSE answers[1 + ((i + m) % array_length(answers, 1))] END,
                 'claude-sonnet-4-6',
                 -- Ties odd-chat user turns to the ClickHouse api_request rows
                 -- (exact per-turn cost matching in the detail sheet).
-                CASE WHEN i % 2 = 1 AND m % 2 = 1
-                     THEN 'demo-prompt-' || i || '-' || least((m + 1) / 2, 3)
+                CASE WHEN i % 2 = 1 AND m IN (1, 4, 7)
+                     THEN 'demo-prompt-' || i || '-' || ((m + 2) / 3)
                      ELSE NULL END,
-                CASE WHEN m % 2 = 0 THEN 1200 + (i * 37 + m * 91) % 2400 ELSE 0 END,
-                CASE WHEN m % 2 = 0 THEN 180 + (i * 53 + m * 17) % 700 ELSE 0 END,
-                CASE WHEN m % 2 = 0 THEN 1380 + (i * 37 + m * 91) % 2400 + (i * 53 + m * 17) % 700 ELSE 0 END,
+                CASE WHEN (i % 2 = 1 AND m NOT IN (1, 4, 7)) OR (i % 2 = 0 AND m % 2 = 0)
+                     THEN 1200 + (i * 37 + m * 91) % 2400 ELSE 0 END,
+                CASE WHEN (i % 2 = 1 AND m NOT IN (1, 4, 7)) OR (i % 2 = 0 AND m % 2 = 0)
+                     THEN 180 + (i * 53 + m * 17) % 700 ELSE 0 END,
+                CASE WHEN (i % 2 = 1 AND m NOT IN (1, 4, 7)) OR (i % 2 = 0 AND m % 2 = 0)
+                     THEN 1380 + (i * 37 + m * 91) % 2400 + (i * 53 + m * 17) % 700 ELSE 0 END,
                 chat_ts + (interval '40 seconds' * m), now());
       END IF;
     END LOOP;
@@ -534,10 +544,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
                                 risk_policy_version, chat_message_id, source, found,
                                 rule_id, description, match, start_pos, end_pos,
                                 confidence, tags, created_at)
+      -- Offsets computed from the actual content so drill-downs reconstruct
+      -- the exact span: the fixed prefix is 58 bytes, strpos keeps it honest.
       VALUES (demo.det_uuid('gram-demo-risk-' || i), chat_proj, demo_org, chat_policy, 1,
               flagged_msg, 'gitleaks', TRUE, 'stripe-access-token',
               'Stripe live secret key found in tool output', leak,
-              55, 55 + length(leak), 0.97, '{secret,stripe}',
+              strpos('payments req_id=2041 status=401 error=invalid_api_key key=' || leak, leak) - 1,
+              strpos('payments req_id=2041 status=401 error=invalid_api_key key=' || leak, leak) - 1 + length(leak),
+              0.97, '{secret,stripe}',
               chat_ts + interval '2 minutes');
     END IF;
   END LOOP;

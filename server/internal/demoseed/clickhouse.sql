@@ -495,6 +495,16 @@ SELECT
     ',"gen_ai.response.model":"', if(i % 2 = 1, 'claude-sonnet-4-6', 'gpt-5.6'), '"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
+    ',"user.attributes.division_name":"', division, '"',
+    ',"user.attributes.department_name":"', department, '"',
+    ',"user.attributes.job_title":"', title, '"',
+    ',"user.attributes.employee_type":"', etype, '"',
+    ',"user.attributes.cost_center_name":"', cc, '"',
+    ',"user.roles":', rolesjson,
+    ',"user.groups":["', team, '"]',
+    ',"gram.hook.hostname":"', hostname, '"',
+    ',"gram.provider":"', if(i % 2 = 1, 'anthropic', if(cityHash64('model', i - 1) % 2 = 1, 'openai', 'anthropic')), '"',
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
     ',"gram.hook.source":"', if(i % 2 = 1, 'claude-code', 'cursor'), '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -514,6 +524,14 @@ FROM (
        toUUID('dec0de00-0000-4000-a000-000000000001')) AS proj,
     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx) AS email,
+    arrayElement(['Customer Experience', 'Customer Experience', 'R&D', 'R&D', 'Customer Experience', 'R&D'], uidx) AS division,
+    arrayElement(['Support Engineering', 'Support Engineering', 'Platform Engineering', 'Platform Engineering', 'Billing Operations', 'Engineering Leadership'], uidx) AS department,
+    arrayElement(['Support Engineer', 'Senior Support Engineer', 'Platform Engineer', 'Site Reliability Engineer', 'Billing Analyst', 'Engineering Manager'], uidx) AS title,
+    arrayElement(['full-time', 'full-time', 'full-time', 'contractor', 'part-time', 'full-time'], uidx) AS etype,
+    arrayElement(['CC-SUP-4100', 'CC-SUP-4100', 'CC-ENG-2200', 'CC-ENG-2200', 'CC-OPS-3300', 'CC-ENG-2200'], uidx) AS cc,
+    arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx) AS team,
+    arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
+    arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     toUnixTimestamp64Nano(
       subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
                       13 * toInt64((number + 1) % 7))) AS nano
@@ -632,7 +650,7 @@ INSERT INTO risk_findings
   (id, created_at, organization_id, project_id, chat_message_id, chat_id,
    user_id, external_user_id, risk_policy_id, risk_policy_version, rule_id,
    description, source, confidence, category, tags, start_pos, end_pos,
-   match_len, match_redacted, message_created_at)
+   match_len, match_redacted, surface, field, message_created_at)
 SELECT
   toUUID(concat(substring(hm, 1, 8), '-', substring(hm, 9, 4), '-5', substring(hm, 14, 3), '-8',
                 substring(hm, 18, 3), '-', substring(hm, 21, 12))),
@@ -655,10 +673,12 @@ SELECT
   0.97,
   'secrets',
   ['secret', 'stripe'],
-  55,
-  87,
+  58,
+  90,
   32,
   concat('sk_l', repeat('*', 26), 'u0'),
+  'content',
+  'content',
   ts
 FROM (
   SELECT

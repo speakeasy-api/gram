@@ -111,6 +111,10 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 		if err != nil {
 			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 		}
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(ac.ActiveOrganizationID),
+			attr.UserID(ac.UserID),
+		)
 		return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 	}
 
@@ -313,6 +317,10 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 		}
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(ac.ActiveOrganizationID),
+			attr.UserID(ac.UserID),
+		)
 		return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
 	}
 
@@ -359,6 +367,10 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 	if acPre.IsAdmin {
 		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
+			trace.SpanFromContext(ctx).SetAttributes(
+				attr.OrganizationID(acPre.ActiveOrganizationID),
+				attr.UserID(acPre.UserID),
+			)
 			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 		}
 	}
