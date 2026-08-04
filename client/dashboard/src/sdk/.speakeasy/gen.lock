@@ -74,8 +74,10 @@ trackedFiles:
   src/funcs/adminRemoteSessionsRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
+  src/funcs/agentGetConfiguration.ts: {}
   src/funcs/agentGetPlugins.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
+  src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
   src/funcs/aiIntegrationsListSchedules.ts: {}
@@ -673,6 +675,7 @@ trackedFiles:
   src/models/components/deploymentpackage.ts: {}
   src/models/components/deploymentsummary.ts:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
+  src/models/components/deviceagentconfiguration.ts: {}
   src/models/components/deviceintegrationconfig.ts: {}
   src/models/components/deviceintegrationcoverage.ts: {}
   src/models/components/deviceintegrationprovider.ts: {}
@@ -1212,6 +1215,7 @@ trackedFiles:
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updateawskmskeyrequestbody.ts: {}
+  src/models/components/updateconfigurationrequestbody.ts: {}
   src/models/components/updatecustomdetectionrulerequestbody.ts: {}
   src/models/components/updatedomainrequestbody.ts: {}
   src/models/components/updateenvironmentrequestbody.ts: {}
@@ -1436,6 +1440,7 @@ trackedFiles:
   src/models/operations/getcustomdetectionrule.ts: {}
   src/models/operations/getdeployment.ts: {}
   src/models/operations/getdeploymentlogs.ts: {}
+  src/models/operations/getdeviceagentconfiguration.ts: {}
   src/models/operations/getdeviceintegrationconfig.ts: {}
   src/models/operations/getdeviceintegrationcoverage.ts: {}
   src/models/operations/getdomain.ts: {}
@@ -1729,6 +1734,7 @@ trackedFiles:
   src/models/operations/updateawskmskey.ts: {}
   src/models/operations/updatecollection.ts: {}
   src/models/operations/updatecustomdetectionrule.ts: {}
+  src/models/operations/updatedeviceagentconfiguration.ts: {}
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
   src/models/operations/updategcpiamcredential.ts: {}
@@ -1925,6 +1931,8 @@ trackedFiles:
   src/react-query/deploymentLogs.core.ts: {}
   src/react-query/deploymentLogs.ts: {}
   src/react-query/detachUserSessionIssuer.ts: {}
+  src/react-query/deviceAgentConfiguration.core.ts: {}
+  src/react-query/deviceAgentConfiguration.ts: {}
   src/react-query/deviceIntegrationConfig.core.ts: {}
   src/react-query/deviceIntegrationConfig.ts: {}
   src/react-query/deviceIntegrationCoverage.core.ts: {}
@@ -2431,6 +2439,7 @@ trackedFiles:
   src/react-query/unshareSkill.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
+  src/react-query/updateDeviceAgentConfiguration.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
   src/react-query/updateGcpIamCredential.ts: {}
@@ -4291,6 +4300,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getDeviceAgentConfiguration:
+    speakeasy-default-get-device-agent-configuration:
+      responses:
+        "200":
+          application/json: {"config": {"key": "<value>"}, "etag": "<value>", "is_configured": false, "schema_version": 403246}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getDeviceIntegrationConfig:
     speakeasy-default-get-device-integration-config:
       parameters:
@@ -7517,6 +7535,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateDeviceAgentConfiguration:
+    speakeasy-default-update-device-agent-configuration:
+      requestBody:
+        application/json: {"config": {"key": "<value>"}}
+      responses:
+        "200":
+          application/json: {"config": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "etag": "<value>", "is_configured": true, "schema_version": 501103}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   updateDomain:
     speakeasy-default-update-domain:
       requestBody:
