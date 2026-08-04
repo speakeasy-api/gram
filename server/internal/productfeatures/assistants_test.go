@@ -42,8 +42,10 @@ func TestEnableRBACTxPatchesAssistantDefaultsForExistingRoles(t *testing.T) {
 	require.Equal(t, 1, grants[grantKey(admin, authz.ScopeAssistantWrite, authz.WildcardResource)])
 	require.Equal(t, 1, grants[grantKey(member, authz.ScopeAssistantRead, authz.WildcardResource)])
 	require.Equal(t, 1, grants[grantKey(member, authz.ScopeProjectRead, "project-retained")])
+	require.Zero(t, grants[grantKey(adminShadow, authz.ScopeAssistantRead, authz.WildcardResource)])
 	require.Zero(t, grants[grantKey(adminShadow, authz.ScopeAssistantWrite, authz.WildcardResource)])
 	require.Zero(t, grants[grantKey(memberShadow, authz.ScopeAssistantRead, authz.WildcardResource)])
+	require.Zero(t, grants[grantKey(memberShadow, authz.ScopeAssistantWrite, authz.WildcardResource)])
 }
 
 func createShadowingRole(t *testing.T, ctx context.Context, q *accessrepo.Queries, organizationID, slug string) urn.Principal {
