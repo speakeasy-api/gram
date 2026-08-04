@@ -360,9 +360,13 @@ BEGIN
     (toolset_2, demo_org, proj_a, 'Acme Ops', 'acme-ops',
      'Operational checks and deploy tooling.', NULL, TRUE, FALSE);
 
+  -- Version = epoch seconds: the server caches toolset contents in Redis
+  -- keyed by (deployment, toolset, version), and a reseed reusing version 1
+  -- would keep serving the stale cached payload. A fresh version per run
+  -- changes the cache key, so every reseed is immediately visible.
   INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
-    (toolset_1, 1, tool_urns, '{}'),
-    (toolset_2, 1, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}');
+    (toolset_1, extract(epoch FROM now())::bigint, tool_urns, '{}'),
+    (toolset_2, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}');
 
   ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
@@ -426,10 +430,13 @@ BEGIN
           'Sessions show agents accepting card numbers in chat before refusing; the skill should forbid it up front.',
           'open', 7);
 
+  -- The diff MUST carry ---/+++ file headers: gitdiff.Parse yields zero file
+  -- fragments for a bare hunk, skilldiff.Apply then fails and the dashboard
+  -- retires the suggestion as "no longer lines up with the manifest".
   INSERT INTO skill_edit_suggestion_changes (project_id, suggestion_id, proposed_diff, rationale, position)
   VALUES
     (proj_a, 'dec0de00-0000-4000-a000-000000005301',
-E'@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.',
+E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.',
      'Make the PCI guardrail the first checkpoint instead of a trailing note.', 1);
 
   ------------------------------------------------------------------
