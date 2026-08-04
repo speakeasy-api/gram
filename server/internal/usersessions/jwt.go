@@ -35,6 +35,16 @@ type RevocationChecker interface {
 	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
 }
 
+// TokenRevoker pushes a JTI into the revocation cache the RevocationChecker
+// reads. Declared as an interface rather than taking *chatsessions.Manager
+// directly so revoke handlers can be tested against a failing revoker without
+// standing up an unreachable Redis, which costs seconds per call (1s
+// DialTimeout plus go-redis retries) and so taxes every run of these tests
+// once per seeded session.
+type TokenRevoker interface {
+	RevokeToken(ctx context.Context, jti string) error
+}
+
 // SessionClaims is the unified JWT claim shape for Gram-issued user sessions
 // (and, as the chat-session path retires, all Gram session tokens). Carries
 // the standard OIDC registered claims plus the OAuth client the token was
