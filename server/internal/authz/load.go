@@ -62,17 +62,24 @@ func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, princi
 	}
 
 	defaults := make(map[string][]Scope, 2)
-	q := accessrepo.New(db)
-	for roleSlug, scopes := range map[string][]Scope{
+	roles, err := accessrepo.New(db).ListGlobalRoles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list global system roles: %w", err)
+	}
+	scopesBySlug := map[string][]Scope{
 		SystemRoleAdmin:  {ScopeAssistantRead, ScopeAssistantWrite},
 		SystemRoleMember: {ScopeAssistantRead},
-	} {
-		role, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
-		if err != nil {
-			return nil, fmt.Errorf("load %s system role: %w", roleSlug, err)
+	}
+	for _, role := range roles {
+		scopes, ok := scopesBySlug[role.WorkosSlug]
+		if !ok || role.Deleted || role.WorkosDeleted {
+			continue
 		}
 		principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String())
 		defaults[principal.String()] = scopes
+	}
+	if len(defaults) != len(scopesBySlug) {
+		return nil, fmt.Errorf("global system roles are incomplete")
 	}
 
 	return defaults, nil

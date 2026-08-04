@@ -2361,6 +2361,9 @@ const SKILL_MUTATION_TOOLS = new Set<OnboardingToolName>([
 ]);
 
 const ENVIRONMENT_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "update_assistant",
+  "attach_toolset",
+  "create_trigger",
   "create_environment",
   "add_environment_keys",
   "request_environment_secrets",

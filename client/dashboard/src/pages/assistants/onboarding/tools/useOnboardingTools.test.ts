@@ -37,6 +37,7 @@ describe("isOnboardingToolAllowed", () => {
       canWriteAssistant: true,
       canReadProject: true,
       canWriteProject: true,
+      canWriteEnvironment: true,
     };
 
     expect(isOnboardingToolAllowed("create_trigger", triggerWriter)).toBe(true);
@@ -44,12 +45,33 @@ describe("isOnboardingToolAllowed", () => {
       false,
     );
     expect(isOnboardingToolAllowed("create_environment", triggerWriter)).toBe(
-      false,
+      true,
     );
+    expect(isOnboardingToolAllowed("update_assistant", triggerWriter)).toBe(
+      true,
+    );
+    expect(isOnboardingToolAllowed("attach_toolset", triggerWriter)).toBe(true);
+    expect(isOnboardingToolAllowed("create_trigger", triggerWriter)).toBe(true);
     expect(isOnboardingToolAllowed("propose_slack_setup", triggerWriter)).toBe(
       false,
     );
   });
+
+  it.each(["update_assistant", "attach_toolset", "create_trigger"] as const)(
+    "requires environment write for %s",
+    (tool) => {
+      expect(
+        isOnboardingToolAllowed(tool, {
+          ...assistantReader,
+          canWriteAssistant: true,
+          canReadProject: true,
+          canWriteProject: true,
+          canReadMCP: true,
+          canWriteMCP: true,
+        }),
+      ).toBe(false);
+    },
+  );
 
   it("exposes cross-resource setup only with every required grant", () => {
     const admin = Object.fromEntries(
