@@ -29,11 +29,12 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name string
-		gate testGate
+		name   string
+		gate   testGate
+		status int
 	}{
-		{name: "disabled", gate: testGate{enabled: false}},
-		{name: "error", gate: testGate{err: errors.New("feature provider unavailable")}},
+		{name: "disabled", gate: testGate{enabled: false}, status: http.StatusForbidden},
+		{name: "error", gate: testGate{err: errors.New("feature provider unavailable")}, status: http.StatusServiceUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -46,7 +47,7 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 
 			handler.ServeHTTP(res, req)
 
-			require.Equal(t, http.StatusForbidden, res.Code)
+			require.Equal(t, tc.status, res.Code)
 			require.Zero(t, authorizer.calls)
 		})
 	}
@@ -67,6 +68,21 @@ func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 	require.Equal(t, 1, authorizer.calls)
 }
 
+func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
+	t.Parallel()
+
+	authenticator := &testAuthenticator{principal: testPrincipal()}
+	runtime := NewRuntime(authenticator, testGate{enabled: true}, &testAuthorizer{}, "", nil)
+	req := httptest.NewRequest(http.MethodPost, Path, nil)
+	req.Header.Set("Authorization", "bearer  access-token  ")
+
+	principal, err := runtime.authenticate(req)
+
+	require.NoError(t, err)
+	require.Equal(t, testPrincipal(), principal)
+	require.Equal(t, "access-token", authenticator.token)
+}
+
 func TestRuntimeAuthenticateRejectsIncompletePrincipal(t *testing.T) {
 	t.Parallel()
 
@@ -83,10 +99,12 @@ type testAuthenticator struct {
 	principal Principal
 	err       error
 	calls     int
+	token     string
 }
 
-func (a *testAuthenticator) Authenticate(_ context.Context, _ string) (Principal, error) {
+func (a *testAuthenticator) Authenticate(_ context.Context, token string) (Principal, error) {
 	a.calls++
+	a.token = token
 	return a.principal, a.err
 }
 

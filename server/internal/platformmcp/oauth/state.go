@@ -179,6 +179,13 @@ func (s *InMemoryStore) RegisterConnection(_ context.Context, connection Connect
 	if _, exists := s.connections[connection.ID]; exists {
 		return ErrAlreadyUsed
 	}
+	if connection.RevokedAt == nil {
+		for _, existing := range s.connections {
+			if existing.OrganizationID == connection.OrganizationID && existing.Subject == connection.Subject && existing.ClientID == connection.ClientID && existing.RevokedAt == nil {
+				return ErrAlreadyUsed
+			}
+		}
+	}
 	s.connections[connection.ID] = connection
 	return nil
 }
@@ -188,10 +195,7 @@ func (s *InMemoryStore) GetConnection(_ context.Context, organizationID, subject
 	defer s.mu.Unlock()
 
 	for _, connection := range s.connections {
-		if connection.OrganizationID == organizationID && connection.Subject == subject && connection.ClientID == clientID {
-			if connection.RevokedAt != nil {
-				return Connection{}, ErrRevoked
-			}
+		if connection.OrganizationID == organizationID && connection.Subject == subject && connection.ClientID == clientID && connection.RevokedAt == nil {
 			return connection, nil
 		}
 	}
@@ -300,6 +304,11 @@ func (s *InMemoryStore) CreateSession(_ context.Context, session Session) error 
 	if _, exists := s.sessions[session.RefreshHash]; exists {
 		return ErrAlreadyUsed
 	}
+	for _, existing := range s.sessions {
+		if existing.JTI == session.JTI {
+			return ErrAlreadyUsed
+		}
+	}
 	s.sessions[session.RefreshHash] = session
 	return nil
 }
@@ -389,14 +398,20 @@ func (s *InMemoryStore) RevokeAccessSession(_ context.Context, jti, clientID str
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	var revoked Session
+	var found bool
 	for hash, session := range s.sessions {
-		if session.JTI == jti && session.ClientID == clientID {
+		if session.JTI == jti && session.ClientID == clientID && session.RevokedAt == nil {
 			session.RevokedAt = &now
 			s.sessions[hash] = session
-			return session, nil
+			revoked = session
+			found = true
 		}
 	}
-	return Session{}, ErrNotFound
+	if !found {
+		return Session{}, ErrNotFound
+	}
+	return revoked, nil
 }
 
 func (s *InMemoryStore) RotateConnectionGeneration(_ context.Context, connectionID, generation string, now time.Time) (Connection, error) {

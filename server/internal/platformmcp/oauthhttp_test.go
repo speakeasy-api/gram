@@ -98,9 +98,22 @@ type allowGate struct{}
 
 func (allowGate) Enabled(context.Context, string) (bool, error) { return true, nil }
 
+type oauthTestGate struct {
+	enabled bool
+	err     error
+}
+
+func (g oauthTestGate) Enabled(context.Context, string) (bool, error) { return g.enabled, g.err }
+
 type allowAuthorizer struct{}
 
 func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return nil }
+
+type oauthTestAuthorizer struct {
+	err error
+}
+
+func (a oauthTestAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return a.err }
 
 type testOrganizationSelector struct {
 	organizations []OrganizationOption
@@ -126,6 +139,38 @@ func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	require.Equal(t, http.StatusCreated, response.Code)
 	require.Contains(t, response.Body.String(), `"client_id"`)
 	require.NotContains(t, response.Body.String(), `"client_secret"`)
+}
+
+func TestOAuthHTTPRequireJSONAcceptsMediaTypeParameters(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		contentType string
+		accepted    bool
+	}{
+		{name: "plain", contentType: "application/json", accepted: true},
+		{name: "charset", contentType: "application/json; charset=utf-8", accepted: true},
+		{name: "uppercase", contentType: "APPLICATION/JSON", accepted: true},
+		{name: "form", contentType: "application/x-www-form-urlencoded", accepted: false},
+		{name: "empty", contentType: "", accepted: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			request := httptest.NewRequest(http.MethodPost, "/admin-mcp/register", nil)
+			request.Header.Set("Content-Type", tc.contentType)
+			response := httptest.NewRecorder()
+
+			accepted := requireJSON(response, request, 1024)
+
+			require.Equal(t, tc.accepted, accepted)
+			if !tc.accepted {
+				require.Equal(t, http.StatusBadRequest, response.Code)
+				require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
+			}
+		})
+	}
 }
 
 func TestOAuthHTTPRejectsUnknownTokenClient(t *testing.T) {
@@ -219,6 +264,71 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	require.Equal(t, http.StatusOK, connect.Code)
 	require.Contains(t, connect.Body.String(), "test")
 	require.Contains(t, connect.Body.String(), "Organization one")
+}
+
+func TestOAuthHTTPGateErrorsDistinguishUnavailableFromDenied(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	principal := Principal{UserID: "user-1", OrganizationID: "org-1", ConnectionID: "connection-1", Generation: "generation-1", ClientID: "client-1"}
+
+	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
+	err := service.gateAndAuthorize(t.Context(), principal)
+	require.ErrorIs(t, err, ErrUnavailable)
+
+	service.gate = oauthTestGate{enabled: true}
+	service.authorizer = oauthTestAuthorizer{err: errors.New("authorization store unavailable")}
+	err = service.gateAndAuthorize(t.Context(), principal)
+	require.ErrorIs(t, err, ErrUnavailable)
+
+	service.authorizer = allowAuthorizer{}
+	service.gate = oauthTestGate{enabled: false}
+	err = service.gateAndAuthorize(t.Context(), principal)
+	require.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestOAuthHTTPConnectPostRedirectsTransientGateError(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	store := testStore(t, service)
+	require.NoError(t, store.RegisterClient(t.Context(), adminoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
+	require.NoError(t, service.cache.Store(t.Context(), challenge))
+	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
+
+	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "action": {"approve"}}
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/connect", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	service.ConnectHandler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusFound, response.Code)
+	location, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, challenge.RedirectURI, location.Scheme+"://"+location.Host+location.Path)
+	require.Equal(t, challenge.State, location.Query().Get("state"))
+	require.Equal(t, "temporarily_unavailable", location.Query().Get("error"))
+}
+
+func TestOAuthHTTPRefreshReturnsTransientGateError(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	store := testStore(t, service)
+	connection := adminoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
+	require.NoError(t, store.RegisterClient(t.Context(), adminoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+	require.NoError(t, store.RegisterConnection(t.Context(), connection))
+	require.NoError(t, store.CreateSession(t.Context(), adminoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash("refresh-token"), ExpiresAt: time.Now().Add(time.Hour), RefreshExpiresAt: time.Now().Add(time.Hour)}))
+	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
+
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token=refresh-token&client_id=client-1"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	service.TokenHandler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Contains(t, response.Body.String(), `"temporarily_unavailable"`)
 }
 
 func TestOAuthHTTPNeverRedirectsToUnregisteredURI(t *testing.T) {

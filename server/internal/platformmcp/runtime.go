@@ -86,7 +86,11 @@ func (r *Runtime) Handler() http.Handler {
 			return
 		}
 		enabled, err := r.gate.Enabled(req.Context(), principal.OrganizationID)
-		if err != nil || !enabled {
+		if err != nil {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if !enabled {
 			http.Error(w, "unavailable", http.StatusForbidden)
 			return
 		}
@@ -109,7 +113,8 @@ func (r *Runtime) authenticate(req *http.Request) (Principal, error) {
 	}
 
 	kind, token, ok := strings.Cut(req.Header.Get("Authorization"), " ")
-	if !ok || kind != TokenType || token == "" {
+	token = strings.TrimSpace(token)
+	if !ok || !strings.EqualFold(kind, TokenType) || token == "" {
 		return Principal{}, ErrUnauthorized
 	}
 

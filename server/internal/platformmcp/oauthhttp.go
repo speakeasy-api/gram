@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -450,7 +451,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	}
 	principal := Principal{UserID: subject.ID, OrganizationID: challenge.OrganizationID, ConnectionID: "pending", Generation: "pending", ClientID: challenge.ClientID}
 	if err := s.gateAndAuthorize(r.Context(), principal); err != nil {
-		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &usersessions.OAuthError{Code: "access_denied", Description: "organization access is not available"})
+		writeAuthorizationGateError(w, r, challenge, err)
 		return
 	}
 	code, err := opaqueToken()
@@ -533,7 +534,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				return
 			}
 			if err := s.gateAndAuthorize(r.Context(), Principal{UserID: subject.ID, OrganizationID: old.Connection.OrganizationID, ConnectionID: old.Connection.ID, Generation: old.Connection.Generation, ClientID: client.ID}); err != nil {
-				writeOAuthError(w, http.StatusForbidden, "access_denied", "organization access is not available")
+				writeTokenGateError(w, err)
 				return
 			}
 			s.mintReplacementAndRespond(w, r, old, client.ID)
@@ -578,7 +579,7 @@ func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, conne
 	}
 	principal := Principal{UserID: subject.ID, OrganizationID: connection.OrganizationID, ConnectionID: connection.ID, Generation: connection.Generation, ClientID: clientID}
 	if err := s.gateAndAuthorize(r.Context(), principal); err != nil {
-		writeOAuthError(w, http.StatusForbidden, "access_denied", "organization access is not available")
+		writeTokenGateError(w, err)
 		return
 	}
 	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: adminAccessTokenLifetime, ClientID: clientID})
@@ -648,13 +649,35 @@ func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret str
 
 func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) error {
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID)
-	if err != nil || !enabled {
+	if err != nil {
+		return fmt.Errorf("check admin mcp feature gate: %w: %w", ErrUnavailable, err)
+	}
+	if !enabled {
 		return ErrForbidden
 	}
 	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		return fmt.Errorf("require live organization admin: %w", err)
+		if isAuthorizationDenied(err) {
+			return ErrForbidden
+		}
+		return fmt.Errorf("require live organization admin: %w: %w", ErrUnavailable, err)
 	}
 	return nil
+}
+
+func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, err error) {
+	if errors.Is(err, ErrUnavailable) {
+		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &usersessions.OAuthError{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
+		return
+	}
+	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &usersessions.OAuthError{Code: "access_denied", Description: "organization access is not available"})
+}
+
+func writeTokenGateError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrUnavailable) {
+		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access could not be verified")
+		return
+	}
+	writeOAuthError(w, http.StatusForbidden, "access_denied", "organization access is not available")
 }
 
 func (s *OAuthHTTP) Issuer() string {
@@ -685,7 +708,8 @@ func clientCredentials(r *http.Request) (string, string) {
 }
 
 func requireJSON(w http.ResponseWriter, r *http.Request, maxBytes int64) bool {
-	if r.Header.Get("Content-Type") != "application/json" {
+	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || contentType != "application/json" {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "Content-Type must be application/json")
 		return false
 	}
