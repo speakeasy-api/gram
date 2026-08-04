@@ -1,4 +1,4 @@
-h1:umUhmpAOlIEnwcUTdLyguoDfHJyolmiEDekS77Hk6ug=
+h1:LFFtYYrfB6E5LVNVZOengSp/Eh+1zAoYvrEZDh1I91w=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -314,4 +314,4 @@ h1:umUhmpAOlIEnwcUTdLyguoDfHJyolmiEDekS77Hk6ug=
 20260803183323_add-unproxied-mcp-servers.sql h1:qzO4JQBZcDOdBk+J5bKitwZToe5vocZryD2n+GFhK8U=
 20260803193050_litellm-instances.sql h1:tXo5MT2gc1ofWtT8ndwAo5Ms2G4vUKhF8wUuZr1r+Zc=
 20260803194013_litellm-instance-health.sql h1:xocULUVta5ICjDnH83WT/zQbXN0ZyzRbmpQvGXU0JW0=
-20260804220336_skill-versions-injection-scan.sql h1:oMcew9WKRCrV2opoTDuwfHHVmODoaol3SwUGUwF5+XA=
+20260804220336_skill-versions-injection-scan.sql h1:BFMK1JCMbDM1eQydH5ESFRmux3ZCuTO0GPRjwP9p37s=
