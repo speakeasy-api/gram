@@ -190,3 +190,32 @@ func TestOpen_CurrentSchemaIsStable(t *testing.T) {
 		require.NoError(t, db.Close())
 	}
 }
+
+// A retired column that SQLite refuses to drop -- because it is the primary
+// key, or unique -- has to report the same actionable message as any other
+// in-place-impossible change, not the driver's own wording. Renaming the key
+// of a ledger table is a realistic change, and the raw error ("cannot drop
+// PRIMARY KEY column") tells an operator nothing about what to do.
+func TestOpen_UndroppableColumnReportsActionably(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "devidp.db")
+	writeLegacyDB(t, path, `
+		CREATE TABLE ema_resource_tokens (
+		  token TEXT NOT NULL PRIMARY KEY,
+		  resource_id TEXT NOT NULL,
+		  user_id TEXT NOT NULL,
+		  client_id TEXT NOT NULL,
+		  audience TEXT NOT NULL,
+		  scope TEXT NOT NULL DEFAULT '',
+		  expires_at DATETIME NOT NULL,
+		  revoked_at DATETIME,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+
+	_, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
+	require.Error(t, err, "an undroppable retired column must fail loudly at boot")
+	require.Contains(t, err.Error(), "ema_resource_tokens.token", "error should name the offending column")
+	require.Contains(t, strings.ToLower(err.Error()), "local/devidp", "error should say how to recover")
+}
