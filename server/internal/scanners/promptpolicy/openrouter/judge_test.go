@@ -203,7 +203,7 @@ func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
 // throttled.
 func drainLimiter(t *testing.T, j *Judge, org string) {
 	t.Helper()
-	key := openrouter.JudgeRateLimitKey(org, defaultJudgeModel)
+	key := openrouter.JudgeRateLimitKey(openrouter.PlatformKey, defaultJudgeModel)
 	for {
 		res, err := j.limiter.Allow(t.Context(), key)
 		require.NoError(t, err)
@@ -442,4 +442,12 @@ func TestBuildJudgePromptTruncatesRuneSafe(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(got), &p))
 	require.True(t, p.Message.BodyTruncated)
 	require.True(t, utf8.ValidString(p.Message.Body), "truncated output must remain valid UTF-8")
+}
+
+func (c *countingCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey, nil
+}
+
+func (c *successfulCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey, nil
 }

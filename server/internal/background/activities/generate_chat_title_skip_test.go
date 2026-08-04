@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -152,4 +153,8 @@ func TestGenerateChatTitle_WriteSkipsManuallyTitledChat(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Human Picked", chat.Title.String)
 	require.True(t, chat.TitleManuallySet)
+}
+
+func (s *completionClientSpy) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey, nil
 }
