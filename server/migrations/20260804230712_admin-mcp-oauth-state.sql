@@ -38,19 +38,18 @@ CREATE TABLE "admin_mcp_connections" (
   CONSTRAINT "admin_mcp_connections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "admin_mcp_connections_subject_urn_check" CHECK (subject_urn <> ''::text)
 );
--- Create index "admin_mcp_connections_id_client_id_key" to table: "admin_mcp_connections"
-CREATE UNIQUE INDEX "admin_mcp_connections_id_client_id_key" ON "admin_mcp_connections" ("id", "oauth_client_id");
 -- Create index "admin_mcp_connections_live_organization_subject_client_key" to table: "admin_mcp_connections"
 CREATE UNIQUE INDEX "admin_mcp_connections_live_organization_subject_client_key" ON "admin_mcp_connections" ("organization_id", "subject_urn", "oauth_client_id") WHERE (revoked_at IS NULL);
 -- Create index "admin_mcp_connections_oauth_client_id_idx" to table: "admin_mcp_connections"
 CREATE INDEX "admin_mcp_connections_oauth_client_id_idx" ON "admin_mcp_connections" ("oauth_client_id");
 -- Create index "admin_mcp_connections_organization_id_id_key" to table: "admin_mcp_connections"
 CREATE UNIQUE INDEX "admin_mcp_connections_organization_id_id_key" ON "admin_mcp_connections" ("organization_id", "id");
--- Create index "admin_mcp_connections_organization_id_idx" to table: "admin_mcp_connections"
-CREATE INDEX "admin_mcp_connections_organization_id_idx" ON "admin_mcp_connections" ("organization_id");
+-- Create index "admin_mcp_connections_organization_id_id_oauth_client_id_key" to table: "admin_mcp_connections"
+CREATE UNIQUE INDEX "admin_mcp_connections_organization_id_id_oauth_client_id_key" ON "admin_mcp_connections" ("organization_id", "id", "oauth_client_id");
 -- Create "admin_mcp_authorization_grants" table
 CREATE TABLE "admin_mcp_authorization_grants" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "organization_id" text NOT NULL,
   "authorization_code_hash" text NOT NULL,
   "oauth_client_id" uuid NOT NULL,
   "connection_id" uuid NOT NULL,
@@ -63,20 +62,20 @@ CREATE TABLE "admin_mcp_authorization_grants" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "admin_mcp_authorization_grants_connection_client_fkey" FOREIGN KEY ("connection_id", "oauth_client_id") REFERENCES "admin_mcp_connections" ("id", "oauth_client_id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "admin_mcp_authorization_grants_oauth_client_id_fkey" FOREIGN KEY ("oauth_client_id") REFERENCES "admin_mcp_oauth_clients" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "admin_mcp_authorization_grants_org_connection_client_fkey" FOREIGN KEY ("organization_id", "connection_id", "oauth_client_id") REFERENCES "admin_mcp_connections" ("organization_id", "id", "oauth_client_id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "admin_mcp_authorization_grants_authorization_code_hash_check" CHECK (authorization_code_hash <> ''::text),
   CONSTRAINT "admin_mcp_authorization_grants_code_challenge_check" CHECK (code_challenge <> ''::text),
   CONSTRAINT "admin_mcp_authorization_grants_redirect_uri_check" CHECK (redirect_uri <> ''::text)
 );
 -- Create index "admin_mcp_authorization_grants_authorization_code_hash_key" to table: "admin_mcp_authorization_grants"
 CREATE UNIQUE INDEX "admin_mcp_authorization_grants_authorization_code_hash_key" ON "admin_mcp_authorization_grants" ("authorization_code_hash");
--- Create index "admin_mcp_authorization_grants_connection_id_idx" to table: "admin_mcp_authorization_grants"
-CREATE INDEX "admin_mcp_authorization_grants_connection_id_idx" ON "admin_mcp_authorization_grants" ("connection_id");
 -- Create index "admin_mcp_authorization_grants_expires_at_idx" to table: "admin_mcp_authorization_grants"
 CREATE INDEX "admin_mcp_authorization_grants_expires_at_idx" ON "admin_mcp_authorization_grants" ("expires_at");
 -- Create index "admin_mcp_authorization_grants_oauth_client_id_idx" to table: "admin_mcp_authorization_grants"
 CREATE INDEX "admin_mcp_authorization_grants_oauth_client_id_idx" ON "admin_mcp_authorization_grants" ("oauth_client_id");
+-- Create index "admin_mcp_authorization_grants_org_code_hash_idx" to table: "admin_mcp_authorization_grants"
+CREATE INDEX "admin_mcp_authorization_grants_org_code_hash_idx" ON "admin_mcp_authorization_grants" ("organization_id", "authorization_code_hash");
 -- Create index "projects_organization_id_id_key" to table: "projects"
 CREATE UNIQUE INDEX CONCURRENTLY "projects_organization_id_id_key" ON "projects" ("organization_id", "id");
 -- Create "admin_mcp_onboarding_milestones" table
@@ -116,6 +115,7 @@ CREATE UNIQUE INDEX "admin_mcp_onboarding_milestones_repeat_day_value_key" ON "a
 -- Create "admin_mcp_sessions" table
 CREATE TABLE "admin_mcp_sessions" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "organization_id" text NOT NULL,
   "connection_id" uuid NOT NULL,
   "oauth_client_id" uuid NOT NULL,
   "connection_generation" uuid NOT NULL,
@@ -130,15 +130,19 @@ CREATE TABLE "admin_mcp_sessions" (
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
   CONSTRAINT "admin_mcp_sessions_id_lineage_key" UNIQUE ("id", "connection_id", "oauth_client_id", "connection_generation"),
-  CONSTRAINT "admin_mcp_sessions_connection_client_fkey" FOREIGN KEY ("connection_id", "oauth_client_id") REFERENCES "admin_mcp_connections" ("id", "oauth_client_id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "admin_mcp_sessions_organization_connection_client_fkey" FOREIGN KEY ("organization_id", "connection_id", "oauth_client_id") REFERENCES "admin_mcp_connections" ("organization_id", "id", "oauth_client_id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "admin_mcp_sessions_replaced_by_session_lineage_fkey" FOREIGN KEY ("replaced_by_session_id", "connection_id", "oauth_client_id", "connection_generation") REFERENCES "admin_mcp_sessions" ("id", "connection_id", "oauth_client_id", "connection_generation") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "admin_mcp_sessions_jti_check" CHECK (jti <> ''::text),
   CONSTRAINT "admin_mcp_sessions_refresh_token_hash_check" CHECK (refresh_token_hash <> ''::text)
 );
--- Create index "admin_mcp_sessions_connection_generation_idx" to table: "admin_mcp_sessions"
-CREATE INDEX "admin_mcp_sessions_connection_generation_idx" ON "admin_mcp_sessions" ("connection_id", "connection_generation");
 -- Create index "admin_mcp_sessions_jti_key" to table: "admin_mcp_sessions"
 CREATE UNIQUE INDEX "admin_mcp_sessions_jti_key" ON "admin_mcp_sessions" ("jti");
+-- Create index "admin_mcp_sessions_organization_connection_generation_idx" to table: "admin_mcp_sessions"
+CREATE INDEX "admin_mcp_sessions_organization_connection_generation_idx" ON "admin_mcp_sessions" ("organization_id", "connection_id", "connection_generation");
+-- Create index "admin_mcp_sessions_organization_jti_idx" to table: "admin_mcp_sessions"
+CREATE INDEX "admin_mcp_sessions_organization_jti_idx" ON "admin_mcp_sessions" ("organization_id", "jti");
+-- Create index "admin_mcp_sessions_organization_refresh_token_hash_idx" to table: "admin_mcp_sessions"
+CREATE INDEX "admin_mcp_sessions_organization_refresh_token_hash_idx" ON "admin_mcp_sessions" ("organization_id", "refresh_token_hash");
 -- Create index "admin_mcp_sessions_refresh_expires_at_idx" to table: "admin_mcp_sessions"
 CREATE INDEX "admin_mcp_sessions_refresh_expires_at_idx" ON "admin_mcp_sessions" ("refresh_expires_at");
 -- Create index "admin_mcp_sessions_refresh_token_hash_key" to table: "admin_mcp_sessions"

@@ -5603,22 +5603,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_live_organization_subjec
 ON admin_mcp_connections (organization_id, subject_urn, oauth_client_id)
 WHERE revoked_at IS NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_id_client_id_key
-ON admin_mcp_connections (id, oauth_client_id);
-
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_id_key
 ON admin_mcp_connections (organization_id, id);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_idx
-ON admin_mcp_connections (organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_id_oauth_client_id_key
+ON admin_mcp_connections (organization_id, id, oauth_client_id);
 
 CREATE INDEX IF NOT EXISTS admin_mcp_connections_oauth_client_id_idx
 ON admin_mcp_connections (oauth_client_id);
 
 -- Authorization codes are stored only as hashes and consumed atomically after
 -- client, redirect URI, PKCE, and current connection-generation validation.
+-- organization_id is copied from and tenant-pinned to the connection so every
+-- authorization-code transition has a direct tenant boundary.
 CREATE TABLE IF NOT EXISTS admin_mcp_authorization_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
   authorization_code_hash TEXT NOT NULL,
   oauth_client_id uuid NOT NULL,
   connection_id uuid NOT NULL,
@@ -5638,8 +5638,10 @@ CREATE TABLE IF NOT EXISTS admin_mcp_authorization_grants (
   CONSTRAINT admin_mcp_authorization_grants_code_challenge_check CHECK (code_challenge <> ''),
   CONSTRAINT admin_mcp_authorization_grants_oauth_client_id_fkey
     FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE CASCADE,
-  CONSTRAINT admin_mcp_authorization_grants_connection_client_fkey
-    FOREIGN KEY (connection_id, oauth_client_id) REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE
+  CONSTRAINT admin_mcp_authorization_grants_org_connection_client_fkey
+    FOREIGN KEY (organization_id, connection_id, oauth_client_id)
+    REFERENCES admin_mcp_connections (organization_id, id, oauth_client_id)
+    ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_authorization_grants_authorization_code_hash_key
@@ -5651,13 +5653,16 @@ ON admin_mcp_authorization_grants (expires_at);
 CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_oauth_client_id_idx
 ON admin_mcp_authorization_grants (oauth_client_id);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_connection_id_idx
-ON admin_mcp_authorization_grants (connection_id);
+CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_org_code_hash_idx
+ON admin_mcp_authorization_grants (organization_id, authorization_code_hash);
 
 -- A session stores Admin token identifiers and hashes, never raw bearer or
 -- refresh tokens. The replacement link preserves single-use refresh history.
+-- organization_id is copied from and tenant-pinned to the connection so every
+-- session transition has a direct tenant boundary.
 CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
   connection_id uuid NOT NULL,
   oauth_client_id uuid NOT NULL,
   connection_generation uuid NOT NULL,
@@ -5676,8 +5681,10 @@ CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
   CONSTRAINT admin_mcp_sessions_id_lineage_key UNIQUE (id, connection_id, oauth_client_id, connection_generation),
   CONSTRAINT admin_mcp_sessions_jti_check CHECK (jti <> ''),
   CONSTRAINT admin_mcp_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
-  CONSTRAINT admin_mcp_sessions_connection_client_fkey
-    FOREIGN KEY (connection_id, oauth_client_id) REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_sessions_organization_connection_client_fkey
+    FOREIGN KEY (organization_id, connection_id, oauth_client_id)
+    REFERENCES admin_mcp_connections (organization_id, id, oauth_client_id)
+    ON DELETE CASCADE,
   CONSTRAINT admin_mcp_sessions_replaced_by_session_lineage_fkey
     FOREIGN KEY (replaced_by_session_id, connection_id, oauth_client_id, connection_generation)
     REFERENCES admin_mcp_sessions (id, connection_id, oauth_client_id, connection_generation)
@@ -5687,11 +5694,17 @@ CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_jti_key
 ON admin_mcp_sessions (jti);
 
+CREATE INDEX IF NOT EXISTS admin_mcp_sessions_organization_jti_idx
+ON admin_mcp_sessions (organization_id, jti);
+
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_refresh_token_hash_key
 ON admin_mcp_sessions (refresh_token_hash);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_sessions_connection_generation_idx
-ON admin_mcp_sessions (connection_id, connection_generation);
+CREATE INDEX IF NOT EXISTS admin_mcp_sessions_organization_refresh_token_hash_idx
+ON admin_mcp_sessions (organization_id, refresh_token_hash);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_sessions_organization_connection_generation_idx
+ON admin_mcp_sessions (organization_id, connection_id, connection_generation);
 
 CREATE INDEX IF NOT EXISTS admin_mcp_sessions_refresh_expires_at_idx
 ON admin_mcp_sessions (refresh_expires_at);
