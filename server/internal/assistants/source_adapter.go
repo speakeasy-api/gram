@@ -33,6 +33,7 @@ func (deterministicChatIDAdapter) ChatID(assistantID uuid.UUID, correlationID st
 
 var sourceAdapters = map[string]sourceAdapter{
 	sourceKindSlack:     slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindMSTeams:   msteamsAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
 	sourceKindLinear:    linearAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
 	sourceKindGithub:    githubAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
 	sourceKindCron:      cronAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
