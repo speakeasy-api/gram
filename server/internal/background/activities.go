@@ -122,6 +122,7 @@ type Activities struct {
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	reconcileExclusion              *risk_exclusion.Reconcile
 	skillObservationReconciler      *activities.SkillObservationReconciler
+	skillInjectionScanner           *activities.SkillInjectionScanner
 	cleanRiskPolicyResults          *risk_policy.Cleanup
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
@@ -297,6 +298,7 @@ func NewActivities(
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		skillObservationReconciler:      activities.NewSkillObservationReconciler(db, telemetryRepo),
+		skillInjectionScanner:           activities.NewSkillInjectionScanner(logger, db, piScanner),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
@@ -624,6 +626,14 @@ func (a *Activities) SyncSkillSessionVersions(ctx context.Context, input activit
 	result, err := a.skillObservationReconciler.SyncSessionVersions(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("sync skill session versions: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ScanSkillVersionsForInjection(ctx context.Context, input activities.ScanSkillVersionsForInjectionParams) (*activities.ScanSkillVersionsForInjectionResult, error) {
+	result, err := a.skillInjectionScanner.Scan(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("scan skill versions for injection: %w", err)
 	}
 	return result, nil
 }
