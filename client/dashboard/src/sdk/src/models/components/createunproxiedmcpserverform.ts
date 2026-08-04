@@ -17,7 +17,7 @@ export type CreateUnproxiedMcpServerForm = {
    */
   name?: string | undefined;
   /**
-   * The URL of the vendor's MCP server. Gram never proxies tool calls through it; the only outbound request Gram ever makes to it is a live tool listing from the Inspect tab.
+   * The URL of the vendor's MCP server. Speakeasy never proxies tool calls through it; the only outbound requests Speakeasy ever makes to it are fetching a favicon and, on request, a live tool listing.
    */
   url: string;
 };
