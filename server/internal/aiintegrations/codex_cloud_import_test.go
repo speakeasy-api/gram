@@ -185,3 +185,29 @@ func newCodexCloudTestSource(cfg Config, client codexComplianceClient) *codexClo
 		progress:  &CodexCloudSyncProgress{},
 	}
 }
+
+// TestCodexCloudEventCreatedAtCountsFallbacks: a valid event timestamp is
+// used directly; a malformed or absent one falls back to import time and
+// counts the canary that flags upstream format changes.
+func TestCodexCloudEventCreatedAtCountsFallbacks(t *testing.T) {
+	t.Parallel()
+
+	source := newCodexCloudTestSource(chatgptConversationConfig(), nil)
+	event := codexCloudEvent{}
+
+	event.Timestamp = "2026-07-28T10:00:00Z"
+	require.Equal(t, time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC), source.eventCreatedAt(event))
+	require.Zero(t, source.progress.TimestampFallbacks)
+
+	// Malformed: import time is used and the canary counts it.
+	event.Timestamp = "1753694400"
+	got := source.eventCreatedAt(event)
+	require.WithinDuration(t, time.Now().UTC(), got, time.Minute)
+	require.Equal(t, 1, source.progress.TimestampFallbacks)
+
+	// Absent entirely: also a counted import-time fallback.
+	event.Timestamp = ""
+	got = source.eventCreatedAt(event)
+	require.WithinDuration(t, time.Now().UTC(), got, time.Minute)
+	require.Equal(t, 2, source.progress.TimestampFallbacks)
+}

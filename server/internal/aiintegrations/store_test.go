@@ -403,3 +403,21 @@ func TestUpsertRejectsNonUUIDWorkspaceIDForChatGPTCompliance(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ChatGPT workspace UUID")
 }
+
+// TestUpsertWithTxStartsChatGPTSchedules: the chatgpt_compliance config owns
+// BOTH workspace-scoped feeds — conversation messages and Codex cloud task
+// transcripts — so saving it must start both time-kind schedules. This is
+// also the wiring ensureActiveSyncSchedules reconciles onto existing configs.
+func TestUpsertWithTxStartsChatGPTSchedules(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &workspaceID, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleChatGPTCompliance:  SyncKindTime,
+		ScheduleCodexCloudSessions: SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
