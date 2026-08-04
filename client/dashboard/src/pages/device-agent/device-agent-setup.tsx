@@ -30,6 +30,11 @@ const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 
+// macOS installs from the signed .pkg attached to the GitHub Release (ADR-0015)
+// rather than the raw-binary manifest above — it isn't part of releases.json.
+const GITHUB_RELEASES_URL =
+  "https://github.com/speakeasy-api/device-agent/releases";
+
 // Shared inline-link styling for the anchors/Links on this page.
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
 
@@ -97,7 +102,8 @@ function psVersionAssign(version: string | null) {
     : `$VERSION = (Invoke-RestMethod ${MANIFEST_URL}).latest.speakeasyd.version`;
 }
 
-type OsSpec = {
+// Fields every platform tile/sheet header needs, regardless of install method.
+type BaseOsSpec = {
   label: string;
   tileDesc: string;
   logo: string;
@@ -109,6 +115,14 @@ type OsSpec = {
   // Monochrome-black logos (the Apple mark) vanish on a dark background — flip
   // them in dark mode. The colored Windows/Tux marks must NOT be inverted.
   invertLogoInDark?: boolean;
+};
+
+// Windows and Linux still ship as raw binaries registered via a manual
+// service-install script — ADR-0015 (device-agent) only replaced the macOS
+// path with a signed, notarized .pkg. Keeping this as its own type (instead
+// of leaving these fields optional on a single OsSpec) means macOS can't
+// silently carry stale script fields that nothing renders anymore.
+type ScriptOsSpec = BaseOsSpec & {
   lang: "bash" | "powershell";
   archNote?: React.ReactNode;
   download: (version: string | null) => string;
@@ -121,35 +135,17 @@ type OsSpec = {
   downloadKeys: string[];
 };
 
-const OS_CONFIG: Record<OsKey, OsSpec> = {
+const OS_CONFIG: {
+  macos: BaseOsSpec;
+  windows: ScriptOsSpec;
+  linux: ScriptOsSpec;
+} = {
   macos: {
     label: "macOS",
     tileDesc: "Apple Silicon or Intel",
     logo: "/icons/platforms/macos.svg",
     logoSize: "h-7 w-7",
     invertLogoInDark: true,
-    lang: "bash",
-    archNote: (
-      <>
-        Apple Silicon shown — swap <code>darwin_arm64</code> for{" "}
-        <code>darwin_amd64</code> on Intel.
-      </>
-    ),
-    download: (version) => `${bashVersionAssign(version)}
-BASE=${RELEASES_BASE}/v$VERSION
-curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_darwin_arm64"
-curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_darwin_arm64"`,
-    chmodMove: `chmod +x speakeasyd speakeasy
-sudo mv speakeasyd speakeasy /usr/local/bin/`,
-    serviceNote: (
-      <>
-        Installs <code>speakeasyd</code> as a LaunchAgent so it runs on login.
-      </>
-    ),
-    serviceRegister: `speakeasyd -service install
-speakeasyd -service start`,
-    verify: `speakeasyd status`,
-    downloadKeys: ["darwin/arm64", "darwin/amd64"],
   },
   windows: {
     label: "Windows",
@@ -302,8 +298,9 @@ function BinaryDownloadButton({
 
 // ManualDownload lists the direct binary links for the selected OS only (the
 // alternative to the curl/PowerShell download script). Degrades to a manifest
-// link if the fetch fails.
-function ManualDownload({ os }: { os: OsKey }) {
+// link if the fetch fails. Windows/Linux only — macOS installs from the pkg
+// (MacInstallStep), not the raw-binary manifest.
+function ManualDownload({ os }: { os: "windows" | "linux" }) {
   const { data, isLoading, isError } = useAgentReleases();
 
   if (isLoading) {
@@ -394,9 +391,10 @@ function ManualDownload({ os }: { os: OsKey }) {
   );
 }
 
-// DownloadStep is the first setup step: two ways to get the binaries (script or
-// direct download), separated by an OR so it's clear they're alternatives.
-function DownloadStep({ os }: { os: OsKey }) {
+// DownloadStep is the first setup step on Windows/Linux: two ways to get the
+// binaries (script or direct download), separated by an OR so it's clear
+// they're alternatives. macOS uses MacInstallStep instead.
+function DownloadStep({ os }: { os: "windows" | "linux" }) {
   const { data } = useAgentReleases();
   const version = data?.latest["speakeasyd"]?.version ?? null;
   const cfg = OS_CONFIG[os];
@@ -735,6 +733,81 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
+// MacInstallStep is the first (and only pre-identity) setup step on macOS:
+// grab the signed .pkg from the GitHub Release and install it, either by hand
+// on one machine or pushed through an MDM as a normal Package. Unlike
+// Windows/Linux there's no separate chmod/move or service-registration step —
+// the pkg's postinstall does both (ADR-0015: device-agent, ONBOARDING_JAMF.md).
+function MacInstallStep() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <SubLabel>Tooling breakdown</SubLabel>
+        <BinaryLegend />
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Get the installer</SubLabel>
+        <Text small muted>
+          Grab <code>speakeasy-agent_&lt;version&gt;.pkg</code> from the{" "}
+          <ExternalLink
+            href={GITHUB_RELEASES_URL}
+            target="_blank"
+            iconSuffixName="external-link"
+          >
+            current stable GitHub Release
+          </ExternalLink>
+          . One universal build covers Apple Silicon and Intel. It's Developer
+          ID signed, notarized, and stapled, so a browser download needs no
+          Gatekeeper workaround.
+        </Text>
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Install it — one machine</SubLabel>
+        <StepNote>
+          Provision <code>managed.json</code> first (see the identity step next)
+          for a deterministic first start, then install:
+        </StepNote>
+        <CodeBlock language="bash">{`sudo installer -pkg "./speakeasy-agent_<version>.pkg" -target /`}</CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>Install it — fleet via MDM</SubLabel>
+        <Text small muted>
+          Upload the pkg to your MDM (Jamf, Kandji, Intune, …) as a{" "}
+          <strong className="font-medium">Package</strong> and scope a policy to
+          install it once per computer — no script needed. The pkg installs the
+          daemon, CLI, menu-bar UI, and privileged helper together, and its
+          postinstall step registers the per-user LaunchAgents itself.
+        </Text>
+        <Text small muted>
+          Don't re-push the pkg for routine version bumps — with{" "}
+          <code>auto_update: "automatic"</code> the agent updates itself after
+          the first push. Reserve a re-push for an installer/layout change.
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+// MacVerifyStep checks the pkg install: the receipt exists, the LaunchAgent is
+// running, and the per-user CLI reports in. The CLI isn't added to PATH (it
+// would collide with the Speakeasy SDK generator's own `speakeasy` on a dev
+// machine), so it's addressed by its per-user install path instead.
+function MacVerifyStep() {
+  return (
+    <div className="flex flex-col gap-2">
+      <StepNote>
+        Run these in the enrolled user's own login session, not as root.
+      </StepNote>
+      <CodeBlock language="bash">{`AGENT_CLI="$HOME/Library/Application Support/Speakeasy/bin/speakeasy"
+
+pkgutil --pkg-info com.speakeasy.agent.pkg
+launchctl print "gui/$(id -u)/com.speakeasy.daemon"
+"$AGENT_CLI" status`}</CodeBlock>
+    </div>
+  );
+}
+
 // IdentityStep is the final sheet step: pick how the agent learns who's on the
 // device (fleet MDM vs personal enrollment).
 function IdentityStep() {
@@ -798,9 +871,19 @@ function SetupTab({
 
 type SetupStep = { title: string; body: React.ReactNode };
 
-// buildSteps assembles the ordered setup steps for an OS. Windows has no
-// chmod/move step, so the list length (and numbering) varies by OS.
+// buildSteps assembles the ordered setup steps for an OS. macOS installs from
+// a signed .pkg (one combined install step, no chmod/move or separate service
+// registration); Windows/Linux still ship raw binaries via a download script,
+// so the list length (and numbering) varies by OS.
 function buildSteps(os: OsKey): SetupStep[] {
+  if (os === "macos") {
+    return [
+      { title: "Download and install the agent", body: <MacInstallStep /> },
+      { title: "Verify it's running", body: <MacVerifyStep /> },
+      { title: "Set the user's identity", body: <IdentityStep /> },
+    ];
+  }
+
   const cfg = OS_CONFIG[os];
   const steps: SetupStep[] = [
     { title: "Download the binaries", body: <DownloadStep os={os} /> },
