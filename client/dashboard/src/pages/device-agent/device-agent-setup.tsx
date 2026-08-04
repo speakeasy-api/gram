@@ -81,6 +81,17 @@ type OsKey = "macos" | "windows" | "linux";
 
 const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
 
+// A manifest-supplied version is rendered directly into a copy-paste
+// shell/PowerShell snippet. Quoting alone doesn't make that safe — double
+// quotes still expand $(...) — so validate shape instead of trying to escape
+// arbitrary content; same charset tag-internal.yml (device-agent) requires
+// when minting a release tag.
+const VERSION_PATTERN =
+  /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
+function safeVersion(version: string | null | undefined) {
+  return version && VERSION_PATTERN.test(version) ? version : null;
+}
+
 // {bash,ps}VersionAssign return the shell line that sets VERSION for the
 // download snippets. When we've resolved the latest release from the manifest
 // we inline it (a concrete, copy-and-run value); otherwise we fall back to a
@@ -88,11 +99,7 @@ const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
 // or if it fails.
 function bashVersionAssign(version: string | null) {
   return version
-    ? // Quoted so a version string can't break out of the assignment into a
-      // second shell command if a compromised/malformed manifest ever served
-      // one with shell metacharacters — matches psVersionAssign below, which
-      // already quotes.
-      `VERSION="${version}"`
+    ? `VERSION="${version}"`
     : `VERSION=$(curl -s ${MANIFEST_URL} | jq -r '.latest.speakeasyd.version')`;
 }
 function psVersionAssign(version: string | null) {
@@ -396,7 +403,7 @@ function ManualDownload({ os }: { os: "windows" | "linux" }) {
 // they're alternatives. macOS uses MacInstallStep instead.
 function DownloadStep({ os }: { os: "windows" | "linux" }) {
   const { data } = useAgentReleases();
-  const version = data?.latest?.["speakeasyd"]?.version ?? null;
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   const cfg = OS_CONFIG[os];
 
   return (
@@ -747,7 +754,7 @@ const MANAGED_CONFIG_PATHS = [
 // ONBOARDING_JAMF.md).
 function MacInstallStep() {
   const { data, isError } = useAgentReleases();
-  const version = data?.latest?.["speakeasyd"]?.version ?? null;
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   // The pkg ships from the same bucket/version layout as the raw binaries
   // (device-agent's release-pkg-macos job), but isn't itself listed in
   // releases.json — it's the manual/MDM on-ramp, not something the
