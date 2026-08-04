@@ -36,9 +36,10 @@ export function UnproxiedMcpOverviewTab({
 }: UnproxiedMcpOverviewTabProps): JSX.Element {
   const { from, to } = useMemo(() => {
     const to = new Date();
-    const from = new Date(
-      to.getTime() - USAGE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-    );
+    // USAGE_WINDOW_DAYS calendar buckets inclusive of `to`, so the query
+    // range starts (USAGE_WINDOW_DAYS - 1) days back, matching the buckets
+    // built below rather than requesting one extra day nothing displays.
+    const from = new Date(to.getTime() - (USAGE_WINDOW_DAYS - 1) * MS_PER_DAY);
     return { from, to };
   }, []);
 
