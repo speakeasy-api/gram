@@ -265,25 +265,6 @@ func TestLogs_CodexUsageRollsUpToAttributeMetrics(t *testing.T) {
 	}, 15*time.Second, 200*time.Millisecond)
 }
 
-func TestIsCodexLogsPayload(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, isCodexLogsPayload(codexLogsPayload(tokenBearingRecord())))
-	assert.False(t, isCodexLogsPayload(nil))
-
-	claude := &gen.LogsPayload{
-		ResourceLogs: []*gen.OTELResourceLog{{
-			Resource: &gen.OTELResource{
-				Attributes: []*gen.OTELResourceAttribute{{
-					Key:   "service.name",
-					Value: &gen.OTELAttributeValue{StringValue: new("claude-code")},
-				}},
-			},
-		}},
-	}
-	assert.False(t, isCodexLogsPayload(claude))
-}
-
 func TestLogs_AttributesCodexOTELRecordsToResolvedUser(t *testing.T) {
 	t.Parallel()
 
@@ -312,24 +293,6 @@ func TestLogs_AttributesCodexOTELRecordsToResolvedUser(t *testing.T) {
 	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
 	require.Contains(t, logs[0].Attributes, userID)
 	require.Contains(t, logs[0].Attributes, "codex-otel@example.com")
-}
-
-func TestIsCodexMetricsPayload(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, isCodexMetricsPayload(codexMetricsPayload()))
-	assert.False(t, isCodexMetricsPayload(nil))
-
-	claude := &gen.MetricsPayload{
-		ResourceMetrics: []*gen.OTELResourceMetrics{{
-			Resource: &gen.OTELResource{
-				Attributes: []*gen.OTELResourceAttribute{
-					resourceStrAttr("service.name", "claude-code"),
-				},
-			},
-		}},
-	}
-	assert.False(t, isCodexMetricsPayload(claude))
 }
 
 func TestMetrics_PersistsCodexOTELMetricDataPoints(t *testing.T) {
@@ -571,6 +534,13 @@ func TestLogs_ClassifiesUnresolvedCodexEmailPersonal(t *testing.T) {
 func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
 	t.Parallel()
 
+	nilCodexLogs, nilClaudeLogs := splitCodexLogsPayload(nil)
+	require.Nil(t, nilCodexLogs)
+	require.Nil(t, nilClaudeLogs)
+	nilCodexMetrics, nilClaudeMetrics := splitCodexMetricsPayload(nil)
+	require.Nil(t, nilCodexMetrics)
+	require.Nil(t, nilClaudeMetrics)
+
 	// Every name below was observed against the shipped 0.146 build.
 	// codex-app-server is Codex mode in the unified ChatGPT desktop app and
 	// is hyphenated, so an underscore-only match would still have misrouted
@@ -580,13 +550,17 @@ func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
 			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
 			ScopeLogs: nil,
 		}}}
-		require.True(t, isCodexLogsPayload(logs), serviceName)
+		codexLogs, claudeLogs := splitCodexLogsPayload(logs)
+		require.NotNil(t, codexLogs, serviceName)
+		require.Nil(t, claudeLogs, serviceName)
 
 		metrics := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{{
 			Resource:     &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
 			ScopeMetrics: nil,
 		}}}
-		require.True(t, isCodexMetricsPayload(metrics), serviceName)
+		codexMetrics, claudeMetrics := splitCodexMetricsPayload(metrics)
+		require.NotNil(t, codexMetrics, serviceName)
+		require.Nil(t, claudeMetrics, serviceName)
 	}
 
 	for _, serviceName := range []string{"claude-code", "claude-code-desktop", "cowork", "codexish-other", ""} {
@@ -594,13 +568,17 @@ func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
 			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
 			ScopeLogs: nil,
 		}}}
-		require.False(t, isCodexLogsPayload(logs), serviceName)
+		codexLogs, claudeLogs := splitCodexLogsPayload(logs)
+		require.Nil(t, codexLogs, serviceName)
+		require.NotNil(t, claudeLogs, serviceName)
 
 		metrics := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{{
 			Resource:     &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
 			ScopeMetrics: nil,
 		}}}
-		require.False(t, isCodexMetricsPayload(metrics), serviceName)
+		codexMetrics, claudeMetrics := splitCodexMetricsPayload(metrics)
+		require.Nil(t, codexMetrics, serviceName)
+		require.NotNil(t, claudeMetrics, serviceName)
 	}
 }
 

@@ -123,24 +123,6 @@ func splitCodexMetricsPayload(payload *gen.MetricsPayload) (codex, claude *gen.M
 	return codex, claude
 }
 
-// isCodexLogsPayload reports whether an OTLP logs payload originated from the
-// Codex CLI, identified by its resource service.name. Claude Code reports a
-// different service name and is handled by the session-seeding path instead.
-func isCodexLogsPayload(payload *gen.LogsPayload) bool {
-	if payload == nil {
-		return false
-	}
-	for _, rl := range payload.ResourceLogs {
-		if rl == nil {
-			continue
-		}
-		if isCodexServiceName(extractResourceAttribute(rl.Resource, "service.name")) {
-			return true
-		}
-	}
-	return false
-}
-
 // writeCodexOTELLogsToClickHouse persists every Codex OTEL log record as a raw
 // telemetry row, mirroring the Claude raw-log stream (claude-code:otel:logs).
 // The rows keep Codex's native attributes (event.name, event.kind, tool_name,
@@ -259,24 +241,6 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 	if err := s.telemetryLogger.LogBulk(ctx, params); err != nil {
 		s.logger.ErrorContext(ctx, "failed to write Codex OTEL logs to ClickHouse", attr.SlogError(err))
 	}
-}
-
-// isCodexMetricsPayload reports whether an OTLP metrics payload originated
-// from the Codex CLI, identified by its resource service.name — the metrics
-// twin of isCodexLogsPayload.
-func isCodexMetricsPayload(payload *gen.MetricsPayload) bool {
-	if payload == nil {
-		return false
-	}
-	for _, rm := range payload.ResourceMetrics {
-		if rm == nil {
-			continue
-		}
-		if isCodexServiceName(extractResourceAttribute(rm.Resource, "service.name")) {
-			return true
-		}
-	}
-	return false
 }
 
 // writeCodexMetricsToClickHouse persists each Codex Sum metric data point as a
