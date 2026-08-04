@@ -35,13 +35,11 @@ const SOURCE_ICONS = {
   openapi: FileCode,
   function: Code,
   externalmcp: Server,
-  // Remote/tunneled/unproxied MCP servers are project-scoped, not
-  // deployment-bound, so they cannot appear in failed deployment sources —
-  // but the icon map must cover the full SourceType union for the indexed
-  // lookup at the call site to typecheck.
+  // Remote MCP servers are project-scoped, not deployment-bound, so they cannot
+  // appear in failed deployment sources — but the icon map must cover the full
+  // SourceType union for the indexed lookup at the call site to typecheck.
   remotemcp: Network,
   tunneledmcp: Network,
-  unproxiedmcp: Network,
 } as const;
 
 export function FailedSourcesSection({
@@ -140,8 +138,6 @@ export function FailedSourcesSection({
           case "remotemcp":
             break;
           case "tunneledmcp":
-            break;
-          case "unproxiedmcp":
             break;
         }
       }

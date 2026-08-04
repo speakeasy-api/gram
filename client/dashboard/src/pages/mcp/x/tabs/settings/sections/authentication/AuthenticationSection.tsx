@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/Badge";
 import {
   Field,
   FieldDescription,
@@ -40,7 +39,6 @@ export function AuthenticationSection({
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
-  const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
@@ -49,45 +47,23 @@ export function AuthenticationSection({
         <SettingsSection.Header>
           <SettingsSection.Title>Authentication</SettingsSection.Title>
           <SettingsSection.Description>
-            {isUnproxied
-              ? "Speakeasy doesn't manage authentication for unproxied servers."
-              : "Configure user sessions and, when required, upstream identity providers for clients connecting to this server."}
+            Configure user sessions and, when required, upstream identity
+            providers for clients connecting to this server.
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            {isUnproxied ? (
-              <UnproxiedAuthenticationNotice />
-            ) : (
-              <AuthenticationSectionBody target={target} />
-            )}
+            <AuthenticationSectionBody target={target} />
           </SettingsSection.Body>
-          {isUnproxied ? null : (
-            <SettingsSection.Footer>
-              <SettingsSection.FooterHint>
-                Authentication changes apply to new client connections.
-              </SettingsSection.FooterHint>
-            </SettingsSection.Footer>
-          )}
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              Authentication changes apply to new client connections.
+            </SettingsSection.FooterHint>
+          </SettingsSection.Footer>
         </SettingsSection.Panel>
       </SettingsSection>
-      {isUnproxied ? null : <McpServerSessionsPanel mcpServer={mcpServer} />}
+      <McpServerSessionsPanel mcpServer={mcpServer} />
     </>
-  );
-}
-
-function UnproxiedAuthenticationNotice(): JSX.Element {
-  return (
-    <Field>
-      <FieldLabel>Authentication</FieldLabel>
-      <div>
-        <Badge variant="success">Not applicable</Badge>
-      </div>
-      <FieldDescription>
-        The customer connects directly using the vendor&apos;s own credentials —
-        there&apos;s nothing for Speakeasy to configure here.
-      </FieldDescription>
-    </Field>
   );
 }
 

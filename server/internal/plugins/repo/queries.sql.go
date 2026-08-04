@@ -358,8 +358,7 @@ SELECT
   EXISTS (
     SELECT 1 FROM mcp_endpoints e
     WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
-  ) AS has_endpoint,
-  (s.unproxied_mcp_server_id IS NOT NULL)::boolean AS is_unproxied
+  ) AS has_endpoint
 FROM mcp_servers s
 WHERE
   s.id = $1
@@ -378,15 +377,11 @@ type GetMcpServerForPluginServerRow struct {
 	Slug        pgtype.Text
 	Visibility  string
 	HasEndpoint bool
-	IsUnproxied bool
 }
 
 // Resolve an mcp_server for plugin-server validation, scoped to the project so
 // IDs alone are never trusted. has_endpoint reports whether the server has at
 // least one usable endpoint so the caller can reject unpublishable servers.
-// is_unproxied reports whether the server is backed by an unproxied MCP
-// server, which is never proxied and so never has an mcp_endpoints row; the
-// caller exempts those servers from the has_endpoint requirement.
 func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpServerForPluginServerParams) (GetMcpServerForPluginServerRow, error) {
 	row := q.db.QueryRow(ctx, getMcpServerForPluginServer, arg.McpServerID, arg.ProjectID)
 	var i GetMcpServerForPluginServerRow
@@ -396,7 +391,6 @@ func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpSer
 		&i.Slug,
 		&i.Visibility,
 		&i.HasEndpoint,
-		&i.IsUnproxied,
 	)
 	return i, err
 }

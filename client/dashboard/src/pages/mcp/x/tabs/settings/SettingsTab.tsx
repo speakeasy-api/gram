@@ -49,18 +49,14 @@ export function SettingsTab({
 }): JSX.Element {
   useScrollToSettingsHash();
 
-  const isUnproxied = !!mcpServer.unproxiedMcpServerId;
-
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <BrandingSection mcpServer={mcpServer} />
-      {isUnproxied ? null : (
-        <ServerUrlSection
-          mcpServer={mcpServer}
-          endpoints={endpoints}
-          isLoadingEndpoints={isLoadingEndpoints}
-        />
-      )}
+      <ServerUrlSection
+        mcpServer={mcpServer}
+        endpoints={endpoints}
+        isLoadingEndpoints={isLoadingEndpoints}
+      />
       <AuthenticationSection mcpServer={mcpServer} />
       {mcpServer.remoteMcpServerId ? (
         <HeadersSection
@@ -68,7 +64,7 @@ export function SettingsTab({
           context={{ kind: "mcp-server" }}
         />
       ) : null}
-      {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}
+      <ToolFilteringSection mcpServer={mcpServer} />
       <PublishingSection mcpServer={mcpServer} endpoints={endpoints} />
       <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />
     </div>

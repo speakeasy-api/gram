@@ -4,13 +4,11 @@ import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
 import {
   attachmentToURNPrefix,
-  unproxiedMcpRouteParam,
   remoteMcpRouteParam,
   tunneledMcpRouteParam,
 } from "@/lib/sources";
@@ -21,7 +19,6 @@ import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import {
@@ -112,7 +109,6 @@ export default function Sources(): JSX.Element {
     telemetry.isFeatureEnabled("gram-functions") ?? false;
   const isTunneledMcpEnabled =
     telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) ?? false;
-  const isSpeakeasyStaff = useIsSpeakeasyStaff();
 
   const {
     data: deploymentResult,
@@ -126,16 +122,12 @@ export default function Sources(): JSX.Element {
     useTunneledMcpServers(undefined, undefined, {
       enabled: isTunneledMcpEnabled,
     });
-  const { data: unproxiedMcpServersResult, isLoading: isLoadingUnproxiedMcp } =
-    useUnproxiedMcpServers();
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
-  // Remote/tunneled/unproxied sources bypass deployments, so page loading
-  // waits on their own queries.
+  // Remote/tunneled sources bypass deployments, so page loading waits on their own queries.
   const isLoading =
     isLoadingDeployment ||
     isLoadingRemoteMcp ||
-    isLoadingUnproxiedMcp ||
     (isTunneledMcpEnabled && isLoadingTunneledMcp);
 
   const [viewMode, setViewMode] = useViewMode();
@@ -226,7 +218,6 @@ export default function Sources(): JSX.Element {
       url: server.url,
       type: "remotemcp" as const,
       transportType: server.transportType,
-      mcpServerId: mcpUsage.remoteMcpServerIds.get(server.id),
     }));
 
     const tunneledMcpSources: NamedAsset[] = isTunneledMcpEnabled
@@ -238,21 +229,8 @@ export default function Sources(): JSX.Element {
           type: "tunneledmcp" as const,
           createdAt: server.createdAt,
           updatedAt: server.updatedAt,
-          mcpServerId: mcpUsage.tunneledMcpServerIds.get(server.id),
         }))
       : [];
-
-    const unproxiedMcpSources: NamedAsset[] = (
-      unproxiedMcpServersResult?.unproxiedMcpServers ?? []
-    ).map((server) => ({
-      id: server.id,
-      deploymentAssetId: server.id,
-      slug: unproxiedMcpRouteParam(server),
-      name: server.name,
-      url: server.url,
-      type: "unproxiedmcp" as const,
-      mcpServerId: mcpUsage.unproxiedMcpServerIds.get(server.id),
-    }));
 
     return [
       ...openApiSources,
@@ -260,7 +238,6 @@ export default function Sources(): JSX.Element {
       ...externalMcpSources,
       ...remoteMcpSources,
       ...tunneledMcpSources,
-      ...unproxiedMcpSources,
     ];
   }, [
     deployment,
@@ -268,9 +245,7 @@ export default function Sources(): JSX.Element {
     catalogIconMap,
     remoteMcpServersResult,
     tunneledMcpServersResult,
-    unproxiedMcpServersResult,
     isTunneledMcpEnabled,
-    mcpUsage,
   ]);
 
   const filteredSources = useMemo(() => {
@@ -365,8 +340,7 @@ export default function Sources(): JSX.Element {
           <Dialog.Content className="max-w-2xl!">
             {dialogState.type === "remove-source" &&
               dialogState.asset.type !== "remotemcp" &&
-              dialogState.asset.type !== "tunneledmcp" &&
-              dialogState.asset.type !== "unproxiedmcp" && (
+              dialogState.asset.type !== "tunneledmcp" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}
                   onConfirmRemoval={removeSource}
@@ -490,25 +464,6 @@ export default function Sources(): JSX.Element {
                         </div>
                       </DropdownMenuItem>
                     )}
-                    {isSpeakeasyStaff && (
-                      <DropdownMenuItem
-                        onSelect={() => routes.sources.addUnproxiedMcp.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 dark:bg-amber-500/20">
-                          <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">
-                            Unproxied MCP Server
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            List a vendor server without proxying it (Speakeasy
-                            staff only)
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    )}
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>
@@ -609,8 +564,7 @@ export default function Sources(): JSX.Element {
             >
               {dialogState.type === "remove-source" &&
                 dialogState.asset.type !== "remotemcp" &&
-                dialogState.asset.type !== "tunneledmcp" &&
-                dialogState.asset.type !== "unproxiedmcp" && (
+                dialogState.asset.type !== "tunneledmcp" && (
                   <RemoveSourceDialogContent
                     asset={dialogState.asset}
                     onConfirmRemoval={removeSource}
@@ -626,8 +580,7 @@ export default function Sources(): JSX.Element {
               )}
               {dialogState.type === "view-asset" &&
                 dialogState.asset.type !== "remotemcp" &&
-                dialogState.asset.type !== "tunneledmcp" &&
-                dialogState.asset.type !== "unproxiedmcp" && (
+                dialogState.asset.type !== "tunneledmcp" && (
                   <ViewAssetDialogContent asset={dialogState.asset} />
                 )}
             </Dialog.Content>
@@ -641,26 +594,18 @@ export default function Sources(): JSX.Element {
 interface McpUsage {
   /** Every tool URN exposed by any toolset (Hosted MCP server). */
   toolsetToolUrns: string[];
-  /**
-   * Source id -> wrapping mcp_server id, for remote/tunneled/unproxied
-   * sources. A Map instead of a Set so the same lookup used for "is this
-   * source used" doubles as the id needed to fetch that server's icon
-   * (mcp_metadata is keyed by mcp_server id, not the source's own id). If a
-   * source were ever wrapped by more than one mcp_server (not possible via
-   * today's create flows), this keeps the last one seen.
-   */
-  remoteMcpServerIds: Map<string, string>;
-  tunneledMcpServerIds: Map<string, string>;
-  unproxiedMcpServerIds: Map<string, string>;
+  /** IDs of remote/tunneled MCP servers that have an mcp_server row. */
+  remoteMcpServerIds: Set<string>;
+  tunneledMcpServerIds: Set<string>;
 }
 
 /**
  * A source counts as "used in an MCP server" through one of two paths, because
  * the two kinds of MCP server are backed differently. Deployment-bound sources
  * (OpenAPI / functions / catalog) contribute tools, so they're used when some
- * toolset references a tool URN under their prefix. Remote, tunneled, and
- * unproxied sources contribute no tools; they're used when an mcp_server
- * row points back at them.
+ * toolset references a tool URN under their prefix. Remote and tunneled
+ * sources contribute no tools; they're used when an mcp_server row points back
+ * at them.
  */
 function useMcpUsage(): McpUsage {
   const gramProject = useProjectSlugForRequests();
@@ -673,26 +618,17 @@ function useMcpUsage(): McpUsage {
     const toolsetToolUrns = (toolsetsData?.toolsets ?? []).flatMap(
       (toolset) => toolset.toolUrns ?? [],
     );
-    const remoteMcpServerIds = new Map<string, string>();
-    const tunneledMcpServerIds = new Map<string, string>();
-    const unproxiedMcpServerIds = new Map<string, string>();
+    const remoteMcpServerIds = new Set<string>();
+    const tunneledMcpServerIds = new Set<string>();
     for (const server of mcpServersResult?.mcpServers ?? []) {
       if (server.remoteMcpServerId) {
-        remoteMcpServerIds.set(server.remoteMcpServerId, server.id);
+        remoteMcpServerIds.add(server.remoteMcpServerId);
       }
       if (server.tunneledMcpServerId) {
-        tunneledMcpServerIds.set(server.tunneledMcpServerId, server.id);
-      }
-      if (server.unproxiedMcpServerId) {
-        unproxiedMcpServerIds.set(server.unproxiedMcpServerId, server.id);
+        tunneledMcpServerIds.add(server.tunneledMcpServerId);
       }
     }
-    return {
-      toolsetToolUrns,
-      remoteMcpServerIds,
-      tunneledMcpServerIds,
-      unproxiedMcpServerIds,
-    };
+    return { toolsetToolUrns, remoteMcpServerIds, tunneledMcpServerIds };
   }, [toolsetsData, mcpServersResult]);
 }
 
@@ -702,9 +638,6 @@ function sourceUsedInMcp(asset: NamedAsset, usage: McpUsage): boolean {
   }
   if (asset.type === "tunneledmcp") {
     return usage.tunneledMcpServerIds.has(asset.id);
-  }
-  if (asset.type === "unproxiedmcp") {
-    return usage.unproxiedMcpServerIds.has(asset.id);
   }
   const prefix = attachmentToURNPrefix(asset.type, asset.slug);
   return usage.toolsetToolUrns.some((urn) => urn.startsWith(prefix));

@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,27 @@ import {
   VerifyRemoteMcpUrlAlert,
   VerifyRemoteMcpUrlButton,
 } from "./VerifyRemoteMcpUrlButton";
+
+// Mirrors server-side url.Parse: must be absolute, http(s), with a non-empty
+// host. We surface this client-side so the user gets feedback before the round
+// trip; the backend re-validates regardless.
+function validateRemoteMcpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "URL is required";
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "Enter a valid absolute URL (e.g. https://example.com/mcp)";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "URL must use http or https";
+  }
+  if (!parsed.hostname) {
+    return "URL must include a host";
+  }
+  return null;
+}
 
 export default function CreateRemoteMcp(): JSX.Element {
   return (
@@ -45,16 +66,16 @@ function CreateRemoteMcpForm() {
 
   const verify = useVerifyRemoteMcpUrl(url);
 
-  const validationError = touched ? validateMcpServerUrl(url) : null;
+  const validationError = touched ? validateRemoteMcpUrl(url) : null;
   const submitDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
+    createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
   const verifyDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
+    createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (validateMcpServerUrl(url) !== null) {
+    if (validateRemoteMcpUrl(url) !== null) {
       return;
     }
     try {

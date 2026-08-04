@@ -11,7 +11,7 @@ import {
 import { useRoutes } from "@/routes";
 import { Badge } from "@/components/ui/Badge";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
-import { SourceMcpIcon, type NamedAsset } from "./SourceCard";
+import type { NamedAsset } from "./SourceCard";
 
 const sourceTypeConfig = {
   openapi: { label: "OpenAPI" },
@@ -19,25 +19,7 @@ const sourceTypeConfig = {
   externalmcp: { label: "Catalog" },
   remotemcp: { label: "Remote MCP" },
   tunneledmcp: { label: "Tunneled MCP" },
-  unproxiedmcp: { label: "Unproxied MCP" },
 };
-
-// sourceRowDisplayName mirrors [sourceCardNameAndSubtitle] in SourceCard.tsx:
-// a flat switch instead of a nested ternary for source types whose display
-// name falls back to a URL when unnamed.
-function sourceRowDisplayName(asset: NamedAsset): string | undefined {
-  switch (asset.type) {
-    case "remotemcp":
-    case "unproxiedmcp":
-      return formatRemoteMcpDisplay(asset);
-    case "tunneledmcp":
-      return formatTunneledMcpDisplay(asset);
-    case "openapi":
-    case "function":
-    case "externalmcp":
-      return asset.name;
-  }
-}
 
 function formatDate(date: Date | undefined) {
   if (!date) return "—";
@@ -79,9 +61,7 @@ export function SourceTableRow({
   const updatedAt = "updatedAt" in asset ? asset.updatedAt : undefined;
 
   const actions =
-    asset.type === "remotemcp" ||
-    asset.type === "tunneledmcp" ||
-    asset.type === "unproxiedmcp"
+    asset.type === "remotemcp" || asset.type === "tunneledmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -129,24 +109,21 @@ export function SourceTableRow({
       );
     }
     if (
+      asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
-      asset.type === "tunneledmcp" ||
-      asset.type === "unproxiedmcp"
+      asset.type === "tunneledmcp"
     ) {
-      return (
-        <SourceMcpIcon
-          mcpServerId={asset.mcpServerId}
-          className="h-5 w-5 object-contain"
-        />
-      );
-    }
-    if (asset.type === "externalmcp") {
       return <Network className="text-muted-foreground h-5 w-5" />;
     }
     return <FileCode className="text-muted-foreground h-5 w-5" />;
   })();
 
-  const displayName = sourceRowDisplayName(asset);
+  const displayName =
+    asset.type === "remotemcp"
+      ? formatRemoteMcpDisplay(asset)
+      : asset.type === "tunneledmcp"
+        ? formatTunneledMcpDisplay(asset)
+        : asset.name;
 
   return (
     <TableRowContextMenu actions={actions}>

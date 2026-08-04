@@ -4,9 +4,8 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Badge } from "@/components/ui/Badge";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Network } from "lucide-react";
 import { Link } from "react-router";
-import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { MCPActivityIndicator } from "./MCPActivityIndicator";
 import type { McpActivityStatus } from "./mcp-activity";
@@ -35,23 +34,13 @@ export function MCPServerCard({
 
   const mcpEnabled = server.visibility !== "disabled";
   const mcpIsPublic = server.visibility === "public";
-  // Unproxied servers are never proxied, so an endpoint count would always
-  // read 0 and imply something's broken. Surface the backend kind instead.
-  const isUnproxied = !!server.unproxiedMcpServerId;
 
   return (
     <Link
       to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
       className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <DotCard
-        icon={
-          <SourceMcpIcon
-            mcpServerId={server.id}
-            className="h-8 w-8 object-contain"
-          />
-        }
-      >
+      <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>
         {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <Text
@@ -64,9 +53,7 @@ export function MCPServerCard({
           </Text>
           <Badge variant="neutral" className="bg-card">
             <Badge.Text>
-              {isUnproxied
-                ? "Not proxied"
-                : `${endpointCount} ${endpointCount === 1 ? "endpoint" : "endpoints"}`}
+              {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
             </Badge.Text>
           </Badge>
         </div>

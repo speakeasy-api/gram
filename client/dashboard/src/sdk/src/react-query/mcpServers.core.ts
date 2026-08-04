@@ -50,7 +50,6 @@ export function buildMcpServersQuery(
       remoteMcpServerId: request?.remoteMcpServerId,
       tunneledMcpServerId: request?.tunneledMcpServerId,
       toolsetId: request?.toolsetId,
-      unproxiedMcpServerId: request?.unproxiedMcpServerId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -84,7 +83,6 @@ export function queryKeyMcpServers(
     remoteMcpServerId?: string | undefined;
     tunneledMcpServerId?: string | undefined;
     toolsetId?: string | undefined;
-    unproxiedMcpServerId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

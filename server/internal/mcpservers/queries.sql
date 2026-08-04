@@ -9,7 +9,6 @@ INSERT INTO mcp_servers (
     remote_mcp_server_id,
     tunneled_mcp_server_id,
     toolset_id,
-    unproxied_mcp_server_id,
     tool_variations_group_id,
     visibility
 )
@@ -23,7 +22,6 @@ VALUES (
     @remote_mcp_server_id,
     @tunneled_mcp_server_id,
     @toolset_id,
-    @unproxied_mcp_server_id,
     @tool_variations_group_id,
     @visibility
 )
@@ -73,7 +71,6 @@ WHERE project_id = @project_id
   AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
   AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
   AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
-  AND (sqlc.narg('unproxied_mcp_server_id')::uuid IS NULL OR unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id')::uuid)
 ORDER BY created_at DESC;
 
 -- name: ListMCPServersByOrganizationID :many
@@ -111,7 +108,6 @@ SET
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,
-    unproxied_mcp_server_id = @unproxied_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
     updated_at = clock_timestamp()

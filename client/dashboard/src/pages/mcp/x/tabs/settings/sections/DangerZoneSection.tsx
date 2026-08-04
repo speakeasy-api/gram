@@ -38,7 +38,6 @@ function mcpServerVisibilityUpdateForm(
     remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
     tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
     toolsetId: mcpServer.toolsetId ?? undefined,
-    unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
     environmentId: mcpServer.environmentId ?? undefined,
     toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
     visibility,

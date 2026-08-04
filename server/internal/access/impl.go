@@ -626,12 +626,6 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 	return nil
 }
 
-// IsSpeakeasyStaffEmail reports whether email belongs to a Speakeasy-owned
-// domain (@speakeasy.com or @speakeasyapi.dev).
-func IsSpeakeasyStaffEmail(email string) bool {
-	return strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev")
-}
-
 // requirePlatformAdmin returns the auth context and an error if the caller is not
 // a Speakeasy employee. Mirrors the exact condition used by the platform-admin
 // impersonation feature in auth/impl.go: email domain OR admin DB flag.
@@ -647,7 +641,7 @@ func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.Auth
 	if ac.Email != nil {
 		email = *ac.Email
 	}
-	if IsSpeakeasyStaffEmail(email) {
+	if strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev") {
 		return ac, nil
 	}
 	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)

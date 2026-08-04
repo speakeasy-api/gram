@@ -5,12 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"slices"
 	"strings"
-	"time"
-
-	"golang.org/x/net/publicsuffix"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -24,8 +20,6 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -38,7 +32,6 @@ import (
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
-	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -50,7 +43,6 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
-	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
@@ -66,7 +58,6 @@ type Service struct {
 	temporalEnv          *tenv.Environment
 	dispositionCache     *ToolDispositionCache
 	pluginsGitHubEnabled bool
-	assets               *assets.Service
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -82,7 +73,6 @@ func NewService(
 	temporalEnv *tenv.Environment,
 	dispositionCache *ToolDispositionCache,
 	pluginsGitHubEnabled bool,
-	assetsService *assets.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
@@ -96,7 +86,6 @@ func NewService(
 		temporalEnv:          temporalEnv,
 		dispositionCache:     dispositionCache,
 		pluginsGitHubEnabled: pluginsGitHubEnabled,
-		assets:               assetsService,
 	}
 }
 
@@ -131,22 +120,18 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogError(ctx, logger)
 	}
 
-	ids, err := parseServerIDs(serverIDStrings{
-		EnvironmentID:         payload.EnvironmentID,
-		RemoteMcpServerID:     payload.RemoteMcpServerID,
-		TunneledMcpServerID:   payload.TunneledMcpServerID,
-		ToolsetID:             payload.ToolsetID,
-		UnproxiedMcpServerID:  payload.UnproxiedMcpServerID,
-		ToolVariationsGroupID: payload.ToolVariationsGroupID,
-	})
+	ids, err := parseServerIDs(
+		payload.EnvironmentID,
+		payload.RemoteMcpServerID,
+		payload.TunneledMcpServerID,
+		payload.ToolsetID,
+		payload.ToolVariationsGroupID,
+	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids); err != nil {
+	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
-	}
-	if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
-		return nil, err
 	}
 
 	// Generate the server ID up front so the slug can include its suffix and
@@ -198,7 +183,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
 		TunneledMcpServerID:   ids.TunneledMcpServerID,
 		ToolsetID:             ids.ToolsetID,
-		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 		Visibility:            string(payload.Visibility),
 	})
@@ -227,89 +211,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Best-effort: an unproxied server has no logo of its own to inherit, so
-	// give it the vendor's favicon as a starting icon rather than leaving it
-	// blank. Backgrounded on a detached context so a slow or unreachable
-	// favicon (up to the fetch's own timeout) doesn't add latency to the
-	// create response; the request's ctx would otherwise cancel this the
-	// moment the handler returns. Bounded independently of the request so a
-	// stuck DB call can't leave the goroutine running forever.
-	if ids.UnproxiedMcpServerID.Valid {
-		bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		go func() {
-			defer cancel()
-			s.setDefaultUnproxiedIcon(bgCtx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)
-		}()
-	}
-
 	return mv.BuildMcpServerView(server), nil
-}
-
-// setDefaultUnproxiedIcon fetches the vendor's favicon and sets it as the
-// newly-created server's icon. Best-effort: any failure is logged and
-// swallowed rather than surfaced, since a missing icon is cosmetic and must
-// never fail the create call it's attached to.
-func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, mcpServerID uuid.UUID, unproxiedMcpServerID uuid.UUID) {
-	source, err := unproxiedmcprepo.New(s.db).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
-		ID:        unproxiedMcpServerID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		logger.ErrorContext(ctx, "load unproxied mcp server for default icon", attr.SlogError(err))
-		return
-	}
-
-	vendorURL, err := url.Parse(source.Url)
-	if err != nil {
-		logger.ErrorContext(ctx, "parse unproxied mcp server url for default icon", attr.SlogError(err))
-		return
-	}
-
-	asset, err := s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, vendorURL.Host))
-	if err != nil {
-		// Some vendors only register a favicon against their registrable
-		// domain, not the specific subdomain hosting the MCP endpoint (e.g.
-		// mcp.figma.com has none, figma.com does) -- retry once against that
-		// before giving up.
-		if registrable, rErr := publicsuffix.EffectiveTLDPlusOne(vendorURL.Hostname()); rErr == nil && registrable != vendorURL.Host {
-			asset, err = s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, registrable))
-		}
-	}
-	if err != nil {
-		logger.WarnContext(ctx, "fetch default favicon for unproxied mcp server", attr.SlogError(err))
-		return
-	}
-
-	assetID, err := uuid.Parse(asset.ID)
-	if err != nil {
-		logger.ErrorContext(ctx, "parse default favicon asset id", attr.SlogError(err))
-		return
-	}
-
-	// Writes mcp_metadata directly rather than through the mcpMetadata
-	// service (which already imports this package, so importing it back here
-	// would cycle) and skips its audit trail accordingly: this is a system
-	// default, not a user-initiated edit. Uses the logo-only conditional
-	// query rather than the general upsert: this runs on a detached
-	// goroutine racing the create response, so a user could already be
-	// saving Branding edits (or their own icon) by the time this lands, and
-	// a full-record upsert would clobber them. pgx.ErrNoRows here just means
-	// the row already had a logo (or a user edit raced ahead) -- not a
-	// failure.
-	if _, err := mcpmetadatarepo.New(s.db).SetDefaultLogoIfUnset(ctx, mcpmetadatarepo.SetDefaultLogoIfUnsetParams{
-		McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
-		ProjectID:   projectID,
-		LogoID:      uuid.NullUUID{UUID: assetID, Valid: true},
-	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		logger.ErrorContext(ctx, "save default favicon for unproxied mcp server", attr.SlogError(err))
-	}
-}
-
-func unproxiedFaviconURL(scheme, host string) string {
-	return fmt.Sprintf(
-		"https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=%s&size=128",
-		url.QueryEscape(scheme+"://"+host),
-	)
 }
 
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
@@ -477,20 +379,15 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, logger)
 	}
-	unproxiedMcpServerID, err := conv.PtrToNullUUID(payload.UnproxiedMcpServerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid unproxied_mcp_server_id").LogError(ctx, logger)
-	}
-	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID, unproxiedMcpServerID) > 1 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id may be provided").LogWarn(ctx, logger)
+	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) > 1 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id may be provided").LogWarn(ctx, logger)
 	}
 
 	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
-		ProjectID:            *authCtx.ProjectID,
-		RemoteMcpServerID:    remoteMcpServerID,
-		TunneledMcpServerID:  tunneledMcpServerID,
-		ToolsetID:            toolsetID,
-		UnproxiedMcpServerID: unproxiedMcpServerID,
+		ProjectID:           *authCtx.ProjectID,
+		RemoteMcpServerID:   remoteMcpServerID,
+		TunneledMcpServerID: tunneledMcpServerID,
+		ToolsetID:           toolsetID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
@@ -536,18 +433,17 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	ids, err := parseServerIDs(serverIDStrings{
-		EnvironmentID:         payload.EnvironmentID,
-		RemoteMcpServerID:     payload.RemoteMcpServerID,
-		TunneledMcpServerID:   payload.TunneledMcpServerID,
-		ToolsetID:             payload.ToolsetID,
-		UnproxiedMcpServerID:  payload.UnproxiedMcpServerID,
-		ToolVariationsGroupID: payload.ToolVariationsGroupID,
-	})
+	ids, err := parseServerIDs(
+		payload.EnvironmentID,
+		payload.RemoteMcpServerID,
+		payload.TunneledMcpServerID,
+		payload.ToolsetID,
+		payload.ToolVariationsGroupID,
+	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids); err != nil {
+	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
@@ -596,16 +492,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	beforeView := mv.BuildMcpServerView(existing)
 
-	// Only gate on staff when the unproxied backend reference is actually
-	// changing: a non-staff project member with write access must still be
-	// able to manage (rename, re-publish, delete) a server staff already
-	// attached to an unproxied backend.
-	if ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID {
-		if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
-			return nil, err
-		}
-	}
-
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
@@ -627,27 +513,16 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
 
-	// NULL leaves the stored issuer untouched (the update query COALESCEs).
-	// A backend switch onto remote/tunneled from a backend that never carried
-	// one (toolset, unproxied) needs a fresh mint here, or the insert trips
-	// mcp_servers_issuer_required_check.
-	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !existing.UserSessionIssuerID.Valid {
-		issuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
-		}
-	}
-
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                  name,
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         ids.EnvironmentID,
-		UserSessionIssuerID:   issuerID,
+		Name:          name,
+		Slug:          conv.ToPGText(slug),
+		EnvironmentID: ids.EnvironmentID,
+		// Always NULL: the query COALESCEs to the stored issuer, which is
+		// attached at create time for the server's lifetime.
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
 		TunneledMcpServerID:   ids.TunneledMcpServerID,
 		ToolsetID:             ids.ToolsetID,
-		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 		Visibility:            string(payload.Visibility),
 		ID:                    serverID,
@@ -1112,56 +987,45 @@ type serverIDs struct {
 	RemoteMcpServerID     uuid.NullUUID
 	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
-}
-
-// serverIDStrings bundles the optional UUID payload fields shared by the
-// create/update forms, as raw strings straight off the wire, so
-// parseServerIDs takes one labeled argument instead of a positional run of
-// same-typed *string parameters.
-type serverIDStrings struct {
-	EnvironmentID         *string
-	RemoteMcpServerID     *string
-	TunneledMcpServerID   *string
-	ToolsetID             *string
-	UnproxiedMcpServerID  *string
-	ToolVariationsGroupID *string
 }
 
 // parseServerIDs parses the optional UUID payload fields into a
 // serverIDs struct. Any malformed UUID surfaces with a field-specific error.
-func parseServerIDs(in serverIDStrings) (serverIDs, error) {
+func parseServerIDs(
+	environmentIDStr *string,
+	remoteMcpServerIDStr *string,
+	tunneledMcpServerIDStr *string,
+	toolsetIDStr *string,
+	toolVariationsGroupIDStr *string,
+) (serverIDs, error) {
 	var (
 		ids serverIDs
 		err error
 	)
 
-	if ids.EnvironmentID, err = conv.PtrToNullUUID(in.EnvironmentID); err != nil {
+	if ids.EnvironmentID, err = conv.PtrToNullUUID(environmentIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid environment_id: %w", err)
 	}
-	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(in.RemoteMcpServerID); err != nil {
+	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(remoteMcpServerIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid remote_mcp_server_id: %w", err)
 	}
-	if ids.TunneledMcpServerID, err = conv.PtrToNullUUID(in.TunneledMcpServerID); err != nil {
+	if ids.TunneledMcpServerID, err = conv.PtrToNullUUID(tunneledMcpServerIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid tunneled_mcp_server_id: %w", err)
 	}
-	if ids.ToolsetID, err = conv.PtrToNullUUID(in.ToolsetID); err != nil {
+	if ids.ToolsetID, err = conv.PtrToNullUUID(toolsetIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid toolset_id: %w", err)
 	}
-	if ids.UnproxiedMcpServerID, err = conv.PtrToNullUUID(in.UnproxiedMcpServerID); err != nil {
-		return serverIDs{}, fmt.Errorf("invalid unproxied_mcp_server_id: %w", err)
-	}
-	if ids.ToolVariationsGroupID, err = conv.PtrToNullUUID(in.ToolVariationsGroupID); err != nil {
+	if ids.ToolVariationsGroupID, err = conv.PtrToNullUUID(toolVariationsGroupIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid tool_variations_group_id: %w", err)
 	}
 
 	return ids, nil
 }
 
-func validateServerBackendExclusivity(ids serverIDs) error {
-	if backendFilterCount(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID, ids.UnproxiedMcpServerID) != 1 {
-		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided")
+func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, toolsetID uuid.NullUUID) error {
+	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) != 1 {
+		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided")
 	}
 	return nil
 }
@@ -1199,28 +1063,6 @@ func backendFilterCount(ids ...uuid.NullUUID) int {
 		}
 	}
 	return count
-}
-
-// requireStaffForUnproxiedBackend rejects attaching an mcp_servers row to an
-// unproxied backend unless the caller is Speakeasy staff. Unproxied MCP
-// servers are a staff-curated catalog (see unproxiedmcp.CreateServer); without
-// this check, any project member could wrap an existing unproxied_mcp_servers
-// row in their own mcp_servers entry and distribute it, bypassing the
-// staff-only restriction on that catalog.
-func requireStaffForUnproxiedBackend(ctx context.Context, authCtx *contextvalues.AuthContext, unproxiedMcpServerID uuid.NullUUID, logger *slog.Logger) error {
-	if !unproxiedMcpServerID.Valid {
-		return nil
-	}
-
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if !access.IsSpeakeasyStaffEmail(email) {
-		return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be attached by Speakeasy staff").LogWarn(ctx, logger)
-	}
-
-	return nil
 }
 
 // verifyServerReferenceOwnership checks that every non-null referenced
@@ -1281,18 +1123,6 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("toolset_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check toolset ownership: %w", err)
-		}
-	}
-
-	if ids.UnproxiedMcpServerID.Valid {
-		if _, err := unproxiedmcprepo.New(dbtx).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
-			ID:        ids.UnproxiedMcpServerID.UUID,
-			ProjectID: projectID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("unproxied_mcp_server_id does not reference a resource in this project")
-			}
-			return fmt.Errorf("check unproxied mcp server ownership: %w", err)
 		}
 	}
 

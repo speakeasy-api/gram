@@ -57,7 +57,6 @@ var All = []outbox.EventRegistration{
 	ToolsetV1,
 	TriggerInstanceV1,
 	TunneledMcpServerV1,
-	UnproxiedMcpServerV1,
 	UserSessionClientV1,
 	UserSessionConsentV1,
 	UserSessionIssuerV1,

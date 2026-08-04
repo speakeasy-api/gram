@@ -13,15 +13,12 @@ import {
   formatTunneledMcpDisplay,
   sourceTypeToUrnKind,
 } from "@/lib/sources";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components/asset.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@/components/ui/Badge";
 import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
-import { AssetImage } from "@/components/asset-image";
 
 export type NamedAsset =
   | (Asset & {
@@ -48,7 +45,6 @@ export type NamedAsset =
       url: string;
       type: "remotemcp";
       transportType?: string;
-      mcpServerId?: string;
     }
   | {
       id: string;
@@ -58,78 +54,7 @@ export type NamedAsset =
       type: "tunneledmcp";
       createdAt?: Date;
       updatedAt?: Date;
-      mcpServerId?: string;
-    }
-  | {
-      id: string;
-      deploymentAssetId: string;
-      slug: string;
-      name?: string | null;
-      url: string;
-      type: "unproxiedmcp";
-      mcpServerId?: string;
     };
-
-// sourceCardNameAndSubtitle centralizes the "what to render" logic for
-// source types whose display name falls back to a URL when unnamed
-// (remotemcp, unproxiedmcp), keeping the branching out of the component
-// body as a flat switch instead of a nested ternary.
-function sourceCardNameAndSubtitle(asset: NamedAsset): {
-  displayName: string | undefined;
-  displaySubtitle: string | undefined;
-} {
-  switch (asset.type) {
-    case "remotemcp": {
-      const urlDisplay = formatRemoteMcpUrlForDisplay(asset.url);
-      const trimmedName = asset.name?.trim();
-      return {
-        displayName: trimmedName || urlDisplay || "",
-        displaySubtitle: trimmedName ? urlDisplay : undefined,
-      };
-    }
-    case "unproxiedmcp": {
-      const urlDisplay = formatRemoteMcpUrlForDisplay(asset.url);
-      const trimmedName = asset.name?.trim();
-      return {
-        displayName: trimmedName || urlDisplay || "",
-        displaySubtitle: trimmedName ? urlDisplay : undefined,
-      };
-    }
-    case "tunneledmcp":
-      return {
-        displayName: formatTunneledMcpDisplay(asset),
-        displaySubtitle: undefined,
-      };
-    case "openapi":
-    case "function":
-    case "externalmcp":
-      return { displayName: asset.name, displaySubtitle: undefined };
-  }
-}
-
-// SourceMcpIcon looks up the real server icon for remote/tunneled/unproxied
-// sources (mcp_metadata.logo_id, keyed by the wrapping mcp_server, not the
-// source row itself) and falls back to the generic Network icon when there's
-// no wrapping mcp_server yet or no icon has been set on it.
-export function SourceMcpIcon({
-  mcpServerId,
-  className,
-}: {
-  mcpServerId: string | undefined;
-  className: string;
-}): JSX.Element {
-  const { data } = useGetMcpMetadata({ mcpServerId }, undefined, {
-    enabled: !!mcpServerId,
-    retry: false,
-    throwOnError: false,
-  });
-  const logoAssetId = data?.metadata?.logoAssetId;
-
-  if (logoAssetId) {
-    return <AssetImage assetId={logoAssetId} className={className} />;
-  }
-  return <Network className={cn("text-muted-foreground", className)} />;
-}
 
 const sourceTypeConfig = {
   openapi: {
@@ -146,9 +71,6 @@ const sourceTypeConfig = {
   },
   tunneledmcp: {
     label: "Tunneled MCP",
-  },
-  unproxiedmcp: {
-    label: "Unproxied MCP",
   },
 };
 
@@ -178,12 +100,9 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  // Remote/tunneled/unproxied MCP deletion lives in Settings because it
-  // touches linked server/endpoint state.
+  // Remote/tunneled MCP deletion lives in Settings because it touches linked server/endpoint state.
   const actions =
-    asset.type === "remotemcp" ||
-    asset.type === "tunneledmcp" ||
-    asset.type === "unproxiedmcp"
+    asset.type === "remotemcp" || asset.type === "tunneledmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -220,7 +139,22 @@ export function SourceCard({
           },
         ];
 
-  const { displayName, displaySubtitle } = sourceCardNameAndSubtitle(asset);
+  const remoteMcpUrlDisplay =
+    asset.type === "remotemcp"
+      ? formatRemoteMcpUrlForDisplay(asset.url)
+      : undefined;
+  const remoteMcpTrimmedName =
+    asset.type === "remotemcp" ? asset.name?.trim() : undefined;
+  const displayName =
+    asset.type === "remotemcp"
+      ? remoteMcpTrimmedName || remoteMcpUrlDisplay || ""
+      : asset.type === "tunneledmcp"
+        ? formatTunneledMcpDisplay(asset)
+        : asset.name;
+  const displaySubtitle =
+    asset.type === "remotemcp" && remoteMcpTrimmedName
+      ? remoteMcpUrlDisplay
+      : undefined;
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {
@@ -233,18 +167,10 @@ export function SourceCard({
       );
     }
     if (
+      asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
-      asset.type === "tunneledmcp" ||
-      asset.type === "unproxiedmcp"
+      asset.type === "tunneledmcp"
     ) {
-      return (
-        <SourceMcpIcon
-          mcpServerId={asset.mcpServerId}
-          className="h-8 w-8 object-contain"
-        />
-      );
-    }
-    if (asset.type === "externalmcp") {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }
     return <FileCode className="text-muted-foreground h-8 w-8" />;

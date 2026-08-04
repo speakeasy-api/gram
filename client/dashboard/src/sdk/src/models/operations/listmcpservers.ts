@@ -34,10 +34,6 @@ export type ListMcpServersRequest = {
    */
   toolsetId?: string | undefined;
   /**
-   * Filter to MCP servers backed by this unproxied MCP server
-   */
-  unproxiedMcpServerId?: string | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -157,7 +153,6 @@ export type ListMcpServersRequest$Outbound = {
   remote_mcp_server_id?: string | undefined;
   tunneled_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
-  unproxied_mcp_server_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -172,7 +167,6 @@ export const ListMcpServersRequest$outboundSchema: z.ZodMiniType<
     remoteMcpServerId: z.optional(z.string()),
     tunneledMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
-    unproxiedMcpServerId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -182,7 +176,6 @@ export const ListMcpServersRequest$outboundSchema: z.ZodMiniType<
       remoteMcpServerId: "remote_mcp_server_id",
       tunneledMcpServerId: "tunneled_mcp_server_id",
       toolsetId: "toolset_id",
-      unproxiedMcpServerId: "unproxied_mcp_server_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
