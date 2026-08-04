@@ -74,70 +74,70 @@ sql:
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          # xaa_apps
-          - column: "xaa_apps.id"
+          # ema_apps
+          - column: "ema_apps.id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_apps.enabled"
+          - column: "ema_apps.enabled"
             go_type: "bool"
-          # xaa_resources
-          - column: "xaa_resources.id"
+          # ema_resources
+          - column: "ema_resources.id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          # xaa_app_assignments
-          - column: "xaa_app_assignments.id"
+          # ema_app_assignments
+          - column: "ema_app_assignments.id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_app_assignments.app_id"
+          - column: "ema_app_assignments.app_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_app_assignments.user_id"
+          - column: "ema_app_assignments.user_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_app_assignments.resource_id"
+          - column: "ema_app_assignments.resource_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          # xaa_trust_rules
-          - column: "xaa_trust_rules.id"
+          # ema_trust_rules
+          - column: "ema_trust_rules.id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_trust_rules.resource_id"
+          - column: "ema_trust_rules.resource_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_trust_rules.enabled"
+          - column: "ema_trust_rules.enabled"
             go_type: "bool"
-          # xaa_issued_jags
-          - column: "xaa_issued_jags.app_id"
+          # ema_issued_jags
+          - column: "ema_issued_jags.app_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_issued_jags.user_id"
+          - column: "ema_issued_jags.user_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_issued_jags.resource_id"
+          - column: "ema_issued_jags.resource_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          # xaa_redeemed_jags
-          - column: "xaa_redeemed_jags.resource_id"
+          # ema_redeemed_jags
+          - column: "ema_redeemed_jags.resource_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          # xaa_resource_tokens
-          - column: "xaa_resource_tokens.resource_id"
+          # ema_resource_tokens
+          - column: "ema_resource_tokens.resource_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
-          - column: "xaa_resource_tokens.user_id"
+          - column: "ema_resource_tokens.user_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"

@@ -75,45 +75,45 @@ func (h *dbHandler) seedUser(t *testing.T, email string) repo.User {
 	return user
 }
 
-// seedApp registers a cross-app access requesting app.
-func (h *dbHandler) seedApp(t *testing.T, clientID, secret string) repo.XaaApp {
+// seedApp registers an enterprise-managed authorization requesting app.
+func (h *dbHandler) seedApp(t *testing.T, clientID, secret string) repo.EmaApp {
 	t.Helper()
-	app, err := h.queries.CreateXaaApp(t.Context(), repo.CreateXaaAppParams{
+	app, err := h.queries.CreateEmaApp(t.Context(), repo.CreateEmaAppParams{
 		ID:           uuid.New(),
 		ClientID:     clientID,
 		ClientSecret: secret,
 		Name:         clientID,
 		Enabled:      true,
 	})
-	require.NoError(t, err, "seed xaa app")
+	require.NoError(t, err, "seed ema app")
 	return app
 }
 
 // seedResource registers a resource app. The returned row's slug determines
 // the audience value a mint request must send.
-func (h *dbHandler) seedResource(t *testing.T, slug, resourceIdentifier string) repo.XaaResource {
+func (h *dbHandler) seedResource(t *testing.T, slug, resourceIdentifier string) repo.EmaResource {
 	t.Helper()
-	resource, err := h.queries.CreateXaaResource(t.Context(), repo.CreateXaaResourceParams{
+	resource, err := h.queries.CreateEmaResource(t.Context(), repo.CreateEmaResourceParams{
 		ID:                 uuid.New(),
 		Slug:               slug,
 		Name:               slug,
 		ResourceIdentifier: resourceIdentifier,
 	})
-	require.NoError(t, err, "seed xaa resource")
+	require.NoError(t, err, "seed ema resource")
 	return resource
 }
 
 // seedAssignment grants a user the right to drive an app against a resource.
-func (h *dbHandler) seedAssignment(t *testing.T, app repo.XaaApp, user repo.User, resource repo.XaaResource, scopes string) repo.XaaAppAssignment {
+func (h *dbHandler) seedAssignment(t *testing.T, app repo.EmaApp, user repo.User, resource repo.EmaResource, scopes string) repo.EmaAppAssignment {
 	t.Helper()
-	assignment, err := h.queries.CreateXaaAppAssignment(t.Context(), repo.CreateXaaAppAssignmentParams{
+	assignment, err := h.queries.CreateEmaAppAssignment(t.Context(), repo.CreateEmaAppAssignmentParams{
 		ID:            uuid.New(),
 		AppID:         app.ID,
 		UserID:        user.ID,
 		ResourceID:    resource.ID,
 		GrantedScopes: scopes,
 	})
-	require.NoError(t, err, "seed xaa assignment")
+	require.NoError(t, err, "seed ema assignment")
 	return assignment
 }
 

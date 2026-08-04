@@ -164,11 +164,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_slug_key
   ON organization_roles (organization_id, slug);
 
 -- =============================================================================
--- Cross-app access (XAA) tables. Two independent policy surfaces:
+-- Enterprise-Managed Authorization (EMA) tables. Two independent policy surfaces:
 --
---   * mint side (the IdP) -- xaa_apps + xaa_resources + xaa_app_assignments
+--   * mint side (the IdP) -- ema_apps + ema_resources + ema_app_assignments
 --     decide whether the oauth2-1 server will issue an ID-JAG at all;
---   * redeem side (each resource authorization server) -- xaa_trust_rules
+--   * redeem side (each resource authorization server) -- ema_trust_rules
 --     decide whether an ID-JAG that was issued somewhere is accepted here.
 --
 -- They are deliberately separate: an ID-JAG this dev-idp minted can still be
@@ -178,7 +178,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_slug_key
 
 -- Requesting apps: the clients allowed to ask the IdP for an ID-JAG on a
 -- user's behalf. `client_id` is the id they authenticate to /token with.
-CREATE TABLE IF NOT EXISTS xaa_apps (
+CREATE TABLE IF NOT EXISTS ema_apps (
   id TEXT NOT NULL PRIMARY KEY,
   client_id TEXT NOT NULL,
   client_secret TEXT NOT NULL DEFAULT '',
@@ -189,13 +189,13 @@ CREATE TABLE IF NOT EXISTS xaa_apps (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS xaa_apps_client_id_key ON xaa_apps (client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ema_apps_client_id_key ON ema_apps (client_id);
 
 -- Resource apps. One row is one resource authorization server, mounted at
 -- /resource-as/<slug>, guarding the MCP server named by `resource_identifier`.
 -- The slug-derived issuer URL is what an ID-JAG carries in `aud`;
 -- `resource_identifier` is what it carries in `resource`.
-CREATE TABLE IF NOT EXISTS xaa_resources (
+CREATE TABLE IF NOT EXISTS ema_resources (
   id TEXT NOT NULL PRIMARY KEY,
   slug TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -205,12 +205,12 @@ CREATE TABLE IF NOT EXISTS xaa_resources (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS xaa_resources_slug_key ON xaa_resources (slug);
+CREATE UNIQUE INDEX IF NOT EXISTS ema_resources_slug_key ON ema_resources (slug);
 
 -- Which user may drive which app against which resource, and for what scopes.
 -- The absence of a row IS the denial -- there is no disabled state here, so
 -- "revoke this user's access" is a delete.
-CREATE TABLE IF NOT EXISTS xaa_app_assignments (
+CREATE TABLE IF NOT EXISTS ema_app_assignments (
   id TEXT NOT NULL PRIMARY KEY,
   app_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -220,23 +220,23 @@ CREATE TABLE IF NOT EXISTS xaa_app_assignments (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  FOREIGN KEY (app_id) REFERENCES xaa_apps (id) ON DELETE CASCADE,
+  FOREIGN KEY (app_id) REFERENCES ema_apps (id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+  FOREIGN KEY (resource_id) REFERENCES ema_resources (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS xaa_app_assignments_app_user_resource_key
-  ON xaa_app_assignments (app_id, user_id, resource_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ema_app_assignments_app_user_resource_key
+  ON ema_app_assignments (app_id, user_id, resource_id);
 
-CREATE INDEX IF NOT EXISTS xaa_app_assignments_user_id_idx
-  ON xaa_app_assignments (user_id);
+CREATE INDEX IF NOT EXISTS ema_app_assignments_user_id_idx
+  ON ema_app_assignments (user_id);
 
 -- Trust domain rules. `trusted_issuer` is an ID-JAG `iss` value the resource
 -- accepts; the dev-idp's own oauth2-1 issuer is just one possible value, so a
 -- resource can be pointed at a foreign IdP. `allowed_client_ids` is a JSON
 -- array ('[]' means any client) and `allowed_scopes` is a space-delimited
 -- ceiling ('' means no ceiling) applied on top of whatever the ID-JAG carries.
-CREATE TABLE IF NOT EXISTS xaa_trust_rules (
+CREATE TABLE IF NOT EXISTS ema_trust_rules (
   id TEXT NOT NULL PRIMARY KEY,
   resource_id TEXT NOT NULL,
   trusted_issuer TEXT NOT NULL,
@@ -247,17 +247,17 @@ CREATE TABLE IF NOT EXISTS xaa_trust_rules (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+  FOREIGN KEY (resource_id) REFERENCES ema_resources (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS xaa_trust_rules_resource_id_trusted_issuer_key
-  ON xaa_trust_rules (resource_id, trusted_issuer);
+CREATE UNIQUE INDEX IF NOT EXISTS ema_trust_rules_resource_id_trusted_issuer_key
+  ON ema_trust_rules (resource_id, trusted_issuer);
 
 -- Ledger of every ID-JAG this IdP minted. Inspection only -- the dashboard
 -- reads it to show what policy actually allowed. Replay is enforced by
--- xaa_redeemed_jags, not here, because a resource may accept ID-JAGs this
+-- ema_redeemed_jags, not here, because a resource may accept ID-JAGs this
 -- dev-idp never issued.
-CREATE TABLE IF NOT EXISTS xaa_issued_jags (
+CREATE TABLE IF NOT EXISTS ema_issued_jags (
   jti TEXT NOT NULL PRIMARY KEY,
   app_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -267,18 +267,18 @@ CREATE TABLE IF NOT EXISTS xaa_issued_jags (
 
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  FOREIGN KEY (app_id) REFERENCES xaa_apps (id) ON DELETE CASCADE,
+  FOREIGN KEY (app_id) REFERENCES ema_apps (id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+  FOREIGN KEY (resource_id) REFERENCES ema_resources (id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS xaa_issued_jags_user_id_idx ON xaa_issued_jags (user_id);
-CREATE INDEX IF NOT EXISTS xaa_issued_jags_expires_at_idx ON xaa_issued_jags (expires_at);
+CREATE INDEX IF NOT EXISTS ema_issued_jags_user_id_idx ON ema_issued_jags (user_id);
+CREATE INDEX IF NOT EXISTS ema_issued_jags_expires_at_idx ON ema_issued_jags (expires_at);
 
 -- Redemption ledger, keyed by (issuer, jti) so an ID-JAG is single-use no
 -- matter which issuer minted it. An insert that conflicts IS the replay
 -- signal; there is no separate lookup.
-CREATE TABLE IF NOT EXISTS xaa_redeemed_jags (
+CREATE TABLE IF NOT EXISTS ema_redeemed_jags (
   issuer TEXT NOT NULL,
   jti TEXT NOT NULL,
   resource_id TEXT NOT NULL,
@@ -287,18 +287,18 @@ CREATE TABLE IF NOT EXISTS xaa_redeemed_jags (
   redeemed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   PRIMARY KEY (issuer, jti),
-  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE
+  FOREIGN KEY (resource_id) REFERENCES ema_resources (id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS xaa_redeemed_jags_expires_at_idx
-  ON xaa_redeemed_jags (expires_at);
+CREATE INDEX IF NOT EXISTS ema_redeemed_jags_expires_at_idx
+  ON ema_redeemed_jags (expires_at);
 
 -- Access tokens issued by a resource authorization server. Deliberately not
 -- the `tokens` table: these are minted by a different authorization server,
 -- under a different grant, and are audience-restricted to one MCP server --
 -- so `audience` is a column here rather than something inferred. Keeping them
--- apart also means the whole XAA surface drops in one piece.
-CREATE TABLE IF NOT EXISTS xaa_resource_tokens (
+-- apart also means the whole EMA surface drops in one piece.
+CREATE TABLE IF NOT EXISTS ema_resource_tokens (
   token TEXT NOT NULL PRIMARY KEY,
   resource_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -310,11 +310,11 @@ CREATE TABLE IF NOT EXISTS xaa_resource_tokens (
 
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  FOREIGN KEY (resource_id) REFERENCES xaa_resources (id) ON DELETE CASCADE,
+  FOREIGN KEY (resource_id) REFERENCES ema_resources (id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS xaa_resource_tokens_user_id_idx
-  ON xaa_resource_tokens (user_id);
-CREATE INDEX IF NOT EXISTS xaa_resource_tokens_expires_at_idx
-  ON xaa_resource_tokens (expires_at);
+CREATE INDEX IF NOT EXISTS ema_resource_tokens_user_id_idx
+  ON ema_resource_tokens (user_id);
+CREATE INDEX IF NOT EXISTS ema_resource_tokens_expires_at_idx
+  ON ema_resource_tokens (expires_at);
