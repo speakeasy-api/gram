@@ -56,7 +56,7 @@
     "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.11.1",
     "ai": "catalog:",
-    "assistant-stream": "^0.3.26",
+    "assistant-stream": "^0.3.29",
     "chart.js": "^4.5.1",
     "chartjs-plugin-zoom": "^2.2.0",
     "class-variance-authority": "^0.7.1",
