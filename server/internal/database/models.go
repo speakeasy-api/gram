@@ -1027,17 +1027,23 @@ type JsonWebKeySet struct {
 }
 
 type LitellmInstance struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	ApiKeyID        uuid.UUID
-	CreatedByUserID string
-	Name            string
-	FailurePosture  string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID                       uuid.UUID
+	OrganizationID           string
+	ProjectID                uuid.UUID
+	ApiKeyID                 uuid.UUID
+	CreatedByUserID          string
+	Name                     string
+	FailurePosture           string
+	LastGuardrailEventAt     pgtype.Timestamptz
+	LastOtelEventAt          pgtype.Timestamptz
+	LastErrorAt              pgtype.Timestamptz
+	LastErrorKind            pgtype.Text
+	ReportedLitellmVersion   pgtype.Text
+	ReportedLitellmVersionAt pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	Deleted                  bool
 }
 
 type McpEndpoint struct {
