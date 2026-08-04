@@ -499,6 +499,246 @@ func DecodeTracesResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildMetricsRequest instantiates a HTTP request object with method and path
+// set to call the "litellm" service "metrics" endpoint
+func (c *Client) BuildMetricsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MetricsLitellmPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("litellm", "metrics", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMetricsRequest returns an encoder for requests sent to the litellm
+// metrics server.
+func EncodeMetricsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*litellm.MetricsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("litellm", "metrics", "*litellm.MetricsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewMetricsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("litellm", "metrics", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMetricsResponse returns a decoder for responses returned by the
+// litellm metrics endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeMetricsResponse may return the following errors:
+//   - "request_too_large" (type *goa.ServiceError): http.StatusRequestEntityTooLarge
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusAccepted:
+			return nil, nil
+		case http.StatusRequestEntityTooLarge:
+			var (
+				body MetricsRequestTooLargeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsRequestTooLargeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsRequestTooLarge(&body)
+		case http.StatusUnauthorized:
+			var (
+				body MetricsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MetricsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MetricsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MetricsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MetricsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MetricsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MetricsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MetricsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+				}
+				err = ValidateMetricsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+				}
+				return nil, NewMetricsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MetricsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+				}
+				err = ValidateMetricsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+				}
+				return nil, NewMetricsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("litellm", "metrics", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MetricsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "metrics", err)
+			}
+			err = ValidateMetricsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "metrics", err)
+			}
+			return nil, NewMetricsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("litellm", "metrics", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalLitellmLiteLLMRequestDataToLiteLLMRequestDataRequestBody builds a
 // value of type *LiteLLMRequestDataRequestBody from a value of type
 // *litellm.LiteLLMRequestData.

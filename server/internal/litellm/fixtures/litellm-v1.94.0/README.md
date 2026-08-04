@@ -43,9 +43,11 @@ guardrails:
 
 Every JSONL line is the callback body as received by the local recorder after the documented normalization. There are no synthetic default-stream callback files in this corpus; unsupported repeated callbacks are documented above rather than presented as recorded support.
 
-## OTLP trace fixtures
+## OTLP fixtures
 
 `otlp-traces.json` and `otlp-traces.pb` are deterministic synthetic OTLP `ExportTraceServiceRequest` payloads shaped for LiteLLM 1.94.0 telemetry. They were not emitted or recorded from the LiteLLM image. The protobuf file is a direct protobuf encoding of the same pinned-version-compatible synthetic fields represented by the JSON fixture; manifest hashes keep both checked-in encodings stable. The payloads deliberately contain synthetic prompt, output, tool, header, metadata, and provider-payload attributes so privacy tests prove those fields are discarded.
+
+`otlp-metrics.json` and `otlp-metrics.pb` similarly encode the six Histogram instruments emitted by LiteLLM 1.94.0 when metrics are enabled. The fixture includes cumulative temporality, buckets, units, and synthetic high-cardinality attributes so the metric allowlist and JSON/protobuf parity remain pinned.
 
 ## Real proxy end-to-end test
 

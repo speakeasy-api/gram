@@ -158,13 +158,16 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	)
 	calls := callcache.New(cacheAdapter)
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
+	metricProcessor := NewMetricProcessor(logger, meterProvider, telemetryLogger)
 	traceProcessor.Start(ctx)
+	metricProcessor.Start(ctx)
 	t.Cleanup(func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		require.NoError(t, traceProcessor.Shutdown(shutdownCtx))
+		require.NoError(t, metricProcessor.Shutdown(shutdownCtx))
 	})
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor)
+	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor)
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,

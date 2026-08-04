@@ -49,6 +49,11 @@ const (
 // classifying org-wide hook keys must verify the token/name minting marker.
 const PluginAPIKeyNamePrefix = "plugins-"
 
+// LiteLLMAPIKeyNamePrefix marks keys minted for LiteLLM integration
+// instances. OTLP ingestion shares routes with harness telemetry, so this
+// prefix is the provenance discriminator for LiteLLM traffic.
+const LiteLLMAPIKeyNamePrefix = "litellm-"
+
 // IsOrgWidePluginHooksAPIKey recognizes keys minted by plugin publish and
 // observability-download flows. The generated name embeds the first six token
 // characters while keyPrefix stores the first five, so authentication can

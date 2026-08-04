@@ -1084,6 +1084,9 @@ func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
 	metric := base
 	metric.eventURN = "urn:telemetry:provider_otel:metric:usage"
 	insertLiteLLMSpan(t, ctx, metric)
+	metricResource := metric
+	metricResource.gramURN = "litellm:otel:metrics"
+	insertLiteLLMSpan(t, ctx, metricResource)
 	spoofed := base
 	spoofed.gramURN = "other:otel:traces"
 	insertLiteLLMSpan(t, ctx, spoofed)

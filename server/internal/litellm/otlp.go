@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -114,11 +115,30 @@ var spanAttributeAllowlist = map[string]otlpAttributeSpec{
 	"litellm.metadata.user_api_key_end_user_id": {target: attr.LiteLLMEndUserIDKey, kind: otlpAttributeString},
 }
 
+var metricAttributeAllowlist = map[string]otlpAttributeSpec{
+	"gen_ai.operation.name": {target: attr.GenAIOperationNameKey, kind: otlpAttributeString},
+	"gen_ai.system":         {target: attr.GenAISystemKey, kind: otlpAttributeString},
+	"gen_ai.request.model":  {target: attr.GenAIRequestModelKey, kind: otlpAttributeString},
+	"gen_ai.framework":      {target: attribute.Key("gen_ai.framework"), kind: otlpAttributeString},
+	"gen_ai.token.type":     {target: attribute.Key("gen_ai.token.type"), kind: otlpAttributeString},
+}
+
 var resourceAttributeAllowlist = map[string]otlpAttributeSpec{
 	"service.name":                {target: attr.ServiceNameKey, kind: otlpAttributeString},
 	"service.namespace":           {target: attr.ServiceNamespaceKey, kind: otlpAttributeString},
 	"service.version":             {target: attr.ServiceVersionKey, kind: otlpAttributeString},
 	"service.instance.id":         {target: attr.ServiceInstanceIDKey, kind: otlpAttributeString},
+	"deployment.environment":      {target: attr.DeploymentEnvironmentKey, kind: otlpAttributeString},
+	"deployment.environment.name": {target: attr.ServiceEnvKey, kind: otlpAttributeString},
+	"telemetry.sdk.name":          {target: attr.TelemetrySDKNameKey, kind: otlpAttributeString},
+	"telemetry.sdk.language":      {target: attr.TelemetrySDKLanguageKey, kind: otlpAttributeString},
+	"telemetry.sdk.version":       {target: attr.TelemetrySDKVersionKey, kind: otlpAttributeString},
+}
+
+var metricResourceAttributeAllowlist = map[string]otlpAttributeSpec{
+	"service.name":                {target: attr.ServiceNameKey, kind: otlpAttributeString},
+	"service.namespace":           {target: attr.ServiceNamespaceKey, kind: otlpAttributeString},
+	"service.version":             {target: attr.ServiceVersionKey, kind: otlpAttributeString},
 	"deployment.environment":      {target: attr.DeploymentEnvironmentKey, kind: otlpAttributeString},
 	"deployment.environment.name": {target: attr.ServiceEnvKey, kind: otlpAttributeString},
 	"telemetry.sdk.name":          {target: attr.TelemetrySDKNameKey, kind: otlpAttributeString},
@@ -1146,24 +1166,7 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 					spanAttributes[attr.OTelSpanDurationMSKey] = float64(end-start) / float64(time.Millisecond)
 				}
 				if scopeSpans.Scope != nil {
-					if scopeSpans.Scope.Name != "" {
-						name, changed, keep := boundOTLPAttributeValue(scopeSpans.Scope.Name)
-						if keep {
-							spanAttributes[attr.OTelScopeNameKey] = name
-						}
-						if changed {
-							s.traces.recordTruncatedAttributes(ctx, 1)
-						}
-					}
-					if scopeSpans.Scope.Version != "" {
-						version, changed, keep := boundOTLPAttributeValue(scopeSpans.Scope.Version)
-						if keep {
-							spanAttributes[attr.OTelScopeVersionKey] = version
-						}
-						if changed {
-							s.traces.recordTruncatedAttributes(ctx, 1)
-						}
-					}
+					maps.Copy(spanAttributes, s.otlpScopeAttributes(ctx, s.traces, scopeSpans.Scope.Name, scopeSpans.Scope.Version))
 				}
 
 				deriveLiteLLMTotalTokens(spanAttributes)
@@ -1204,15 +1207,40 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 	return params
 }
 
+func (s *Service) otlpScopeAttributes(ctx context.Context, recorder *TraceProcessor, name, version string) map[attr.Key]any {
+	result := make(map[attr.Key]any, 2)
+	for key, value := range map[attr.Key]string{attr.OTelScopeNameKey: name, attr.OTelScopeVersionKey: version} {
+		if value == "" {
+			continue
+		}
+		bounded, changed, keep := boundOTLPAttributeValue(value)
+		if keep {
+			result[key] = bounded
+		}
+		if changed {
+			recorder.recordTruncatedAttributes(ctx, 1)
+		}
+	}
+	return result
+}
+
 func (s *Service) sanitizeOTLPAttributes(ctx context.Context, values []otlpKeyValue, allowlist map[string]otlpAttributeSpec) map[attr.Key]any {
-	return s.sanitizeOTLPAttributesWithBudget(ctx, values, allowlist, 0)
+	return s.sanitizeOTLPAttributesWithBudget(ctx, s.traces, values, allowlist, 0)
 }
 
 func (s *Service) sanitizeOTLPResourceAttributes(ctx context.Context, values []otlpKeyValue) map[attr.Key]any {
-	return s.sanitizeOTLPAttributesWithBudget(ctx, values, resourceAttributeAllowlist, maxOTLPResourceBytes)
+	return s.sanitizeOTLPAttributesWithBudget(ctx, s.traces, values, resourceAttributeAllowlist, maxOTLPResourceBytes)
 }
 
-func (s *Service) sanitizeOTLPAttributesWithBudget(ctx context.Context, values []otlpKeyValue, allowlist map[string]otlpAttributeSpec, byteBudget int) map[attr.Key]any {
+func (s *Service) sanitizeOTLPMetricAttributes(ctx context.Context, values []otlpKeyValue) map[attr.Key]any {
+	return s.sanitizeOTLPAttributesWithBudget(ctx, s.metrics.TraceProcessor, values, metricAttributeAllowlist, 0)
+}
+
+func (s *Service) sanitizeOTLPMetricResourceAttributes(ctx context.Context, values []otlpKeyValue) map[attr.Key]any {
+	return s.sanitizeOTLPAttributesWithBudget(ctx, s.metrics.TraceProcessor, values, metricResourceAttributeAllowlist, maxOTLPResourceBytes)
+}
+
+func (s *Service) sanitizeOTLPAttributesWithBudget(ctx context.Context, recorder *TraceProcessor, values []otlpKeyValue, allowlist map[string]otlpAttributeSpec, byteBudget int) map[attr.Key]any {
 	result := make(map[attr.Key]any)
 	retainedSizes := make(map[attr.Key]int)
 	retainedBytes := 2 // JSON object braces; entry accounting is conservatively one byte over for the first key.
@@ -1246,7 +1274,7 @@ func (s *Service) sanitizeOTLPAttributesWithBudget(ctx context.Context, values [
 		retainedSizes[spec.target] = entrySize
 		retainedBytes += entrySize - previousSize
 	}
-	s.traces.recordTruncatedAttributes(ctx, truncated)
+	recorder.recordTruncatedAttributes(ctx, truncated)
 	return result
 }
 

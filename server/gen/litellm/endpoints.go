@@ -16,8 +16,9 @@ import (
 
 // Endpoints wraps the "litellm" service endpoints.
 type Endpoints struct {
-	Ingest goa.Endpoint
-	Traces goa.Endpoint
+	Ingest  goa.Endpoint
+	Traces  goa.Endpoint
+	Metrics goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "litellm" service with endpoints.
@@ -25,8 +26,9 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Ingest: NewIngestEndpoint(s, a.APIKeyAuth),
-		Traces: NewTracesEndpoint(s, a.APIKeyAuth),
+		Ingest:  NewIngestEndpoint(s, a.APIKeyAuth),
+		Traces:  NewTracesEndpoint(s, a.APIKeyAuth),
+		Metrics: NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -34,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Ingest = m(e.Ingest)
 	e.Traces = m(e.Traces)
+	e.Metrics = m(e.Metrics)
 }
 
 // NewIngestEndpoint returns an endpoint function that calls the method
@@ -108,5 +111,40 @@ func NewTracesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return nil, s.Traces(ctx, p)
+	}
+}
+
+// NewMetricsEndpoint returns an endpoint function that calls the method
+// "metrics" of service "litellm".
+func NewMetricsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MetricsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Metrics(ctx, p)
 	}
 }
