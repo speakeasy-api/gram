@@ -387,6 +387,12 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 		}
 	}
 
+	// Fail fast on malformed input before opening a transaction and taking the
+	// org-wide update lock; the merged document is validated again below.
+	if _, err := validateDeviceAgentConfiguration(config); err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin device agent configuration update").LogError(ctx, s.logger)

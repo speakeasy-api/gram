@@ -97,11 +97,6 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-// withPerUserKeyAuth rewrites the request's auth context to look like a per-user
-// device-agent key (minted by token-exchange or manual enrollment): it carries
-// only the `agent_user` scope, and its owner email IS the enrolled developer.
-// getPlugins must therefore attribute to the key owner and ignore any vouched
-// `email` param.
 // withPlatformAdmin rewrites the request's auth context to look like a
 // Speakeasy platform administrator, which is what allows editing the
 // platform-admin-only configuration keys (update_channel, blocked_versions).
@@ -114,6 +109,11 @@ func withPlatformAdmin(t *testing.T, ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
+// withPerUserKeyAuth rewrites the request's auth context to look like a per-user
+// device-agent key (minted by token-exchange or manual enrollment): it carries
+// only the `agent_user` scope, and its owner email IS the enrolled developer.
+// getPlugins must therefore attribute to the key owner and ignore any vouched
+// `email` param.
 func withPerUserKeyAuth(t *testing.T, ctx context.Context, ownerEmail string) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
