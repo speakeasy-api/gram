@@ -577,9 +577,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      'Per-person monthly cap on agent/CLI spend.',
      'email.endsWith("@demo.getgram.ai")', 30, 'monthly', 80, 'flag', TRUE, 1,
      now() - interval '20 days'),
+    -- Builder-representable condition: the rule edit sheet cannot round-trip
+    -- 'email in [...]' CEL (no is-one-of operator), which left the condition
+    -- blank in the UI. Department equality maps cleanly.
     (rule_weekly, demo_org, 'Support weekly cap', 'support-weekly-cap',
      'Weekly guardrail for the support rotation.',
-     'email in ["jonas@demo.getgram.ai", "mateo@demo.getgram.ai", "lucas@demo.getgram.ai"]',
+     'department_name == "Support Engineering"',
      20, 'weekly', 75, 'block', TRUE, 1, now() - interval '15 days');
 
   INSERT INTO spend_rule_events (organization_id, spend_rule_id, rule_urn, event_type,
@@ -599,7 +602,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      date_trunc('week', now()), date_trunc('week', now()) + interval '1 week',
      now() - interval '6 hours'),
     (demo_org, rule_weekly, 'spend_rule:support-weekly-cap:v1', 'warning',
-     'user_demo_mateo', 'mateo@demo.getgram.ai', 'Mateo Alvarez', 15, 20,
+     'user_demo_amara', 'amara@demo.getgram.ai', 'Amara Okafor', 15, 20,
      date_trunc('week', now()), date_trunc('week', now()) + interval '1 week',
      now() - interval '10 hours');
 

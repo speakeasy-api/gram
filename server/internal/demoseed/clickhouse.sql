@@ -177,8 +177,8 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.provider":"anthropic"',
-    ',"gram.account_type":"team"',
-    ',"gram.billing_mode":"metered"}'
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
+    ',"gram.billing_mode":"', if(email = 'mateo@demo.getgram.ai', 'flat_rate', 'metered'), '"}'
   ),
   '{"service.name":"claude-code","gram.deployment.id":"demo-seed"}',
   proj,
@@ -366,7 +366,7 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.hook.source":"cursor"',
     ',"gram.provider":"', if(model = 'gpt-5.6', 'openai', 'anthropic'), '"',
-    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
+    ',"gram.account_type":"team"',
     ',"gram.billing_mode":"flat_rate"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
