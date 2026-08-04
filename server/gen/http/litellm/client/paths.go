@@ -11,3 +11,13 @@ package client
 func IngestLitellmPath() string {
 	return "/rpc/litellm.ingest/beta/litellm_basic_guardrail_api"
 }
+
+// TracesLitellmPath returns the URL path to the litellm service traces HTTP endpoint.
+func TracesLitellmPath() string {
+	return "/rpc/hooks.otel/v1/traces"
+}
+
+// MetricsLitellmPath returns the URL path to the litellm service metrics HTTP endpoint.
+func MetricsLitellmPath() string {
+	return "/rpc/litellm.otel/v1/metrics"
+}

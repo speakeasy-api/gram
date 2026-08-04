@@ -1337,7 +1337,7 @@ var SearchUsersPayload = Type("SearchUsersPayload", func() {
 		Enum("full", "basic")
 		Default("full")
 	})
-	Attribute("source", String, "Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.", func() {
+	Attribute("source", String, "Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat, LiteLLM), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.", func() {
 		Enum("logs", "agent_metrics")
 		Default("logs")
 	})

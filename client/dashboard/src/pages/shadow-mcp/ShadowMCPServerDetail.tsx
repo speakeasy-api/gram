@@ -659,6 +659,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                 <div className="flex min-h-0 flex-col gap-6">
                   <ShadowMCPInventoryActionSheet
                     action={activeAction}
+                    disposition={disposition}
                     isSubmitting={isSubmitting}
                     members={membersQuery.data?.members ?? []}
                     onOpenChange={(open) => {

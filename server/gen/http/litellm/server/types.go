@@ -31,6 +31,23 @@ type IngestRequestBody struct {
 	AdditionalProviderSpecificParams map[string]any                         `form:"additional_provider_specific_params,omitempty" json:"additional_provider_specific_params,omitempty" xml:"additional_provider_specific_params,omitempty"`
 }
 
+// TracesRequestBody is the type of the "litellm" service "traces" endpoint
+// HTTP request body.
+type TracesRequestBody struct {
+	// Standard OTLP ResourceSpans objects. OTLP integer fields use their canonical
+	// decimal-string JSON representation and trace/span IDs use case-insensitive
+	// hexadecimal strings.
+	ResourceSpans []any `form:"resourceSpans,omitempty" json:"resourceSpans,omitempty" xml:"resourceSpans,omitempty"`
+}
+
+// MetricsRequestBody is the type of the "litellm" service "metrics" endpoint
+// HTTP request body.
+type MetricsRequestBody struct {
+	// Standard OTLP ResourceMetrics objects. OTLP integer fields use their
+	// canonical decimal-string JSON representation.
+	ResourceMetrics []any `form:"resourceMetrics,omitempty" json:"resourceMetrics,omitempty" xml:"resourceMetrics,omitempty"`
+}
+
 // IngestResponseBody is the type of the "litellm" service "ingest" endpoint
 // HTTP response body.
 type IngestResponseBody struct {
@@ -207,6 +224,402 @@ type IngestUnexpectedResponseBody struct {
 // IngestGatewayErrorResponseBody is the type of the "litellm" service "ingest"
 // endpoint HTTP response body for the "gateway_error" error.
 type IngestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesRequestTooLargeResponseBody is the type of the "litellm" service
+// "traces" endpoint HTTP response body for the "request_too_large" error.
+type TracesRequestTooLargeResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesUnauthorizedResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "unauthorized" error.
+type TracesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesForbiddenResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "forbidden" error.
+type TracesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesBadRequestResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "bad_request" error.
+type TracesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesNotFoundResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "not_found" error.
+type TracesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesConflictResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "conflict" error.
+type TracesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesUnsupportedMediaResponseBody is the type of the "litellm" service
+// "traces" endpoint HTTP response body for the "unsupported_media" error.
+type TracesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesInvalidResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "invalid" error.
+type TracesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesInvariantViolationResponseBody is the type of the "litellm" service
+// "traces" endpoint HTTP response body for the "invariant_violation" error.
+type TracesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesUnexpectedResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "unexpected" error.
+type TracesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TracesGatewayErrorResponseBody is the type of the "litellm" service "traces"
+// endpoint HTTP response body for the "gateway_error" error.
+type TracesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsRequestTooLargeResponseBody is the type of the "litellm" service
+// "metrics" endpoint HTTP response body for the "request_too_large" error.
+type MetricsRequestTooLargeResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsUnauthorizedResponseBody is the type of the "litellm" service
+// "metrics" endpoint HTTP response body for the "unauthorized" error.
+type MetricsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsForbiddenResponseBody is the type of the "litellm" service "metrics"
+// endpoint HTTP response body for the "forbidden" error.
+type MetricsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsBadRequestResponseBody is the type of the "litellm" service "metrics"
+// endpoint HTTP response body for the "bad_request" error.
+type MetricsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsNotFoundResponseBody is the type of the "litellm" service "metrics"
+// endpoint HTTP response body for the "not_found" error.
+type MetricsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsConflictResponseBody is the type of the "litellm" service "metrics"
+// endpoint HTTP response body for the "conflict" error.
+type MetricsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsUnsupportedMediaResponseBody is the type of the "litellm" service
+// "metrics" endpoint HTTP response body for the "unsupported_media" error.
+type MetricsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsInvalidResponseBody is the type of the "litellm" service "metrics"
+// endpoint HTTP response body for the "invalid" error.
+type MetricsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsInvariantViolationResponseBody is the type of the "litellm" service
+// "metrics" endpoint HTTP response body for the "invariant_violation" error.
+type MetricsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsUnexpectedResponseBody is the type of the "litellm" service "metrics"
+// endpoint HTTP response body for the "unexpected" error.
+type MetricsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MetricsGatewayErrorResponseBody is the type of the "litellm" service
+// "metrics" endpoint HTTP response body for the "gateway_error" error.
+type MetricsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -415,6 +828,314 @@ func NewIngestGatewayErrorResponseBody(res *goa.ServiceError) *IngestGatewayErro
 	return body
 }
 
+// NewTracesRequestTooLargeResponseBody builds the HTTP response body from the
+// result of the "traces" endpoint of the "litellm" service.
+func NewTracesRequestTooLargeResponseBody(res *goa.ServiceError) *TracesRequestTooLargeResponseBody {
+	body := &TracesRequestTooLargeResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "traces" endpoint of the "litellm" service.
+func NewTracesUnauthorizedResponseBody(res *goa.ServiceError) *TracesUnauthorizedResponseBody {
+	body := &TracesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesForbiddenResponseBody builds the HTTP response body from the result
+// of the "traces" endpoint of the "litellm" service.
+func NewTracesForbiddenResponseBody(res *goa.ServiceError) *TracesForbiddenResponseBody {
+	body := &TracesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesBadRequestResponseBody builds the HTTP response body from the
+// result of the "traces" endpoint of the "litellm" service.
+func NewTracesBadRequestResponseBody(res *goa.ServiceError) *TracesBadRequestResponseBody {
+	body := &TracesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesNotFoundResponseBody builds the HTTP response body from the result
+// of the "traces" endpoint of the "litellm" service.
+func NewTracesNotFoundResponseBody(res *goa.ServiceError) *TracesNotFoundResponseBody {
+	body := &TracesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesConflictResponseBody builds the HTTP response body from the result
+// of the "traces" endpoint of the "litellm" service.
+func NewTracesConflictResponseBody(res *goa.ServiceError) *TracesConflictResponseBody {
+	body := &TracesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "traces" endpoint of the "litellm" service.
+func NewTracesUnsupportedMediaResponseBody(res *goa.ServiceError) *TracesUnsupportedMediaResponseBody {
+	body := &TracesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesInvalidResponseBody builds the HTTP response body from the result
+// of the "traces" endpoint of the "litellm" service.
+func NewTracesInvalidResponseBody(res *goa.ServiceError) *TracesInvalidResponseBody {
+	body := &TracesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "traces" endpoint of the "litellm" service.
+func NewTracesInvariantViolationResponseBody(res *goa.ServiceError) *TracesInvariantViolationResponseBody {
+	body := &TracesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesUnexpectedResponseBody builds the HTTP response body from the
+// result of the "traces" endpoint of the "litellm" service.
+func NewTracesUnexpectedResponseBody(res *goa.ServiceError) *TracesUnexpectedResponseBody {
+	body := &TracesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTracesGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "traces" endpoint of the "litellm" service.
+func NewTracesGatewayErrorResponseBody(res *goa.ServiceError) *TracesGatewayErrorResponseBody {
+	body := &TracesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsRequestTooLargeResponseBody builds the HTTP response body from the
+// result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsRequestTooLargeResponseBody(res *goa.ServiceError) *MetricsRequestTooLargeResponseBody {
+	body := &MetricsRequestTooLargeResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsUnauthorizedResponseBody(res *goa.ServiceError) *MetricsUnauthorizedResponseBody {
+	body := &MetricsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsForbiddenResponseBody builds the HTTP response body from the
+// result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsForbiddenResponseBody(res *goa.ServiceError) *MetricsForbiddenResponseBody {
+	body := &MetricsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsBadRequestResponseBody builds the HTTP response body from the
+// result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsBadRequestResponseBody(res *goa.ServiceError) *MetricsBadRequestResponseBody {
+	body := &MetricsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsNotFoundResponseBody builds the HTTP response body from the result
+// of the "metrics" endpoint of the "litellm" service.
+func NewMetricsNotFoundResponseBody(res *goa.ServiceError) *MetricsNotFoundResponseBody {
+	body := &MetricsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsConflictResponseBody builds the HTTP response body from the result
+// of the "metrics" endpoint of the "litellm" service.
+func NewMetricsConflictResponseBody(res *goa.ServiceError) *MetricsConflictResponseBody {
+	body := &MetricsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsUnsupportedMediaResponseBody(res *goa.ServiceError) *MetricsUnsupportedMediaResponseBody {
+	body := &MetricsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsInvalidResponseBody builds the HTTP response body from the result
+// of the "metrics" endpoint of the "litellm" service.
+func NewMetricsInvalidResponseBody(res *goa.ServiceError) *MetricsInvalidResponseBody {
+	body := &MetricsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsInvariantViolationResponseBody(res *goa.ServiceError) *MetricsInvariantViolationResponseBody {
+	body := &MetricsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsUnexpectedResponseBody(res *goa.ServiceError) *MetricsUnexpectedResponseBody {
+	body := &MetricsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMetricsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "metrics" endpoint of the "litellm" service.
+func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayErrorResponseBody {
+	body := &MetricsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewIngestPayload builds a litellm service ingest endpoint payload.
 func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string) *litellm.IngestPayload {
 	v := &litellm.IngestPayload{
@@ -481,6 +1202,34 @@ func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugI
 	return v
 }
 
+// NewTracesPayload builds a litellm service traces endpoint payload.
+func NewTracesPayload(body *TracesRequestBody, apikeyToken *string, projectSlugInput *string) *litellm.TracesPayload {
+	v := &litellm.TracesPayload{}
+	v.ResourceSpans = make([]any, len(body.ResourceSpans))
+	for i, val := range body.ResourceSpans {
+		v.ResourceSpans[i] = val
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewMetricsPayload builds a litellm service metrics endpoint payload.
+func NewMetricsPayload(body *MetricsRequestBody, apikeyToken *string, projectSlugInput *string) *litellm.MetricsPayload {
+	v := &litellm.MetricsPayload{}
+	if body.ResourceMetrics != nil {
+		v.ResourceMetrics = make([]any, len(body.ResourceMetrics))
+		for i, val := range body.ResourceMetrics {
+			v.ResourceMetrics[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateIngestRequestBody runs the validations defined on IngestRequestBody
 func ValidateIngestRequestBody(body *IngestRequestBody) (err error) {
 	if body.InputType == nil {
@@ -500,6 +1249,14 @@ func ValidateIngestRequestBody(body *IngestRequestBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateTracesRequestBody runs the validations defined on TracesRequestBody
+func ValidateTracesRequestBody(body *TracesRequestBody) (err error) {
+	if body.ResourceSpans == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resourceSpans", "body"))
 	}
 	return
 }

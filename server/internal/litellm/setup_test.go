@@ -5,8 +5,11 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -18,11 +21,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -49,12 +54,43 @@ func TestMain(m *testing.M) {
 }
 
 type realTestInstance struct {
-	service *Service
-	hooks   *hooks.Service
-	conn    *pgxpool.Pool
+	service   *Service
+	hooks     *hooks.Service
+	conn      *pgxpool.Pool
+	chConn    clickhouse.Conn
+	telemetry *telemetry.Logger
+	observer  *recordingMessageObserver
+}
+
+type recordingMessageObserver struct {
+	mu       sync.Mutex
+	projects []uuid.UUID
+}
+
+func (r *recordingMessageObserver) OnMessagesStored(_ context.Context, projectID uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.projects = append(r.projects, projectID)
+}
+
+func (r *recordingMessageObserver) count(projectID uuid.UUID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, observed := range r.projects {
+		if observed == projectID {
+			count++
+		}
+	}
+	return count
 }
 
 func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context, *realTestInstance) {
+	t.Helper()
+	return newRealTestServiceWithScannerFactory(t, func(*pgxpool.Pool) risk.RiskScanner { return scanner })
+}
+
+func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgxpool.Pool) risk.RiskScanner) (context.Context, *realTestInstance) {
 	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -62,6 +98,7 @@ func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context
 	meterProvider := testenv.NewMeterProvider(t)
 	conn, err := testInfra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+	scanner := scannerFactory(conn)
 	redisClient, err := testInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
@@ -69,11 +106,24 @@ func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	chConn, err := testInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
+	telemetryLogger := telemetry.NewLogger(
+		ctx,
+		logger,
+		tracerProvider,
+		meterProvider,
+		chConn,
+		func(context.Context, string) (bool, error) { return true, nil },
+		func(context.Context, string) (bool, error) { return false, nil },
+		telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)),
+		telemetry.NewNoopLogPublisher(logger),
+	)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
 	t.Cleanup(func() { require.NoError(t, shutdownWriter(t.Context())) })
+	observer := &recordingMessageObserver{mu: sync.Mutex{}, projects: nil}
+	chatWriter.AddObserver(observer)
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
 	siteURL, err := url.Parse("https://app.example.test")
@@ -106,10 +156,24 @@ func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context
 		siteURL,
 		"test-jwt-secret",
 	)
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService)
+	calls := callcache.New(cacheAdapter)
+	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
+	metricProcessor := NewMetricProcessor(logger, meterProvider, telemetryLogger)
+	traceProcessor.Start(ctx)
+	metricProcessor.Start(ctx)
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		require.NoError(t, traceProcessor.Shutdown(shutdownCtx))
+		require.NoError(t, metricProcessor.Shutdown(shutdownCtx))
+	})
+	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor)
 	return ctx, &realTestInstance{
-		service: service,
-		hooks:   hookService,
-		conn:    conn,
+		service:   service,
+		hooks:     hookService,
+		conn:      conn,
+		chConn:    chConn,
+		telemetry: telemetryLogger,
+		observer:  observer,
 	}
 }

@@ -29,6 +29,7 @@ import {
   useRiskListPolicyBypassRequests,
 } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
 import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-query/riskApprovePolicyBypassRequest.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
 import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -383,6 +384,7 @@ function ReviewRequestSheet({
   projectSlug,
   roles,
   members,
+  allowAll = false,
   open,
   isSubmitting,
   onOpenChange,
@@ -393,6 +395,9 @@ function ReviewRequestSheet({
   projectSlug: string;
   roles: Role[];
   members: AccessMember[];
+  /** The request targets an allow_all policy: approval unblocks the server
+   * for everyone in the project, so no audience is picked. */
+  allowAll?: boolean;
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
@@ -455,7 +460,8 @@ function ReviewRequestSheet({
           selectedUserPrincipalUrn,
           roles,
         });
-  const approveReady = action !== "approve" || principalUrns.length > 0;
+  const approveReady =
+    action !== "approve" || allowAll || principalUrns.length > 0;
   const canSubmit = projectSlug.length > 0 && approveReady;
   const submitLabel = reviewRequestSubmitLabel(isEditingAccess, action);
   const sheetCopy = reviewRequestSheetCopy(isEditingAccess);
@@ -561,7 +567,9 @@ function ReviewRequestSheet({
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    Allow matching access.
+                    {allowAll
+                      ? "Unblock for everyone in the project."
+                      : "Allow matching access."}
                   </Text>
                 </span>
               </label>
@@ -584,7 +592,14 @@ function ReviewRequestSheet({
             </RadioGroup>
           )}
 
-          {(isEditingAccess || action === "approve") && (
+          {allowAll && (isEditingAccess || action === "approve") && (
+            <Text muted small>
+              This policy allows servers by default. Approving removes the block
+              rule, so the server becomes available to everyone in the project.
+            </Text>
+          )}
+
+          {!allowAll && (isEditingAccess || action === "approve") && (
             <section className="border-border space-y-3 rounded-md border p-3">
               <Text variant="small" className="font-medium">
                 Applies to
@@ -754,6 +769,22 @@ export function ApprovalRequestsContent({
   );
   const rolesQuery = useRoles(undefined, undefined, { enabled: canAdmin });
   const membersQuery = useMembers(undefined, undefined, { enabled: canAdmin });
+  const policiesQuery = useRiskListPolicies(
+    { gramProject: projectSlug },
+    undefined,
+    { enabled: canAdmin && projectSlug.length > 0 },
+  );
+  // Requests against an allow_all policy are approved project-wide (the URL
+  // leaves the policy's blocked list), so the audience picker does not apply.
+  const allowAllPolicyIDs = useMemo(() => {
+    const ids = new Set<string>();
+    for (const policy of policiesQuery.data?.policies ?? []) {
+      if (policy.shadowMcpDisposition === "allow_all") {
+        ids.add(policy.id);
+      }
+    }
+    return ids;
+  }, [policiesQuery.data?.policies]);
 
   const requests = useMemo(
     () => requestsQuery.data?.requests ?? [],
@@ -918,7 +949,11 @@ export function ApprovalRequestsContent({
       width: "1.5fr",
       render: (rule) => (
         <Text variant="small" className="truncate">
-          {principalSummary(rule.grantedPrincipalUrns, roles, members)}
+          {/* Allow-all approvals unblock the server project-wide and carry
+              no principal grants, so an empty list means everyone. */}
+          {allowAllPolicyIDs.has(rule.policyId)
+            ? "Everyone"
+            : principalSummary(rule.grantedPrincipalUrns, roles, members)}
         </Text>
       ),
     },
@@ -970,6 +1005,9 @@ export function ApprovalRequestsContent({
         projectSlug={projectSlug}
         roles={roles}
         members={members}
+        allowAll={
+          !!reviewRequest && allowAllPolicyIDs.has(reviewRequest.policyId)
+        }
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
@@ -978,12 +1016,13 @@ export function ApprovalRequestsContent({
         onApprove={async (principalUrns) => {
           if (!reviewRequest) return;
 
+          const allowAll = allowAllPolicyIDs.has(reviewRequest.policyId);
           await approveRequest.mutateAsync({
             request: {
               gramProject: projectSlug,
               riskPolicyBypassApprovalRequestBody: {
                 id: reviewRequest.id,
-                grantedPrincipalUrns: principalUrns,
+                grantedPrincipalUrns: allowAll ? [] : principalUrns,
               },
             },
           });

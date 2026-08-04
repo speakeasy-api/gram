@@ -295,8 +295,64 @@ const CODEX_AI_INTEGRATION: AIIntegrationProvider = {
   ),
 };
 
+const CHATGPT_AI_INTEGRATION: AIIntegrationProvider = {
+  provider: "chatgpt_compliance",
+  name: "ChatGPT Conversations",
+  description:
+    "Import ChatGPT conversations from web and desktop for security review.",
+  schedules: [
+    {
+      schedule: "chatgpt_compliance",
+      name: "Conversation messages",
+      description:
+        "Imports ChatGPT conversation messages from Compliance Logs files for review.",
+      cadence: "Every 5m",
+      kind: "events",
+      signal: "chatgpt.chat.message",
+      destination: { label: "Agent Sessions", path: "agent-sessions" },
+    },
+  ],
+  onboardingDescription:
+    "Connect OpenAI's Compliance Logs API so the platform can import ChatGPT conversations for review workflows.",
+  setupGuide: {
+    steps: [
+      {
+        title: "Create a Compliance API key",
+        description:
+          "Create an OpenAI API key with access to compliance logs for the workspace whose ChatGPT conversations Speakeasy should import. The same key used for Codex cost import works here.",
+      },
+      {
+        title: "Copy your ChatGPT workspace ID",
+        description:
+          "Copy the workspace ID (a UUID) from the ChatGPT admin console. Conversation logs are served per workspace, not per API organization.",
+      },
+      {
+        title: "Paste both values into Speakeasy",
+        description:
+          "Copy the Compliance API key and ChatGPT workspace ID, then paste both below. The platform stores the key securely and starts importing conversations.",
+        showsForm: true,
+      },
+    ],
+  },
+  icon: CodexIcon,
+  apiKeyLabel: "OpenAI Compliance Logs API key",
+  apiKeyPlaceholder: "Paste your OpenAI Compliance Logs API key",
+  requiresOrganizationId: true,
+  organizationIdLabel: "ChatGPT workspace ID",
+  organizationIdPlaceholder: "00000000-0000-0000-0000-000000000000",
+  helpText: (
+    <>
+      Conversation import uses OpenAI Compliance Logs Platform{" "}
+      <code className="text-foreground">CONVERSATION_MESSAGE</code> files for a
+      ChatGPT workspace. Use the workspace UUID, not an{" "}
+      <code className="text-foreground">org-*</code> ID.
+    </>
+  ),
+};
+
 export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
   CURSOR_AI_INTEGRATION,
   ANTHROPIC_AI_INTEGRATION,
   CODEX_AI_INTEGRATION,
+  CHATGPT_AI_INTEGRATION,
 ];

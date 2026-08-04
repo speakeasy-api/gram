@@ -30,6 +30,13 @@ function policyStatusText(
         description:
           "Block policy is enabled. Servers without allow rules are not allowed.",
       };
+    case "warning":
+      return {
+        label: "Warning",
+        icon: "shield-alert",
+        description:
+          "Warn policy is enabled. Users must acknowledge warnings before continuing.",
+      };
     case "flagging":
       return {
         label: "Flagging",

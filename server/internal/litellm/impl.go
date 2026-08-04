@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -22,14 +23,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-const genericBlockedReason = "Request blocked by policy."
+const (
+	genericBlockedReason = "Request blocked by policy."
+	callCacheTimeout     = time.Second
+)
 
 type HookIngester interface {
-	IngestAuthenticatedWithOptions(context.Context, *contextvalues.AuthContext, *hooksgen.IngestPayload, hooks.AuthenticatedIngestOptions) (*hooksgen.IngestHookResult, error)
+	IngestAuthenticatedDetailed(context.Context, *contextvalues.AuthContext, *hooksgen.IngestPayload, hooks.AuthenticatedIngestOptions) (*hooks.AuthenticatedIngestResult, error)
 }
 
 type authorizer interface {
@@ -37,21 +42,27 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	auth   authorizer
-	hooks  HookIngester
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	auth    authorizer
+	hooks   HookIngester
+	calls   *callcache.Cache
+	traces  *TraceProcessor
+	metrics *MetricProcessor
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor) *Service {
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger: logger.With(attr.SlogComponent("litellm")),
-		auth:   auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:  hookIngester,
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:  logger.With(attr.SlogComponent("litellm")),
+		auth:    auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:   hookIngester,
+		calls:   calls,
+		traces:  traces,
+		metrics: metrics,
 	}
 }
 
@@ -59,7 +70,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	server.Traces = service.traceHTTPHandler()
+	server.Metrics = service.metricHTTPHandler()
+	srv.Mount(mux, server)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
@@ -80,13 +94,21 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 	if payload == nil || payload.RequestData == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "request_data is required")
 	}
-	if payload.InputType != "request" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "only request input_type is supported")
-	}
 	callID := strings.TrimSpace(conv.PtrValOr(payload.LitellmCallID, ""))
 	if callID == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "litellm_call_id is required")
 	}
+	switch payload.InputType {
+	case "request":
+		return s.ingestRequest(ctx, payload, callID)
+	case "response":
+		return s.ingestResponse(ctx, payload, callID)
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "input_type must be request or response")
+	}
+}
+
+func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload, callID string) (*gen.LitellmIngestResult, error) {
 	prompt := latestUserPrompt(payload.StructuredMessages)
 	if prompt == "" {
 		prompt = lastText(payload.Texts)
@@ -99,11 +121,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 	if !ok || authCtx == nil {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
-	authCopy := *authCtx
-	authCopy.UserID = ""
-	authCopy.Email = nil
-	authCopy.ExternalUserID = ""
-	authCopy.OrgWidePluginHooksKey = false
+	authCopy := strippedAuthContext(authCtx)
 
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
 	sessionID := sessionHeader(payload.RequestHeaders)
@@ -152,16 +170,17 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 		},
 		Raw: nil,
 	}
-	result, err := s.hooks.IngestAuthenticatedWithOptions(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+	outcome, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
+		OutputToolCalls:              nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
 	}
-	if result.Decision == "deny" {
-		reason := strings.TrimSpace(conv.PtrValOr(result.Message, ""))
+	if outcome.Result.Decision == "deny" {
+		reason := strings.TrimSpace(conv.PtrValOr(outcome.Result.Message, ""))
 		if reason == "" {
 			reason = genericBlockedReason
 		}
@@ -174,7 +193,121 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.
 			StreamHoldbackChars: nil,
 		}, nil
 	}
+	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
+	err = s.calls.Store(cacheCtx, callcache.Record{
+		ProjectID: *authCtx.ProjectID,
+		CallID:    callID,
+		TraceID:   traceID,
+		SessionID: sessionID,
+		UserID:    outcome.Actor.UserID,
+		Email:     outcome.Actor.Email,
+	})
+	cancel()
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to cache LiteLLM call",
+			attr.SlogError(err),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogLiteLLMCallID(callID),
+			attr.SlogLiteLLMTraceID(traceID),
+		)
+	}
 	return noneResult(), nil
+}
+
+func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload, callID string) (*gen.LitellmIngestResult, error) {
+	text := joinedTexts(payload.Texts)
+	if text == "" && len(payload.ToolCalls) == 0 {
+		return noneResult(), nil
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+	authCopy := strippedAuthContext(authCtx)
+	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
+	sessionID := sessionHeader(payload.RequestHeaders)
+	if sessionID == "" {
+		sessionID = conv.Default(traceID, callID)
+	}
+	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
+
+	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
+	cached, err := s.calls.Get(cacheCtx, *authCtx.ProjectID, callID)
+	cancel()
+	if err == nil {
+		sessionID = cached.SessionID
+		authCopy.UserID = cached.UserID
+		authCopy.Email = conv.PtrEmpty(cached.Email)
+		email = cached.Email
+	} else if !callcache.IsMiss(err) {
+		s.logger.WarnContext(ctx, "failed to read cached LiteLLM call",
+			attr.SlogError(err),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+			attr.SlogLiteLLMCallID(callID),
+		)
+	}
+
+	model := strings.TrimSpace(conv.PtrValOr(payload.Model, ""))
+	version := strings.TrimSpace(conv.PtrValOr(payload.LitellmVersion, ""))
+	idempotencyKey := "litellm:" + callID + ":response"
+	role := "assistant"
+	hookPayload := &hooksgen.IngestPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Replayed:         nil,
+		SchemaVersion:    "hook.ingest.v1",
+		IdempotencyKey:   &idempotencyKey,
+		Source: &hooksgen.HookIngestSource{
+			Adapter:        "litellm",
+			AdapterVersion: conv.PtrEmpty(version),
+			RawEventName:   nil,
+			Hostname:       nil,
+			UserEmail:      conv.PtrEmpty(email),
+		},
+		Session: &hooksgen.HookIngestSession{
+			ID:     &sessionID,
+			TurnID: &callID,
+			Cwd:    nil,
+			Model:  conv.PtrEmpty(model),
+		},
+		Event: &hooksgen.HookIngestEvent{
+			Type:       "assistant.responded",
+			OccurredAt: nil,
+		},
+		Data: &hooksgen.HookIngestData{
+			Prompt:            nil,
+			ToolCall:          nil,
+			Mcp:               nil,
+			McpInventory:      nil,
+			Usage:             nil,
+			Message:           &hooksgen.HookMessageData{Text: &text, Role: &role, DurationMs: nil},
+			Skill:             nil,
+			Notification:      nil,
+			McpAttribution:    nil,
+			PromptAttachments: nil,
+		},
+		Raw: nil,
+	}
+	_, err = s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		AllowWarnAcknowledgement:     false,
+		AllowSessionIdentityFallback: false,
+		SourceAttributes:             sourceAttributes(payload),
+		OutputToolCalls:              payload.ToolCalls,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
+	}
+	return noneResult(), nil
+}
+
+func strippedAuthContext(authCtx *contextvalues.AuthContext) contextvalues.AuthContext {
+	authCopy := *authCtx
+	authCopy.UserID = ""
+	authCopy.Email = nil
+	authCopy.ExternalUserID = ""
+	authCopy.OrgWidePluginHooksKey = false
+	return authCopy
 }
 
 func noneResult() *gen.LitellmIngestResult {
@@ -230,6 +363,16 @@ func lastText(texts []string) string {
 		return ""
 	}
 	return strings.TrimSpace(texts[len(texts)-1])
+}
+
+func joinedTexts(texts []string) string {
+	joined := make([]string, 0, len(texts))
+	for _, text := range texts {
+		if text = strings.TrimSpace(text); text != "" {
+			joined = append(joined, text)
+		}
+	}
+	return strings.Join(joined, "\n")
 }
 
 func sessionHeader(headers map[string]string) string {

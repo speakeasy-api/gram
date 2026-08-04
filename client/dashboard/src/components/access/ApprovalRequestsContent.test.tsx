@@ -60,6 +60,11 @@ vi.mock("@gram/client/react-query/riskApprovePolicyBypassRequest.js", () => ({
   useRiskApprovePolicyBypassRequestMutation: mocks.mutation,
 }));
 
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  invalidateAllRiskListPolicies: vi.fn(),
+  useRiskListPolicies: () => ({ data: undefined }),
+}));
+
 vi.mock("@gram/client/react-query/riskDenyPolicyBypassRequest.js", () => ({
   useRiskDenyPolicyBypassRequestMutation: mocks.mutation,
 }));

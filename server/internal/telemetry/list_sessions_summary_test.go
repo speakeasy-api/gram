@@ -48,6 +48,8 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	claudeChatID := uuid.NewString()
 	agentChatID := uuid.NewString()
 	failedChatID := uuid.NewString()
+	liteLLMChatID := uuid.NewString()
+	metricChatID := uuid.NewString()
 
 	// A Claude session: two turns (different models) plus a successful tool
 	// call.
@@ -89,6 +91,18 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 		statusCode: 200,
 		toolURN:    "mcp__petstore__listPets",
 	})
+	insertLiteLLMSpan(t, ctx, liteLLMSpanParams{
+		projectID: projectID, timestamp: now.Add(-4 * time.Minute), chatID: liteLLMChatID, callID: uuid.NewString(),
+		gramURN: "litellm:otel:traces", eventURN: "urn:telemetry:provider_otel:span:text_completion",
+		requestModel: "completion-group", responseModel: "", email: "lee@example.com",
+		inputTokens: 40, outputTokens: 10, cost: 0.5,
+	})
+	insertLiteLLMSpan(t, ctx, liteLLMSpanParams{
+		projectID: projectID, timestamp: now.Add(-3 * time.Minute), chatID: metricChatID, callID: uuid.NewString(),
+		gramURN: "litellm:otel:metrics", eventURN: "urn:telemetry:provider_otel:metric:litellm",
+		requestModel: "must-not-form-a-session", responseModel: "openai/gpt-4o", email: "metric@example.com",
+		inputTokens: 999, outputTokens: 999, cost: 999,
+	})
 	// A Cursor usage session.
 	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
@@ -126,7 +140,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 		SortBy: "total_cost",
 		Limit:  10,
 	}, func(res *gen.ListSessionsResult) bool {
-		return len(res.Sessions) == 3
+		return len(res.Sessions) == 4
 	})
 
 	summaryRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
@@ -135,7 +149,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 		SortBy: "total_cost",
 		Limit:  10,
 	}, func(res *gen.ListSessionsResult) bool {
-		return len(res.Sessions) == 3
+		return len(res.Sessions) == 4
 	})
 
 	require.Equal(t, rawRes.Sessions, summaryRes.Sessions,
@@ -146,6 +160,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	for _, s := range summaryRes.Sessions {
 		byChat[s.GramChatID] = s
 	}
+	require.NotContains(t, byChat, metricChatID)
 	claude := byChat[claudeChatID]
 	require.NotNil(t, claude)
 	require.Equal(t, int64(2), claude.MessageCount)
@@ -159,6 +174,20 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	failed := byChat[failedChatID]
 	require.NotNil(t, failed)
 	require.Equal(t, "error", failed.Status)
+
+	liteLLM := byChat[liteLLMChatID]
+	require.NotNil(t, liteLLM)
+	require.NotNil(t, liteLLM.UserEmail)
+	require.Equal(t, "lee@example.com", *liteLLM.UserEmail)
+	require.NotNil(t, liteLLM.HookSource)
+	require.Equal(t, "litellm", *liteLLM.HookSource)
+	require.Equal(t, int64(1), liteLLM.MessageCount)
+	require.Equal(t, int64(40), liteLLM.TotalInputTokens)
+	require.Equal(t, int64(10), liteLLM.TotalOutputTokens)
+	require.Equal(t, int64(50), liteLLM.TotalTokens)
+	require.InDelta(t, 0.5, liteLLM.TotalCost, 1e-9)
+	require.NotNil(t, liteLLM.Model)
+	require.Equal(t, "completion-group", *liteLLM.Model)
 }
 
 // TestListSessions_SummaryPathFilters covers the filter translation onto the

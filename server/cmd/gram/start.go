@@ -77,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
+	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
@@ -158,6 +159,8 @@ const shutdownDrainTimeout = 60 * time.Second
 
 func newStartCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
+	dbClose := func() {}
+	clickhouseShutdown := noopShutdown
 
 	flags := []cli.Flag{
 		&cli.StringFlag{
@@ -502,13 +505,13 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			defer db.Close()
+			dbClose = db.Close
 
 			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			clickhouseShutdown = shutdown
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -698,23 +701,46 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
+			var (
+				litellmTraceProcessor   *litellm.TraceProcessor
+				litellmMetricProcessor  *litellm.MetricProcessor
+				litellmService          *litellm.Service
+				telemetryLoggerShutdown func(context.Context) error
+				publishersShutdown      func(context.Context) error
+				pubsubShutdown          func(context.Context) error
+			)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				var errs []error
+				if litellmTraceProcessor != nil {
+					if err := litellmTraceProcessor.Shutdown(ctx); err != nil {
+						errs = append(errs, fmt.Errorf("shutdown LiteLLM trace processor: %w", err))
+					}
+				}
+				if litellmMetricProcessor != nil {
+					if err := litellmMetricProcessor.Shutdown(ctx); err != nil {
+						errs = append(errs, fmt.Errorf("shutdown LiteLLM metric processor: %w", err))
+					}
+				}
+				if telemetryLoggerShutdown != nil {
+					errs = append(errs, telemetryLoggerShutdown(ctx))
+				}
+				if publishersShutdown != nil {
+					errs = append(errs, publishersShutdown(ctx))
+				}
+				if pubsubShutdown != nil {
+					errs = append(errs, pubsubShutdown(ctx))
+				}
+				return errors.Join(errs...)
+			})
+
+			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
+			pubsubShutdown = shutdown
 			if err != nil {
-				shutdownFuncs = append(shutdownFuncs, pubsubShutdown)
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 
-			publishers, publishersShutdown, err := newPublishers(ctx, psbroker)
-			// Stop and flush the publishers before closing the Pub/Sub client
-			// they publish through. runShutdown executes shutdown funcs
-			// concurrently, so this ordering must be enforced inside a single
-			// func - appending the two separately would race the publisher
-			// flush against the client close and could drop in-flight messages.
-			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				stopErr := publishersShutdown(ctx)
-				closeErr := pubsubShutdown(ctx)
-				return errors.Join(stopErr, closeErr)
-			})
+			publishers, shutdown, err := newPublishers(ctx, psbroker)
+			publishersShutdown = shutdown
 			if err != nil {
 				return fmt.Errorf("failed to create publishers: %w", err)
 			}
@@ -722,7 +748,7 @@ func newStartCommand() *cli.Command {
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			telemetryLoggerShutdown = shutdown
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
@@ -937,6 +963,11 @@ func newStartCommand() *cli.Command {
 				otelForwarder.Shutdown(ctx)
 				return nil
 			})
+			litellmCalls := callcache.New(cache.NewRedisCacheAdapter(redisClient))
+			litellmTraceProcessor = litellm.NewTraceProcessor(logger, meterProvider, telemLogger, litellmCalls)
+			litellmMetricProcessor = litellm.NewMetricProcessor(logger, meterProvider, telemLogger)
+			litellmTraceProcessor.Start(ctx)
+			litellmMetricProcessor.Start(ctx)
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
 			if shutdown != nil {
@@ -1044,6 +1075,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 			mux.Use(otelforwarding.Middleware(logger, otelForwardClient, otelForwarder))
+			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))
 
 			// Reuse the same Presidio client the worker uses for offline analysis
 			// so the runtime hook scanner can flag/redact PII inputs too.
@@ -1133,7 +1165,8 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellm.Attach(mux, litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService))
+			litellmService = litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor)
+			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
@@ -1318,6 +1351,7 @@ func newStartCommand() *cli.Command {
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService, telemetryrepo.New(chDB))...)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantPluginsTools(pluginsSvc)...)
 			// One-off fetches on a cold cache; a pooled client would only hold
 			// idle connections to the marketing site. Bound the whole request
 			// so a stalled marketing-site response can't hang the fetch; the
@@ -1533,6 +1567,9 @@ func newStartCommand() *cli.Command {
 			return loadConfigFromFile(ctx, flags)
 		},
 		After: func(c *cli.Context) error {
+			ctx := context.WithoutCancel(c.Context)
+			defer dbClose()
+			defer o11y.LogDefer(ctx, PullLogger(c.Context), func() error { return clickhouseShutdown(ctx) })
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}

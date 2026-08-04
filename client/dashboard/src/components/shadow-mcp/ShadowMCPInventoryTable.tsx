@@ -462,6 +462,7 @@ export function ShadowMCPInventoryTable({
     >
       <ShadowMCPInventoryActionSheet
         action={activeAction}
+        disposition={disposition}
         isSubmitting={isSubmitting}
         members={members}
         onOpenChange={(open) => {

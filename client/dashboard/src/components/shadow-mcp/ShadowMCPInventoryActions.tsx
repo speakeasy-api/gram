@@ -312,6 +312,7 @@ function PolicySelection({
 
 export function ShadowMCPInventoryActionSheet({
   action,
+  disposition = null,
   isSubmitting,
   members,
   onOpenChange,
@@ -322,6 +323,7 @@ export function ShadowMCPInventoryActionSheet({
   shadowMCPPolicies,
 }: {
   action: ActiveInventoryAction | null;
+  disposition?: ShadowMCPPolicyDisposition | null;
   isSubmitting: boolean;
   members: AccessMember[];
   onOpenChange: (open: boolean) => void;
@@ -353,14 +355,20 @@ export function ShadowMCPInventoryActionSheet({
   const server = action.server;
   const isBlocklistAction =
     action.mode === "block" || action.mode === "unblock";
+  // Under allow_all, approving a request unblocks the server project-wide, so
+  // there is no policy selection to make.
+  const isAllowAllReview =
+    action.mode === "review" && disposition === "allow_all";
   const canChoosePolicies =
     !isBlocklistAction &&
+    !isAllowAllReview &&
     action.mode !== "delete" &&
     (action.mode !== "review" || decision === "allow");
   const needsPolicySelection = canChoosePolicies;
   const canSubmit =
     !isSubmitting &&
     (isBlocklistAction ||
+      isAllowAllReview ||
       action.mode === "delete" ||
       (action.mode === "review" && decision === "deny") ||
       selectedPolicyIDs.length > 0);
@@ -423,7 +431,9 @@ export function ShadowMCPInventoryActionSheet({
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    Add an allow decision.
+                    {isAllowAllReview
+                      ? "Unblock the server for everyone in the project."
+                      : "Add an allow decision."}
                   </Text>
                 </span>
               </label>
