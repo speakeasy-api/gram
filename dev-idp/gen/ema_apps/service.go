@@ -11,8 +11,8 @@ import (
 	"context"
 )
 
-// Cross-app access requesting apps: the clients allowed to ask the IdP for an
-// ID-JAG. Permanently unauthenticated.
+// Enterprise-managed authorization requesting apps: the clients allowed to ask
+// the IdP for an ID-JAG. Permanently unauthenticated.
 type Service interface {
 	// Register an app.
 	Create(context.Context, *CreatePayload) (res *EmaApp, err error)
@@ -46,6 +46,9 @@ type CreatePayload struct {
 	ClientID string
 	// Omit or leave empty to register a public client.
 	ClientSecret *string
+	// JWKS document holding the app's public key. Set this to require
+	// private_key_jwt.
+	Jwks *string
 	// Display name; defaults to the client id.
 	Name *string
 	// Defaults to true.
@@ -67,6 +70,9 @@ type EmaApp struct {
 	// Client secret; empty registers a public client that authenticates by
 	// client_id alone.
 	ClientSecret string
+	// JWKS document holding the app's public key. When set the app authenticates
+	// with private_key_jwt and its secret is ignored.
+	Jwks string
 	// Display name.
 	Name string
 	// Disabled apps are refused at mint time.
@@ -99,6 +105,8 @@ type UpdatePayload struct {
 	ClientID *string
 	// Client secret.
 	ClientSecret *string
+	// JWKS document holding the app's public key.
+	Jwks *string
 	// Display name.
 	Name *string
 	// Enabled flag; always rewritten when supplied.

@@ -191,7 +191,7 @@ func (h *Handler) baseMetadata() asMetadata {
 		ResponseTypesSupported:            []string{"code"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token", ema.GrantTypeTokenExchange},
 		CodeChallengeMethodsSupported:     []string{"S256"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "private_key_jwt", "none"},
 		ScopesSupported:                   []string{"openid", "email", "profile"},
 		ClientIDMetadataDocumentSupported: true,
 

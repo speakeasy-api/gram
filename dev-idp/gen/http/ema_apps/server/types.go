@@ -19,6 +19,9 @@ type CreateRequestBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Omit or leave empty to register a public client.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// JWKS document holding the app's public key. Set this to require
+	// private_key_jwt.
+	Jwks *string `form:"jwks,omitempty" json:"jwks,omitempty" xml:"jwks,omitempty"`
 	// Display name; defaults to the client id.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Defaults to true.
@@ -34,6 +37,8 @@ type UpdateRequestBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Client secret.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// JWKS document holding the app's public key.
+	Jwks *string `form:"jwks,omitempty" json:"jwks,omitempty" xml:"jwks,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Enabled flag; always rewritten when supplied.
@@ -66,6 +71,9 @@ type CreateResponseBody struct {
 	// Client secret; empty registers a public client that authenticates by
 	// client_id alone.
 	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
+	// JWKS document holding the app's public key. When set the app authenticates
+	// with private_key_jwt and its secret is ignored.
+	Jwks string `form:"jwks" json:"jwks" xml:"jwks"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Disabled apps are refused at mint time.
@@ -84,6 +92,9 @@ type UpdateResponseBody struct {
 	// Client secret; empty registers a public client that authenticates by
 	// client_id alone.
 	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
+	// JWKS document holding the app's public key. When set the app authenticates
+	// with private_key_jwt and its secret is ignored.
+	Jwks string `form:"jwks" json:"jwks" xml:"jwks"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Disabled apps are refused at mint time.
@@ -110,6 +121,9 @@ type EmaAppResponseBody struct {
 	// Client secret; empty registers a public client that authenticates by
 	// client_id alone.
 	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
+	// JWKS document holding the app's public key. When set the app authenticates
+	// with private_key_jwt and its secret is ignored.
+	Jwks string `form:"jwks" json:"jwks" xml:"jwks"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Disabled apps are refused at mint time.
@@ -125,6 +139,7 @@ func NewCreateResponseBody(res *emaapps.EmaApp) *CreateResponseBody {
 		ID:           res.ID,
 		ClientID:     res.ClientID,
 		ClientSecret: res.ClientSecret,
+		Jwks:         res.Jwks,
 		Name:         res.Name,
 		Enabled:      res.Enabled,
 		CreatedAt:    res.CreatedAt,
@@ -140,6 +155,7 @@ func NewUpdateResponseBody(res *emaapps.EmaApp) *UpdateResponseBody {
 		ID:           res.ID,
 		ClientID:     res.ClientID,
 		ClientSecret: res.ClientSecret,
+		Jwks:         res.Jwks,
 		Name:         res.Name,
 		Enabled:      res.Enabled,
 		CreatedAt:    res.CreatedAt,
@@ -174,6 +190,7 @@ func NewCreatePayload(body *CreateRequestBody) *emaapps.CreatePayload {
 	v := &emaapps.CreatePayload{
 		ClientID:     *body.ClientID,
 		ClientSecret: body.ClientSecret,
+		Jwks:         body.Jwks,
 		Name:         body.Name,
 		Enabled:      body.Enabled,
 	}
@@ -187,6 +204,7 @@ func NewUpdatePayload(body *UpdateRequestBody) *emaapps.UpdatePayload {
 		ID:           *body.ID,
 		ClientID:     body.ClientID,
 		ClientSecret: body.ClientSecret,
+		Jwks:         body.Jwks,
 		Name:         body.Name,
 		Enabled:      body.Enabled,
 	}

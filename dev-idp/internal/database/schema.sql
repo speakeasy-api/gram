@@ -178,10 +178,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_slug_key
 
 -- Requesting apps: the clients allowed to ask the IdP for an ID-JAG on a
 -- user's behalf. `client_id` is the id they authenticate to /token with.
+--
+-- How an app authenticates follows from which credential column is set, so
+-- there is no separate auth-method discriminator to keep in sync:
+--
+--   jwks set           -> private_key_jwt, the method real enterprise IdPs
+--                         mandate for this exchange. A JWKS document holding
+--                         the app's public key; it signs a client assertion.
+--   client_secret set  -> client_secret_post.
+--   neither            -> a public client, authenticating by client_id alone.
+--
+-- jwks wins when both are set, so an app can be migrated to private_key_jwt
+-- without a window where its old secret still works.
 CREATE TABLE IF NOT EXISTS ema_apps (
   id TEXT NOT NULL PRIMARY KEY,
   client_id TEXT NOT NULL,
   client_secret TEXT NOT NULL DEFAULT '',
+  jwks TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1,
 

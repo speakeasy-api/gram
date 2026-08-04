@@ -25,6 +25,11 @@ type EmaAppOpts struct {
 	// Name overrides the display name. Defaults to the client id.
 	Name string
 
+	// JWKS, when non-empty, is a JWKS document holding the app's public key.
+	// Setting it makes the app authenticate with private_key_jwt, and its
+	// ClientSecret is then ignored.
+	JWKS string
+
 	// Disabled registers the app in the disabled state, which every mint
 	// request then fails against. Defaults to enabled.
 	Disabled bool
@@ -48,6 +53,7 @@ func CreateEmaApp(t *testing.T, ctx context.Context, q *repo.Queries, opts EmaAp
 		ID:           uuid.New(),
 		ClientID:     clientID,
 		ClientSecret: opts.ClientSecret,
+		Jwks:         opts.JWKS,
 		Name:         name,
 		Enabled:      !opts.Disabled,
 	})

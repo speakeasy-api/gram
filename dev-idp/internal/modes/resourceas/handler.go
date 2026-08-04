@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/cimd"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
+	"github.com/speakeasy-api/gram/dev-idp/internal/jwks"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 )
 
@@ -430,9 +431,9 @@ func (h *Handler) verificationKey(ctx context.Context, issuer string, token *jwt
 }
 
 func (h *Handler) discoverJWKSURI(ctx context.Context, issuer string) (string, error) {
-	parsed, err := parseIssuerURL(issuer)
+	parsed, err := jwks.ParseIssuerURL(issuer)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("validate issuer: %w", err)
 	}
 	metadataURL := parsed.Scheme + "://" + parsed.Host + "/.well-known/oauth-authorization-server" + parsed.Path
 
@@ -449,25 +450,16 @@ func (h *Handler) discoverJWKSURI(ctx context.Context, issuer string) (string, e
 }
 
 func (h *Handler) fetchJWKSKey(ctx context.Context, jwksURI, kid string) (*rsa.PublicKey, error) {
-	var doc jwksDocument
+	var doc jwks.Document
 	if err := h.getJSON(ctx, jwksURI, &doc); err != nil {
 		return nil, fmt.Errorf("fetch jwks: %w", err)
 	}
 
-	for _, key := range doc.Keys {
-		if kid != "" && key.Kid != kid {
-			continue
-		}
-		if key.Kty != "RSA" {
-			continue
-		}
-		pub, err := key.rsaPublicKey()
-		if err != nil {
-			return nil, fmt.Errorf("decode jwk %q: %w", key.Kid, err)
-		}
-		return pub, nil
+	key, err := doc.FindRSA(kid)
+	if err != nil {
+		return nil, fmt.Errorf("%w in %s", err, jwksURI)
 	}
-	return nil, fmt.Errorf("no RSA key with kid %q in %s", kid, jwksURI)
+	return key, nil
 }
 
 // authenticateClient checks that whoever is calling is the client the ID-JAG
