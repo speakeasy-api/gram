@@ -219,6 +219,10 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, err
 	}
 
+	if _, err := s.mirrorPublishingState(ctx, dbtx, createdToolset, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to mirror toolset publishing state").LogError(ctx, logger)
+	}
+
 	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -512,6 +516,11 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
 	}
 
+	clearedDomainIDs, err := s.mirrorPublishingState(ctx, dbtx, updatedToolset, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to mirror toolset publishing state").LogError(ctx, logger)
+	}
+
 	var pluginCreated bool
 	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
 		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name)
@@ -596,6 +605,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").LogError(ctx, logger)
 	}
 
+	s.reconcileMirroredDomains(ctx, clearedDomainIDs)
 	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
 
 	return toolsetDetails, nil
@@ -632,6 +642,14 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return err
 	}
 
+	// Tombstone the wrapper mcp_servers/mcp_endpoints projection first —
+	// soft deletes never fire the RESTRICT FK, so without this the wrapper
+	// would keep serving a deleted toolset's tools.
+	clearedDomainIDs, err := s.tombstoneWrapper(ctx, dbtx, toDelete, authCtx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to remove toolset mcp server").LogError(ctx, logger)
+	}
+
 	deleted, err := tr.DeleteToolset(ctx, repo.DeleteToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
@@ -659,6 +677,8 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error saving toolset deletion").LogError(ctx, logger)
 	}
+
+	s.reconcileMirroredDomains(ctx, clearedDomainIDs)
 
 	return nil
 }
@@ -823,6 +843,10 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "could not create unique toolset name").LogError(ctx, logger)
+	}
+
+	if _, err := s.mirrorPublishingState(ctx, dbtx, clonedToolset, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to mirror toolset publishing state").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{

@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -99,11 +100,10 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
 	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		return s.ServeWellKnownProtectedResourceForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case errors.Is(err, mcpendpoints.ErrAddressMiss):
 		// Fall through to the legacy toolset-by-slug lookup below.
 	default:
 		return err
@@ -120,6 +120,8 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
+
+	s.metrics.RecordToolsetSlugFallback(ctx, toolsetFallbackSurfaceProtectedResource, mcpSlug)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
@@ -151,11 +153,10 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
 	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		return s.ServeWellKnownAuthorizationServerForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case errors.Is(err, mcpendpoints.ErrAddressMiss):
 		// Fall through to the legacy toolset-by-slug lookup below.
 	default:
 		return err
@@ -172,6 +173,8 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
+
+	s.metrics.RecordToolsetSlugFallback(ctx, toolsetFallbackSurfaceAuthorizationServer, mcpSlug)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
@@ -237,6 +240,16 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 		if err != nil {
 			return err
 		}
+		// A toolset user-session issuer gates this endpoint even though
+		// the wrapper's own issuer column is NULL: serve the Gram-hosted
+		// metadata shape bound to the endpoint's identity.
+		if toolset.UserSessionIssuerID.Valid {
+			endpoint := newResolvedMcpEndpointFromToolsetBackedServer(mcpEndpoint, mcpServer, toolset, routeBase)
+			if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+				return err
+			}
+			return s.ServeGetProtectedResource(w, r, endpoint)
+		}
 		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
@@ -282,6 +295,16 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
 		if err != nil {
 			return err
+		}
+		// A toolset user-session issuer gates this endpoint even though
+		// the wrapper's own issuer column is NULL: serve the Gram-hosted
+		// metadata shape bound to the endpoint's identity.
+		if toolset.UserSessionIssuerID.Valid {
+			endpoint := newResolvedMcpEndpointFromToolsetBackedServer(mcpEndpoint, mcpServer, toolset, routeBase)
+			if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+				return err
+			}
+			return s.ServeGetAuthorizationServer(w, r, endpoint)
 		}
 		// Today's OAuth machinery is keyed on the toolset's mcp_slug; the
 		// production model assumes mcp_endpoints.slug == toolsets.mcp_slug

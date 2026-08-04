@@ -62,7 +62,9 @@ ORDER BY created_at DESC;
 -- List active endpoints (across every project under the owning org) registered
 -- under a custom domain, with the parent mcp_server name/slug and project
 -- name/slug joined in. Used by the org-scoped domains.listMcpEndpoints handler
--- to preview the impact of a custom domain deletion.
+-- to preview the impact of a custom domain deletion and to populate the
+-- default-MCP-server (domain root) selector. Endpoints whose parent server is
+-- disabled are hidden: they are unroutable and ineligible for root selection.
 SELECT
     e.id,
     e.project_id,
@@ -78,6 +80,8 @@ JOIN projects p ON p.id = e.project_id
 JOIN mcp_servers s ON s.id = e.mcp_server_id
 WHERE e.custom_domain_id = @custom_domain_id::uuid
   AND e.deleted IS FALSE
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
 ORDER BY p.slug, e.slug;
 
 -- name: UpdateMCPEndpoint :one

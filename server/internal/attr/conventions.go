@@ -236,6 +236,7 @@ const (
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
 	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
 	McpMethodKey                        = attribute.Key("gram.mcp.method")
+	McpToolsetFallbackSurfaceKey        = attribute.Key("gram.mcp.toolset_fallback.surface")
 	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey                 = attribute.Key("gram.mcp.tools_filtered")
@@ -1668,6 +1669,13 @@ func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey),
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
+
+func McpToolsetFallbackSurface(v string) attribute.KeyValue {
+	return McpToolsetFallbackSurfaceKey.String(v)
+}
+func SlogMcpToolsetFallbackSurface(v string) slog.Attr {
+	return slog.String(string(McpToolsetFallbackSurfaceKey), v)
+}
 
 func MCPRequestedTags(v []string) attribute.KeyValue { return McpRequestedTagsKey.StringSlice(v) }
 func SlogMCPRequestedTags(v []string) slog.Attr {

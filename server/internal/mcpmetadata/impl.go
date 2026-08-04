@@ -1033,14 +1033,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 // first (via the shared mcpendpoints.BySlugAndCustomDomain helper, mirroring
 // mcp.ServePublic's resolution), then falls back to the legacy
 // toolsets.mcp_slug lookup so platform-domain install pages keep working for
-// customers that pre-date mcp_endpoints. A disabled mcp_server resolves like
-// a 404 and is allowed to fall through to the legacy path, again matching
-// mcp.ServePublic.
+// customers that pre-date mcp_endpoints. Only a true address miss falls
+// back: an endpoint that exists but is unavailable (disabled visibility,
+// dangling server) is authoritative for its slug and renders as not found,
+// again matching mcp.ServePublic.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case errors.Is(err, mcpendpoints.ErrAddressMiss):
 		// Fall through to legacy toolset lookup.
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
@@ -1080,6 +1080,10 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)
 	}
+	s.logger.InfoContext(ctx, "install page resolved via toolset mcp_slug fallback",
+		attr.SlogToolsetMCPSlug(mcpSlug),
+		attr.SlogMcpToolsetFallbackSurface("install_page"),
+	)
 	return &installContext{
 		toolset:      toolset,
 		mcpServer:    nil,
@@ -1276,7 +1280,16 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 		}
 	}
 
-	mcpURL, err := s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
+	// Endpoint-routed installs derive their URL from the mcp_endpoint — its
+	// custom-domain binding and is_domain_root (bare-domain) state are
+	// authoritative for the address the visitor used. The toolset's own
+	// custom_domain_id only drives the direct mcp_slug-routed path.
+	var mcpURL string
+	if ic.mcpEndpoint != nil {
+		mcpURL, err = s.resolveMcpEndpointURL(ctx, ic.mcpEndpoint)
+	} else {
+		mcpURL, err = s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve toolset mcp url").LogError(ctx, s.logger)
 	}

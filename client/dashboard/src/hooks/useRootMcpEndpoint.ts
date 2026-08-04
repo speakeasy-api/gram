@@ -1,5 +1,6 @@
 import { invalidateAllCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints.js";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain.js";
+import { invalidateAllListDomains } from "@gram/client/react-query/listDomains.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import {
   type SetRootMcpEndpointMutationVariables,
@@ -14,6 +15,10 @@ export async function invalidateRootMcpEndpointQueries(
 ): Promise<void> {
   await Promise.all([
     invalidateAllGetDomain(queryClient, { refetchType: "all" }),
+    // OrgDomains reads the domain (and its rootMcpEndpointId) through
+    // listDomains, not getDomain — without this the selector snaps back to
+    // "No root mapping" until a manual reload.
+    invalidateAllListDomains(queryClient, { refetchType: "all" }),
     invalidateAllCustomDomainMcpEndpoints(queryClient, {
       refetchType: "all",
     }),

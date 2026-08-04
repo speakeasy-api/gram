@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -531,10 +532,11 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 // backend dispatch, then RemoteMcpServerID-backed rows proxy via
 // remotemcp and ToolsetID-backed rows delegate to ServeToolsetResolved.
 //
-// On any not-found from endpoint resolution — no matching mcp_endpoint,
-// dangling mcp_endpoint.mcp_server_id FK, or an mcp_server with
-// visibility="disabled" — ServePublic falls back to the legacy
-// toolsets.mcp_slug lookup. The fallback's loadToolset has
+// Only a true addressing miss — no matching mcp_endpoint row at all —
+// falls back to the legacy toolsets.mcp_slug lookup. An endpoint that
+// exists but is unavailable (dangling mcp_endpoint.mcp_server_id FK, or an
+// mcp_server with visibility="disabled") is authoritative for its slug and
+// returns 404 without fallback. The fallback's loadToolset has
 // platform/custom-domain handling distinct from mcp_endpoints'
 // scoping: a platform-context lookup may resolve a toolset bound to a
 // custom domain when no platform-scoped row exists. This asymmetry is
@@ -555,17 +557,18 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
 	// Try mcp_endpoints → mcp_servers first. On hit, dispatch through the
-	// unified backend switch (remote proxy / toolset). On 404, fall through
-	// to the legacy toolset-by-slug path below.
+	// unified backend switch (remote proxy / toolset). Only a true address
+	// miss falls through to the legacy toolset-by-slug path below — an
+	// endpoint that exists but is unavailable (disabled, dangling server) is
+	// authoritative for its slug and stays a 404.
 	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
 			return err
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case errors.Is(err, mcpendpoints.ErrAddressMiss):
 		// Fall through to legacy toolset lookup.
 	default:
 		return err
@@ -586,6 +589,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if err := s.enforceCustomDomainLockdown(ctx, logger, toolset.ProjectID); err != nil {
 		return err
 	}
+
+	s.metrics.RecordToolsetSlugFallback(ctx, toolsetFallbackSurfaceServe, mcpSlug)
 
 	// Legacy toolset-by-slug path has no mcp_server, so there is no
 	// server-level variation group override (ServeToolsetResolved falls back to
