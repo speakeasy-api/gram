@@ -23,7 +23,7 @@ export function UnproxiedMcpToolsSection({
       <div className="border-neutral-softest border-b px-4 py-3">
         <Text small muted>
           Discovered live from the vendor&apos;s server. Tool calls aren&apos;t
-          proxied through Gram.
+          proxied through Speakeasy.
         </Text>
       </div>
       {isDisabled ? (
@@ -77,7 +77,7 @@ function UnproxiedMcpToolsBody({
       <div className="px-4 py-6">
         <Text small muted>
           {data.message ??
-            "This server requires authentication Gram doesn't manage."}
+            "This server requires authentication Speakeasy doesn't manage."}
         </Text>
       </div>
     );

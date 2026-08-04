@@ -155,7 +155,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           key: "server-url",
           label: "Server URL",
           description: isUnproxied
-            ? "Not applicable — unproxied servers have no Gram-hosted endpoint."
+            ? "Not applicable — unproxied servers have no Speakeasy-hosted endpoint."
             : mcpUrl
               ? "Endpoint is live and ready to connect to."
               : "Add an endpoint so this server has a URL to connect to.",

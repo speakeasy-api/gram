@@ -50,7 +50,7 @@ export function AuthenticationSection({
           <SettingsSection.Title>Authentication</SettingsSection.Title>
           <SettingsSection.Description>
             {isUnproxied
-              ? "Gram doesn't manage authentication for unproxied servers."
+              ? "Speakeasy doesn't manage authentication for unproxied servers."
               : "Configure user sessions and, when required, upstream identity providers for clients connecting to this server."}
           </SettingsSection.Description>
         </SettingsSection.Header>
@@ -85,7 +85,7 @@ function UnproxiedAuthenticationNotice(): JSX.Element {
       </div>
       <FieldDescription>
         The customer connects directly using the vendor&apos;s own credentials —
-        there&apos;s nothing for Gram to configure here.
+        there&apos;s nothing for Speakeasy to configure here.
       </FieldDescription>
     </Field>
   );

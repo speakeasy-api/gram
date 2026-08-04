@@ -102,9 +102,9 @@ export default function UnproxiedMCPDetails(): JSX.Element {
             )}
 
             <Text muted small>
-              This server is listed but never proxied — Gram doesn&apos;t fetch
-              its URL or manage OAuth for it. Customers connect to the vendor
-              directly.
+              This server is listed but never proxied — Speakeasy doesn&apos;t
+              fetch its URL or manage OAuth for it. Customers connect to the
+              vendor directly.
             </Text>
 
             <RequireScope scope="mcp:write" level="component">

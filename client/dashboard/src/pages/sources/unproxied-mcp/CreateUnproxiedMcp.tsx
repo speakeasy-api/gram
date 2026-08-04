@@ -114,7 +114,7 @@ function CreateUnproxiedMcpForm() {
           </Stack>
         </Stack>
         <Text muted>
-          List a vendor&apos;s MCP server without proxying it. Gram never
+          List a vendor&apos;s MCP server without proxying it. Speakeasy never
           fetches this URL or manages OAuth for it — the customer connects to
           the vendor directly. Use this to sidestep per-vendor OAuth callback
           allowlisting for servers we don&apos;t need to proxy.
