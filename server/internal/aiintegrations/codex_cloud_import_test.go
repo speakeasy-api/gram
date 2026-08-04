@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -380,4 +383,65 @@ func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 	require.NoError(t, err)
 	// Chat and message share the one resolved import-time fallback.
 	require.WithinDuration(t, time.Now().UTC(), chatRow.CreatedAt.Time.UTC(), time.Minute)
+}
+
+// TestSyncCodexCloudSessionsRejectsMisconfiguredIntegrations: the cloud
+// transcript feed is workspace-scoped and lives on chatgpt_compliance, while
+// Codex cost data lives on codex_compliance. Pointing this importer at the
+// wrong provider must fail loudly — running it anyway would import against the
+// wrong credential and surface as confusing data rather than an error. The
+// workspace id is likewise required: without it the client cannot scope its
+// requests at all.
+func TestSyncCodexCloudSessionsRejectsMisconfiguredIntegrations(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, _ := newStoreTestDB(t)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+
+	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	now := time.Now().UTC()
+
+	err := svc.SyncCodexCloudSessions(ctx, Config{
+		Provider:               ProviderCodexCompliance,
+		ExternalOrganizationID: &workspaceID,
+	}, now)
+	require.Error(t, err, "the codex cost provider must not drive the cloud transcript import")
+	require.Contains(t, err.Error(), ProviderCodexCompliance)
+
+	err = svc.SyncCodexCloudSessions(ctx, Config{
+		Provider:               ProviderChatGPTCompliance,
+		ExternalOrganizationID: nil,
+	}, now)
+	require.Error(t, err, "the workspace id scopes every request and cannot be absent")
+	require.Contains(t, err.Error(), "external_organization_id")
+}
+
+// TestCodexCloudRetryAfterOnlyBacksOffOnRateLimits: a 429 must park the sync
+// for the poller to retry, while any other failure surfaces. The match is an
+// errors.As against the client's typed error, so wrapping changes upstream can
+// silently turn a retryable rate limit into a hard failure — or worse, make
+// every error look retryable and spin.
+func TestCodexCloudRetryAfterOnlyBacksOffOnRateLimits(t *testing.T) {
+	t.Parallel()
+
+	src := &codexCloudSource{}
+
+	_, retry := src.RetryAfter(&codexapi.HTTPError{StatusCode: http.StatusTooManyRequests})
+	require.True(t, retry, "a 429 must be retried")
+
+	// Still a rate limit after the poller wraps it on the way up.
+	_, retry = src.RetryAfter(fmt.Errorf("fetch page: %w", &codexapi.HTTPError{StatusCode: http.StatusTooManyRequests}))
+	require.True(t, retry, "wrapping must not hide the rate limit")
+
+	for _, err := range []error{
+		&codexapi.HTTPError{StatusCode: http.StatusInternalServerError},
+		&codexapi.HTTPError{StatusCode: http.StatusUnauthorized},
+		errors.New("connection reset"),
+		nil,
+	} {
+		_, retry = src.RetryAfter(err)
+		require.False(t, retry, "only a 429 is retryable: %v", err)
+	}
 }
