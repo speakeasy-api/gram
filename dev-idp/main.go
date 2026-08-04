@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
+	"github.com/speakeasy-api/gram/dev-idp/internal/modes/resourceas"
 	devidpworkos "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/service"
 	"github.com/speakeasy-api/gram/dev-idp/internal/workos"
@@ -135,6 +136,16 @@ func run() error {
 	)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21Handler.Handler()))
 	oauth21Handler.RegisterRootRoutes(outer)
+
+	// Resource authorization servers -- the redeeming half of cross-app
+	// access. One per xaa_resources row, addressed by slug, so a request can
+	// arrive here before any resource is configured and simply 404.
+	resourceASHandler := resourceas.NewHandler(
+		resourceas.Config{ExternalURL: pubURL},
+		ks, logger, tp, db,
+	)
+	outer.Handle(resourceas.Prefix+"/", http.StripPrefix(resourceas.Prefix, resourceASHandler.Handler()))
+	resourceASHandler.RegisterRootRoutes(outer)
 
 	// The WorkOS surface always mounts at the same prefix; only what backs
 	// it changes. That keeps WORKOS_API_URL a constant across backends.

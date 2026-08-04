@@ -688,6 +688,55 @@ func (q *Queries) CreateXaaResource(ctx context.Context, arg CreateXaaResourcePa
 	return i, err
 }
 
+const createXaaResourceToken = `-- name: CreateXaaResourceToken :one
+
+INSERT INTO xaa_resource_tokens (
+  token, resource_id, user_id, client_id, audience, scope, expires_at
+)
+VALUES (
+  ?1, ?2, ?3, ?4, ?5, ?6, ?7
+)
+RETURNING token, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at
+`
+
+type CreateXaaResourceTokenParams struct {
+	Token      string
+	ResourceID uuid.UUID
+	UserID     uuid.UUID
+	ClientID   string
+	Audience   string
+	Scope      string
+	ExpiresAt  time.Time
+}
+
+// =============================================================================
+// xaa_resource_tokens
+// =============================================================================
+func (q *Queries) CreateXaaResourceToken(ctx context.Context, arg CreateXaaResourceTokenParams) (XaaResourceToken, error) {
+	row := q.db.QueryRowContext(ctx, createXaaResourceToken,
+		arg.Token,
+		arg.ResourceID,
+		arg.UserID,
+		arg.ClientID,
+		arg.Audience,
+		arg.Scope,
+		arg.ExpiresAt,
+	)
+	var i XaaResourceToken
+	err := row.Scan(
+		&i.Token,
+		&i.ResourceID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Audience,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createXaaTrustRule = `-- name: CreateXaaTrustRule :one
 
 INSERT INTO xaa_trust_rules (
@@ -865,6 +914,40 @@ func (q *Queries) GetActiveToken(ctx context.Context, arg GetActiveTokenParams) 
 		&i.UserID,
 		&i.ClientID,
 		&i.Kind,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getActiveXaaResourceToken = `-- name: GetActiveXaaResourceToken :one
+SELECT token, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at FROM xaa_resource_tokens
+WHERE token = ?1
+  AND resource_id = ?2
+  AND revoked_at IS NULL
+  AND expires_at > ?3
+`
+
+type GetActiveXaaResourceTokenParams struct {
+	Token      string
+	ResourceID uuid.UUID
+	Ts         time.Time
+}
+
+// GetActiveXaaResourceToken resolves a bearer token presented back to the
+// resource authorization server that minted it. Scoped by resource_id so a
+// token minted by one resource cannot be introspected at another.
+func (q *Queries) GetActiveXaaResourceToken(ctx context.Context, arg GetActiveXaaResourceTokenParams) (XaaResourceToken, error) {
+	row := q.db.QueryRowContext(ctx, getActiveXaaResourceToken, arg.Token, arg.ResourceID, arg.Ts)
+	var i XaaResourceToken
+	err := row.Scan(
+		&i.Token,
+		&i.ResourceID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Audience,
 		&i.Scope,
 		&i.ExpiresAt,
 		&i.RevokedAt,
