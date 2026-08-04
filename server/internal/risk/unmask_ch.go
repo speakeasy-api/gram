@@ -427,16 +427,25 @@ func (s *Service) derivedUnmaskCandidates(ctx context.Context, chatID uuid.UUID,
 	case "custom":
 		// Custom CEL rules can match on the derived tool.server / tool.function
 		// strings, which are computed from a recorded call name rather than
-		// stored anywhere. Offer both derivations for every recorded call and
-		// let the length gate pick the one the finding stored.
+		// stored anywhere. The recorded field selects which derivation to
+		// offer: emitting both would let an equal-length value from the other
+		// field win the length gate and be served as the match.
+		wantFunction := row.Field == "tool.function"
+		wantServer := row.Field == "tool.server"
+		if !wantFunction && !wantServer {
+			return nil
+		}
 		var out [][]byte
 		for _, call := range anchor.toolCalls {
 			name := call.Function.Name
 			if name == "" {
 				continue
 			}
-			if fn := toolref.MCPFunctionOf(name); fn != "" {
-				out = append(out, []byte(fn))
+			if wantFunction {
+				if fn := toolref.MCPFunctionOf(name); fn != "" {
+					out = append(out, []byte(fn))
+				}
+				continue
 			}
 			if srv := toolref.MCPServerOf(name); srv != "" {
 				out = append(out, []byte(srv))

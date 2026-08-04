@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // unmaskFinding is one ClickHouse risk_findings fixture row for the reveal
@@ -831,4 +832,71 @@ func TestUnmaskRiskResult_ClickHouseForeignChatAnchorNotFound(t *testing.T) {
 
 	_, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestUnmaskRiskResult_ClickHouseCustomDerivedFieldScoped pins that a custom
+// rule's derived reveal is scoped to the field the finding recorded: with a
+// tool name whose server and function halves are the same length, the length
+// gate alone cannot tell them apart, so the field must.
+func TestUnmaskRiskResult_ClickHouseCustomDerivedFieldScoped(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	// Equal-length server and function halves: "payments" and "transfer" are
+	// both 8 bytes, so match_len cannot discriminate.
+	toolName := "mcp__payments__transfer"
+	server := toolref.MCPServerOf(toolName)
+	function := toolref.MCPFunctionOf(toolName)
+	require.Len(t, server, len(function), "fixture needs equal-length halves to exercise the gate")
+
+	repo := riskrepo.New(ti.conn)
+	chatID, err := repo.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID: projectID, OrganizationID: orgID, UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	msgID, err := repo.CreateChatMessageWithToolCallsForTest(ctx, riskrepo.CreateChatMessageWithToolCallsForTestParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+		Role:      "assistant",
+		Content:   "",
+		ToolCalls: []byte(`[{"id":"call_1","function":{"name":"` + toolName + `","arguments":"{}"}}]`),
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+
+	base := unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: msgID.String(),
+		chatID:        chatID.String(),
+		source:        "custom",
+		ruleID:        "custom.tool_guard",
+		matchLen:      uint32(len(server)),
+		matchRedacted: "paym**ts",
+		surface:       "derived",
+	}
+
+	base.field = "tool.server"
+	serverRow := insertUnmaskFinding(t, ti, base)
+
+	base.id = uuid.Nil
+	base.field = "tool.function"
+	functionRow := insertUnmaskFinding(t, ti, base)
+
+	res, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: serverRow.String()})
+	require.NoError(t, err)
+	require.Equal(t, server, res.Match, "a tool.server finding reveals the server half")
+
+	res, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: functionRow.String()})
+	require.NoError(t, err)
+	require.Equal(t, function, res.Match, "a tool.function finding reveals the function half")
 }
