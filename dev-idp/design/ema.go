@@ -42,6 +42,7 @@ var _ = Service("emaApps", func() {
 		Payload(func() {
 			Attribute("client_id", String, "Client id used at the token endpoint. Must be unique.")
 			Attribute("client_secret", String, "Omit or leave empty to register a public client.")
+			Attribute("jwks", String, "JWKS document holding the app's public key. Set this to require private_key_jwt.")
 			Attribute("name", String, "Display name; defaults to the client id.")
 			Attribute("enabled", Boolean, "Defaults to true.")
 			Required("client_id")
@@ -64,6 +65,7 @@ var _ = Service("emaApps", func() {
 			})
 			Attribute("client_id", String, "Client id.")
 			Attribute("client_secret", String, "Client secret.")
+			Attribute("jwks", String, "JWKS document holding the app's public key.")
 			Attribute("name", String, "Display name.")
 			Attribute("enabled", Boolean, "Enabled flag; always rewritten when supplied.")
 			Required("id")

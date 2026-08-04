@@ -242,6 +242,7 @@ func TestMintIDJAGRejectsDisabledApp(t *testing.T) {
 		ID:           f.app.ID,
 		ClientID:     sql.NullString{String: "", Valid: false},
 		ClientSecret: sql.NullString{String: "", Valid: false},
+		Jwks:         sql.NullString{String: "", Valid: false},
 		Name:         sql.NullString{String: "", Valid: false},
 		Enabled:      false,
 		Ts:           time.Now(),

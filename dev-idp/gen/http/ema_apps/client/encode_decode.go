@@ -296,6 +296,7 @@ func unmarshalEmaAppResponseBodyToEmaappsEmaApp(v *EmaAppResponseBody) *emaapps.
 		ID:           *v.ID,
 		ClientID:     *v.ClientID,
 		ClientSecret: *v.ClientSecret,
+		Jwks:         *v.Jwks,
 		Name:         *v.Name,
 		Enabled:      *v.Enabled,
 		CreatedAt:    *v.CreatedAt,

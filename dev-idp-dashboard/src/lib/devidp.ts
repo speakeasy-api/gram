@@ -64,6 +64,8 @@ export interface EmaApp {
   id: string;
   client_id: string;
   client_secret: string;
+  /** JWKS document; when set the app authenticates with private_key_jwt. */
+  jwks: string;
   name: string;
   enabled: boolean;
   created_at: string;
@@ -228,6 +230,7 @@ export const api = {
     create: (p: {
       client_id: string;
       client_secret?: string;
+      jwks?: string;
       name?: string;
       enabled?: boolean;
     }) => rpc<typeof p, EmaApp>("emaApps.create", p),
@@ -235,6 +238,7 @@ export const api = {
       id: string;
       client_id?: string;
       client_secret?: string;
+      jwks?: string;
       name?: string;
       enabled?: boolean;
     }) => rpc<typeof p, EmaApp>("emaApps.update", p),

@@ -50,6 +50,11 @@ const (
 	TokenTypeIDToken      = "urn:ietf:params:oauth:token-type:id_token"      //nolint:gosec // G101: registered URN, not a credential
 	TokenTypeRefreshToken = "urn:ietf:params:oauth:token-type:refresh_token" //nolint:gosec // G101: registered URN, not a credential
 
+	// ClientAssertionTypeJWTBearer is the `client_assertion_type` an app sends
+	// when authenticating with private_key_jwt (RFC 7523 §2.2) rather than a
+	// shared secret. Enterprise IdPs commonly mandate this for the mint leg.
+	ClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" //nolint:gosec // G101: registered URN, not a credential
+
 	// GrantProfileIDJAG is advertised by a resource authorization server in
 	// `authorization_grant_profiles_supported`. An MCP client checks for
 	// exactly this value to decide whether a server speaks the profile.

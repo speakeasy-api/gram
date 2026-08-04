@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import {
   Cell,
   DeleteButton,
-  OrDash,
   Row,
   Section,
   Table,
@@ -31,6 +30,7 @@ function AppsPage() {
 
   const [clientID, setClientID] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [jwks, setJwks] = useState("");
   const [name, setName] = useState("");
 
   const submit = () => {
@@ -39,12 +39,14 @@ function AppsPage() {
       {
         client_id: clientID.trim(),
         client_secret: clientSecret.trim() || undefined,
+        jwks: jwks.trim() || undefined,
         name: name.trim() || undefined,
       },
       {
         onSuccess: () => {
           setClientID("");
           setClientSecret("");
+          setJwks("");
           setName("");
         },
       },
@@ -54,7 +56,7 @@ function AppsPage() {
   return (
     <Section
       title="Apps"
-      description="Clients allowed to ask the IdP for an ID-JAG on a user's behalf. An app with no secret is a public client and authenticates by client_id alone. Registering an app grants it nothing on its own — that is what assignments are for."
+      description="Clients allowed to ask the IdP for an ID-JAG on a user's behalf. How an app authenticates follows from what it registers: a JWKS means private_key_jwt (what real enterprise IdPs mandate, and it wins over a secret), a secret alone means client_secret_post, neither means a public client. Registering an app grants it nothing on its own — that is what assignments are for."
     >
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border p-3">
         <div className="flex flex-col gap-1.5">
@@ -87,6 +89,16 @@ function AppsPage() {
             className="w-56"
           />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="app-jwks">JWKS</Label>
+          <Input
+            id="app-jwks"
+            value={jwks}
+            onChange={(e) => setJwks(e.target.value)}
+            placeholder='{"keys":[…]} — requires private_key_jwt'
+            className="w-72"
+          />
+        </div>
         <Button
           onClick={submit}
           disabled={!clientID.trim() || create.isPending}
@@ -100,7 +112,7 @@ function AppsPage() {
       ) : null}
 
       <Table
-        headers={["Client ID", "Name", "Secret", "Enabled", ""]}
+        headers={["Client ID", "Name", "Authenticates with", "Enabled", ""]}
         isEmpty={(data?.items ?? []).length === 0}
         empty={isLoading ? "Loading…" : "No apps registered."}
       >
@@ -109,7 +121,11 @@ function AppsPage() {
             <Cell mono>{app.client_id}</Cell>
             <Cell>{app.name}</Cell>
             <Cell mono>
-              <OrDash value={app.client_secret ? "set" : ""} />
+              {app.jwks
+                ? "private_key_jwt"
+                : app.client_secret
+                  ? "client_secret_post"
+                  : "none (public)"}
             </Cell>
             <Cell>
               <Button

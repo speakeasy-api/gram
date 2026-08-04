@@ -23,12 +23,13 @@ func BuildCreatePayload(emaAppsCreateBody string) (*emaapps.CreatePayload, error
 	{
 		err = json.Unmarshal([]byte(emaAppsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
 		}
 	}
 	v := &emaapps.CreatePayload{
 		ClientID:     body.ClientID,
 		ClientSecret: body.ClientSecret,
+		Jwks:         body.Jwks,
 		Name:         body.Name,
 		Enabled:      body.Enabled,
 	}
@@ -44,7 +45,7 @@ func BuildUpdatePayload(emaAppsUpdateBody string) (*emaapps.UpdatePayload, error
 	{
 		err = json.Unmarshal([]byte(emaAppsUpdateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -55,6 +56,7 @@ func BuildUpdatePayload(emaAppsUpdateBody string) (*emaapps.UpdatePayload, error
 		ID:           body.ID,
 		ClientID:     body.ClientID,
 		ClientSecret: body.ClientSecret,
+		Jwks:         body.Jwks,
 		Name:         body.Name,
 		Enabled:      body.Enabled,
 	}

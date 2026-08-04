@@ -1,7 +1,12 @@
 package oauth21
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -140,4 +146,77 @@ func (h *dbHandler) seedRefreshToken(t *testing.T, user repo.User) string {
 	})
 	require.NoError(t, err, "seed refresh token")
 	return value
+}
+
+// seedAppWithJWKS registers an app that authenticates with private_key_jwt,
+// returning the app row and the private key it must sign assertions with.
+func (h *dbHandler) seedAppWithJWKS(t *testing.T, clientID string) (repo.EmaApp, *rsa.PrivateKey, string) {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err, "generate app key")
+
+	const kid = "app-key-1"
+	doc, err := json.Marshal(map[string]any{
+		"keys": []map[string]string{{
+			"kty": "RSA",
+			"use": "sig",
+			"alg": "RS256",
+			"kid": kid,
+			"n":   base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+			"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
+		}},
+	})
+	require.NoError(t, err, "marshal app jwks")
+
+	app, err := h.queries.CreateEmaApp(t.Context(), repo.CreateEmaAppParams{
+		ID:           uuid.New(),
+		ClientID:     clientID,
+		ClientSecret: "",
+		Jwks:         string(doc),
+		Name:         clientID,
+		Enabled:      true,
+	})
+	require.NoError(t, err, "seed private_key_jwt app")
+	return app, key, kid
+}
+
+// clientAssertionOpts describes an assertion to sign. The zero value is not
+// useful; start from defaultClientAssertion.
+type clientAssertionOpts struct {
+	Issuer   string
+	Subject  string
+	Audience string
+	Expires  time.Time
+	Key      *rsa.PrivateKey
+	KID      string
+}
+
+func (h *dbHandler) defaultClientAssertion(clientID string, key *rsa.PrivateKey, kid string) clientAssertionOpts {
+	return clientAssertionOpts{
+		Issuer:   clientID,
+		Subject:  clientID,
+		Audience: testExternalURL + Prefix,
+		Expires:  time.Now().Add(2 * time.Minute),
+		Key:      key,
+		KID:      kid,
+	}
+}
+
+func signClientAssertion(t *testing.T, opts clientAssertionOpts) string {
+	t.Helper()
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
+		ID:        uuid.NewString(),
+		Issuer:    opts.Issuer,
+		Subject:   opts.Subject,
+		Audience:  jwt.ClaimStrings{opts.Audience},
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(opts.Expires),
+		NotBefore: nil,
+	})
+	token.Header["kid"] = opts.KID
+	signed, err := token.SignedString(opts.Key)
+	require.NoError(t, err, "sign client assertion")
+	return signed
 }
