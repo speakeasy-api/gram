@@ -105,7 +105,7 @@ func TestClaude_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	scanner := &recordingRiskScanner{}
-	ti.service.riskScanner = scanner
+	ti.service.enforcer.riskScanner = scanner
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -142,7 +142,7 @@ func TestClaude_PreToolUse_SpendGateDeniesNativeTool(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	scanner := &recordingRiskScanner{}
-	ti.service.riskScanner = scanner
+	ti.service.enforcer.riskScanner = scanner
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -383,7 +383,7 @@ func TestCodex_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	scanner := &recordingRiskScanner{}
-	ti.service.riskScanner = scanner
+	ti.service.enforcer.riskScanner = scanner
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -512,7 +512,7 @@ func TestCursor_PreToolUse_SpendGateDeniesNativeToolWithBlockURL(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	scanner := &recordingRiskScanner{}
-	ti.service.riskScanner = scanner
+	ti.service.enforcer.riskScanner = scanner
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/agenthooks"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -29,10 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
-	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -42,6 +41,14 @@ import (
 )
 
 type Service struct {
+	// enforcer owns the enforcement dependencies and primitives (riskScanner,
+	// siteURL, jwtSecret, block rows, shadow-MCP evaluation, ...) with its
+	// own copies of the general infra (logger, cache, repo). It is the same
+	// *Enforcer whose method values the cmd wiring hands to the policy
+	// constructors (cmd/gram/hook_policies.go), so a test swapping one of
+	// its fields after construction (ti.service.enforcer.riskScanner = ...)
+	// mutates the state the policy runner's stages read at call time.
+	enforcer           *Enforcer
 	tracer             trace.Tracer
 	metrics            *metrics
 	logger             *slog.Logger
@@ -54,10 +61,6 @@ type Service struct {
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
-	riskScanner        risk.RiskScanner
-	policyBypass       *risk.PolicyBypassEvaluator
-	spendGate          *spendrules.Gate
-	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
@@ -66,8 +69,14 @@ type Service struct {
 	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
 	serverURL          *url.URL
-	siteURL            *url.URL
-	jwtSecret          string
+	// policies is the ingest decision pipeline: the agenthooks event router
+	// the canonical Ingest path runs its gating policies on (see the cmd
+	// builder in cmd/gram/hook_policies.go for the registration block
+	// documenting the run order).
+	// Constructed in cmd from the same Enforcer this Service holds
+	// and passed into NewService, so the stages read the dependencies tests
+	// swap (enforcer.riskScanner, enforcer.siteURL, ...) at call time.
+	policies *agenthooks.Runner
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
@@ -199,18 +208,15 @@ func NewService(
 	authz *authz.Engine,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
-	riskScanner risk.RiskScanner,
-	policyBypass *risk.PolicyBypassEvaluator,
-	spendGate *spendrules.Gate,
-	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	efficacySignaler efficacy.Signaler,
 	suggestionSignaler suggest.Signaler,
 	serverURL *url.URL,
-	siteURL *url.URL,
-	jwtSecret string,
+	enforcer *Enforcer,
+	policyRunner *agenthooks.Runner,
 ) *Service {
 	return &Service{
+		enforcer:           enforcer,
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
 		logger:             logger.With(attr.SlogComponent("hooks")),
@@ -223,16 +229,11 @@ func NewService(
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
-		riskScanner:        riskScanner,
-		policyBypass:       policyBypass,
-		spendGate:          spendGate,
-		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		efficacySignaler:   efficacySignaler,
 		suggestionSignaler: suggestionSignaler,
 		serverURL:          serverURL,
-		siteURL:            siteURL,
-		jwtSecret:          jwtSecret,
+		policies:           policyRunner,
 		nowFunc:            time.Now,
 	}
 }
@@ -323,17 +324,17 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 // back to permissive behaviour. Flag-action policies are intentionally ignored
 // here — they surface as findings via the batch scanner instead of denying at
 // the hook layer.
-func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
-	if s.riskScanner == nil || projectID == "" {
+func (e *Enforcer) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
+	if e.riskScanner == nil || projectID == "" {
 		return nil
 	}
 	pid, err := uuid.Parse(projectID)
 	if err != nil {
 		return nil
 	}
-	policy, err := s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, organizationID, pid, userID)
+	policy, err := e.riskScanner.LookupShadowMCPBlockingPolicy(ctx, organizationID, pid, userID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to look up shadow_mcp policy; defaulting to off",
+		e.logger.WarnContext(ctx, "failed to look up shadow_mcp policy; defaulting to off",
 			attr.SlogError(err),
 		)
 		return nil

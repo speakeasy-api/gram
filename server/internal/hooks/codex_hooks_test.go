@@ -17,7 +17,7 @@ import (
 func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-blocked"
 	toolName := "mcp__gram__do_thing"
@@ -43,7 +43,7 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(
 func TestCodex_PreToolUse_ShadowMCPAllowsGramHostedMetaTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-gram-mcp-meta-tool"
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
@@ -78,7 +78,7 @@ func TestCodex_PreToolUse_ShadowMCPAllowsGramHostedMetaTool(t *testing.T) {
 func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-external-mcp-meta-tool"
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
@@ -117,7 +117,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 func TestCodex_PreToolUse_ShadowMCPBlocksUnverifiedMetaTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-unverified-mcp-meta-tool"
 	toolName := "list_mcp_resources"
@@ -150,7 +150,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksMetaToolMissingServer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestHooksService(t)
-			ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+			ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 			sessionID := "codex-session-missing-meta-server-" + name
 			toolName := "list_mcp_resources"
@@ -183,7 +183,7 @@ func TestCodex_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing
 	hookUserID := "codex-hook-user"
 	hookUserEmail := "codex-hook-user@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
-	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+	ti.service.enforcer.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
 
 	sessionID := "codex-session-specific-user-policy"
 	toolName := "mcp__gram__do_thing"
@@ -226,7 +226,7 @@ func TestCodex_UserPromptSubmit_ScansViaHookEvents(t *testing.T) {
 			Description: "blocked prompt",
 		},
 	}
-	ti.service.riskScanner = scanner
+	ti.service.enforcer.riskScanner = scanner
 
 	sessionID := "codex-session-risk-scan"
 	userEmail := "dev@example.com"

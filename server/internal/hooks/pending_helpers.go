@@ -33,8 +33,10 @@ func withHookDuplicate(ctx context.Context) context.Context {
 	return context.WithValue(ctx, hookDuplicateContextKey{}, true)
 }
 
-// isHookDuplicate reports whether ctx was tagged as a redelivery.
-func (s *Service) isHookDuplicate(ctx context.Context) bool {
+// isHookDuplicate reports whether ctx was tagged as a redelivery. It hangs
+// off the Enforcer (rather than Service) so the policy-facing facade methods
+// can check it; Service callers reach it via s.enforcer.
+func (e *Enforcer) isHookDuplicate(ctx context.Context) bool {
 	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)
 	return dup
 }

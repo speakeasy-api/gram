@@ -3,6 +3,7 @@ package litellm
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"sync"
@@ -14,7 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/agenthooks"
+
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -22,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	hookpolicies "github.com/speakeasy-api/gram/server/internal/hooks/policies"
 	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
@@ -98,6 +103,34 @@ func (r *recordingMessageObserver) count(projectID uuid.UUID) int {
 	return count
 }
 
+// newTestPolicyRunner mirrors the cmd registration block (newHookPolicyRunner
+// in cmd/gram/hook_policies.go): tests cannot import package gram's cmd, so
+// the same policies are registered here in the same pinned order from the
+// same Enforcer method values. Keep the two blocks in sync.
+func newTestPolicyRunner(logger *slog.Logger, enforcer *hooks.Enforcer) *agenthooks.Runner {
+	r := agenthooks.New(agenthooks.WithLogger(logger.With(attr.SlogComponent("hooks"))))
+
+	r.Use(hookpolicies.ActorResolution)
+
+	r.OnPromptSubmitted(
+		hookpolicies.SpendGatePrompt(enforcer.CheckSpend),
+		hookpolicies.RiskScanPromptGate(enforcer.ScanPrompt, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+	)
+	r.OnToolPre(
+		hookpolicies.SpendGateToolPre(enforcer.CheckSpend, enforcer.AppendBlockPageURL),
+		hookpolicies.RiskScanToolPreGate(enforcer.ScanToolRequest, enforcer.ScanMCPToolRequest, enforcer.AppendBlockPageURL, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+		hookpolicies.ShadowMCPToolPreGate(enforcer.EvaluateShadowMCP),
+	)
+	r.OnPermission(
+		hookpolicies.SpendGatePermission(enforcer.CheckSpend, enforcer.AppendBlockPageURL),
+		hookpolicies.RiskScanPermissionGate(enforcer.ScanPermissionRequest, enforcer.AppendBlockPageURL, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+		hookpolicies.RiskScanPermissionToolGate(enforcer.ScanToolRequest, enforcer.ScanMCPToolRequest, enforcer.AppendBlockPageURL, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+		hookpolicies.ShadowMCPPermissionGate(enforcer.EvaluateShadowMCP),
+	)
+
+	return r
+}
+
 func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context, *realTestInstance) {
 	t.Helper()
 	return newRealTestServiceWithScannerFactory(t, func(*pgxpool.Pool) risk.RiskScanner { return scanner })
@@ -145,6 +178,17 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	require.NoError(t, err)
 	spendGate, err := spendrules.NewGate(logger, cacheAdapter, spendEngine)
 	require.NoError(t, err)
+	hooksEnforcer := hooks.NewEnforcer(
+		logger,
+		conn,
+		cacheAdapter,
+		scanner,
+		risk.NewPolicyBypassEvaluator(logger, conn),
+		spendGate,
+		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
+		siteURL,
+		"test-jwt-secret",
+	)
 	hookService := hooks.NewService(
 		logger,
 		conn,
@@ -158,16 +202,12 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		authzEngine,
 		captureEnabledFeatures{},
 		nil,
-		scanner,
-		risk.NewPolicyBypassEvaluator(logger, conn),
-		spendGate,
-		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
 		chatWriter,
 		nil,
 		nil,
 		serverURL,
-		siteURL,
-		"test-jwt-secret",
+		hooksEnforcer,
+		newTestPolicyRunner(logger, hooksEnforcer),
 	)
 	calls := callcache.New(cacheAdapter)
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)

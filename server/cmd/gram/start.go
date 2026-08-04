@@ -1150,6 +1150,21 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				completionsClient,
 			))
+			// The enforcer is shared by the hooks service and the ingest
+			// policy runner (its method values are the runner's policy
+			// deps): one copy of each enforcement dependency, read by both
+			// at call time.
+			hooksEnforcer := hooks.NewEnforcer(
+				logger,
+				db,
+				hooksCache,
+				riskScanner,
+				policyBypass,
+				spendGate,
+				shadowMCPClient,
+				siteURL,
+				c.String("jwt-signing-key"),
+			)
 			hooksService := hooks.NewService(
 				logger,
 				db,
@@ -1163,16 +1178,12 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				productFeatures,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
-				riskScanner,
-				policyBypass,
-				spendGate,
-				shadowMCPClient,
 				chatWriter,
 				efficacySignaler,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
 				serverURL,
-				siteURL,
-				c.String("jwt-signing-key"),
+				hooksEnforcer,
+				newHookPolicyRunner(logger, hooksEnforcer),
 			)
 			hooks.Attach(mux, hooksService)
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, productFeatures, auditLogger, c.String("environment"))

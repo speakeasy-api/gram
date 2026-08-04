@@ -273,7 +273,7 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	}
 	// Spend gate runs before any risk-policy evaluation: an over-budget user
 	// is denied outright.
-	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+	if block := s.enforcer.checkSpendGate(ctx, ev.Event); block != nil {
 		reason := spendBlockReason("prompt", block)
 		if payload.SessionID != nil && s.claimBlockedPromptTelemetry(ctx, payload) {
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
@@ -282,8 +282,8 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 		}
 		return constructBlockResponse(payload.HookEventName, reason), nil
 	}
-	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+	if s.enforcer.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
+		if scanResult := s.enforcer.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			// Warn (challenge) defers to the tool call: Claude Code can only show
 			// a native [y/n] confirmation at PreToolUse, not at prompt submit.
 			// Never hard-block a warn here — let the prompt through so the

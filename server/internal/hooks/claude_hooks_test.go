@@ -207,7 +207,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	// lookupShadowMCPBlockingPolicy needs a non-nil scanner that reports a
 	// blocking shadow-MCP policy, otherwise the handler short-circuits to
 	// allow before the cached-MCP-list check runs.
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -248,7 +248,7 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -281,7 +281,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__plugin_slack_slack__send_message"
@@ -321,7 +321,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__mise__install_tool"
@@ -362,7 +362,7 @@ func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testin
 	hookUserID := "claude-hook-user"
 	hookUserEmail := "claude-hook-user@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
-	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+	ti.service.enforcer.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__mise__install_tool"
@@ -396,7 +396,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -436,7 +436,7 @@ func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -480,7 +480,7 @@ func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__notion__search"
@@ -520,7 +520,7 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -571,7 +571,7 @@ func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -638,7 +638,7 @@ func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testin
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"

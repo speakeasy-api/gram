@@ -180,7 +180,7 @@ func TestIngest_BlockedInferredSkillIsNotObserved(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 
 	toolName, identity := "mcp__local_server__search", "local-server"
 	payload := skillPayload("codex", "tool.requested", "blocked-observation", "repo-review", "")
@@ -213,7 +213,7 @@ func TestIngest_OnlyDurableSkillObservationWakesEfficacy(t *testing.T) {
 	_, err = ti.service.Ingest(failedCtx, skillPayload("claude", eventTypeSkillActivated, "failed-session", "repo-review", ""))
 	require.NoError(t, err)
 
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 	toolName, identity := "mcp__local_server__search", "local-server"
 	blocked := skillPayload("codex", "tool.requested", "blocked-session", "repo-review", "")
 	blocked.Data.ToolCall = &gen.HookToolCallData{Name: &toolName, Input: map[string]any{"query": "x"}}

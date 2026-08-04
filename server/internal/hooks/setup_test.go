@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"slices"
@@ -18,8 +19,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/agenthooks"
+
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -27,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/policies"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -139,6 +144,34 @@ func (c *namespacedSpendGateCache) DeleteByPrefix(ctx context.Context, prefix st
 	return nil
 }
 
+// newTestPolicyRunner mirrors the cmd registration block (newHookPolicyRunner
+// in cmd/gram/hook_policies.go): tests cannot import package gram's cmd, so
+// the same policies are registered here in the same pinned order from the
+// same Enforcer method values. Keep the two blocks in sync.
+func newTestPolicyRunner(logger *slog.Logger, enforcer *Enforcer) *agenthooks.Runner {
+	r := agenthooks.New(agenthooks.WithLogger(logger.With(attr.SlogComponent("hooks"))))
+
+	r.Use(policies.ActorResolution)
+
+	r.OnPromptSubmitted(
+		policies.SpendGatePrompt(enforcer.CheckSpend),
+		policies.RiskScanPromptGate(enforcer.ScanPrompt, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+	)
+	r.OnToolPre(
+		policies.SpendGateToolPre(enforcer.CheckSpend, enforcer.AppendBlockPageURL),
+		policies.RiskScanToolPreGate(enforcer.ScanToolRequest, enforcer.ScanMCPToolRequest, enforcer.AppendBlockPageURL, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+		policies.ShadowMCPToolPreGate(enforcer.EvaluateShadowMCP),
+	)
+	r.OnPermission(
+		policies.SpendGatePermission(enforcer.CheckSpend, enforcer.AppendBlockPageURL),
+		policies.RiskScanPermissionGate(enforcer.ScanPermissionRequest, enforcer.AppendBlockPageURL, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+		policies.RiskScanPermissionToolGate(enforcer.ScanToolRequest, enforcer.ScanMCPToolRequest, enforcer.AppendBlockPageURL, enforcer.WarnAcknowledged, enforcer.WarnDenyReason),
+		policies.ShadowMCPPermissionGate(enforcer.EvaluateShadowMCP),
+	)
+
+	return r
+}
+
 func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -187,6 +220,10 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	spendGate, err := spendrules.NewGate(logger, spendGateCache, spendCelEngine)
 	require.NoError(t, err)
+	// The enforcer is shared by the service (embedded) and the policy runner,
+	// mirroring the cmd wiring: swapping a field on ti.service (riskScanner,
+	// siteURL, ...) mutates the state the runner's stages read at call time.
+	enforcer := NewEnforcer(logger, conn, cacheAdapter, nil, policyBypass, spendGate, shadowMCPClient, siteURL, "test-jwt-secret")
 	svc := NewService(
 		logger,
 		conn,
@@ -200,16 +237,12 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		authzEngine,
 		nil,
 		nil,
-		nil,
-		policyBypass,
-		spendGate,
-		shadowMCPClient,
 		chatWriter,
 		efficacySignals,
 		nil,
 		serverURL,
-		siteURL,
-		"test-jwt-secret",
+		enforcer,
+		newTestPolicyRunner(logger, enforcer),
 	)
 
 	return ctx, &testInstance{

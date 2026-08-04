@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-func (s *Service) enforceShadowMCPToolAccess(
+func (e *Enforcer) enforceShadowMCPToolAccess(
 	ctx context.Context,
 	organizationID string,
 	projectID string,
@@ -25,7 +25,7 @@ func (s *Service) enforceShadowMCPToolAccess(
 	var detail string
 	switch {
 	case evidence.FullURL != "":
-		if s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, evidence.FullURL, organizationID) {
+		if e.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, evidence.FullURL, organizationID) {
 			return "", false
 		}
 		detail = fmt.Sprintf("MCP server is not Gram-hosted (URL: %s)", evidence.FullURL)
@@ -44,7 +44,7 @@ func (s *Service) enforceShadowMCPToolAccess(
 		if !blocked {
 			return "", false
 		}
-		s.logger.InfoContext(ctx, "shadow-mcp call blocked by allow-all policy blocked list",
+		e.logger.InfoContext(ctx, "shadow-mcp call blocked by allow-all policy blocked list",
 			attr.SlogEvent("shadow_mcp_policy_blocklist_deny"),
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProjectID(projectID),
@@ -57,8 +57,8 @@ func (s *Service) enforceShadowMCPToolAccess(
 		return fmt.Sprintf("MCP server is blocked by policy (URL: %s)", blockedURL), true
 	}
 
-	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policy.ID, evidence, toolName); allowed {
-		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
+	if target, allowed := e.canBypassPolicy(ctx, organizationID, userID, policy.ID, evidence, toolName); allowed {
+		e.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
 			attr.SlogEvent("shadow_mcp_policy_bypass_allow"),
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProjectID(projectID),
@@ -74,7 +74,7 @@ func (s *Service) enforceShadowMCPToolAccess(
 	return detail, true
 }
 
-func (s *Service) canBypassPolicy(
+func (e *Enforcer) canBypassPolicy(
 	ctx context.Context,
 	organizationID string,
 	userID string,
@@ -86,7 +86,7 @@ func (s *Service) canBypassPolicy(
 	if target == nil {
 		return nil, false
 	}
-	allowed := s.policyBypass.CanBypass(ctx, risk.PolicyBypassEvaluation{
+	allowed := e.policyBypass.CanBypass(ctx, risk.PolicyBypassEvaluation{
 		OrganizationID: organizationID,
 		UserID:         userID,
 		PolicyID:       policyID,
@@ -177,7 +177,7 @@ func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *M
 		return ""
 	}
 	switch {
-	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
+	case matched.URL != "" && !s.enforcer.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
 		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", matched.Name, matched.URL)
 	case matched.URL == "" && matched.Command != "":
 		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", matched.Name, matched.Command)

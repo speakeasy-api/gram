@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	"github.com/speakeasy-api/gram/server/internal/hooks/policies"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -230,7 +231,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if observed {
 		s.signalSkillEfficacy(ctx, *authCtx.ProjectID)
 	}
-	if !s.isHookDuplicate(ctx) {
+	if !s.enforcer.isHookDuplicate(ctx) {
 		// Detach from request cancellation: the idempotency token is already
 		// claimed, so a client disconnect here would otherwise drop the event
 		// for good — the retry gets marked duplicate and skips persistence.
@@ -397,11 +398,9 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 // canonicalActor is the human the event is attributed to. Distinct from the
 // AuthContext identity: an org-wide plugin key authenticates many machines,
 // so its owner (the publishing admin) must not absorb every developer's
-// telemetry.
-type canonicalActor struct {
-	UserID string
-	Email  string
-}
+// telemetry. It aliases policies.Actor so the identity Ingest resolves is
+// the exact value the policy stages gate on — no conversion, no drift.
+type canonicalActor = policies.Actor
 
 // resolveCanonicalActor picks the attribution identity for one ingested event:
 // the payload's self-reported user email when present (matching the legacy
@@ -510,149 +509,61 @@ func isReservedAssistantAdapter(adapter string) bool {
 	}
 }
 
+// evaluateCanonicalHook runs the policy router over one ingested event:
+// adapter (envelope -> typed event) -> Runner.Decide -> outcome mapping. It
+// returns today's (blockReason, userReason) contract — blockReason is the
+// audit reason persisted to telemetry, userReason the agent-facing message
+// (block-page URL / access-request link already appended by the stage that
+// denied). Event types the adapter does not map never gate.
+//
+// Outcome mapping is the decision's Blocks() classification, not a kind
+// enumeration:
+//
+//   - a blocking decision (deny / block-prompt today, plus any blocking
+//     kind the library adds later) -> deny with the stage's reasons. An
+//     unacknowledged risk warn (challenge) denies here too, with the
+//     challenge framing and the ack link (see riskScanToolDecision);
+//   - everything else -> allow. Acknowledged warns stay neutral in the
+//     stages, so evaluation falls through to the remaining checks exactly
+//     as the inline code fell through.
+//
+// A pipeline error also allows: no registered stage returns an error — the
+// enforcement primitives swallow their failures internally (log + fail open)
+// exactly as the inline evaluation did — so an error here is a stage panic
+// or a canceled request context, and enforcement keeps the same fail-open
+// posture those paths already had.
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
-	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
-	eventType := strings.TrimSpace(payload.Event.Type)
-
-	// Spend gate runs before any risk-policy evaluation, for every adapter
-	// with a per-provider enforcement surface (claude, codex, cursor) — the
-	// risk scans below already run adapter-agnostically, and an over-budget
-	// actor is over budget regardless of which agent carries the event.
-	// Adapters are self-reported slugs, so this remains a cooperative-client
-	// boundary like the rest of the ingest surface; matching is on the
-	// lowercased value so a case variant cannot dodge the gate. opencode
-	// still passes through untouched pending a product decision on its
-	// enforcement surface.
-	if spendGatedAdapter(payload.Source.Adapter) && (eventType == "prompt.submitted" || eventType == "tool.requested") {
-		if block := s.checkSpendGate(ctx, event); block != nil {
-			if eventType == "tool.requested" {
-				kind := "tool call"
-				if canonicalPermissionType(payload) != "" {
-					// Permission-shaped tool.requested events keep the
-					// permission framing, matching this path's risk wording
-					// and the legacy codex endpoint's spend deny.
-					kind = "permission request"
-				}
-				auditReason := spendBlockReason(kind, block)
-				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, canonicalToolName(payload), "", auditReason)
-			}
-			auditReason := spendBlockReason("prompt", block)
-			return auditReason, auditReason
-		}
+	typed := agenthooksTypedEvent(payload, timestamp)
+	if typed == nil {
+		return "", ""
 	}
-
-	switch eventType {
-	case "prompt.submitted":
-		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: canonicalPromptText(payload),
-		})
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
-				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
-					return "", ""
-				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
-				}
-			}
-			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
-		}
-	case "tool.requested":
-		toolName := canonicalToolName(payload)
-		toolInput := canonicalToolInput(payload)
-		if permissionType := canonicalPermissionType(payload); permissionType != "" {
-			ev := hookevents.NewPermissionRequest(event, hookevents.PermissionRequestParams{
-				ToolName:       toolName,
-				ToolInput:      toolInput,
-				PermissionType: permissionType,
-			})
-			// An acknowledged permission warn clears only this risk challenge; it
-			// must still fall through to the MCP/shadow-MCP guard below, never
-			// short-circuit the tool call (mirrors the Claude PreToolUse handler).
-			// So exclude acknowledged warns from the block condition rather than
-			// returning early on them.
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
-				if scanResult.Action == "warn" {
-					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
-						auditReason := fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-						return auditReason, userReason
-					}
-				}
-				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
-			}
-		}
-		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) {
-			ev := hookevents.NewBeforeMCPExecution(event, hookevents.BeforeMCPExecutionParams{
-				ToolName:  toolName,
-				ToolInput: toolInput,
-			})
-			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
-				if scanResult.Action == "warn" {
-					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
-						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
-					}
-					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
-						auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-						return auditReason, userReason
-					}
-				}
-				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
-			}
-			return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
-		}
-		ev := hookevents.NewBeforeToolUse(event, hookevents.BeforeToolUseParams{
-			ToolName:  toolName,
-			ToolInput: toolInput,
-		})
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" {
-				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
-					return "", ""
-				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
-				}
-			}
-			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-			return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
-		}
+	ctx = policies.WithRequest(ctx, &policies.Request{
+		Payload:      payload,
+		AuthCtx:      authCtx,
+		Actor:        actor,
+		AllowWarnAck: authenticatedIngestOptions(ctx).AllowWarnAcknowledgement,
+	})
+	decision, err := s.policies.Decide(ctx, typed)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "hook policy pipeline failed; failing open",
+			attr.SlogError(err),
+			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
+			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
+		)
+		return "", ""
+	}
+	if decision.Blocks() {
+		return decision.Reason(), decision.SystemMessage()
 	}
 	return "", ""
 }
 
-// appendCanonicalBlockURL mints the durable block row for a policy-denied
-// tool call and attaches its URL to the agent-facing reason, matching the
-// legacy per-provider handlers. Retried deliveries keep the deny but must not
-// mint a second row.
-func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, auditReason, toolName, policyID, userReason string) string {
-	if s.isHookDuplicate(ctx) {
-		return userReason
-	}
-	bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
-		Provider:       strings.TrimSpace(payload.Source.Adapter),
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Reason:         auditReason,
-		ToolName:       toolName,
-		UserID:         actor.UserID,
-		RiskPolicyID:   conv.StringToNullUUID(policyID),
-		RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ChatID:         chatIDForBlock(canonicalSessionID(payload)),
-		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	if bURL == "" {
-		return userReason
-	}
-	return appendBlockURL(userReason, bURL)
+// canonicalIsMCPToolRequest is the ingest path's MCP predicate: the payload
+// explicitly carries MCP transport data, or the tool name is MCP-routed. It
+// decides which risk-scan flavor a tool request gets and whether the
+// shadow-MCP gate applies.
+func canonicalIsMCPToolRequest(payload *gen.IngestPayload) bool {
+	return canonicalMCPData(payload) != nil || toolref.IsMCPToolName(canonicalToolName(payload))
 }
 
 func canonicalHookEvent(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) hookevents.Event {
@@ -684,7 +595,7 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 	case "prompt.submitted":
 		return hookevents.EventTypeUserPromptSubmit
 	case "tool.requested":
-		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(canonicalToolName(payload)) {
+		if canonicalIsMCPToolRequest(payload) {
 			return hookevents.EventTypeBeforeMCPExecution
 		}
 		if canonicalPermissionType(payload) != "" {
@@ -713,50 +624,6 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 	default:
 		return hookevents.EventType(strings.TrimSpace(payload.Event.Type))
 	}
-}
-
-func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
-	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
-	if policy == nil {
-		return "", ""
-	}
-
-	toolName := toolref.MCPFunctionOf(rawToolName)
-	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
-	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
-		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			ProjectID:       authCtx.ProjectID.String(),
-			RequesterUserID: actor.UserID,
-			UserMessage:     policy.UserMessage,
-			AuditReason:     auditReason,
-			Evidence:        evidence,
-			ToolName:        toolName,
-			ToolInput:       toolInput,
-			RiskPolicyID:    policy.ID,
-		})
-		// Retried deliveries still get the deny decision, but must not mint
-		// another block row (and a second block URL) for the same call.
-		if !s.isHookDuplicate(ctx) {
-			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
-				Provider:       strings.TrimSpace(payload.Source.Adapter),
-				OrganizationID: authCtx.ActiveOrganizationID,
-				ProjectID:      *authCtx.ProjectID,
-				Reason:         auditReason,
-				ToolName:       toolName,
-				UserID:         actor.UserID,
-				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
-				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			}); bURL != "" {
-				userReason = appendBlockURL(userReason, bURL)
-			}
-		}
-		return auditReason, userReason
-	}
-	return "", ""
 }
 
 func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {

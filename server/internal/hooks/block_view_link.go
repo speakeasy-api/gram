@@ -40,24 +40,24 @@ type toolCallBlockParams struct {
 // id is minted on the hot path so the URL can go in the deny response
 // immediately, while the backing row is inserted off the hot path (see
 // insertToolCallBlock). Returns "" when no site URL is configured.
-func (s *Service) blockViewURL(blockID uuid.UUID) string {
-	if s.siteURL == nil {
+func (e *Enforcer) blockViewURL(blockID uuid.UUID) string {
+	if e.siteURL == nil {
 		return ""
 	}
-	return s.siteURL.JoinPath("blocks", blockID.String()).String()
+	return e.siteURL.JoinPath("blocks", blockID.String()).String()
 }
 
 // insertToolCallBlock persists the durable block row for a pre-minted id. It is
 // meant to run detached (the deny response doesn't wait on it); the row becomes
 // visible to the block page within moments. Best-effort: logs and returns on
 // failure.
-func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p toolCallBlockParams) {
-	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
+func (e *Enforcer) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p toolCallBlockParams) {
+	if e.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolCallBlockWriteTimeout)
 	defer cancel()
-	if err := s.repo.InsertToolCallBlock(ctx, repo.InsertToolCallBlockParams{
+	if err := e.repo.InsertToolCallBlock(ctx, repo.InsertToolCallBlockParams{
 		ID:             blockID,
 		OrganizationID: p.OrganizationID,
 		ProjectID:      p.ProjectID,
@@ -70,7 +70,7 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 		ChatID:         p.ChatID,
 		ChatMessageID:  p.ChatMessageID,
 	}); err != nil {
-		s.logger.WarnContext(ctx, "tool call block: failed to insert row",
+		e.logger.WarnContext(ctx, "tool call block: failed to insert row",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(p.OrganizationID),
 			attr.SlogProjectID(p.ProjectID.String()),
@@ -82,20 +82,20 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 // path, and returns the durable block URL to append to the deny message. Use
 // this from providers whose persistence already runs detached (Cursor, Codex);
 // the page becomes valid within moments. Returns "" when it can't proceed.
-func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockParams) string {
+func (e *Enforcer) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockParams) string {
 	// Only mint a URL when the block row can actually be persisted; otherwise
 	// the link would resolve to a /blocks/<id> page with no backing row. These
 	// preconditions must mirror insertToolCallBlock's guard.
-	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
+	if e.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return ""
 	}
 	blockID, err := uuid.NewV7()
 	if err != nil {
-		s.logger.ErrorContext(ctx, "tool call block: failed to generate id", attr.SlogError(err))
+		e.logger.ErrorContext(ctx, "tool call block: failed to generate id", attr.SlogError(err))
 		return ""
 	}
-	go s.insertToolCallBlock(context.WithoutCancel(ctx), blockID, p)
-	return s.blockViewURL(blockID)
+	go e.insertToolCallBlock(context.WithoutCancel(ctx), blockID, p)
+	return e.blockViewURL(blockID)
 }
 
 // chatIDForBlock derives the chat a blocked tool call belongs to from its

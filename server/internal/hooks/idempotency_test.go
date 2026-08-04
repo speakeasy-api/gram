@@ -135,8 +135,8 @@ func TestHookDuplicateContextFlag(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 
-	assert.False(t, ti.service.isHookDuplicate(context.Background()), "untagged context is a live delivery")
-	assert.True(t, ti.service.isHookDuplicate(withHookDuplicate(context.Background())), "tagged context is a duplicate")
+	assert.False(t, ti.service.enforcer.isHookDuplicate(context.Background()), "untagged context is a live delivery")
+	assert.True(t, ti.service.enforcer.isHookDuplicate(withHookDuplicate(context.Background())), "tagged context is a duplicate")
 }
 
 // ttlRecordingCache records the TTL each Add claim was made with, so the

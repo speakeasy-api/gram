@@ -27,17 +27,17 @@ type shadowMCPRequestLinkParams struct {
 	RiskPolicyID    string
 }
 
-func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
+func (e *Enforcer) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
 	message := renderUserBlockReason(params.UserMessage, params.AuditReason)
-	requestURL, ok := s.shadowMCPApprovalRequestURL(ctx, params)
+	requestURL, ok := e.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
 		return message
 	}
 	return strings.TrimSpace(message) + "\n\nRequest access:\n" + requestURL + "\n\n" + shadowMCPApprovalRequestPrompt
 }
 
-func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (string, bool) {
-	if s.siteURL == nil || s.cache == nil || strings.TrimSpace(s.jwtSecret) == "" {
+func (e *Enforcer) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (string, bool) {
+	if e.siteURL == nil || e.cache == nil || strings.TrimSpace(e.jwtSecret) == "" {
 		return "", false
 	}
 
@@ -46,7 +46,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		return "", false
 	}
 
-	requestURL, _, err := risk.GeneratePolicyBypassRequestURL(ctx, s.cache, s.siteURL, risk.PolicyBypassRequestTokenInput{
+	requestURL, _, err := risk.GeneratePolicyBypassRequestURL(ctx, e.cache, e.siteURL, risk.PolicyBypassRequestTokenInput{
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              params.ProjectID,
 		RequesterUserID:        params.RequesterUserID,
@@ -61,7 +61,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		RiskResultID:           nil,
 	}, shadowMCPApprovalRequestTokenTTL)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to generate shadow mcp approval request link",
+		e.logger.WarnContext(ctx, "failed to generate shadow mcp approval request link",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(params.OrganizationID),
 			attr.SlogProjectID(params.ProjectID),

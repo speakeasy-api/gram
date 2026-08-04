@@ -105,7 +105,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// Spend gate runs before any risk-policy evaluation: an over-budget
 			// user gets tool calls denied even mid-turn, for native and MCP
 			// tools alike.
-			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			if block := s.enforcer.checkSpendGate(ctx, ev.Event); block != nil {
 				blockReason = spendBlockReason("tool call", block)
 				userReason = blockReason
 				isToolCallBlock = true
@@ -115,13 +115,13 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// Acknowledged warn is excluded from the enforcement block so it
 			// falls through to the shadow-MCP guard below: an ack clears the
 			// risk challenge but must never bypass unapproved-toolset validation.
-			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			if scanResult := s.enforcer.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || !s.enforcer.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 				// Unacknowledged warn → warning + ack link (challenge, not a
 				// durable block page). No ack link buildable → fall through to block.
 				if scanResult.Action == "warn" {
 					// Codex surfaces a single reason (the CLI user reads it), so use
 					// the human-facing framing that carries the ack link.
-					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					if _, warnUserReason, ok := s.enforcer.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 						blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						userReason = warnUserReason
 						blockPolicyID = scanResult.PolicyID
@@ -135,7 +135,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				blockPolicyID = scanResult.PolicyID
 				break
 			}
-			policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
+			policy := s.enforcer.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
 			if policy != nil {
 				toolName := ev.ToolName
 				evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
@@ -148,7 +148,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					// the whole gate. The fail-closed inventory/provenance
 					// checks below are block_all concepts — an unverified or
 					// unmatched server is simply allowed here.
-					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
+					detail, denied = s.enforcer.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
 				case isCodexMetaTool:
 					// Codex's built-in MCP resource tools are not Gram
 					// toolset calls, so they never carry x-gram-toolset-id.
@@ -162,12 +162,12 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 						detail = fmt.Sprintf("MCP server %q could not be verified from Codex inventory", evidence.ServerIdentity)
 					}
 					if detail != "" {
-						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+						if _, allowed := s.enforcer.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
 							denied = true
 						}
 					}
 				default:
-					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
+					detail, denied = s.enforcer.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
 				}
 				// No inventory fail-closed pass runs under allow-all; the
 				// blocked-list check above is the whole gate.
@@ -178,12 +178,12 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					// target.
 					inventoryDetail := s.codexInventoryProvenanceDetail(ctx, matched, orgID)
 					if inventoryDetail != "" {
-						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+						if _, allowed := s.enforcer.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
 							detail, denied = inventoryDetail, true
 						}
 					} else if evidence.ServerIdentity != "" && matched == nil {
 						inventoryDetail = fmt.Sprintf("MCP server %q could not be verified from Codex inventory", evidence.ServerIdentity)
-						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+						if _, allowed := s.enforcer.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
 							detail, denied = inventoryDetail, true
 						}
 					}
@@ -198,7 +198,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 						attr.SlogRiskPolicyName(policy.Name),
 					)
 					blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-					userReason = s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+					userReason = s.enforcer.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
 						OrganizationID:  orgID,
 						ProjectID:       projectID,
 						RequesterUserID: metadata.UserID,
@@ -217,7 +217,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		case *hookevents.PermissionRequest:
 			// Over-budget users are denied here too: a permission request is a
 			// tool call awaiting approval, so it must not slip past the gate.
-			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			if block := s.enforcer.checkSpendGate(ctx, ev.Event); block != nil {
 				blockReason = spendBlockReason("permission request", block)
 				userReason = blockReason
 				break
@@ -225,10 +225,10 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// Acknowledged warn is excluded so it clears without a block; an
 			// unacknowledged warn is challenged (deny + ack link), not
 			// hard-blocked with the raw user_message — consistent with tool calls.
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			if scanResult := s.enforcer.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
+				(scanResult.Action != "warn" || !s.enforcer.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 				if scanResult.Action == "warn" {
-					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					if _, warnUserReason, ok := s.enforcer.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 						blockReason = fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						userReason = warnUserReason
 						blockPolicyID = scanResult.PolicyID
@@ -241,14 +241,14 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		case *hookevents.UserPromptSubmit:
 			// Spend gate runs before any risk-policy evaluation: an over-budget
 			// user is denied outright.
-			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			if block := s.enforcer.checkSpendGate(ctx, ev.Event); block != nil {
 				blockReason = spendBlockReason("prompt", block)
 				userReason = blockReason
 				break
 			}
 			// warn never hard-blocks at prompt submit (no confirmation primitive
 			// here); it defers to the follow-on tool call. Matches Claude/Cursor.
-			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+			if scanResult := s.enforcer.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 				blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
@@ -262,8 +262,8 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	// redeliveries keep the deny but must not mint a second row (matching the
 	// Claude and ingest paths), so the retried delivery's reason carries no
 	// link.
-	if isToolCallBlock && blockReason != "" && !s.isHookDuplicate(ctx) {
-		if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+	if isToolCallBlock && blockReason != "" && !s.enforcer.isHookDuplicate(ctx) {
+		if bURL := s.enforcer.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 			Provider:       "codex",
 			OrganizationID: orgID,
 			ProjectID:      *authCtx.ProjectID,
@@ -300,7 +300,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 
 func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
 	// Skip persistence for a redelivery (the token was claimed in Codex()).
-	if s.isHookDuplicate(ctx) {
+	if s.enforcer.isHookDuplicate(ctx) {
 		return
 	}
 
