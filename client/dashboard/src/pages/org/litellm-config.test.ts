@@ -37,7 +37,7 @@ describe("LiteLLM configuration", () => {
     );
     expect(environment).toContain('export GRAM_PROJECT_SLUG="my-project"');
     expect(environment).toContain(
-      'export OTEL_ENDPOINT="https://api.getgram.ai/rpc/litellm.otel"',
+      'export OTEL_ENDPOINT="https://api.getgram.ai/rpc/hooks.otel"',
     );
     expect(environment).toContain(
       'export OTEL_HEADERS="Gram-Key=${GRAM_LITELLM_INGEST_KEY},Gram-Project=${GRAM_PROJECT_SLUG}"',
@@ -50,14 +50,10 @@ describe("LiteLLM configuration", () => {
     ).toThrow("LiteLLM integration endpoints require HTTPS");
     expect(
       buildLiteLLMEnvironment("http://localhost:8080", "my-project"),
-    ).toContain(
-      'export OTEL_ENDPOINT="http://localhost:8080/rpc/litellm.otel"',
-    );
+    ).toContain('export OTEL_ENDPOINT="http://localhost:8080/rpc/hooks.otel"');
     expect(
       buildLiteLLMEnvironment("http://127.0.0.2:8080", "my-project"),
-    ).toContain(
-      'export OTEL_ENDPOINT="http://127.0.0.2:8080/rpc/litellm.otel"',
-    );
+    ).toContain('export OTEL_ENDPOINT="http://127.0.0.2:8080/rpc/hooks.otel"');
     expect(() =>
       buildLiteLLMEnvironment("ftp://localhost", "my-project"),
     ).toThrow("LiteLLM integration endpoints require HTTPS");

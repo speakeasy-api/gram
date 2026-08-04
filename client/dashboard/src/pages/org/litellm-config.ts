@@ -44,7 +44,7 @@ export function buildLiteLLMEnvironment(
 export GRAM_PROJECT_SLUG="${projectSlug}"
 export LITELLM_OTEL_V2=true
 export OTEL_EXPORTER=otlp_http
-export OTEL_ENDPOINT="${apiBase(serverURL)}/rpc/litellm.otel"
+export OTEL_ENDPOINT="${apiBase(serverURL)}/rpc/hooks.otel"
 export OTEL_HEADERS="Gram-Key=\${GRAM_LITELLM_INGEST_KEY},Gram-Project=\${GRAM_PROJECT_SLUG}"
 export OTEL_SERVICE_NAME=litellm
 export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=no_content
