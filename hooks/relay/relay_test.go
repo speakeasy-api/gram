@@ -1626,3 +1626,26 @@ func TestParseCodexMCPInventory(t *testing.T) {
 	require.Empty(t, parseCodexMCPInventory([]byte("not json")))
 	require.Empty(t, parseCodexMCPInventory(nil))
 }
+
+// TestEnvelopeReportsBinaryVersion: the server reads adapter_version's presence
+// as "this relay can report MCP inventory" and degrades the codex meta-tool
+// shadow-MCP guard without it. Dropping this field would silently disable that
+// enforcement for every user rather than failing visibly.
+func TestEnvelopeReportsBinaryVersion(t *testing.T) {
+	previous := BinaryVersion
+	t.Cleanup(func() { BinaryVersion = previous })
+	BinaryVersion = "9.9.9"
+
+	payload := buildEnvelope(&agenthooks.PromptEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "UserPromptSubmit",
+			Session:    agenthooks.SessionInfo{ID: "s1"},
+		},
+		Prompt: "hello",
+	}, "host")
+
+	require.NotNil(t, payload.Source.AdapterVersion)
+	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
+}

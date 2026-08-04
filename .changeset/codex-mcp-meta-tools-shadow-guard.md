@@ -18,3 +18,11 @@ allowed and a denied one is named. A meta-tool whose server cannot be resolved
 is denied rather than allowed — an unproven target is not an absent one.
 Sessions now cache their MCP inventory on the ingest path under the same key
 and TTL the legacy per-provider endpoints use.
+
+Rolled out on client capability rather than deploy order: releases before this
+one report no adapter version and no MCP inventory, so enforcing on them would
+deny every meta-tool call — including reads of Gram-hosted servers that work
+today. Those clients keep their current behavior and are counted in the logs
+until they upgrade. A client that does report a version but no inventory has no
+MCP servers configured, so a meta-tool call has nothing legitimate to target
+and is denied.

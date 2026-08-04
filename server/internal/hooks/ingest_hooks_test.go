@@ -1977,6 +1977,7 @@ func TestIngest_ShadowMCPGuardCoversCodexMetaTools(t *testing.T) {
 				ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 				payload := canonicalIngestPayload("codex", "tool.requested", "codex-meta-"+toolName+"-"+name)
+				payload.Source.AdapterVersion = new("1.2.3")
 				callID := "call-1"
 				payload.Data = &gen.HookIngestData{
 					ToolCall: &gen.HookToolCallData{
@@ -2008,6 +2009,7 @@ func TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters(t *testing.T
 	toolName := "read_mcp_resource"
 	callID := "call-1"
 	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "non-codex-meta-tool")
+	payload.Source.AdapterVersion = new("1.2.3")
 	payload.Data = &gen.HookIngestData{
 		ToolCall: &gen.HookToolCallData{
 			ID:    &callID,
@@ -2066,6 +2068,7 @@ func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 			toolName := "read_mcp_resource"
 			callID := "call-1"
 			payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+			payload.Source.AdapterVersion = new("1.2.3")
 			payload.Data = &gen.HookIngestData{
 				ToolCall: &gen.HookToolCallData{
 					ID: &callID, Name: &toolName,
@@ -2114,4 +2117,43 @@ func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
 	// Other adapters keep no codex-specific prefix.
 	payload.Source.Adapter = "claude"
 	require.Empty(t, canonicalMCPInventoryEntries(payload)[0].ToolPrefix)
+}
+
+// TestIngest_ShadowMCPMetaToolGateDegradesForIncapableClients: the server-side
+// deny ships independently of the hooks release that starts collecting the
+// Codex MCP inventory. A relay predating that release sends no inventory, so
+// the guard would have nothing to clear a target against and every meta-tool
+// call would deny — including reads of Gram-hosted servers that work today.
+// Those clients are identified by an absent adapter_version (nothing else has
+// ever set it) and keep their current behavior until they upgrade.
+func TestIngest_ShadowMCPMetaToolGateDegradesForIncapableClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-legacy-relay")
+	// An old relay: adapter_version left unset.
+	payload.Source.AdapterVersion = nil
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID: &callID, Name: &toolName,
+			Input: map[string]any{"server": "platform-logs"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, "deny", result.Decision,
+		"a relay that cannot report MCP inventory must not have its meta-tool calls blanket-denied")
+
+	// An empty string is as good as absent — it proves no capability either.
+	payload.Source.AdapterVersion = new("")
+	result, err = ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, "deny", result.Decision)
 }

@@ -593,7 +593,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 			}
 		}
-		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) || canonicalCodexMetaTool(payload, toolName, toolInput) {
+		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) || s.canonicalCodexMetaTool(ctx, payload, toolName, toolInput) {
 			ev := hookevents.NewBeforeMCPExecution(event, hookevents.BeforeMCPExecutionParams{
 				ToolName:  toolName,
 				ToolInput: toolInput,
@@ -828,12 +828,44 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 // data by that same prefix, so without this check they reach neither arm of the
 // gate and a shadow-MCP policy never sees them (DNO-767). Scoped to the codex
 // adapter: another agent's unrelated tool of the same name is not an MCP call.
-func canonicalCodexMetaTool(payload *gen.IngestPayload, toolName string, toolInput any) bool {
+func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.IngestPayload, toolName string, toolInput any) bool {
 	if payload == nil || !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
 		return false
 	}
 	_, isMetaTool := codexMetaToolServer(toolName, toolInput)
-	return isMetaTool
+	if !isMetaTool {
+		return false
+	}
+	if !canonicalClientReportsMCPInventory(payload) {
+		// Counts the un-upgraded population: once this stops firing, the
+		// capability check can go and the guard can apply unconditionally.
+		s.logger.InfoContext(ctx, "skipping codex meta-tool shadow-mcp guard: client cannot report MCP inventory",
+			attr.SlogEvent("shadow_mcp_meta_tool_client_incapable"),
+			attr.SlogToolName(toolName),
+		)
+		return false
+	}
+	return true
+}
+
+// canonicalClientReportsMCPInventory reports whether the sending client is new
+// enough to collect the Codex MCP inventory the meta-tool guard resolves
+// against.
+//
+// Every relay released before that change left adapter_version unset, and
+// nothing else has ever populated it, so its absence identifies them exactly.
+// Enforcing regardless would deny every meta-tool call from those clients —
+// including reads of Gram-hosted servers that work today — because they send
+// no inventory for the guard to clear the target against. Degrading instead
+// keeps them at their current behavior and lets enforcement arrive with the
+// hooks upgrade, rather than depending on a server deploy and a hooks release
+// being ordered correctly.
+//
+// A capable client that reports no inventory is a different case: that means
+// no MCP servers are configured, so a meta-tool call has nothing legitimate to
+// target and the guard denies it.
+func canonicalClientReportsMCPInventory(payload *gen.IngestPayload) bool {
+	return payload != nil && strings.TrimSpace(conv.PtrValOr(payload.Source.AdapterVersion, "")) != ""
 }
 
 func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {
