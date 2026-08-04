@@ -124,10 +124,10 @@ type BaseOsSpec = {
 };
 
 // Windows and Linux still ship as raw binaries registered via a manual
-// service-install script — ADR-0015 (device-agent) only replaced the macOS
-// path with a signed, notarized .pkg. Keeping this as its own type (instead
-// of leaving these fields optional on a single OsSpec) means macOS can't
-// silently carry stale script fields that nothing renders anymore.
+// service-install script; only macOS moved to a signed, notarized .pkg.
+// Keeping this as its own type (instead of leaving these fields optional on
+// a single OsSpec) means macOS can't silently carry stale script fields that
+// nothing renders anymore.
 type ScriptOsSpec = BaseOsSpec & {
   lang: "bash" | "powershell";
   archNote?: React.ReactNode;
@@ -750,8 +750,7 @@ const MANAGED_CONFIG_PATHS = [
 
 // MacInstallStep is the first (and only pre-identity) setup step on macOS.
 // Unlike Windows/Linux there's no separate chmod/move or service-registration
-// step — the pkg's postinstall does both (ADR-0015: device-agent,
-// ONBOARDING_JAMF.md).
+// step — the pkg's postinstall does both.
 function MacInstallStep() {
   const { data, isError } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
@@ -840,8 +839,8 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
 // The pkg deliberately doesn't add the CLI to PATH: it would collide with the
 // Speakeasy SDK generator's own `speakeasy` on a dev machine, and pointing
 // PATH at the pkg's staging copy would serve a stale binary after the first
-// auto-update (ADR-0015: device-agent). Reach it by its per-user seed path
-// instead — every macOS CLI invocation in this file does.
+// auto-update. Reach it by its per-user seed path instead — every macOS CLI
+// invocation in this file does.
 function MacVerifyStep() {
   return (
     <div className="flex flex-col gap-2">
