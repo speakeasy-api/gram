@@ -408,7 +408,7 @@ function CodexInstallContent({
       <div className="flex items-center gap-3">
         <Button variant="secondary" size="sm" asChild>
           <a
-            href="https://developers.openai.com/codex/hooks"
+            href="https://learn.chatgpt.com/docs/hooks"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
@@ -419,7 +419,7 @@ function CodexInstallContent({
         </Button>
         <Button variant="secondary" size="sm" asChild>
           <a
-            href="https://developers.openai.com/codex/plugins/build"
+            href="https://developers.openai.com/plugins/build/plugins"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
