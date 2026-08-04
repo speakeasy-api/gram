@@ -108,3 +108,6 @@ __pycache__/
 
 # Storybook build output
 storybook-static/
+
+# Stray browser-automation screenshots at repo root (agents must use .playwright-cli/)
+/*.png
