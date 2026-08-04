@@ -29,12 +29,12 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/bootstrap"
 	"github.com/speakeasy-api/gram/dev-idp/internal/config"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/resourceas"
 	workosmode "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
-	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
 	"github.com/speakeasy-api/gram/plog"
 )
 
@@ -159,8 +159,8 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	oauth21H.RegisterRootRoutes(outer)
 
 	// Resource authorization servers are always mounted, mirroring the real
-	// binary. With no xaa_resources rows seeded every slug simply 404s, so
-	// tests that do not exercise cross-app access are unaffected.
+	// binary. With no ema_resources rows seeded every slug simply 404s, so
+	// tests that do not exercise enterprise-managed authorization are unaffected.
 	resourceASH := resourceas.NewHandler(resourceas.Config{ExternalURL: pubURL}, ks, logger, tp, db)
 	outer.Handle(resourceas.Prefix+"/", http.StripPrefix(resourceas.Prefix, resourceASH.Handler()))
 	resourceASH.RegisterRootRoutes(outer)
@@ -227,7 +227,7 @@ func (i *Instance) OAuth21Metadata(t *testing.T) []byte {
 //
 // The resource itself still has to exist -- seed one with CreateResource.
 func (i *Instance) ResourceASURL(slug string) string {
-	return xaa.ResourceASIssuer(i.Issuer, slug)
+	return ema.ResourceASIssuer(i.Issuer, slug)
 }
 
 // ResourceASMetadata fetches the RFC 8414 authorization-server metadata for

@@ -3,10 +3,10 @@
 //
 //   - the Goa management API (under /rpc/...) for /users, /organizations,
 //     /memberships, /organization_roles, /invitations, /devIdp, and the
-//     cross-app access surfaces /xaaApps, /xaaResources,
-//     /xaaAppAssignments, /xaaTrustRules;
+//     enterprise-managed authorization surfaces /emaApps, /emaResources,
+//     /emaAppAssignments, /emaTrustRules;
 //   - the OAuth 2.1 authorization server at /oauth2-1/;
-//   - a resource authorization server per xaa_resources row, at
+//   - a resource authorization server per ema_resources row, at
 //     /resource-as/<slug>/;
 //   - the WorkOS REST surface at /workos/.
 //
@@ -15,7 +15,7 @@
 // "workos" passes through to a real WorkOS environment. Both mount at the
 // same prefixes, so no URL changes when switching.
 //
-// # Cross-app access
+// # Enterprise-managed authorization
 //
 // The dev-idp plays both halves of the MCP Enterprise-Managed Authorization
 // profile, on separate issuers, so the whole flow is exercisable in one
@@ -23,16 +23,16 @@
 //
 //   - /oauth2-1 is the enterprise IdP. Its token endpoint mints an Identity
 //     Assertion JWT Authorization Grant (ID-JAG) under the RFC 8693
-//     token-exchange grant, gated on the xaa_apps / xaa_app_assignments
+//     token-exchange grant, gated on the ema_apps / ema_app_assignments
 //     policy tables.
 //   - /resource-as/<slug> is a resource authorization server. It redeems an
 //     ID-JAG under the RFC 7523 jwt-bearer grant and returns an access token
-//     restricted to the MCP server behind it, gated on xaa_trust_rules.
+//     restricted to the MCP server behind it, gated on ema_trust_rules.
 //
 // Neither half assumes the other: a resource can be configured to trust a
 // foreign issuer, and a grant this dev-idp minted can still be refused at
 // redemption. Both are always mounted -- with no policy rows seeded nothing
-// is reachable, so there is no flag to set. See internal/xaa for the shared
+// is reachable, so there is no flag to set. See internal/ema for the shared
 // wire vocabulary.
 //
 // A second tiny health server is mounted on GRAM_DEVIDP_CONTROL_ADDRESS.
@@ -151,10 +151,10 @@ func run() error {
 	service.AttachOrganizationRoles(goaMux, service.NewOrganizationRolesService(logger, tp, db))
 	service.AttachInvitations(goaMux, service.NewInvitationsService(logger, tp, db))
 	service.AttachDevIdp(goaMux, service.NewDevIdpService(logger, tp, db))
-	service.AttachXaaApps(goaMux, service.NewXaaAppsService(logger, tp, db))
-	service.AttachXaaResources(goaMux, service.NewXaaResourcesService(logger, tp, db, pubURL))
-	service.AttachXaaAppAssignments(goaMux, service.NewXaaAppAssignmentsService(logger, tp, db))
-	service.AttachXaaTrustRules(goaMux, service.NewXaaTrustRulesService(logger, tp, db))
+	service.AttachEmaApps(goaMux, service.NewEmaAppsService(logger, tp, db))
+	service.AttachEmaResources(goaMux, service.NewEmaResourcesService(logger, tp, db, pubURL))
+	service.AttachEmaAppAssignments(goaMux, service.NewEmaAppAssignmentsService(logger, tp, db))
+	service.AttachEmaTrustRules(goaMux, service.NewEmaTrustRulesService(logger, tp, db))
 
 	outer := http.NewServeMux()
 
@@ -166,7 +166,7 @@ func run() error {
 	oauth21Handler.RegisterRootRoutes(outer)
 
 	// Resource authorization servers -- the redeeming half of cross-app
-	// access. One per xaa_resources row, addressed by slug, so a request can
+	// access. One per ema_resources row, addressed by slug, so a request can
 	// arrive here before any resource is configured and simply 404.
 	resourceASHandler := resourceas.NewHandler(
 		resourceas.Config{ExternalURL: pubURL},

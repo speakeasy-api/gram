@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
-	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 )
 
 // idJAGLifetime is how long a minted ID-JAG stays valid. The grant is
@@ -24,7 +24,7 @@ import (
 const idJAGLifetime = 5 * time.Minute
 
 // idJAGResponse is the RFC 8693 token-exchange response carrying an ID-JAG.
-// `TokenType` is always xaa.TokenTypeNotApplicable: an ID-JAG is an
+// `TokenType` is always ema.TokenTypeNotApplicable: an ID-JAG is an
 // authorization grant to be redeemed elsewhere, not a credential to present
 // at a resource.
 type idJAGResponse struct {
@@ -39,14 +39,14 @@ type idJAGResponse struct {
 // access flow, where a client trades the identity assertion it holds from
 // this IdP for a grant naming one specific resource authorization server.
 //
-// Everything this endpoint decides is policy the dev-idp's XAA tables
+// Everything this endpoint decides is policy the dev-idp's EMA tables
 // describe -- which app is asking, whether that app is assigned to the
 // resolved user for the target resource, and which of the requested scopes
 // that assignment actually grants.
 func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	if got := r.Form.Get("requested_token_type"); got != xaa.TokenTypeIDJAG {
+	if got := r.Form.Get("requested_token_type"); got != ema.TokenTypeIDJAG {
 		oauthError(w, http.StatusBadRequest, "invalid_request",
-			fmt.Sprintf("only requested_token_type=%s is supported, got %q", xaa.TokenTypeIDJAG, got))
+			fmt.Sprintf("only requested_token_type=%s is supported, got %q", ema.TokenTypeIDJAG, got))
 		return
 	}
 
@@ -61,18 +61,18 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 	// `audience` names a resource authorization server by its issuer URL;
 	// RFC 8693 gives unknown targets their own error code rather than
 	// folding them into invalid_request.
-	slug, ok := xaa.ResourceSlugFromIssuer(h.cfg.ExternalURL, audience)
+	slug, ok := ema.ResourceSlugFromIssuer(h.cfg.ExternalURL, audience)
 	if !ok {
 		oauthError(w, http.StatusBadRequest, "invalid_target", "audience does not name a resource authorization server on this dev-idp")
 		return
 	}
-	resource, err := queries.GetXaaResourceBySlug(ctx, slug)
+	resource, err := queries.GetEmaResourceBySlug(ctx, slug)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			oauthError(w, http.StatusBadRequest, "invalid_target", "no resource is registered for that audience")
 			return
 		}
-		h.logger.ErrorContext(ctx, "load xaa resource for mint", slog.Any("error", err))
+		h.logger.ErrorContext(ctx, "load ema resource for mint", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load resource")
 		return
 	}
@@ -84,7 +84,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 		return
 	}
 
-	app := h.authenticateXaaApp(ctx, w, queries, r)
+	app := h.authenticateEmaApp(ctx, w, queries, r)
 	if app == nil {
 		return
 	}
@@ -94,7 +94,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 		return
 	}
 
-	assignment, err := queries.GetXaaAppAssignmentForMint(ctx, repo.GetXaaAppAssignmentForMintParams{
+	assignment, err := queries.GetEmaAppAssignmentForMint(ctx, repo.GetEmaAppAssignmentForMintParams{
 		AppID:      app.ID,
 		UserID:     userID,
 		ResourceID: resource.ID,
@@ -108,7 +108,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 			oauthError(w, http.StatusForbidden, "access_denied", "the user is not assigned this app for that resource")
 			return
 		}
-		h.logger.ErrorContext(ctx, "load xaa assignment", slog.Any("error", err))
+		h.logger.ErrorContext(ctx, "load ema assignment", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to evaluate policy")
 		return
 	}
@@ -118,7 +118,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 	// denial, not an empty success.
 	granted := assignment.GrantedScopes
 	if requested := r.Form.Get("scope"); requested != "" {
-		granted = xaa.NarrowScope(requested, assignment.GrantedScopes)
+		granted = ema.NarrowScope(requested, assignment.GrantedScopes)
 		if granted == "" {
 			oauthError(w, http.StatusBadRequest, "invalid_scope", "none of the requested scopes are granted by this assignment")
 			return
@@ -134,7 +134,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 		return
 	}
 
-	claims := xaa.Claims{
+	claims := ema.Claims{
 		Email:    user.Email,
 		Resource: resource.ResourceIdentifier,
 		ClientID: app.ClientID,
@@ -144,7 +144,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 			ID:        jti,
 			Issuer:    h.issuer(),
 			Subject:   userID.String(),
-			Audience:  jwt.ClaimStrings{xaa.ResourceASIssuer(h.cfg.ExternalURL, resource.Slug)},
+			Audience:  jwt.ClaimStrings{ema.ResourceASIssuer(h.cfg.ExternalURL, resource.Slug)},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(idJAGLifetime)),
 			NotBefore: nil,
@@ -153,7 +153,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = h.keystore.KID()
-	token.Header["typ"] = xaa.JWTType
+	token.Header["typ"] = ema.JWTType
 	signed, err := token.SignedString(h.keystore.PrivateKey())
 	if err != nil {
 		h.logger.ErrorContext(ctx, "sign id-jag", slog.Any("error", err))
@@ -161,7 +161,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 		return
 	}
 
-	if _, err := queries.CreateXaaIssuedJag(ctx, repo.CreateXaaIssuedJagParams{
+	if _, err := queries.CreateEmaIssuedJag(ctx, repo.CreateEmaIssuedJagParams{
 		Jti:        jti,
 		AppID:      app.ID,
 		UserID:     userID,
@@ -177,31 +177,31 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 	// RFC 8693 §2.2.1 requires no-store on a token-exchange response.
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, idJAGResponse{
-		IssuedTokenType: xaa.TokenTypeIDJAG,
+		IssuedTokenType: ema.TokenTypeIDJAG,
 		AccessToken:     signed,
-		TokenType:       xaa.TokenTypeNotApplicable,
+		TokenType:       ema.TokenTypeNotApplicable,
 		Scope:           granted,
 		ExpiresIn:       int(idJAGLifetime.Seconds()),
 	})
 }
 
-// authenticateXaaApp resolves and authenticates the requesting app from the
+// authenticateEmaApp resolves and authenticates the requesting app from the
 // form's client credentials. It writes the error response itself and returns
 // nil when the caller should stop.
-func (h *Handler) authenticateXaaApp(ctx context.Context, w http.ResponseWriter, queries *repo.Queries, r *http.Request) *repo.XaaApp {
+func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter, queries *repo.Queries, r *http.Request) *repo.EmaApp {
 	clientID := r.Form.Get("client_id")
 	if clientID == "" {
 		oauthError(w, http.StatusUnauthorized, "invalid_client", "client_id is required to mint an ID-JAG")
 		return nil
 	}
 
-	app, err := queries.GetXaaAppByClientID(ctx, clientID)
+	app, err := queries.GetEmaAppByClientID(ctx, clientID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			oauthError(w, http.StatusUnauthorized, "invalid_client", "client_id is not a registered cross-app access app")
+			oauthError(w, http.StatusUnauthorized, "invalid_client", "client_id is not a registered enterprise-managed authorization app")
 			return nil
 		}
-		h.logger.ErrorContext(ctx, "load xaa app", slog.Any("error", err))
+		h.logger.ErrorContext(ctx, "load ema app", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
 		return nil
 	}
@@ -235,7 +235,7 @@ func (h *Handler) resolveExchangeSubject(ctx context.Context, w http.ResponseWri
 	}
 
 	switch r.Form.Get("subject_token_type") {
-	case xaa.TokenTypeIDToken:
+	case ema.TokenTypeIDToken:
 		userID, err := h.subjectFromIDToken(subjectToken)
 		if err != nil {
 			h.logger.WarnContext(ctx, "reject id_token subject", slog.Any("error", err))
@@ -248,7 +248,7 @@ func (h *Handler) resolveExchangeSubject(ctx context.Context, w http.ResponseWri
 		}
 		return userID, true
 
-	case xaa.TokenTypeRefreshToken:
+	case ema.TokenTypeRefreshToken:
 		stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: subjectToken, Ts: time.Now()})
 		if err != nil || stored.Kind != "refresh_token" {
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "subject_token is unknown, revoked, expired, or not a refresh token")
@@ -262,7 +262,7 @@ func (h *Handler) resolveExchangeSubject(ctx context.Context, w http.ResponseWri
 
 	default:
 		oauthError(w, http.StatusBadRequest, "invalid_request",
-			fmt.Sprintf("subject_token_type must be %s or %s", xaa.TokenTypeIDToken, xaa.TokenTypeRefreshToken))
+			fmt.Sprintf("subject_token_type must be %s or %s", ema.TokenTypeIDToken, ema.TokenTypeRefreshToken))
 		return uuid.Nil, false
 	}
 }

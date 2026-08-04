@@ -41,8 +41,8 @@ function RootComponent() {
               <TopNavLink to="/providers" matchPrefix>
                 Providers
               </TopNavLink>
-              <TopNavLink to="/xaa" matchPrefix>
-                Cross-app access
+              <TopNavLink to="/ema" matchPrefix>
+                Enterprise-managed auth
               </TopNavLink>
             </nav>
           </div>

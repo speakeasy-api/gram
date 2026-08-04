@@ -437,20 +437,20 @@ WHERE m.user_id = @user_id
 ORDER BY o.name ASC;
 
 -- =============================================================================
--- xaa_apps
+-- ema_apps
 -- =============================================================================
 
--- CreateXaaApp is find-or-create on client_id, matching the idiom used by
+-- CreateEmaApp is find-or-create on client_id, matching the idiom used by
 -- CreateOrganization: the no-op DO UPDATE makes RETURNING fire on the
 -- existing row so callers always get a usable record back.
--- name: CreateXaaApp :one
-INSERT INTO xaa_apps (id, client_id, client_secret, name, enabled)
+-- name: CreateEmaApp :one
+INSERT INTO ema_apps (id, client_id, client_secret, name, enabled)
 VALUES (@id, @client_id, @client_secret, @name, @enabled)
 ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
 RETURNING *;
 
--- name: UpdateXaaApp :one
-UPDATE xaa_apps
+-- name: UpdateEmaApp :one
+UPDATE ema_apps
 SET
   client_id = COALESCE(sqlc.narg('client_id'), client_id),
   client_secret = COALESCE(sqlc.narg('client_secret'), client_secret),
@@ -460,33 +460,33 @@ SET
 WHERE id = @id
 RETURNING *;
 
--- name: GetXaaApp :one
-SELECT * FROM xaa_apps WHERE id = @id;
+-- name: GetEmaApp :one
+SELECT * FROM ema_apps WHERE id = @id;
 
--- name: GetXaaAppByClientID :one
-SELECT * FROM xaa_apps WHERE client_id = @client_id;
+-- name: GetEmaAppByClientID :one
+SELECT * FROM ema_apps WHERE client_id = @client_id;
 
--- name: ListXaaApps :many
-SELECT * FROM xaa_apps
+-- name: ListEmaApps :many
+SELECT * FROM ema_apps
 WHERE id > @after
 ORDER BY id ASC
 LIMIT @max_rows;
 
--- name: DeleteXaaApp :exec
-DELETE FROM xaa_apps WHERE id = @id;
+-- name: DeleteEmaApp :exec
+DELETE FROM ema_apps WHERE id = @id;
 
 -- =============================================================================
--- xaa_resources
+-- ema_resources
 -- =============================================================================
 
--- name: CreateXaaResource :one
-INSERT INTO xaa_resources (id, slug, name, resource_identifier)
+-- name: CreateEmaResource :one
+INSERT INTO ema_resources (id, slug, name, resource_identifier)
 VALUES (@id, @slug, @name, @resource_identifier)
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
 RETURNING *;
 
--- name: UpdateXaaResource :one
-UPDATE xaa_resources
+-- name: UpdateEmaResource :one
+UPDATE ema_resources
 SET
   slug = COALESCE(sqlc.narg('slug'), slug),
   name = COALESCE(sqlc.narg('name'), name),
@@ -495,60 +495,60 @@ SET
 WHERE id = @id
 RETURNING *;
 
--- name: GetXaaResource :one
-SELECT * FROM xaa_resources WHERE id = @id;
+-- name: GetEmaResource :one
+SELECT * FROM ema_resources WHERE id = @id;
 
--- GetXaaResourceBySlug backs both the mint leg (resolving the `audience`
+-- GetEmaResourceBySlug backs both the mint leg (resolving the `audience`
 -- parameter's issuer URL to a row) and every request to a resource
 -- authorization server (resolving the {slug} path wildcard).
--- name: GetXaaResourceBySlug :one
-SELECT * FROM xaa_resources WHERE slug = @slug;
+-- name: GetEmaResourceBySlug :one
+SELECT * FROM ema_resources WHERE slug = @slug;
 
--- name: ListXaaResources :many
-SELECT * FROM xaa_resources
+-- name: ListEmaResources :many
+SELECT * FROM ema_resources
 WHERE id > @after
 ORDER BY id ASC
 LIMIT @max_rows;
 
--- name: DeleteXaaResource :exec
-DELETE FROM xaa_resources WHERE id = @id;
+-- name: DeleteEmaResource :exec
+DELETE FROM ema_resources WHERE id = @id;
 
 -- =============================================================================
--- xaa_app_assignments
+-- ema_app_assignments
 -- =============================================================================
 
--- CreateXaaAppAssignment is idempotent on the (app, user, resource) triple.
+-- CreateEmaAppAssignment is idempotent on the (app, user, resource) triple.
 -- Re-assigning with different scopes overwrites them, because an assignment
 -- carries no other state worth preserving.
--- name: CreateXaaAppAssignment :one
-INSERT INTO xaa_app_assignments (id, app_id, user_id, resource_id, granted_scopes)
+-- name: CreateEmaAppAssignment :one
+INSERT INTO ema_app_assignments (id, app_id, user_id, resource_id, granted_scopes)
 VALUES (@id, @app_id, @user_id, @resource_id, @granted_scopes)
 ON CONFLICT (app_id, user_id, resource_id) DO UPDATE SET
   granted_scopes = excluded.granted_scopes
 RETURNING *;
 
--- name: UpdateXaaAppAssignment :one
-UPDATE xaa_app_assignments
+-- name: UpdateEmaAppAssignment :one
+UPDATE ema_app_assignments
 SET
   granted_scopes = @granted_scopes,
   updated_at = @ts
 WHERE id = @id
 RETURNING *;
 
--- name: GetXaaAppAssignment :one
-SELECT * FROM xaa_app_assignments WHERE id = @id;
+-- name: GetEmaAppAssignment :one
+SELECT * FROM ema_app_assignments WHERE id = @id;
 
--- GetXaaAppAssignmentForMint is the mint leg's policy lookup. ErrNoRows here
+-- GetEmaAppAssignmentForMint is the mint leg's policy lookup. ErrNoRows here
 -- is the denial: either the user was never assigned the app, or the app was
 -- never pointed at this resource.
--- name: GetXaaAppAssignmentForMint :one
-SELECT * FROM xaa_app_assignments
+-- name: GetEmaAppAssignmentForMint :one
+SELECT * FROM ema_app_assignments
 WHERE app_id = @app_id AND user_id = @user_id AND resource_id = @resource_id;
 
--- ListXaaAppAssignments keyset-paginates by id with optional exact-match
+-- ListEmaAppAssignments keyset-paginates by id with optional exact-match
 -- filters. Any narg may be NULL, in which case that filter is not applied.
--- name: ListXaaAppAssignments :many
-SELECT * FROM xaa_app_assignments
+-- name: ListEmaAppAssignments :many
+SELECT * FROM ema_app_assignments
 WHERE id > @after
   AND (sqlc.narg('app_id') IS NULL OR app_id = sqlc.narg('app_id'))
   AND (sqlc.narg('user_id') IS NULL OR user_id = sqlc.narg('user_id'))
@@ -556,15 +556,15 @@ WHERE id > @after
 ORDER BY id ASC
 LIMIT @max_rows;
 
--- name: DeleteXaaAppAssignment :exec
-DELETE FROM xaa_app_assignments WHERE id = @id;
+-- name: DeleteEmaAppAssignment :exec
+DELETE FROM ema_app_assignments WHERE id = @id;
 
 -- =============================================================================
--- xaa_trust_rules
+-- ema_trust_rules
 -- =============================================================================
 
--- name: CreateXaaTrustRule :one
-INSERT INTO xaa_trust_rules (
+-- name: CreateEmaTrustRule :one
+INSERT INTO ema_trust_rules (
   id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled
 )
 VALUES (
@@ -581,8 +581,8 @@ ON CONFLICT (resource_id, trusted_issuer) DO UPDATE SET
   enabled = excluded.enabled
 RETURNING *;
 
--- name: UpdateXaaTrustRule :one
-UPDATE xaa_trust_rules
+-- name: UpdateEmaTrustRule :one
+UPDATE ema_trust_rules
 SET
   trusted_issuer = COALESCE(sqlc.narg('trusted_issuer'), trusted_issuer),
   allowed_client_ids = COALESCE(sqlc.narg('allowed_client_ids'), allowed_client_ids),
@@ -592,60 +592,60 @@ SET
 WHERE id = @id
 RETURNING *;
 
--- name: GetXaaTrustRule :one
-SELECT * FROM xaa_trust_rules WHERE id = @id;
+-- name: GetEmaTrustRule :one
+SELECT * FROM ema_trust_rules WHERE id = @id;
 
--- GetXaaTrustRuleForIssuer is the redeem leg's trust lookup. ErrNoRows means
+-- GetEmaTrustRuleForIssuer is the redeem leg's trust lookup. ErrNoRows means
 -- this resource has no rule for the ID-JAG's `iss` at all, which is the
 -- deny-by-default path.
--- name: GetXaaTrustRuleForIssuer :one
-SELECT * FROM xaa_trust_rules
+-- name: GetEmaTrustRuleForIssuer :one
+SELECT * FROM ema_trust_rules
 WHERE resource_id = @resource_id AND trusted_issuer = @trusted_issuer;
 
--- name: ListXaaTrustRules :many
-SELECT * FROM xaa_trust_rules
+-- name: ListEmaTrustRules :many
+SELECT * FROM ema_trust_rules
 WHERE id > @after
   AND (sqlc.narg('resource_id') IS NULL OR resource_id = sqlc.narg('resource_id'))
 ORDER BY id ASC
 LIMIT @max_rows;
 
--- name: DeleteXaaTrustRule :exec
-DELETE FROM xaa_trust_rules WHERE id = @id;
+-- name: DeleteEmaTrustRule :exec
+DELETE FROM ema_trust_rules WHERE id = @id;
 
 -- =============================================================================
--- xaa_issued_jags / xaa_redeemed_jags
+-- ema_issued_jags / ema_redeemed_jags
 -- =============================================================================
 
--- name: CreateXaaIssuedJag :one
-INSERT INTO xaa_issued_jags (jti, app_id, user_id, resource_id, scope, expires_at)
+-- name: CreateEmaIssuedJag :one
+INSERT INTO ema_issued_jags (jti, app_id, user_id, resource_id, scope, expires_at)
 VALUES (@jti, @app_id, @user_id, @resource_id, @scope, @expires_at)
 RETURNING *;
 
--- ListXaaIssuedJags is newest-first for the dashboard rather than keyset
+-- ListEmaIssuedJags is newest-first for the dashboard rather than keyset
 -- paginated: it is a debugging view over a short-lived ledger, and reading it
 -- in mint order is the whole point.
--- name: ListXaaIssuedJags :many
-SELECT * FROM xaa_issued_jags
+-- name: ListEmaIssuedJags :many
+SELECT * FROM ema_issued_jags
 WHERE (sqlc.narg('user_id') IS NULL OR user_id = sqlc.narg('user_id'))
   AND (sqlc.narg('resource_id') IS NULL OR resource_id = sqlc.narg('resource_id'))
 ORDER BY created_at DESC, jti DESC
 LIMIT @max_rows;
 
--- ClaimXaaRedeemedJag enforces single use. The insert conflicts when this
+-- ClaimEmaRedeemedJag enforces single use. The insert conflicts when this
 -- (issuer, jti) pair was already redeemed, and DO NOTHING makes RETURNING
 -- yield no row -- so ErrNoRows from this query IS the replay signal.
--- name: ClaimXaaRedeemedJag :one
-INSERT INTO xaa_redeemed_jags (issuer, jti, resource_id, expires_at)
+-- name: ClaimEmaRedeemedJag :one
+INSERT INTO ema_redeemed_jags (issuer, jti, resource_id, expires_at)
 VALUES (@issuer, @jti, @resource_id, @expires_at)
 ON CONFLICT (issuer, jti) DO NOTHING
 RETURNING *;
 
 -- =============================================================================
--- xaa_resource_tokens
+-- ema_resource_tokens
 -- =============================================================================
 
--- name: CreateXaaResourceToken :one
-INSERT INTO xaa_resource_tokens (
+-- name: CreateEmaResourceToken :one
+INSERT INTO ema_resource_tokens (
   token, resource_id, user_id, client_id, audience, scope, expires_at
 )
 VALUES (
@@ -653,11 +653,11 @@ VALUES (
 )
 RETURNING *;
 
--- GetActiveXaaResourceToken resolves a bearer token presented back to the
+-- GetActiveEmaResourceToken resolves a bearer token presented back to the
 -- resource authorization server that minted it. Scoped by resource_id so a
 -- token minted by one resource cannot be introspected at another.
--- name: GetActiveXaaResourceToken :one
-SELECT * FROM xaa_resource_tokens
+-- name: GetActiveEmaResourceToken :one
+SELECT * FROM ema_resource_tokens
 WHERE token = @token
   AND resource_id = @resource_id
   AND revoked_at IS NULL

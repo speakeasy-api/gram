@@ -1,16 +1,17 @@
-// Package resourceas serves the redeeming half of the cross-app access flow:
+// Package resourceas serves the redeeming half of Enterprise-Managed
+// Authorization:
 // the resource authorization servers that accept an Identity Assertion JWT
 // Authorization Grant (ID-JAG) under the RFC 7523 jwt-bearer grant and hand
 // back an access token for the MCP server behind them.
 //
-// Each row in xaa_resources is one such server, mounted at
+// Each row in ema_resources is one such server, mounted at
 // /resource-as/<slug>. They are rows rather than a singleton for two reasons:
 // an ID-JAG names exactly one audience, so testing that a grant minted for
 // one resource is refused at another needs a second resource to exist; and
 // trust rules are per-resource, so modelling two trust domains needs two.
 //
 // The IdP half lives in internal/modes/oauth21. A resource here is under no
-// obligation to trust it -- xaa_trust_rules decides, and pointing a resource
+// obligation to trust it -- ema_trust_rules decides, and pointing a resource
 // at a foreign issuer is a supported configuration.
 package resourceas
 
@@ -35,13 +36,13 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/cimd"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
-	"github.com/speakeasy-api/gram/dev-idp/internal/xaa"
 )
 
 // Prefix is the URL prefix the dev-idp listener mounts this handler under.
 // The resource slug is the next path segment.
-const Prefix = xaa.ResourceASPrefix
+const Prefix = ema.ResourceASPrefix
 
 const (
 	accessTokenLifetime = 1 * time.Hour
@@ -113,7 +114,7 @@ func (h *Handler) RegisterRootRoutes(mux *http.ServeMux) {
 
 // issuer is the absolute URL identifying one resource's authorization server.
 func (h *Handler) issuer(slug string) string {
-	return xaa.ResourceASIssuer(h.cfg.ExternalURL, slug)
+	return ema.ResourceASIssuer(h.cfg.ExternalURL, slug)
 }
 
 // =============================================================================
@@ -131,7 +132,7 @@ type asMetadata struct {
 
 	// AuthorizationGrantProfilesSupported is the field an MCP client reads to
 	// decide whether this server speaks enterprise-managed authorization. It
-	// looks for exactly xaa.GrantProfileIDJAG.
+	// looks for exactly ema.GrantProfileIDJAG.
 	AuthorizationGrantProfilesSupported []string `json:"authorization_grant_profiles_supported"`
 }
 
@@ -152,12 +153,12 @@ func (h *Handler) handleASMetadata(w http.ResponseWriter, r *http.Request) {
 		Issuer:                            iss,
 		TokenEndpoint:                     iss + "/token",
 		IntrospectionEndpoint:             iss + "/introspect",
-		GrantTypesSupported:               []string{xaa.GrantTypeJWTBearer},
+		GrantTypesSupported:               []string{ema.GrantTypeJWTBearer},
 		TokenEndpointAuthMethodsSupported: []string{"none"},
 		ScopesSupported:                   h.advertisedScopes(r.Context(), resource),
 		ClientIDMetadataDocumentSupported: true,
 
-		AuthorizationGrantProfilesSupported: []string{xaa.GrantProfileIDJAG},
+		AuthorizationGrantProfilesSupported: []string{ema.GrantProfileIDJAG},
 	})
 }
 
@@ -178,8 +179,8 @@ func (h *Handler) handleProtectedResourceMetadata(w http.ResponseWriter, r *http
 // resource's trust rules. A rule with no ceiling contributes nothing, since
 // "no ceiling" is not a scope. Best-effort: a read failure advertises none
 // rather than failing the discovery document.
-func (h *Handler) advertisedScopes(ctx context.Context, resource *repo.XaaResource) []string {
-	rules, err := repo.New(h.db).ListXaaTrustRules(ctx, repo.ListXaaTrustRulesParams{
+func (h *Handler) advertisedScopes(ctx context.Context, resource *repo.EmaResource) []string {
+	rules, err := repo.New(h.db).ListEmaTrustRules(ctx, repo.ListEmaTrustRulesParams{
 		After:      uuid.Nil,
 		ResourceID: uuid.NullUUID{UUID: resource.ID, Valid: true},
 		MaxRows:    100,
@@ -191,7 +192,7 @@ func (h *Handler) advertisedScopes(ctx context.Context, resource *repo.XaaResour
 
 	scopes := []string{}
 	for _, rule := range rules {
-		for _, s := range xaa.ScopeList(rule.AllowedScopes) {
+		for _, s := range ema.ScopeList(rule.AllowedScopes) {
 			if !slices.Contains(scopes, s) {
 				scopes = append(scopes, s)
 			}
@@ -225,9 +226,9 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if got := r.Form.Get("grant_type"); got != xaa.GrantTypeJWTBearer {
+	if got := r.Form.Get("grant_type"); got != ema.GrantTypeJWTBearer {
 		oauthError(w, http.StatusBadRequest, "unsupported_grant_type",
-			fmt.Sprintf("this authorization server only accepts %s", xaa.GrantTypeJWTBearer))
+			fmt.Sprintf("this authorization server only accepts %s", ema.GrantTypeJWTBearer))
 		return
 	}
 
@@ -258,7 +259,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 
 	// Single use, claimed before the token is minted so a concurrent replay
 	// loses the race rather than getting a second token.
-	if _, err := queries.ClaimXaaRedeemedJag(ctx, repo.ClaimXaaRedeemedJagParams{
+	if _, err := queries.ClaimEmaRedeemedJag(ctx, repo.ClaimEmaRedeemedJagParams{
 		Issuer:     claims.Issuer,
 		Jti:        claims.ID,
 		ResourceID: resource.ID,
@@ -282,7 +283,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 
 	// The trust rule's ceiling is applied on top of whatever the IdP already
 	// granted: this server narrows, it never widens.
-	rule, err := queries.GetXaaTrustRuleForIssuer(ctx, repo.GetXaaTrustRuleForIssuerParams{
+	rule, err := queries.GetEmaTrustRuleForIssuer(ctx, repo.GetEmaTrustRuleForIssuerParams{
 		ResourceID:    resource.ID,
 		TrustedIssuer: claims.Issuer,
 	})
@@ -291,10 +292,10 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load trust rule")
 		return
 	}
-	granted := xaa.NarrowScope(claims.Scope, rule.AllowedScopes)
+	granted := ema.NarrowScope(claims.Scope, rule.AllowedScopes)
 
-	access := "xaa_" + randomHex(32)
-	if _, err := queries.CreateXaaResourceToken(ctx, repo.CreateXaaResourceTokenParams{
+	access := "ema_" + randomHex(32)
+	if _, err := queries.CreateEmaResourceToken(ctx, repo.CreateEmaResourceTokenParams{
 		Token:      access,
 		ResourceID: resource.ID,
 		UserID:     userID,
@@ -320,47 +321,47 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 // verifyIDJAG runs the full acceptance check on an assertion and returns its
 // claims. Every failure is phrased for a developer reading the response body,
 // because that is the whole point of this server existing.
-func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.XaaResource, assertion string) (xaa.Claims, error) {
+func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.EmaResource, assertion string) (ema.Claims, error) {
 	// Parse unverified first: the issuer decides which key verifies the
 	// signature, and the issuer is inside the token.
-	var claims xaa.Claims
+	var claims ema.Claims
 	unverified, _, err := jwt.NewParser().ParseUnverified(assertion, &claims)
 	if err != nil {
-		return xaa.Claims{}, fmt.Errorf("assertion is not a JWT: %w", err)
+		return ema.Claims{}, fmt.Errorf("assertion is not a JWT: %w", err)
 	}
 
 	// The typ header is what distinguishes an ID-JAG from an ordinary
 	// id_token. Without this check any id_token the IdP ever signed would be
 	// redeemable here.
-	if typ, _ := unverified.Header["typ"].(string); typ != xaa.JWTType {
-		return xaa.Claims{}, fmt.Errorf("assertion typ header is %q, want %q", typ, xaa.JWTType)
+	if typ, _ := unverified.Header["typ"].(string); typ != ema.JWTType {
+		return ema.Claims{}, fmt.Errorf("assertion typ header is %q, want %q", typ, ema.JWTType)
 	}
 
 	issuerURL := h.issuer(resource.Slug)
 	if !slices.Contains(claims.Audience, issuerURL) {
-		return xaa.Claims{}, fmt.Errorf("assertion aud %v does not name this authorization server (%s)", claims.Audience, issuerURL)
+		return ema.Claims{}, fmt.Errorf("assertion aud %v does not name this authorization server (%s)", claims.Audience, issuerURL)
 	}
 
 	if claims.ID == "" {
-		return xaa.Claims{}, errors.New("assertion has no jti, so it cannot be enforced as single-use")
+		return ema.Claims{}, errors.New("assertion has no jti, so it cannot be enforced as single-use")
 	}
 
-	rule, err := repo.New(h.db).GetXaaTrustRuleForIssuer(ctx, repo.GetXaaTrustRuleForIssuerParams{
+	rule, err := repo.New(h.db).GetEmaTrustRuleForIssuer(ctx, repo.GetEmaTrustRuleForIssuerParams{
 		ResourceID:    resource.ID,
 		TrustedIssuer: claims.Issuer,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return xaa.Claims{}, fmt.Errorf("this resource has no trust rule for issuer %q", claims.Issuer)
+			return ema.Claims{}, fmt.Errorf("this resource has no trust rule for issuer %q", claims.Issuer)
 		}
-		return xaa.Claims{}, fmt.Errorf("load trust rule: %w", err)
+		return ema.Claims{}, fmt.Errorf("load trust rule: %w", err)
 	}
 	if !rule.Enabled {
-		return xaa.Claims{}, fmt.Errorf("the trust rule for issuer %q is disabled", claims.Issuer)
+		return ema.Claims{}, fmt.Errorf("the trust rule for issuer %q is disabled", claims.Issuer)
 	}
 
 	if err := allowedByTrustRule(rule, claims.ClientID); err != nil {
-		return xaa.Claims{}, err
+		return ema.Claims{}, err
 	}
 
 	// Only now, with the issuer known to be trusted, resolve its key. Doing
@@ -368,10 +369,10 @@ func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.XaaResource, a
 	// request.
 	key, err := h.verificationKey(ctx, claims.Issuer, unverified)
 	if err != nil {
-		return xaa.Claims{}, fmt.Errorf("resolve signing key for issuer %q: %w", claims.Issuer, err)
+		return ema.Claims{}, fmt.Errorf("resolve signing key for issuer %q: %w", claims.Issuer, err)
 	}
 
-	var verified xaa.Claims
+	var verified ema.Claims
 	parser := jwt.NewParser(
 		jwt.WithValidMethods([]string{"RS256"}),
 		jwt.WithIssuer(claims.Issuer),
@@ -379,11 +380,11 @@ func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.XaaResource, a
 		jwt.WithLeeway(idJAGClockSkew),
 	)
 	if _, err := parser.ParseWithClaims(assertion, &verified, func(*jwt.Token) (any, error) { return key, nil }); err != nil {
-		return xaa.Claims{}, fmt.Errorf("assertion did not verify: %w", err)
+		return ema.Claims{}, fmt.Errorf("assertion did not verify: %w", err)
 	}
 
 	if resource.ResourceIdentifier != "" && verified.Resource != "" && verified.Resource != resource.ResourceIdentifier {
-		return xaa.Claims{}, fmt.Errorf("assertion resource %q is not the resource behind this authorization server (%s)", verified.Resource, resource.ResourceIdentifier)
+		return ema.Claims{}, fmt.Errorf("assertion resource %q is not the resource behind this authorization server (%s)", verified.Resource, resource.ResourceIdentifier)
 	}
 
 	return verified, nil
@@ -391,7 +392,7 @@ func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.XaaResource, a
 
 // allowedByTrustRule checks a client id against a rule's allowlist. An empty
 // or absent list means any client the issuer vouched for is acceptable.
-func allowedByTrustRule(rule repo.XaaTrustRule, clientID string) error {
+func allowedByTrustRule(rule repo.EmaTrustRule, clientID string) error {
 	raw := strings.TrimSpace(rule.AllowedClientIds)
 	if raw == "" || raw == "[]" {
 		return nil
@@ -478,7 +479,7 @@ func (h *Handler) fetchJWKSKey(ctx context.Context, jwksURI, kid string) (*rsa.P
 // grant. When that id is a Client ID Metadata Document URL it is dereferenced
 // too, which is the CIMD draft's own requirement and catches a client
 // pointing at a document that does not describe it.
-func (h *Handler) authenticateClient(ctx context.Context, r *http.Request, claims xaa.Claims) error {
+func (h *Handler) authenticateClient(ctx context.Context, r *http.Request, claims ema.Claims) error {
 	presented := r.Form.Get("client_id")
 	if presented == "" {
 		return errors.New("client_id is required")
@@ -502,7 +503,7 @@ func (h *Handler) authenticateClient(ctx context.Context, r *http.Request, claim
 // identifies the person -- and a user who has never been seen here is
 // created, which is what a real resource app does on first cross-domain
 // access.
-func (h *Handler) resolveSubject(ctx context.Context, queries *repo.Queries, claims xaa.Claims) (uuid.UUID, error) {
+func (h *Handler) resolveSubject(ctx context.Context, queries *repo.Queries, claims ema.Claims) (uuid.UUID, error) {
 	if id, err := uuid.Parse(claims.Subject); err == nil {
 		if _, err := queries.GetUser(ctx, id); err == nil {
 			return id, nil
@@ -569,7 +570,7 @@ func (h *Handler) handleIntrospect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveXaaResourceToken(ctx, repo.GetActiveXaaResourceTokenParams{
+	stored, err := queries.GetActiveEmaResourceToken(ctx, repo.GetActiveEmaResourceTokenParams{
 		Token:      token,
 		ResourceID: resource.ID,
 		Ts:         time.Now(),
@@ -603,8 +604,8 @@ func (h *Handler) handleIntrospect(w http.ResponseWriter, r *http.Request) {
 
 // lookupResource resolves the {slug} wildcard to a resource row, writing the
 // error response itself and returning nil when there is no such resource.
-func (h *Handler) lookupResource(ctx context.Context, w http.ResponseWriter, slug string) *repo.XaaResource {
-	resource, err := repo.New(h.db).GetXaaResourceBySlug(ctx, slug)
+func (h *Handler) lookupResource(ctx context.Context, w http.ResponseWriter, slug string) *repo.EmaResource {
+	resource, err := repo.New(h.db).GetEmaResourceBySlug(ctx, slug)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			oauthError(w, http.StatusNotFound, "invalid_request", fmt.Sprintf("no resource authorization server is registered at %q", slug))
