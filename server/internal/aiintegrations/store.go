@@ -54,6 +54,10 @@ const (
 	ScheduleAnthropicAnalyticsCost  = "anthropic_analytics_cost"
 	ScheduleCodexCompliance         = ProviderCodexCompliance
 	ScheduleChatGPTCompliance       = ProviderChatGPTCompliance
+	// ScheduleCodexCloudSessions imports Codex cloud task transcripts
+	// (CODEX_LOG files) — a second schedule on the chatgpt_compliance config,
+	// which owns the workspace scope both feeds are served under.
+	ScheduleCodexCloudSessions = "codex_cloud_sessions"
 )
 
 // Sync kinds record how a schedule checkpoints progress.
@@ -92,6 +96,10 @@ const (
 	// messages from the Compliance Logs Platform CONVERSATION_MESSAGE feed —
 	// discrete activity events like claude.chat.message, not metrics.
 	StreamChatGPTChatMessage = "chatgpt.chat.message"
+	// codex.cloud.chat.message carries Codex cloud task transcripts (web
+	// tasks; GitHub code review has no CODEX_LOG presence) from the
+	// Compliance Logs Platform CODEX_LOG feed — discrete activity events.
+	StreamCodexCloudChatMessage = "codex.cloud.chat.message"
 )
 
 // streamInfo names the product-level stream a schedule writes.
@@ -120,6 +128,8 @@ func streamForSchedule(schedule string) streamInfo {
 		return streamInfo{name: StreamCodexCostUSD, kind: StreamKindMetrics}
 	case ScheduleChatGPTCompliance:
 		return streamInfo{name: StreamChatGPTChatMessage, kind: StreamKindEvents}
+	case ScheduleCodexCloudSessions:
+		return streamInfo{name: StreamCodexCloudChatMessage, kind: StreamKindEvents}
 	default:
 		return streamInfo{name: "", kind: ""}
 	}
@@ -160,6 +170,11 @@ func syncSchedulesFor(provider string) []syncSchedule {
 		}
 	case ProviderCodexCompliance:
 		return []syncSchedule{providerSyncSchedule(provider)}
+	case ProviderChatGPTCompliance:
+		return []syncSchedule{
+			providerSyncSchedule(provider),
+			{schedule: ScheduleCodexCloudSessions, kind: SyncKindTime},
+		}
 	default:
 		return []syncSchedule{providerSyncSchedule(provider)}
 	}
@@ -224,7 +239,7 @@ func pollIntervalForSchedule(schedule string) time.Duration {
 		return anthropicAnalyticsPollInterval
 	case ScheduleCodexCompliance:
 		return codexComplianceUsagePollInterval
-	case ScheduleChatGPTCompliance:
+	case ScheduleChatGPTCompliance, ScheduleCodexCloudSessions:
 		return chatgptCompliancePollInterval
 	default:
 		return cursorUsagePollInterval

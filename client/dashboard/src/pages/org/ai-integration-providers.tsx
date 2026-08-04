@@ -311,6 +311,16 @@ const CHATGPT_AI_INTEGRATION: AIIntegrationProvider = {
       signal: "chatgpt.chat.message",
       destination: { label: "Agent Sessions", path: "agent-sessions" },
     },
+    {
+      schedule: "codex_cloud_sessions",
+      name: "Codex cloud task transcripts",
+      description:
+        "Imports Codex cloud web-task prompts and responses from Compliance Logs files for review.",
+      cadence: "Every 5m",
+      kind: "events",
+      signal: "codex.cloud.chat.message",
+      destination: { label: "Agent Sessions", path: "agent-sessions" },
+    },
   ],
   onboardingDescription:
     "Connect OpenAI's Compliance Logs API so the platform can import ChatGPT conversations for review workflows.",

@@ -52,6 +52,9 @@ func TestExpandSourceAliases_ExpandsCanonical(t *testing.T) {
 	// ChatGPT rows arrive from the compliance import under the chatgpt hook
 	// source; the display alias must round-trip through the filter.
 	require.Equal(t, []string{"chatgpt", "ChatGPT"}, expandSourceAliases([]string{"chatgpt"}))
+	// Codex cloud web-task transcripts import under codex-web — a distinct
+	// surface from live device codex sessions, which must not absorb it.
+	require.Equal(t, []string{"codex-web", "CodexWeb", "Codex Web"}, expandSourceAliases([]string{"codex-web"}))
 }
 
 func TestExpandSourceAliases_PassesThroughUnknown(t *testing.T) {

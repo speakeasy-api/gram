@@ -152,6 +152,13 @@ func (p ChatGPTConversationSyncProgress) String() string {
 	)
 }
 
+func (p CodexCloudSyncProgress) String() string {
+	return fmt.Sprintf(
+		"window_start=%s log_pages=%d log_files=%d events=%d messages_written=%d chats_upserted=%d skipped_clients=%d timestamp_fallbacks=%d watermark_reached=%s",
+		p.WindowStart.Format(time.RFC3339Nano), p.LogPages, p.LogFiles, p.Events, p.MessagesWritten, p.ChatsUpserted, p.SkippedClients, p.TimestampFallbacks, p.WatermarkReached.Format(time.RFC3339Nano),
+	)
+}
+
 func (p CodexCostSyncProgress) String() string {
 	return fmt.Sprintf(
 		"window_start=%s log_pages=%d log_files=%d cost_events=%d cost_events_written=%d watermark_reached=%s",
