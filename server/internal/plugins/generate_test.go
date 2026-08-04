@@ -1562,6 +1562,92 @@ func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
 	require.Contains(t, calls, "plugin marketplace upgrade "+conv.ToSlug(cfg.OrgName)+"-speakeasy")
 }
 
+// The unified ChatGPT desktop app (Chat + Work + Codex modes) that OpenAI
+// merged the standalone Codex app into on 2026-07-09 ships the codex CLI at a
+// different bundle path. Without this probe the script silently degrades to
+// "codex executable not found" manual instructions on every machine that only
+// has the post-merge app — the common case now that the legacy app is frozen.
+// find_codex walks a candidate list in order when no codex is on PATH. Run
+// the script against two seeded candidates and observe which binary it
+// actually invokes, so this covers the lookup and its precedence rather than
+// the generated text.
+func TestGenerateCodexInstallScriptResolvesCodexByProbeOrder(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home := t.TempDir()
+	callLog := filepath.Join(home, "codex-calls.log")
+	for marker, dir := range map[string]string{
+		// Candidate 1: the standalone package install.
+		"standalone-wins": filepath.Join(home, ".codex", "packages", "standalone", "current", "bin"),
+		// Candidate 2: ~/.local/bin, which must lose to the earlier match.
+		"local-bin-ran": filepath.Join(home, ".local", "bin"),
+	} {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		stub := "#!/bin/sh\nprintf '" + marker + "\\n' >> \"" + callLog + "\"\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(stub), 0o755))
+	}
+
+	execCodexInstallScript(t, script, home)
+
+	calls := string(requireFileBytes(t, callLog))
+	require.Contains(t, calls, "standalone-wins", "the first matching candidate must be the one invoked")
+	require.NotContains(t, calls, "local-bin-ran", "a later candidate must not run once an earlier one matches")
+}
+
+// The /Applications candidates cannot be executed here — a test cannot place
+// a bundle under the system Applications directory — so the candidate list is
+// read out of the generated script and asserted whole. That pins both which
+// paths are probed and the order they are tried in, and a failure prints the
+// actual list rather than an index comparison.
+//
+// ChatGPT.app leads the bundle pair because OpenAI merged the standalone
+// Codex app into the unified ChatGPT app, which is where the maintained codex
+// CLI now ships (verified by hand against 0.146, DNO-737); the frozen legacy
+// bundle stays as a fallback for machines that never migrated. Dropping the
+// unified entry silently returns install to "codex executable not found" on
+// any post-merge machine.
+func TestGenerateCodexInstallScriptProbesCandidatesInOrder(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{
+		"${codex_home}/packages/standalone/current/bin/codex",
+		"${HOME}/.local/bin/codex",
+		"/usr/local/bin/codex",
+		"/Applications/ChatGPT.app/Contents/Resources/codex",
+		"/Applications/Codex.app/Contents/Resources/codex",
+	}, codexProbeCandidates(t, script))
+}
+
+// codexProbeCandidates reads find_codex's ordered candidate list out of the
+// generated script.
+func codexProbeCandidates(t *testing.T, script []byte) []string {
+	t.Helper()
+
+	const marker = "for candidate in"
+	start := strings.Index(string(script), marker)
+	require.Positive(t, start, "generated script must declare a candidate list")
+	body := string(script)[start+len(marker):]
+	end := strings.Index(body, "; do")
+	require.Positive(t, end, "candidate list must terminate with '; do'")
+
+	candidates := make([]string, 0, 8)
+	for field := range strings.FieldsSeq(body[:end]) {
+		field = strings.Trim(field, "\\\"")
+		if field != "" {
+			candidates = append(candidates, field)
+		}
+	}
+	return candidates
+}
+
 // Root-level dotted keys (features.hooks = true) implicitly define the
 // [features] table and make Codex reject the whole config with a duplicate-key
 // error when an explicit [features] table is also present — which is the
