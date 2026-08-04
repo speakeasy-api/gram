@@ -1,4 +1,4 @@
-// Package oauth defines Platform MCP's organization-bound OAuth state contracts.
+// Package oauth defines Admin MCP's organization-bound OAuth state contracts.
 // It intentionally has no HTTP, hosted MCP, or database dependency.
 package oauth
 
@@ -13,19 +13,23 @@ import (
 )
 
 var (
-	ErrNotFound       = errors.New("platform oauth state not found")
-	ErrRevoked        = errors.New("platform oauth state revoked")
-	ErrExpired        = errors.New("platform oauth state expired")
-	ErrAlreadyUsed    = errors.New("platform oauth state already used")
-	ErrClientMismatch = errors.New("platform oauth client mismatch")
-	ErrGeneration     = errors.New("platform oauth connection generation mismatch")
-	ErrRedirectURI    = errors.New("platform oauth redirect URI mismatch")
-	ErrPKCE           = errors.New("platform oauth PKCE mismatch")
+	ErrNotFound       = errors.New("admin oauth state not found")
+	ErrRevoked        = errors.New("admin oauth state revoked")
+	ErrExpired        = errors.New("admin oauth state expired")
+	ErrAlreadyUsed    = errors.New("admin oauth state already used")
+	ErrClientMismatch = errors.New("admin oauth client mismatch")
+	ErrGeneration     = errors.New("admin oauth connection generation mismatch")
+	ErrRedirectURI    = errors.New("admin oauth redirect URI mismatch")
+	ErrPKCE           = errors.New("admin oauth PKCE mismatch")
 )
 
 type Client struct {
-	ID        string
-	RevokedAt *time.Time
+	ID              string
+	SecretHash      string
+	Name            string
+	RedirectURIs    []string
+	SecretExpiresAt *time.Time
+	RevokedAt       *time.Time
 }
 
 type Connection struct {
@@ -73,21 +77,33 @@ type RotateSessionInput struct {
 	Replacement Session
 }
 
-// Store defines the state transitions the Platform authorization server requires.
+type AuthorizeConnectionInput struct {
+	Connection Connection
+	Grant      Grant
+	Now        time.Time
+}
+
+// Store defines the state transitions the Admin authorization server requires.
 type Store interface {
 	RegisterClient(ctx context.Context, client Client) error
+	GetClient(ctx context.Context, clientID string) (Client, error)
 	RevokeClient(ctx context.Context, clientID string, now time.Time) error
 	RegisterConnection(ctx context.Context, connection Connection) error
+	GetConnection(ctx context.Context, organizationID, subject, clientID string) (Connection, error)
+	AuthorizeConnection(ctx context.Context, input AuthorizeConnectionInput) (Connection, error)
 	RevokeConnection(ctx context.Context, connectionID string, now time.Time) error
 	IssueGrant(ctx context.Context, grant Grant) error
 	ConsumeGrant(ctx context.Context, input ConsumeGrantInput) (Grant, error)
 	CreateSession(ctx context.Context, session Session) error
+	GetSessionByRefreshHash(ctx context.Context, refreshHash string) (Session, error)
+	DetectRefreshReuse(ctx context.Context, refreshHash string, now time.Time) (bool, error)
 	RotateSession(ctx context.Context, input RotateSessionInput) (Session, error)
 	RevokeSession(ctx context.Context, refreshHash, clientID string, now time.Time) (Session, error)
+	RevokeAccessSession(ctx context.Context, jti, clientID string, now time.Time) (Session, error)
 	RotateConnectionGeneration(ctx context.Context, connectionID, generation string, now time.Time) (Connection, error)
 }
 
-// InMemoryStore is a concurrency-safe contract implementation for Platform OAuth.
+// InMemoryStore is a concurrency-safe contract implementation for Admin OAuth.
 type InMemoryStore struct {
 	mu          sync.Mutex
 	clients     map[string]Client
@@ -117,6 +133,20 @@ func (s *InMemoryStore) RegisterClient(_ context.Context, client Client) error {
 	}
 	s.clients[client.ID] = client
 	return nil
+}
+
+func (s *InMemoryStore) GetClient(_ context.Context, clientID string) (Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, ok := s.clients[clientID]
+	if !ok {
+		return Client{}, ErrNotFound
+	}
+	if client.RevokedAt != nil {
+		return Client{}, ErrRevoked
+	}
+	return client, nil
 }
 
 func (s *InMemoryStore) RevokeClient(_ context.Context, clientID string, now time.Time) error {
@@ -151,6 +181,54 @@ func (s *InMemoryStore) RegisterConnection(_ context.Context, connection Connect
 	}
 	s.connections[connection.ID] = connection
 	return nil
+}
+
+func (s *InMemoryStore) GetConnection(_ context.Context, organizationID, subject, clientID string) (Connection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, connection := range s.connections {
+		if connection.OrganizationID == organizationID && connection.Subject == subject && connection.ClientID == clientID {
+			if connection.RevokedAt != nil {
+				return Connection{}, ErrRevoked
+			}
+			return connection, nil
+		}
+	}
+	return Connection{}, ErrNotFound
+}
+
+func (s *InMemoryStore) AuthorizeConnection(_ context.Context, input AuthorizeConnectionInput) (Connection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.validateClient(input.Connection.ClientID); err != nil {
+		return Connection{}, err
+	}
+	if input.Grant.ClientID != input.Connection.ClientID {
+		return Connection{}, ErrClientMismatch
+	}
+	if _, exists := s.grants[input.Grant.Code]; exists {
+		return Connection{}, ErrAlreadyUsed
+	}
+	connection := input.Connection
+	for id, existing := range s.connections {
+		if existing.OrganizationID != connection.OrganizationID || existing.Subject != connection.Subject || existing.ClientID != connection.ClientID || existing.RevokedAt != nil {
+			continue
+		}
+		s.revokeGeneration(id, existing.Generation, input.Now)
+		existing.Generation = connection.Generation
+		s.connections[id] = existing
+		connection = existing
+		break
+	}
+	if _, exists := s.connections[connection.ID]; !exists {
+		s.connections[connection.ID] = connection
+	}
+	grant := input.Grant
+	grant.Connection = connection
+	s.grants[grant.Code] = grant
+	return connection, nil
 }
 
 func (s *InMemoryStore) RevokeConnection(_ context.Context, connectionID string, now time.Time) error {
@@ -226,6 +304,32 @@ func (s *InMemoryStore) CreateSession(_ context.Context, session Session) error 
 	return nil
 }
 
+func (s *InMemoryStore) GetSessionByRefreshHash(_ context.Context, refreshHash string) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[refreshHash]
+	if !ok {
+		return Session{}, ErrNotFound
+	}
+	return session, nil
+}
+
+func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, refreshHash string, now time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[refreshHash]
+	if !ok {
+		return false, ErrNotFound
+	}
+	if session.RevokedAt == nil {
+		return false, nil
+	}
+	s.revokeGeneration(session.Connection.ID, session.Connection.Generation, now)
+	return true, nil
+}
+
 func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInput) (Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -279,6 +383,20 @@ func (s *InMemoryStore) RevokeSession(_ context.Context, refreshHash, clientID s
 	session.RevokedAt = &now
 	s.sessions[refreshHash] = session
 	return session, nil
+}
+
+func (s *InMemoryStore) RevokeAccessSession(_ context.Context, jti, clientID string, now time.Time) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for hash, session := range s.sessions {
+		if session.JTI == jti && session.ClientID == clientID {
+			session.RevokedAt = &now
+			s.sessions[hash] = session
+			return session, nil
+		}
+	}
+	return Session{}, ErrNotFound
 }
 
 func (s *InMemoryStore) RotateConnectionGeneration(_ context.Context, connectionID, generation string, now time.Time) (Connection, error) {
@@ -359,7 +477,7 @@ func validPKCEVerifier(verifier string) bool {
 		return false
 	}
 	return strings.IndexFunc(verifier, func(r rune) bool {
-		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && !strings.ContainsRune("-._~", r)
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || strings.ContainsRune("-._~", r))
 	}) == -1
 }
 
@@ -368,6 +486,6 @@ func validPKCES256Challenge(challenge string) bool {
 		return false
 	}
 	return strings.IndexFunc(challenge, func(r rune) bool {
-		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_'
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_')
 	}) == -1
 }

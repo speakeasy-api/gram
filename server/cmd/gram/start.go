@@ -26,12 +26,14 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp"
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -1267,6 +1269,31 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
+			adminGate := adminmcp.NewOrganizationGate(productFeatures, featureFlags)
+			adminAuthorizer := adminmcp.NewLiveOrgAdminAuthorizer(db, authzEngine)
+			adminOAuth, err := adminmcp.NewOAuthHTTP(adminmcp.OAuthHTTPConfig{
+				BaseURL:       serverURL,
+				Environment:   c.String("environment"),
+				Cache:         cache.NewRedisCacheAdapter(redisClient),
+				Store:         adminmcp.NewPostgresOAuthStore(db),
+				Identity:      identityResolver,
+				Gate:          adminGate,
+				Authorizer:    adminAuthorizer,
+				Organizations: adminmcp.NewLiveOrganizationSelector(db, adminAuthorizer),
+				Signer:        sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
+			})
+			if err != nil {
+				return fmt.Errorf("create admin mcp oauth service: %w", err)
+			}
+			adminRuntime := adminmcp.NewRuntime(
+				adminmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, adminOAuth.Issuer(), adminOAuth.Audience()),
+				adminGate,
+				adminAuthorizer,
+				adminOAuth.ProtectedResourceURL(),
+				adminmcp.NewPostgresReader(db),
+			)
+			adminOAuth.Attach(mux)
+			o11y.AttachHandler(mux, "POST", adminmcp.Path, adminRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

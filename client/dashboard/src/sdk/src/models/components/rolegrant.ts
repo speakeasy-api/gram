@@ -42,7 +42,6 @@ export const Scope = {
   SkillBlockedWrite: "skill:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
-  RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
 } as const;
 /**
