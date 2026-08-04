@@ -2481,6 +2481,105 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 	return items, nil
 }
 
+const listRemoteSessionIssuersByIssuerURL = `-- name: ListRemoteSessionIssuersByIssuerURL :many
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE issuer = ANY($1::text[])
+  AND (
+    project_id = $2
+    OR ($3::boolean AND project_id IS NULL AND organization_id = $4)
+    OR ($5::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC
+`
+
+type ListRemoteSessionIssuersByIssuerURLParams struct {
+	Issuers               []string
+	ProjectID             uuid.NullUUID
+	IncludeOrganizational bool
+	OrganizationID        pgtype.Text
+	IncludeGlobal         bool
+}
+
+// Every issuer a project may resolve an upstream authorization server URL onto:
+// its own, plus each inherited tier the caller opts in to, using the same
+// three-arm tenancy predicate as ListRemoteSessionIssuersByProjectID.
+//
+// Matching is literal equality against a caller-supplied candidate set rather
+// than a normalizing expression, because the index this rides on
+// (remote_session_issuers_issuer_idx) is on the raw column: any expression
+// around `issuer` would make it unusable and turn this into a sequential scan.
+// The caller canonicalizes the URL in Go and expands it back into the closed set
+// of raw spellings that canonicalize to the same thing, so `= ANY` stays a
+// series of index probes. See matchCandidates for the exact set and for the
+// spellings deliberately left unmatched.
+//
+// Returns every candidate rather than picking one: precedence is project >
+// organization > platform and cannot be expressed by row order here, and the
+// caller applies it (plus the oldest-first tie-break within a tier) through
+// resolveIssuerByPrecedence.
+//
+// Ordered by created_at, NOT by id. generate_uuidv7 overlays only a
+// millisecond-resolution timestamp onto an otherwise random gen_random_uuid, so
+// two rows written in the same millisecond sort randomly by id: stable for a
+// given set of rows, but not chronological. created_at is clock_timestamp() at
+// microsecond resolution, which makes "oldest" mean what it says. id remains the
+// final tie-break so the order is still total if two rows somehow share a
+// created_at.
+func (q *Queries) ListRemoteSessionIssuersByIssuerURL(ctx context.Context, arg ListRemoteSessionIssuersByIssuerURLParams) ([]RemoteSessionIssuer, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByIssuerURL,
+		arg.Issuers,
+		arg.ProjectID,
+		arg.IncludeOrganizational,
+		arg.OrganizationID,
+		arg.IncludeGlobal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionIssuer
+	for rows.Next() {
+		var i RemoteSessionIssuer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Slug,
+			&i.Issuer,
+			&i.AuthorizationEndpoint,
+			&i.TokenEndpoint,
+			&i.RegistrationEndpoint,
+			&i.JwksUri,
+			&i.ServiceDocumentation,
+			&i.OpPolicyUri,
+			&i.OpTosUri,
+			&i.ScopesSupported,
+			&i.GrantTypesSupported,
+			&i.ResponseTypesSupported,
+			&i.TokenEndpointAuthMethodsSupported,
+			&i.ClientIDMetadataDocumentSupported,
+			&i.Oidc,
+			&i.Passthrough,
+			&i.Name,
+			&i.LogoAssetID,
+			&i.ClientSetupDocumentationUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionIssuersByProjectID = `-- name: ListRemoteSessionIssuersByProjectID :many
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers

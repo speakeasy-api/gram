@@ -1,10 +1,10 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useState } from "react";
 import { toast } from "sonner";
 import { OpenApiSourceInput } from "../OpenApiSourceInput";
-import { Type } from "../ui/type";
+import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 import type { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
@@ -77,7 +77,7 @@ export default function UploadFileStep(): JSX.Element {
   if (stepper.meta.current.file) {
     return (
       <Stack direction={"horizontal"} gap={2} align={"center"}>
-        <Type>✓ Uploaded {stepper.meta.current.file.name}</Type>
+        <Text>✓ Uploaded {stepper.meta.current.file.name}</Text>
       </Stack>
     );
   } else {

@@ -1,12 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button as UiButton } from "@/components/ui/button";
-import { DotCard } from "@/components/ui/dot-card";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import type { ViewMode } from "@/components/ui/use-view-mode";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button as UiButton } from "@/components/ui/Button";
+import { DotCard } from "@/components/ui/DotCard";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
@@ -16,12 +17,15 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import {
   SkillPickerDialog,
   type SkillPickerResult,
@@ -35,13 +39,10 @@ import { SectionEmptyState } from "./SectionEmptyState";
  */
 export function PluginSkillsSection({
   pluginId,
-  searchQuery,
   viewMode,
   onMutated,
 }: {
   pluginId: string;
-  /** Page-level search query; narrows the listed skill distributions. */
-  searchQuery: string;
   /** Page-level entry layout shared with the server section. */
   viewMode: ViewMode;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
@@ -50,6 +51,7 @@ export function PluginSkillsSection({
   const project = useProject();
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const distributionsQuery = useSkillDistributionsInfinite(
     { pluginId, limit: 50 },
@@ -71,7 +73,7 @@ export function PluginSkillsSection({
 
   // Case-insensitive match on the card's visible labels: the skill display
   // name and its mono slug-style name.
-  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedSearch = search.trim().toLowerCase();
   const filteredDistributions = useMemo(() => {
     if (!normalizedSearch) return distributions;
     return distributions.filter(
@@ -184,49 +186,53 @@ export function PluginSkillsSection({
   }
 
   return (
-    <>
-      <div className="mb-3 flex items-center gap-3">
-        <div className="border-border flex-1 border-t" />
-        <div className="flex shrink-0 items-center gap-2">
-          <Type
-            small
-            muted
-            className="font-mono text-xs tracking-wide uppercase"
-          >
-            Skills
-          </Type>
+    <SettingsSection>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <SettingsSection.Header>
+          <div className="flex items-center gap-2">
+            <SettingsSection.Title>Skills</SettingsSection.Title>
+            {/* The query drains page by page, so a count shown mid-drain would
+                read as the total and then jump. Wait for the full membership. */}
+            {isMembershipLoaded && distributions.length > 0 && (
+              <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                {distributions.length}
+              </span>
+            )}
+          </div>
+          <SettingsSection.Description>
+            Skills distributed to this plugin ship inside the plugin package and
+            reach everyone who installs it.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <div className="flex items-center gap-2">
           {distributions.length > 0 && (
-            <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-              {distributions.length}
-            </span>
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search skills"
+              className="h-9 w-56"
+            />
           )}
-        </div>
-        <div className="border-border flex-1 border-t" />
-      </div>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <Type small muted className="max-w-md">
-          Skills distributed to this plugin ship inside the plugin package and
-          reach everyone who installs it.
-        </Type>
-        <RequireScope
-          scope="skill:write"
-          resourceId={project.id}
-          level="component"
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!isMembershipLoaded}
-            onClick={() => setIsAddSkillOpen(true)}
+          <RequireScope
+            scope="skill:write"
+            resourceId={project.id}
+            level="component"
           >
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Skill</Button.Text>
-          </Button>
-        </RequireScope>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!isMembershipLoaded}
+              onClick={() => setIsAddSkillOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Skill</Button.Text>
+            </Button>
+          </RequireScope>
+        </div>
       </div>
-      <div className="mb-8">{listContent}</div>
+      {listContent}
 
       <SkillPickerDialog
         open={isAddSkillOpen}
@@ -239,7 +245,7 @@ export function PluginSkillsSection({
         emptyMessage="No skills available to add. Record a skill in this project first."
         onBatchComplete={handleAddSkillsComplete}
       />
-    </>
+    </SettingsSection>
   );
 }
 
@@ -265,7 +271,7 @@ function PluginSkillCard({
       icon={<Sparkles className="text-muted-foreground h-8 w-8" />}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
@@ -277,12 +283,12 @@ function PluginSkillCard({
           >
             {distribution.skillDisplayName}
           </Link>
-        </Type>
+        </Text>
         <SkillVersionBadge distribution={distribution} />
       </div>
-      <Type small muted className="truncate font-mono">
+      <Text small muted className="truncate font-mono">
         {distribution.skillName}
-      </Type>
+      </Text>
 
       <div className="mt-auto flex items-center justify-end gap-2 pt-2">
         <RequireScope
@@ -292,8 +298,8 @@ function PluginSkillCard({
         >
           <UiButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
+            variant="tertiary"
+            size="sm"
             tooltip="Remove skill"
             aria-label="Remove skill"
             className="hover:text-destructive"
@@ -331,19 +337,19 @@ function PluginSkillTableRow({
       ariaLabel={`View skill ${distribution.skillDisplayName}`}
     >
       <td className="px-3 py-3">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="group-hover:text-primary truncate text-sm transition-colors"
           title={distribution.skillDisplayName}
         >
           {distribution.skillDisplayName}
-        </Type>
+        </Text>
       </td>
       <td className="px-3 py-3">
-        <Type small muted className="truncate font-mono">
+        <Text small muted className="truncate font-mono">
           {distribution.skillName}
-        </Type>
+        </Text>
       </td>
       <td className="px-3 py-3">
         <SkillVersionBadge distribution={distribution} />
@@ -360,8 +366,8 @@ function PluginSkillTableRow({
           >
             <UiButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              variant="tertiary"
+              size="sm"
               tooltip="Remove skill"
               aria-label={`Remove skill ${distribution.skillDisplayName}`}
               className="hover:text-destructive"

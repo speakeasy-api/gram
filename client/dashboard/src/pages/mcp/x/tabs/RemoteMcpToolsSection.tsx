@@ -1,13 +1,13 @@
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import {
   useProxiedMcpTools,
   type ProxiedMcpTool,
@@ -25,7 +25,8 @@ import {
   useToolMetadata,
   type ToolMetadataByName,
 } from "@/hooks/useToolMetadata";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -111,9 +112,9 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
       <Heading variant="h3" className="mt-1 mb-1 font-semibold normal-case">
         Tools
       </Heading>
-      <Type muted small className="mb-5">
+      <Text muted small className="mb-5">
         Tools exposed by this MCP server.
-      </Type>
+      </Text>
       {children}
     </section>
   );
@@ -448,9 +449,9 @@ function RemoteToolDetails({
           />
         </div>
         {(stored?.title ?? tool.annotations?.title) ? (
-          <Type muted small as="p">
+          <Text muted small as="p">
             {stored?.title ?? tool.annotations?.title}
-          </Type>
+          </Text>
         ) : null}
         <SheetDescription className="whitespace-pre-line">
           {tool.description || "No description provided."}
@@ -458,13 +459,13 @@ function RemoteToolDetails({
       </SheetHeader>
 
       <div className="flex-1 overflow-y-auto p-4">
-        <Type variant="subheading" as="h4" className="mb-3">
+        <Text variant="subheading" as="h4" className="mb-3">
           Parameters
-        </Type>
+        </Text>
         {parameters.length === 0 ? (
-          <Type muted small as="p">
+          <Text muted small as="p">
             This tool takes no parameters.
-          </Type>
+          </Text>
         ) : (
           <ul className="divide-border divide-y">
             {parameters.map((parameter) => (
@@ -485,12 +486,12 @@ function ToolParameterRow({
   return (
     <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <Type mono small as="span" className="font-medium break-all">
+        <Text mono small as="span" className="font-medium break-all">
           {parameter.name}
-        </Type>
-        <Type mono small as="span" className="text-muted-foreground">
+        </Text>
+        <Text mono small as="span" className="text-muted-foreground">
           {parameter.type}
-        </Type>
+        </Text>
         {parameter.required ? (
           <Badge variant="neutral" size="sm" background>
             <Badge.Text className="text-[10px] uppercase">Required</Badge.Text>
@@ -498,9 +499,9 @@ function ToolParameterRow({
         ) : null}
       </div>
       {parameter.description ? (
-        <Type muted small as="span" className="break-words">
+        <Text muted small as="span" className="break-words">
           {parameter.description}
-        </Type>
+        </Text>
       ) : null}
     </li>
   );
@@ -517,9 +518,9 @@ function EmptyState({
 }): JSX.Element {
   return (
     <div className="border-border flex flex-col items-start gap-2 rounded-md border border-dashed px-4 py-6">
-      <Type muted small>
+      <Text muted small>
         {message}
-      </Type>
+      </Text>
       {children}
       {onRetry ? (
         <button
@@ -566,9 +567,9 @@ function RemoteMcpToolsConnectPrompt({
   return (
     <div className="border-neutral-softest flex flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
       <PlugZap className="text-muted-foreground/70 size-8" />
-      <Type muted small>
+      <Text muted small>
         Connect to this MCP to view the tools.
-      </Type>
+      </Text>
       {onConnect ? (
         <Button variant="secondary" onClick={onConnect}>
           <Button.Text>Connect</Button.Text>

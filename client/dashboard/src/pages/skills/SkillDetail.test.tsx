@@ -222,14 +222,35 @@ vi.mock("@/components/page-layout", () => {
     }),
   };
 });
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-  Button: ({ children }: { children: ReactNode }) => (
-    <button>{children}</button>
-  ),
-  cn: (...classes: Array<string | false | null | undefined>) =>
-    classes.filter(Boolean).join(" "),
+}));
+
+vi.mock("@/components/ui/Button", () => {
+  const Button = ({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  );
+  Button.Text = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Button.LeftIcon = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Button.RightIcon = ({ children }: { children: ReactNode }) => <>{children}</>;
+  return { Button };
+});
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: () => <span />,
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: ({
     columns,
     data,
@@ -251,6 +272,11 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       ))}
     </div>
   ),
+}));
+
+vi.mock("@/lib/utils", () => ({
+  cn: (...classes: Array<string | false | null | undefined>) =>
+    classes.filter(Boolean).join(" "),
 }));
 vi.mock("sonner", () => ({
   toast: { success: testState.toastSuccess, error: testState.toastError },

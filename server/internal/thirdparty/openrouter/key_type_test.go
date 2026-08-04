@@ -141,16 +141,26 @@ func TestChatClient_GetObjectCompletion_PropagatesKeyType(t *testing.T) {
 	require.Equal(t, []KeyType{KeyTypeInternal}, provisioner.ProvisionedKeyTypes())
 }
 
-func TestChatClient_CreateEmbeddings_UsesChatKey(t *testing.T) {
+func TestChatClient_CreateEmbeddings_UsesSelectedKeyType(t *testing.T) {
 	t.Parallel()
 
-	client, provisioner := newKeyTypeTestClient(t)
+	for _, tt := range []struct {
+		name     string
+		options  []EmbeddingOption
+		expected KeyType
+	}{
+		{name: "chat by default", options: nil, expected: KeyTypeChat},
+		{name: "internal when selected", options: []EmbeddingOption{WithEmbeddingKeyType(KeyTypeInternal)}, expected: KeyTypeInternal},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			client, provisioner := newKeyTypeTestClient(t)
 
-	// The embeddings path calls the vendor SDK against the real base URL, so
-	// the call itself fails in tests — but the key is provisioned first, and
-	// that is the behavior under test.
-	_, _ = client.CreateEmbeddings(t.Context(), "org-kt", "openai/text-embedding-3-small", []string{"hello"})
+			// The embeddings path calls the vendor SDK against the real base
+			// URL, so the call fails after provisioning the selected key.
+			_, _ = client.CreateEmbeddings(t.Context(), "org-kt", "openai/text-embedding-3-small", []string{"hello"}, tt.options...)
 
-	require.Equal(t, []KeyType{KeyTypeChat}, provisioner.ProvisionedKeyTypes(),
-		"embeddings must always bill the chat key")
+			require.Equal(t, []KeyType{tt.expected}, provisioner.ProvisionedKeyTypes())
+		})
+	}
 }

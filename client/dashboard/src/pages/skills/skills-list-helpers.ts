@@ -1,11 +1,4 @@
 import type { Skill } from "@gram/client/models/components/skill.js";
-import type { SkillInsightMetrics } from "@gram/client/models/components/skillinsightmetrics.js";
-
-export type SkillSort =
-  | "updated"
-  | "activations"
-  | "efficacy"
-  | "estimated_savings";
 
 export function filterSkills(
   skills: Skill[],
@@ -33,37 +26,4 @@ export function prioritizeAddableSkills(skills: Skill[]): Skill[] {
     (left, right) =>
       Number(right.hasValidVersion) - Number(left.hasValidVersion),
   );
-}
-
-export function sortSkills(
-  skills: Skill[],
-  metricsBySkill: ReadonlyMap<string, SkillInsightMetrics>,
-  sort: SkillSort,
-): Skill[] {
-  return [...skills].sort((left, right) => {
-    let difference = 0;
-    switch (sort) {
-      case "updated":
-        difference = right.updatedAt.getTime() - left.updatedAt.getTime();
-        break;
-      case "activations":
-        difference =
-          (metricsBySkill.get(right.id)?.activations ?? 0) -
-          (metricsBySkill.get(left.id)?.activations ?? 0);
-        break;
-      case "efficacy":
-        difference =
-          (metricsBySkill.get(right.id)?.efficacy?.averageScore ?? -1) -
-          (metricsBySkill.get(left.id)?.efficacy?.averageScore ?? -1);
-        break;
-      case "estimated_savings":
-        difference =
-          (metricsBySkill.get(right.id)?.efficacy?.estimatedMinutesSavedTotal ??
-            -1) -
-          (metricsBySkill.get(left.id)?.efficacy?.estimatedMinutesSavedTotal ??
-            -1);
-        break;
-    }
-    return difference || left.displayName.localeCompare(right.displayName);
-  });
 }

@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { TextArea } from "@/components/ui/Textarea";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
@@ -78,9 +78,9 @@ export function EditInstructionsDialog({
 
         <Dialog.Footer className="items-center">
           {!canWrite && (
-            <Type muted small className="mr-auto">
+            <Text muted small className="mr-auto">
               You don't have permission to edit instructions.
-            </Type>
+            </Text>
           )}
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel

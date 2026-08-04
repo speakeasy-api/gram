@@ -325,6 +325,56 @@ VALUES (
 )
 RETURNING *;
 
+-- name: UpsertUserSessionClientFromCIMD :one
+-- Lazy upsert for a client resolved from a Client ID Metadata Document at
+-- authorize time. For CIMD rows the document URL IS the client_id, so the
+-- conflict target is the same partial unique index that serves DCR lookups.
+-- On refresh the mutable metadata (client_name, redirect_uris) and the fetch
+-- stamp are replaced wholesale — the document is refetched on every
+-- authorize.
+--
+-- Two deliberate behaviors:
+--   - A soft-deleted row does not conflict (partial index), so revoking a
+--     CIMD client does not stick: the next authorize resolves the document
+--     again and inserts a fresh row. CIMD identity lives at the URL, and
+--     durable blocking is admission control's job, not revocation's.
+--   - The DO UPDATE is guarded so it can never touch a secret-bearing DCR
+--     row that happens to share the client_id: rewriting it would trip the
+--     client_id_metadata_uri CHECK constraints with an opaque 500. The
+--     guard makes such a collision surface as no-rows, which handlers
+--     already map to invalid_client.
+INSERT INTO user_session_clients (
+    project_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at,
+    client_id_metadata_uri,
+    client_id_metadata_fetched_at
+)
+VALUES (
+    (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
+    @user_session_issuer_id,
+    @client_id,
+    NULL,
+    @client_name,
+    @redirect_uris,
+    NULL,
+    @client_id,
+    clock_timestamp()
+)
+ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    redirect_uris = EXCLUDED.redirect_uris,
+    client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+    client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    updated_at = clock_timestamp()
+WHERE user_session_clients.client_secret_hash IS NULL
+RETURNING *;
+
 -- name: CreateUserSession :one
 -- user_session_client_id binds the session to the DCR client that minted it.
 -- The /token refresh path requires the same client to refresh; see

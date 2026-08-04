@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { CodeBlock } from "@/components/code";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { RULE_CATEGORY_META } from "./policy-data";
 import {
   getCategoryForFinding,
@@ -19,8 +19,8 @@ import {
   scoreToRating,
   type SeverityRating,
 } from "./risk-utils";
-import { Badge } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/Badge";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   RevealAllContext,
   useRevealAll,

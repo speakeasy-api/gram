@@ -23,8 +23,10 @@ type Service interface {
 	ListDomains(context.Context, *ListDomainsPayload) (res *ListCustomDomainsResult, err error)
 	// Create a custom domain for an organization
 	CreateDomain(context.Context, *CreateDomainPayload) (err error)
-	// Update the IP allowlist for the organization's custom domain
+	// Update settings for the organization's custom domain
 	UpdateDomain(context.Context, *UpdateDomainPayload) (res *CustomDomain, err error)
+	// Set or clear the MCP endpoint mapped to a custom domain's root
+	SetRootMcpEndpoint(context.Context, *SetRootMcpEndpointPayload) (res *CustomDomain, err error)
 	// Check the routing and certificate health of the organization's custom domain
 	CheckHealth(context.Context, *CheckHealthPayload) (res *CustomDomain, err error)
 	// Delete a custom domain
@@ -56,7 +58,7 @@ const ServiceName = "domains"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getDomain", "listDomains", "createDomain", "updateDomain", "checkHealth", "deleteDomain", "listMcpEndpoints"}
+var MethodNames = [8]string{"getDomain", "listDomains", "createDomain", "updateDomain", "setRootMcpEndpoint", "checkHealth", "deleteDomain", "listMcpEndpoints"}
 
 // CheckHealthPayload is the payload type of the domains service checkHealth
 // method.
@@ -111,6 +113,10 @@ type CustomDomain struct {
 	CertificateExpiresAt *string
 	// The number of consecutive failed health checks
 	ConsecutiveFailures *int32
+	// The MCP endpoint currently mapped to the domain root, if any
+	RootMcpEndpointID *string
+	// The token served for OpenAI app-submission domain verification, if configured
+	OpenaiAppsChallengeToken *string
 }
 
 // An MCP endpoint registered under a custom domain, with its parent MCP server
@@ -135,6 +141,8 @@ type CustomDomainMcpEndpoint struct {
 	// The url-friendly slug of the parent MCP server. May be empty if the parent
 	// has no configured slug.
 	McpServerSlug *string
+	// Whether this endpoint is mapped to the custom-domain root
+	IsDomainRoot bool
 }
 
 // DeleteDomainPayload is the payload type of the domains service deleteDomain
@@ -172,12 +180,25 @@ type ListMcpEndpointsPayload struct {
 	SessionToken *string
 }
 
+// SetRootMcpEndpointPayload is the payload type of the domains service
+// setRootMcpEndpoint method.
+type SetRootMcpEndpointPayload struct {
+	SessionToken *string
+	// The custom domain whose root mapping to change
+	CustomDomainID string
+	// The MCP endpoint to map to the domain root. Omit to clear the mapping.
+	McpEndpointID *string
+}
+
 // UpdateDomainPayload is the payload type of the domains service updateDomain
 // method.
 type UpdateDomainPayload struct {
 	SessionToken *string
 	// Replacement IP allowlist. Pass an empty list to remove all restrictions.
 	IPAllowlist []string
+	// Replacement OpenAI app-submission verification token. Pass an empty string
+	// to clear it.
+	OpenaiAppsChallengeToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

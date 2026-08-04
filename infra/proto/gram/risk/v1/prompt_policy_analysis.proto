@@ -23,6 +23,7 @@ message PromptPolicyAnalysis {
   string body = 13;
   string tool_name = 14;
   repeated ToolCall tool_calls = 15;
+  string content_part_id = 16;
 
   message ToolCall {
     string name = 1;

@@ -20,12 +20,14 @@ func TestCanonicalizeSources_CollapsesAliasesAndDropsEmpty(t *testing.T) {
 		"cursor",
 		"Cursor",
 		"Claude Cowork",
+		"chatgpt",
+		"ChatGPT",
 		"",
 		"   ",
 		"claude-code",
 	})
 
-	require.Equal(t, []string{"claude", "claude-chat-web", "claude-code", "claude-code-desktop", "codex", "cowork", "cursor"}, got)
+	require.Equal(t, []string{"chatgpt", "claude", "claude-chat-web", "claude-code", "claude-code-desktop", "codex", "cowork", "cursor"}, got)
 }
 
 func TestCanonicalizeSources_Empty(t *testing.T) {
@@ -47,6 +49,9 @@ func TestExpandSourceAliases_ExpandsCanonical(t *testing.T) {
 		[]string{"claude", "claude-desktop", "claude-chat-desktop", "Claude Chat Desktop"},
 		expandSourceAliases([]string{"claude"}),
 	)
+	// ChatGPT rows arrive from the compliance import under the chatgpt hook
+	// source; the display alias must round-trip through the filter.
+	require.Equal(t, []string{"chatgpt", "ChatGPT"}, expandSourceAliases([]string{"chatgpt"}))
 }
 
 func TestExpandSourceAliases_PassesThroughUnknown(t *testing.T) {

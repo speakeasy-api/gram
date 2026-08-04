@@ -20,6 +20,7 @@ import (
 type FindingMetadata struct {
 	RequestID         string
 	ChatMessageID     string
+	ContentPartID     string
 	ProjectID         string
 	OrganizationID    string
 	RiskPolicyID      string
@@ -78,10 +79,12 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 		occurrences[baseID]++
 		startPos := conv.SafeInt32(finding.StartPos)
 		endPos := conv.SafeInt32(finding.EndPos)
+		surface := FindingSurface(finding.Source, finding.Field, finding.Path)
 		msg := riskv1.Finding_builder{
 			Id:                new(id.String()),
 			RequestId:         &meta.RequestID,
-			ChatMessageId:     &meta.ChatMessageID,
+			ChatMessageId:     conv.PtrEmpty(meta.ChatMessageID),
+			ContentPartId:     conv.PtrEmpty(meta.ContentPartID),
 			ProjectId:         &meta.ProjectID,
 			OrganizationId:    &meta.OrganizationID,
 			RiskPolicyId:      &meta.RiskPolicyID,
@@ -95,6 +98,10 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 			Tags:              finding.Tags,
 			Source:            &finding.Source,
 			Confidence:        &finding.Confidence,
+			Surface:           &surface,
+			Field:             &finding.Field,
+			Path:              &finding.Path,
+			ToolCallId:        &finding.McpLookupToolCallID,
 		}.Build()
 
 		results = append(results, pub.Publish(ctx, msg))
@@ -116,6 +123,11 @@ func deterministicFindingID(meta FindingMetadata, finding Finding) uuid.UUID {
 	parts := []string{
 		meta.RequestID,
 		meta.ChatMessageID,
+	}
+	if meta.ContentPartID != "" {
+		parts = append(parts, meta.ContentPartID)
+	}
+	parts = append(parts,
 		meta.ProjectID,
 		meta.OrganizationID,
 		meta.RiskPolicyID,
@@ -125,6 +137,6 @@ func deterministicFindingID(meta FindingMetadata, finding Finding) uuid.UUID {
 		strconv.Itoa(finding.StartPos),
 		strconv.Itoa(finding.EndPos),
 		finding.Match,
-	}
+	)
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:"+strings.Join(parts, "\x00")))
 }

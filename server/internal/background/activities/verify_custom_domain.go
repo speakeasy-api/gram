@@ -101,6 +101,9 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 	case err == nil:
 		// Domain already exists, continue
 	case errors.Is(err, pgx.ErrNoRows):
+		// Soft-deleted rows do not reserve the hostname. A replacement can
+		// therefore race cleanup by the previous row's UUID-scoped reconciler;
+		// closing that pre-existing hostname-reuse window is a follow-up.
 		// Create a new unverified domain entry
 		kind := args.ProvisionerKind
 		if kind == "" {

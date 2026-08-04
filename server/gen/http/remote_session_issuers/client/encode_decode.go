@@ -1291,6 +1291,9 @@ func EncodeGetRemoteSessionIssuerRequest(encoder func(*http.Request) goahttp.Enc
 		if p.Slug != nil {
 			values.Add("slug", *p.Slug)
 		}
+		if p.Issuer != nil {
+			values.Add("issuer", *p.Issuer)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

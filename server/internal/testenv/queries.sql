@@ -230,3 +230,23 @@ WHERE s.device_integration_schedule_id = sch.id
 UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
+
+-- name: InsertChatContentPartFixture :one
+-- Test-only fixture: seeds a minimal chat content part so tests can anchor a
+-- risk_results row to it.
+INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
+VALUES (@chat_id, @project_id, @kind, @content_asset_url)
+RETURNING id;
+
+-- name: InsertContentPartRiskResultFixture :exec
+-- Test-only fixture: seeds a risk_results row anchored to a chat content part
+-- (chat_message_id IS NULL), a shape the production InsertRiskResults copyfrom
+-- cannot produce, so backfill tooling can exercise the fallback path its
+-- chat_messages join takes when a finding has no chat message.
+INSERT INTO risk_results (
+  id, project_id, organization_id, risk_policy_id, risk_policy_version,
+  chat_content_part_id, source, found, rule_id, description, match, tags
+) VALUES (
+  @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
+  @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
+);

@@ -34,6 +34,8 @@ type Server struct {
 	ListShadowMCPInventoryUsers          http.Handler
 	UpsertShadowMCPInventoryPolicyBypass http.Handler
 	DeleteShadowMCPInventoryPolicyBypass http.Handler
+	BlockShadowMCPInventoryServer        http.Handler
+	UnblockShadowMCPInventoryServer      http.Handler
 	ResolveShadowMCPInventoryRequest     http.Handler
 	RequestAccess                        http.Handler
 	GetRBACStatus                        http.Handler
@@ -86,6 +88,8 @@ func New(
 			{"ListShadowMCPInventoryUsers", "GET", "/rpc/access.listShadowMCPInventoryUsers"},
 			{"UpsertShadowMCPInventoryPolicyBypass", "POST", "/rpc/access.upsertShadowMCPInventoryPolicyBypass"},
 			{"DeleteShadowMCPInventoryPolicyBypass", "DELETE", "/rpc/access.deleteShadowMCPInventoryPolicyBypass"},
+			{"BlockShadowMCPInventoryServer", "POST", "/rpc/access.blockShadowMCPInventoryServer"},
+			{"UnblockShadowMCPInventoryServer", "DELETE", "/rpc/access.unblockShadowMCPInventoryServer"},
 			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
 			{"RequestAccess", "POST", "/rpc/access.requestAccess"},
 			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
@@ -110,6 +114,8 @@ func New(
 		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersHandler(e.ListShadowMCPInventoryUsers, mux, decoder, encoder, errhandler, formatter),
 		UpsertShadowMCPInventoryPolicyBypass: NewUpsertShadowMCPInventoryPolicyBypassHandler(e.UpsertShadowMCPInventoryPolicyBypass, mux, decoder, encoder, errhandler, formatter),
 		DeleteShadowMCPInventoryPolicyBypass: NewDeleteShadowMCPInventoryPolicyBypassHandler(e.DeleteShadowMCPInventoryPolicyBypass, mux, decoder, encoder, errhandler, formatter),
+		BlockShadowMCPInventoryServer:        NewBlockShadowMCPInventoryServerHandler(e.BlockShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
+		UnblockShadowMCPInventoryServer:      NewUnblockShadowMCPInventoryServerHandler(e.UnblockShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
 		RequestAccess:                        NewRequestAccessHandler(e.RequestAccess, mux, decoder, encoder, errhandler, formatter),
 		GetRBACStatus:                        NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
@@ -141,6 +147,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListShadowMCPInventoryUsers = m(s.ListShadowMCPInventoryUsers)
 	s.UpsertShadowMCPInventoryPolicyBypass = m(s.UpsertShadowMCPInventoryPolicyBypass)
 	s.DeleteShadowMCPInventoryPolicyBypass = m(s.DeleteShadowMCPInventoryPolicyBypass)
+	s.BlockShadowMCPInventoryServer = m(s.BlockShadowMCPInventoryServer)
+	s.UnblockShadowMCPInventoryServer = m(s.UnblockShadowMCPInventoryServer)
 	s.ResolveShadowMCPInventoryRequest = m(s.ResolveShadowMCPInventoryRequest)
 	s.RequestAccess = m(s.RequestAccess)
 	s.GetRBACStatus = m(s.GetRBACStatus)
@@ -171,6 +179,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListShadowMCPInventoryUsersHandler(mux, h.ListShadowMCPInventoryUsers)
 	MountUpsertShadowMCPInventoryPolicyBypassHandler(mux, h.UpsertShadowMCPInventoryPolicyBypass)
 	MountDeleteShadowMCPInventoryPolicyBypassHandler(mux, h.DeleteShadowMCPInventoryPolicyBypass)
+	MountBlockShadowMCPInventoryServerHandler(mux, h.BlockShadowMCPInventoryServer)
+	MountUnblockShadowMCPInventoryServerHandler(mux, h.UnblockShadowMCPInventoryServer)
 	MountResolveShadowMCPInventoryRequestHandler(mux, h.ResolveShadowMCPInventoryRequest)
 	MountRequestAccessHandler(mux, h.RequestAccess)
 	MountGetRBACStatusHandler(mux, h.GetRBACStatus)
@@ -963,6 +973,114 @@ func NewDeleteShadowMCPInventoryPolicyBypassHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteShadowMCPInventoryPolicyBypass")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountBlockShadowMCPInventoryServerHandler configures the mux to serve the
+// "access" service "blockShadowMCPInventoryServer" endpoint.
+func MountBlockShadowMCPInventoryServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.blockShadowMCPInventoryServer", f)
+}
+
+// NewBlockShadowMCPInventoryServerHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "blockShadowMCPInventoryServer" endpoint.
+func NewBlockShadowMCPInventoryServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeBlockShadowMCPInventoryServerRequest(mux, decoder)
+		encodeResponse = EncodeBlockShadowMCPInventoryServerResponse(encoder)
+		encodeError    = EncodeBlockShadowMCPInventoryServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "blockShadowMCPInventoryServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUnblockShadowMCPInventoryServerHandler configures the mux to serve the
+// "access" service "unblockShadowMCPInventoryServer" endpoint.
+func MountUnblockShadowMCPInventoryServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/access.unblockShadowMCPInventoryServer", f)
+}
+
+// NewUnblockShadowMCPInventoryServerHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "unblockShadowMCPInventoryServer" endpoint.
+func NewUnblockShadowMCPInventoryServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUnblockShadowMCPInventoryServerRequest(mux, decoder)
+		encodeResponse = EncodeUnblockShadowMCPInventoryServerResponse(encoder)
+		encodeError    = EncodeUnblockShadowMCPInventoryServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "unblockShadowMCPInventoryServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

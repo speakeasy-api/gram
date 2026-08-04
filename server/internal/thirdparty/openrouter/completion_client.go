@@ -27,6 +27,8 @@ type EmbeddingOption func(*EmbeddingOptions)
 type EmbeddingOptions struct {
 	// Dimensions requests Matryoshka truncation to N dimensions when set.
 	Dimensions *int64
+	// KeyType selects the organization key pool used for the request.
+	KeyType KeyType
 }
 
 // WithEmbeddingDimensions requests a specific output dimensionality from the
@@ -36,6 +38,14 @@ func WithEmbeddingDimensions(dimensions int) EmbeddingOption {
 	return func(o *EmbeddingOptions) {
 		d := int64(dimensions)
 		o.Dimensions = &d
+	}
+}
+
+// WithEmbeddingKeyType selects the organization key pool used for an
+// embedding request. The default is KeyTypeChat.
+func WithEmbeddingKeyType(keyType KeyType) EmbeddingOption {
+	return func(o *EmbeddingOptions) {
+		o.KeyType = keyType
 	}
 }
 

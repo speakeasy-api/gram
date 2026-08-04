@@ -1,17 +1,17 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Dialog } from "@/components/ui/dialog";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
@@ -25,17 +25,17 @@ import {
   useOrganizationRemoteSessionIssuers,
 } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
-  Alert,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -324,9 +324,9 @@ function IssuerTable({
 
   if (!isLoading && items.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         {emptyMessage}
-      </Type>
+      </Text>
     );
   }
 
@@ -347,28 +347,28 @@ function IssuerTable({
           ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
         >
           <td className="px-3 py-3">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
             >
               {issuerDisplayName(item.issuer)}
-            </Type>
-            <Type small muted as="div" className="truncate">
+            </Text>
+            <Text small muted as="div" className="truncate">
               {item.issuer.issuer}
-            </Type>
+            </Text>
           </td>
           {showProject && (
             <td className="px-3 py-3">
-              <Type small muted>
+              <Text small muted>
                 {item.projectName || "—"}
-              </Type>
+              </Text>
             </td>
           )}
           <td className="px-3 py-3">
-            <Type small muted>
+            <Text small muted>
               {item.clientCount} {item.clientCount === 1 ? "client" : "clients"}
-            </Type>
+            </Text>
           </td>
           {!readOnly && (
             <td className="px-3 py-3 text-right">

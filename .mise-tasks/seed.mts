@@ -3821,6 +3821,35 @@ async function seedObservabilityData(init: {
   const todayUtcStart = Math.floor(now / msPerDay) * msPerDay;
   const rawTtlBoundaryMs = todayUtcStart - RAW_TTL_SAFETY_DAYS * msPerDay;
   const rawTtlBoundaryNano = BigInt(rawTtlBoundaryMs) * BigInt(1_000_000);
+
+  // Days inside the ACTIVE billing cycle (anchor day 1 → the current UTC
+  // month) run heavier so the cycle lands clearly past the 50M contracted
+  // allowance and the billing page renders a real overage segment. The boost
+  // targets ~100M BILLED tokens for the cycle's elapsed days regardless of
+  // when the seed runs. The billed TUM population is much narrower than the
+  // raw telemetry inserted here (registry exclusions, cache reads dropped,
+  // stored-evidence gating): an unboosted seed bills ~350k tokens/day, the
+  // divisor below. The cap only guards against pathological division — it
+  // sits above the worst-case single-elapsed-day boost (~286x) so the
+  // overage renders whether the cycle is a day old or nearly sealed. Sole
+  // gap: on the cycle's first day the history (which ends yesterday) has no
+  // rows inside the cycle yet, so overage appears from day two. Run-date
+  // dependent, which is fine: the full-project delete preamble in chSQL
+  // resets every re-run.
+  const nowUtc = new Date(now);
+  const currentCycleStartMs = Date.UTC(
+    nowUtc.getUTCFullYear(),
+    nowUtc.getUTCMonth(),
+    1,
+  );
+  const elapsedCycleDays = Math.max(
+    1,
+    Math.floor((todayUtcStart - currentCycleStartMs) / msPerDay),
+  );
+  const currentCycleBoost = Math.min(
+    300,
+    Math.max(1, 100_000_000 / (elapsedCycleDays * 350_000)),
+  );
   const chBackfillInserts: string[] = [];
   // Risky history sessions also get a Postgres chat + one message so
   // seedRiskFindings can attach findings (risk_results FKs to chat_messages).
@@ -3885,14 +3914,28 @@ async function seedObservabilityData(init: {
           : null;
 
       // Cache-heavy token mix (agent sessions replay large cached prompts);
-      // ~15% are light API-style calls with little cache traffic.
+      // ~15% are light API-style calls with little cache traffic. Sessions
+      // in the active billing cycle carry the overage boost, divided by the
+      // day's weekend session damping so every in-cycle day contributes
+      // roughly the same volume — otherwise an early-month seed whose only
+      // elapsed days are a weekend would miss the overage target.
+      const cycleBoost =
+        dayStartMs >= currentCycleStartMs
+          ? currentCycleBoost / weekendFactor
+          : 1;
       const cacheDiv = r() < 0.15 ? 10 : 1;
-      const inputTokens = (800 + Math.floor(r() * 7_000)) * anonBoost;
-      const outputTokens = (300 + Math.floor(r() * 3_500)) * anonBoost;
-      const cacheReadTokens =
-        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost;
-      const cacheCreationTokens =
-        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
+      const inputTokens = Math.round(
+        (800 + Math.floor(r() * 7_000)) * anonBoost * cycleBoost,
+      );
+      const outputTokens = Math.round(
+        (300 + Math.floor(r() * 3_500)) * anonBoost * cycleBoost,
+      );
+      const cacheReadTokens = Math.round(
+        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
+      const cacheCreationTokens = Math.round(
+        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
       const cost = computeUsageCost(
@@ -4650,12 +4693,29 @@ function chatSessionBackfillSQL(
             is_claude_otel_row
             AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
         ) AS is_claude_tool_result,
-        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+        (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+        (
+            is_codex_otel_row
+            AND toString(attributes.event.name) = 'codex.sse_event'
+            AND toString(attributes.event.kind) = 'response.completed'
+            AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
+        ) AS is_codex_api_request,
+        least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
+        (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
         (
             hook_source = 'opencode'
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
             AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
         ) AS is_opencode_usage_row,
+        (
+            gram_urn = 'litellm:otel:traces'
+            AND event_urn IN (
+                'urn:telemetry:provider_otel:span:chat',
+                'urn:telemetry:provider_otel:span:embeddings',
+                'urn:telemetry:provider_otel:span:text_completion'
+            )
+        ) AS is_litellm_usage_row,
         (
             hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
@@ -4663,7 +4723,7 @@ function chatSessionBackfillSQL(
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
         ) AS is_agent_tool_call,
         (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-        (is_claude_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
+        (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
         (
             (is_claude_tool_result AND toString(attributes.success) = 'false')
             OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
@@ -4673,10 +4733,18 @@ function chatSessionBackfillSQL(
             toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
             toString(id)
         ) AS tool_call_dedup_id,
-        multiIf(is_claude_api_request, toString(attributes.prompt.id), is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(
+            is_claude_api_request, toString(attributes.prompt.id),
+            is_litellm_usage_row AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id),
+            is_codex_api_request OR is_opencode_usage_row OR is_litellm_usage_row, toString(id),
+            toString(attributes.gen_ai.response.id)
+        ) AS session_message_id,
         multiIf(
             is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
             is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model),
+            is_litellm_usage_row, toString(attributes.gen_ai.request.model),
             toString(attributes.gen_ai.response.model)
         ) AS effective_model
     SELECT
@@ -4691,10 +4759,10 @@ function chatSessionBackfillSQL(
         uniqExactIfState(session_message_id, session_message_id != '') AS message_count,
         uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS tool_call_count,
         countIf(is_failed_tool_call) AS failed_tool_call_count,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), is_codex_api_request, codex_input_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), is_codex_api_request, toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), is_codex_api_request, codex_input_tokens + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), is_codex_api_request, codex_cache_read_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
         sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
         sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
         groupUniqArray(toString(attributes.user.attributes.department_name)) AS department_names,
@@ -4716,7 +4784,7 @@ function chatSessionBackfillSQL(
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
       AND chat_id != ''
-      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
+      AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
     GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }

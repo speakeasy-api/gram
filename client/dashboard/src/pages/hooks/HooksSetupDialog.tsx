@@ -1,11 +1,11 @@
-import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Dialog } from "@/components/ui/Dialog";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
@@ -75,16 +75,12 @@ function ClaudeInstallContent({
           <div className="bg-muted/50 space-y-2 rounded-lg p-4 font-mono text-sm">
             <div className="flex items-center justify-between gap-2">
               <code className="break-all">{addCommand}</code>
-              <CopyButton
-                size="inline"
-                text={addCommand}
-                tooltip="Copy command"
-              />
+              <CopyButton size="xs" text={addCommand} tooltip="Copy command" />
             </div>
             <div className="flex items-center justify-between gap-2">
               <code className="break-all">{installCommand}</code>
               <CopyButton
-                size="inline"
+                size="xs"
                 text={installCommand}
                 tooltip="Copy command"
               />
@@ -117,7 +113,7 @@ function ClaudeInstallContent({
                     {requireMarketplaceJson}
                   </pre>
                   <CopyButton
-                    size="inline"
+                    size="xs"
                     text={requireMarketplaceJson}
                     tooltip="Copy settings.json snippet"
                   />
@@ -142,7 +138,7 @@ function ClaudeInstallContent({
                     {requirePluginJson}
                   </pre>
                   <CopyButton
-                    size="inline"
+                    size="xs"
                     text={requirePluginJson}
                     tooltip="Copy settings.json snippet"
                   />
@@ -156,7 +152,7 @@ function ClaudeInstallContent({
             )}
           </div>
 
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href="https://code.claude.com/docs/en/plugin-marketplaces#require-marketplaces-for-your-team"
               target="_blank"
@@ -265,7 +261,7 @@ function CursorInstallContent() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://cursor.com/docs/plugins"
             target="_blank"
@@ -276,7 +272,7 @@ function CursorInstallContent() {
             Plugin Docs
           </a>
         </Button>
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://cursor.com/docs/hooks"
             target="_blank"
@@ -327,11 +323,7 @@ function CodexInstallContent({
           <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
             <div className="flex items-center justify-between gap-2">
               <code className="break-all">{addCommand}</code>
-              <CopyButton
-                size="inline"
-                text={addCommand}
-                tooltip="Copy command"
-              />
+              <CopyButton size="xs" text={addCommand} tooltip="Copy command" />
             </div>
           </div>
         ) : (
@@ -365,7 +357,7 @@ function CodexInstallContent({
               ].join("\n\n")}
             </pre>
             <CopyButton
-              size="inline"
+              size="xs"
               text={[featureFlags, pluginEntry ?? ""].join("\n\n").trim()}
               tooltip="Copy config entries"
             />
@@ -414,7 +406,7 @@ function CodexInstallContent({
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://developers.openai.com/codex/hooks"
             target="_blank"
@@ -425,7 +417,7 @@ function CodexInstallContent({
             Hooks Docs
           </a>
         </Button>
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://developers.openai.com/codex/plugins/build"
             target="_blank"
@@ -500,7 +492,7 @@ function PublishedRepoPanel() {
         team observability automatically — no manual SessionStart hook, no
         credential paste.
       </p>
-      <Button variant="outline" size="sm" asChild>
+      <Button variant="secondary" size="sm" asChild>
         <Link to={routes.plugins.href()}>Go to Plugins</Link>
       </Button>
     </div>
@@ -604,7 +596,7 @@ export function HooksSetupButton(): JSX.Element {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" />
         Add provider
       </Button>

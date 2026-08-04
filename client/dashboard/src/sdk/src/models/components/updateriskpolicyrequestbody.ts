@@ -142,6 +142,10 @@ export type UpdateRiskPolicyRequestBody = {
    */
   shadowMcpAllowedUrls?: Array<string> | undefined;
   /**
+   * For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.
+   */
+  shadowMcpBlockedUrls?: Array<string> | undefined;
+  /**
    * The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.
    */
   shadowMcpDisposition?:
@@ -196,6 +200,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   scope_include?: string | undefined;
   score?: number | undefined;
   shadow_mcp_allowed_urls?: Array<string> | undefined;
+  shadow_mcp_blocked_urls?: Array<string> | undefined;
   shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
@@ -230,6 +235,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     scopeInclude: z.optional(z.string()),
     score: z.optional(z.number()),
     shadowMcpAllowedUrls: z.optional(z.array(z.string())),
+    shadowMcpBlockedUrls: z.optional(z.array(z.string())),
     shadowMcpDisposition: z.optional(
       UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema,
     ),
@@ -253,6 +259,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
       shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
+      shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
       shadowMcpDisposition: "shadow_mcp_disposition",
       userMessage: "user_message",
     });

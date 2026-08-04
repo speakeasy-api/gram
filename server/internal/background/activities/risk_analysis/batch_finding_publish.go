@@ -57,15 +57,12 @@ var batchOnlyFindingSources = map[string]struct{}{
 // survives activity cancellation, and heartbeats between acks — the same
 // discipline every other publish in this activity uses.
 // anchors carries one entry per findings slot, so the two stay index aligned.
-// Content parts are skipped: the finding proto only has a chat_message_id to
-// anchor to until that field exists.
+// An anchor is either a chat message or a content part, so exactly one of the
+// two published ids is set per finding.
 func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, anchors []batchMessage, findings [][]scanners.Finding) {
 	var results []gcp.PublishResult
 	for i, anchor := range anchors {
-		if anchor.ContentPart {
-			continue
-		}
-		id := anchor.ID
+		chatMessageID, contentPartID := anchor.anchorIDStrings()
 		var toPublish []scanners.Finding
 		for _, f := range findings[i] {
 			if _, ok := batchOnlyFindingSources[f.Source]; !ok || f.DeadLetterReason != "" {
@@ -79,7 +76,8 @@ func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args Analyz
 
 		meta := scanners.FindingMetadata{
 			RequestID:         "",
-			ChatMessageID:     id.String(),
+			ChatMessageID:     derefOrEmpty(chatMessageID),
+			ContentPartID:     derefOrEmpty(contentPartID),
 			ProjectID:         args.ProjectID.String(),
 			OrganizationID:    args.OrganizationID,
 			RiskPolicyID:      args.RiskPolicyID.String(),
@@ -90,4 +88,11 @@ func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args Analyz
 	}
 
 	drainPublishAcks(ctx, a.logger, "failed to publish batch-only finding", results)
+}
+
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

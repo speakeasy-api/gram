@@ -1,12 +1,13 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { Outlet } from "react-router";
 
 export default function Skills(): JSX.Element {
@@ -77,7 +78,7 @@ function SkillsFeatureGate({
           title="Unable to load Skills availability"
           error="Refresh the page or try again."
         />
-        <Button variant="outline" className="self-start" onClick={onRetry}>
+        <Button variant="secondary" className="self-start" onClick={onRetry}>
           Try again
         </Button>
       </div>
@@ -114,13 +115,13 @@ function SkillsComingSoon(): JSX.Element {
           <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
             <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
           </div>
-          <Type variant="subheading" className="mb-1">
+          <Text variant="subheading" className="mb-1">
             No skills yet
-          </Type>
-          <Type small muted className="max-w-md text-center">
+          </Text>
+          <Text small muted className="max-w-md text-center">
             Build and distribute skills to your team. Track usage, enable
             discovery and improve performance.
-          </Type>
+          </Text>
           <Badge variant="neutral" className="mt-3">
             Coming Soon
           </Badge>

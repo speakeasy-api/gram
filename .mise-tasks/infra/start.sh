@@ -1,7 +1,68 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
 
-docker compose up -d || exit 1
+# This worktree's own stack, first — with --remove-orphans. A pre-existing
+# worktree (and the main tree) still runs a gram-presidio container under its own
+# project that compose.yml no longer declares; removing it here, BEFORE asserting
+# the shared analyzer below, frees the old host port (5050 on the main tree,
+# which never remapped it) so the shared `up` can bind it in this same run
+# instead of losing the port to the stale container and only converging next
+# time. Profile-gated services (litellm, tunnel, local-registry) stay declared in
+# compose.yml and are not treated as orphans.
+docker compose up -d --remove-orphans || exit 1
+
+# One-time migration: free host port 5050 for the shared analyzer. Before the
+# shared stack existed, the main tree ran its own gram-presidio bound to 5050
+# under its own compose project (the main tree never remaps PRESIDIO_PORT). The
+# --remove-orphans above only touches THIS worktree's project, so that stale
+# container would keep 5050 and block the shared `up` below. Remove ONLY the
+# non-`gram-shared` container that actually holds 5050 — scoping by the port
+# keeps this from touching a sibling worktree's still-in-use analyzer bound to
+# its own remapped port, which the sibling's app is still pointed at until it
+# runs `git:worksync`. Idempotent: once migrated there is nothing to remove.
+docker ps -a --filter "label=com.docker.compose.service=gram-presidio" --filter "publish=5050" \
+  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+  | awk '$1 != "gram-shared" { print $2 }' \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
+# Presidio analyzer, shared across all worktrees under a fixed project name so a
+# worktree's COMPOSE_PROJECT_NAME cannot fork it into a second copy. Bringing it
+# up is idempotent, so every worktree can safely (re)assert it here. A failure
+# here (e.g. a transient pull of the ~1 GB image) must NOT take down this
+# worktree's own databases, so warn and continue rather than aborting.
+docker compose -f compose.shared.yml -p gram-shared up -d \
+  || echo "⚠️  Shared Presidio analyzer failed to start; continuing. PII scanning stays degraded until it is up." >&2
+
+# Best-effort readiness for the shared analyzer. `up -d` returns once the
+# container is created, not once its ~1 GB spaCy model has loaded, so poll the
+# container's own healthcheck to keep infra:start's success signal honest. This
+# is deliberately NON-fatal and NOT a hard gate: nothing in the startup path
+# consumes Presidio synchronously (only background Temporal risk activities do,
+# and they already tolerate/retry an unavailable analyzer), so a cold model load
+# must not block the rest of the stack. Since Presidio is a long-lived shared
+# singleton, this returns instantly on every run after the first. Override the
+# bound with PRESIDIO_READINESS_TIMEOUT; <=0 or a non-integer skips the wait.
+PRESIDIO_READINESS_TIMEOUT="${PRESIDIO_READINESS_TIMEOUT:-90}"
+# Normalize to a plain decimal int before any arithmetic: a leading-zero
+# override (e.g. "08") would otherwise be misread as octal — "08"/"09" error and
+# "010" means 8 — so validate the digits, then re-base with 10# (matching
+# INFRA_READINESS_TIMEOUT below). A non-integer becomes 0, which skips the wait.
+if [[ "$PRESIDIO_READINESS_TIMEOUT" =~ ^[0-9]+$ ]]; then
+  PRESIDIO_READINESS_TIMEOUT=$((10#$PRESIDIO_READINESS_TIMEOUT))
+else
+  PRESIDIO_READINESS_TIMEOUT=0
+fi
+presidio_cid="$(docker compose -f compose.shared.yml -p gram-shared ps -q gram-presidio 2>/dev/null)"
+if [[ -n "$presidio_cid" && "$PRESIDIO_READINESS_TIMEOUT" -gt 0 ]]; then
+  presidio_deadline=$((SECONDS + PRESIDIO_READINESS_TIMEOUT))
+  until [ "$(docker inspect -f '{{.State.Health.Status}}' "$presidio_cid" 2>/dev/null)" = "healthy" ]; do
+    if ((SECONDS >= presidio_deadline)); then
+      echo "⚠️  Shared Presidio analyzer not healthy after ${PRESIDIO_READINESS_TIMEOUT}s; continuing (PII scanning catches up once it is ready)." >&2
+      break
+    fi
+    sleep 2
+  done
+fi
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of

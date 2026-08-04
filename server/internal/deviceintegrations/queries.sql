@@ -550,8 +550,12 @@ WHERE s.id = @sync_id
 -- positive and the new streak reaches it, auto-pauses the schedule so
 -- candidate selection stops re-enqueueing it. Callers pass zero pause_after
 -- for failures that should never pause (e.g. transient network errors).
+-- Returns whether this call left the schedule auto-paused: the caller loads a
+-- runnable (never-paused) sync, so a non-null auto_paused_at can only mean
+-- THIS failure crossed the threshold — a clean auto-pause metric signal. Zero
+-- rows (a concurrent config save moved updated_at) returns no row.
 
--- name: RecordSyncFailure :exec
+-- name: RecordSyncFailure :one
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + make_interval(secs => @next_in_seconds::int),
     last_poll_error = @last_poll_error,
@@ -575,7 +579,8 @@ JOIN device_integration_configs c
   ON c.id = sch.device_integration_config_id
 WHERE s.id = @sync_id
   AND sch.id = s.device_integration_schedule_id
-  AND c.updated_at = @config_updated_at;
+  AND c.updated_at = @config_updated_at
+RETURNING (s.auto_paused_at IS NOT NULL)::boolean AS auto_paused;
 
 -- UpsertMdmDevice reconciles one inventory row. A reappearing device clears
 -- missing_since; last_seen_at stamps this observation for the mark-missing
@@ -663,18 +668,21 @@ LIMIT 1;
 -- heartbeat. Ordered by external id so the snapshot digest is deterministic.
 
 -- name: ListCoverageSnapshotDevices :many
--- Deliberately still user-level. Pushed evidence keeps matching on email
--- until the sink field names change with it: under device-level matching
--- assigned_user_agent_active would be backed by a device heartbeat while
--- still claiming to describe the assigned user, and an auditor reading a
--- stronger claim than the field name supports is the one outcome this
--- integration must not produce. Flipped together with the rename.
+-- Prefers the machine's own heartbeat, falling back to its assigned user's.
+-- device_attested travels with each row because the answer is per device, not
+-- per org: even with device-level matching on, a machine whose agent cannot
+-- report a serial is still only user-attested, and pushed evidence must say
+-- so rather than let the stronger claim leak across.
 SELECT
     d.external_id
   , d.serial_number
   , d.hostname
   , d.user_email
-  , das.last_seen_at AS agent_last_seen_at
+  , (CASE
+      WHEN @device_level::boolean AND dads.id IS NOT NULL THEN dads.last_seen_at
+      ELSE das.last_seen_at
+    END)::timestamptz AS agent_last_seen_at
+  , (@device_level::boolean AND dads.id IS NOT NULL) AS device_attested
 FROM mdm_devices d
 JOIN device_integration_configs c
   ON c.id = d.device_integration_config_id
@@ -682,6 +690,9 @@ JOIN device_integration_configs c
 LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
+LEFT JOIN device_agent_device_syncs dads
+  ON dads.organization_id = d.organization_id
+ AND LOWER(dads.serial_number) = LOWER(d.serial_number)
 WHERE d.organization_id = @organization_id
   AND d.missing_since IS NULL
 ORDER BY d.external_id ASC, d.id ASC;

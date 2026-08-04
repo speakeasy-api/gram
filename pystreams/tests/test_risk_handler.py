@@ -136,8 +136,9 @@ async def test_publishes_a_finding_per_detection():
         await handler.handle(msg, _meta(delivery_attempt=2))
 
     (finding,) = publisher.published
-    # Each finding gets a fresh UUIDv7 identifier.
-    assert uuid.UUID(finding.id).version == 7
+    # Each finding id is name-based (uuid5/SHA-1), derived from the finding's
+    # identity so redeliveries republish under the same id.
+    assert uuid.UUID(finding.id).version == 5
     # Originating request/message context is carried through verbatim.
     assert finding.request_id == "req-1"
     assert finding.chat_message_id == "chat-1"
@@ -156,6 +157,12 @@ async def test_publishes_a_finding_per_detection():
     assert finding.end_pos == 19
     assert finding.confidence == 0.85
     assert list(finding.tags) == ["pii"]
+    # Reveal metadata: Presidio scans the verbatim content, so the offsets
+    # index the anchored message text; no span-level attribution applies.
+    assert finding.surface == "content"
+    assert finding.field == ""
+    assert finding.path == ""
+    assert finding.tool_call_id == ""
 
     (entry,) = logs
     assert entry["event"] == "presidio scan detected entities"
@@ -165,6 +172,114 @@ async def test_publishes_a_finding_per_detection():
     assert entry["detected_count"] == 1
     assert entry["published_count"] == 1
     assert entry["delivery_attempt"] == 2
+
+
+async def test_publishes_content_part_anchor():
+    scanner = FakeScanner(
+        [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)]
+    )
+    publisher = FakePublisher()
+    handler = _handler(scanner, publisher)
+    msg = _message(
+        "a@b.com",
+        request_id="req-1",
+        chat_message_id="",
+        content_part_id="part-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    await handler.handle(msg, _meta())
+
+    (finding,) = publisher.published
+    assert finding.chat_message_id == ""
+    assert finding.content_part_id == "part-1"
+
+
+async def test_finding_ids_are_deterministic_across_deliveries():
+    """A redelivered message republishes every finding under the same id."""
+    detections = [
+        _detection("EMAIL_ADDRESS", "a@b.com", start_pos=12, end_pos=19),
+        _detection("PHONE_NUMBER", "555-0100", start_pos=25, end_pos=33),
+    ]
+    kwargs = dict(
+        request_id="req-1",
+        chat_message_id="chat-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    first = FakePublisher()
+    await _handler(FakeScanner(detections), first).handle(
+        _message("email me", **kwargs), _meta()
+    )
+    second = FakePublisher()
+    await _handler(FakeScanner(detections), second).handle(
+        _message("email me", **kwargs), _meta(delivery_attempt=2)
+    )
+
+    assert [f.id for f in first.published] == [f.id for f in second.published]
+    assert len({f.id for f in first.published}) == 2
+
+
+async def test_finding_id_matches_go_derivation():
+    """Cross-language vector: the id must equal Go's deterministicFindingID.
+
+    The expected uuids were computed with the Go implementation
+    (server/internal/scanners/publish.go): uuid.NewSHA1(uuid.NameSpaceURL,
+    "gram:risk:finding:" + parts joined by NUL), and the in-batch duplicate
+    derived as "gram:risk:finding:dup:<base>:1". If this test fails, the two
+    write paths have diverged and redeliveries will double-count in ClickHouse.
+    """
+    duplicate = _detection(
+        "EMAIL_ADDRESS", "user@example.com", start_pos=10, end_pos=26
+    )
+    scanner = FakeScanner([duplicate, duplicate])
+    publisher = FakePublisher()
+    handler = _handler(scanner, publisher)
+    msg = _message(
+        "mail user@example.com twice",
+        request_id="req-1",
+        chat_message_id="msg-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=3,
+    )
+
+    await handler.handle(msg, _meta())
+
+    base, dup = publisher.published
+    assert base.id == "7bfa8d60-e261-5d4d-9676-2ec0083da5cc"
+    assert dup.id == "27bdeb04-de7b-5e19-82f8-9de1e8eed21c"
+
+
+async def test_content_part_id_changes_finding_id():
+    """content_part_id joins the id parts only when set, mirroring Go."""
+    detections = [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)]
+    kwargs = dict(
+        request_id="req-1",
+        chat_message_id="",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    without_part = FakePublisher()
+    await _handler(FakeScanner(detections), without_part).handle(
+        _message("a@b.com", **kwargs), _meta()
+    )
+    with_part = FakePublisher()
+    await _handler(FakeScanner(detections), with_part).handle(
+        _message("a@b.com", content_part_id="part-1", **kwargs), _meta()
+    )
+
+    assert without_part.published[0].id != with_part.published[0].id
 
 
 async def test_publishes_one_finding_per_hit_and_dedupes_log_types():

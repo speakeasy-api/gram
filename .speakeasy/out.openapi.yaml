@@ -6,6 +6,95 @@ info:
 servers:
   - url: https://app.getgram.ai
 paths:
+  /rpc/access.blockShadowMCPInventoryServer:
+    post:
+      description: Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.
+      operationId: blockShadowMCPInventoryServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockShadowMCPInventoryServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: blockShadowMCPInventoryServer access
+      tags:
+        - access
+      x-speakeasy-name-override: blockShadowMCPInventoryServer
+      x-speakeasy-react-hook:
+        name: BlockShadowMCPInventoryServer
+        type: mutation
   /rpc/access.createRole:
     post:
       description: Create a new custom role.
@@ -1894,6 +1983,110 @@ paths:
       x-speakeasy-react-hook:
         name: ResolveShadowMCPInventoryRequest
         type: mutation
+  /rpc/access.unblockShadowMCPInventoryServer:
+    delete:
+      description: Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.
+      operationId: unblockShadowMCPInventoryServer
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: project_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: server_url
+          required: true
+          schema:
+            format: uri
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: policy_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShadowMCPInventoryURLState'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: unblockShadowMCPInventoryServer access
+      tags:
+        - access
+      x-speakeasy-name-override: unblockShadowMCPInventoryServer
+      x-speakeasy-react-hook:
+        name: UnblockShadowMCPInventoryServer
+        type: mutation
   /rpc/access.updateMemberRoles:
     put:
       description: Update a team member's role assignments.
@@ -2424,6 +2617,94 @@ paths:
       x-speakeasy-name-override: triggerAnalysis
       x-speakeasy-react-hook:
         name: TriggerChatAnalysis
+  /rpc/adminChatAnalysis.upsertBusinessMemorySettings:
+    post:
+      description: Create or replace the active organization's business-memory extraction settings. Requires platform admin.
+      operationId: upsertBusinessMemoryAnalysisSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertBusinessMemorySettingsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatAnalysisSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: upsertBusinessMemorySettings adminChatAnalysis
+      tags:
+        - adminChatAnalysis
+      x-speakeasy-name-override: upsertBusinessMemorySettings
+      x-speakeasy-react-hook:
+        name: UpsertBusinessMemoryAnalysisSettings
   /rpc/adminChatAnalysis.upsertWorkUnitsSettings:
     post:
       description: Create or replace the active organization's chat analysis settings. Requires platform admin.
@@ -4152,9 +4433,91 @@ paths:
       x-speakeasy-name-override: updateGlobalIssuer
       x-speakeasy-react-hook:
         name: UpdateGlobalRemoteSessionIssuer
+  /rpc/agent.getConfiguration:
+    get:
+      description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
+      operationId: getDeviceAgentConfiguration
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceAgentConfiguration'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getConfiguration agent
+      tags:
+        - agent
+      x-speakeasy-name-override: getConfiguration
+      x-speakeasy-react-hook:
+        name: DeviceAgentConfiguration
   /rpc/agent.getPlugins:
     get:
-      description: 'Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool''s own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool''s syncer decides how to render it into that tool''s native configuration.'
+      description: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
       operationId: getAgentPlugins
       parameters:
         - allowEmptyValue: true
@@ -4344,6 +4707,94 @@ paths:
       x-speakeasy-name-override: listSyncedUsers
       x-speakeasy-react-hook:
         name: SyncedAgentUsers
+  /rpc/agent.updateConfiguration:
+    post:
+      description: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.
+      operationId: updateDeviceAgentConfiguration
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConfigurationRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceAgentConfiguration'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateConfiguration agent
+      tags:
+        - agent
+      x-speakeasy-name-override: updateConfiguration
+      x-speakeasy-react-hook:
+        name: UpdateDeviceAgentConfiguration
   /rpc/aiIntegrations.deleteConfig:
     post:
       description: Delete the org-wide AI integration config for a provider.
@@ -4442,12 +4893,12 @@ paths:
       operationId: getAIIntegrationConfig
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+            description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -4540,12 +4991,12 @@ paths:
       operationId: listAIIntegrationSchedules
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+            description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -8124,6 +8575,324 @@ paths:
       x-speakeasy-name-override: switchScopes
       x-speakeasy-react-hook:
         name: SwitchScopes
+  /rpc/businessMemories.contentScopes:
+    get:
+      description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.
+      operationId: listBusinessMemoryContentScopes
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListBusinessMemoryContentScopesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listBusinessMemoryContentScopes businessMemories
+      tags:
+        - businessMemories
+      x-speakeasy-name-override: listContentScopes
+      x-speakeasy-react-hook:
+        name: ListBusinessMemoryContentScopes
+  /rpc/businessMemories.list:
+    get:
+      description: List memories extracted for the active project. Requires organization admin.
+      operationId: listBusinessMemories
+      parameters:
+        - allowEmptyValue: true
+          description: Cursor for the next result page.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next result page.
+            type: string
+        - allowEmptyValue: true
+          description: Exact content-scope tag to match.
+          in: query
+          name: content_scope
+          schema:
+            description: Exact content-scope tag to match.
+            pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
+            type: string
+        - allowEmptyValue: true
+          description: Content-scope namespace to match.
+          in: query
+          name: content_scope_namespace
+          schema:
+            description: Content-scope namespace to match.
+            pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
+            type: string
+        - allowEmptyValue: true
+          description: Number of memories to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Number of memories to return.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListBusinessMemoriesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listBusinessMemories businessMemories
+      tags:
+        - businessMemories
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: ListBusinessMemories
+  /rpc/businessMemories.search:
+    post:
+      description: Run semantic search over active memories in the active project. Requires organization admin.
+      operationId: searchBusinessMemories
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchBusinessMemoriesRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchBusinessMemoriesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: searchBusinessMemories businessMemories
+      tags:
+        - businessMemories
+      x-speakeasy-name-override: search
+      x-speakeasy-react-hook:
+        name: SearchBusinessMemories
   /rpc/chat.creditUsage:
     get:
       description: Get the total number of chat credits and usage for the current billing period
@@ -12668,9 +13437,97 @@ paths:
       x-speakeasy-name-override: registerDomain
       x-speakeasy-react-hook:
         name: registerDomain
+  /rpc/domain.setRootMcpEndpoint:
+    post:
+      description: Set or clear the MCP endpoint mapped to a custom domain's root
+      operationId: setRootMcpEndpoint
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetRootMcpEndpointRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomDomain'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setRootMcpEndpoint domains
+      tags:
+        - domains
+      x-speakeasy-name-override: setRootMcpEndpoint
+      x-speakeasy-react-hook:
+        name: SetRootMcpEndpoint
   /rpc/domain.update:
     post:
-      description: Update the IP allowlist for the organization's custom domain
+      description: Update settings for the organization's custom domain
       operationId: updateDomain
       parameters:
         - allowEmptyValue: true
@@ -17536,6 +18393,477 @@ paths:
       x-speakeasy-name-override: validate
       x-speakeasy-react-hook:
         name: ValidateAPIKey
+  /rpc/litellm.createInstance:
+    post:
+      description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
+      operationId: createLiteLLMInstance
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInstanceRequestBody'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LitellmInstanceKeyResult'
+          description: Created response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: createInstance litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: createInstance
+      x-speakeasy-react-hook:
+        name: CreateLiteLLMInstance
+  /rpc/litellm.ingest/beta/litellm_basic_guardrail_api:
+    post:
+      description: Evaluates and captures a LiteLLM model request before it reaches the provider.
+      operationId: ingestLiteLLMGuardrail
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequestBody2'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LitellmIngestResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: ingest litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: ingestGuardrail
+      x-speakeasy-react-hook:
+        disabled: true
+  /rpc/litellm.listInstances:
+    get:
+      description: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.
+      operationId: listLiteLLMInstances
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInstancesResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listInstances litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: listInstances
+      x-speakeasy-react-hook:
+        name: LiteLLMInstances
+  /rpc/litellm.revokeInstance:
+    delete:
+      description: Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.
+      operationId: revokeLiteLLMInstance
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: revokeInstance litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: revokeInstance
+      x-speakeasy-react-hook:
+        name: RevokeLiteLLMInstance
+  /rpc/litellm.rotateInstanceKey:
+    post:
+      description: Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.
+      operationId: rotateLiteLLMInstanceKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LitellmInstanceKeyResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: rotateInstanceKey litellm
+      tags:
+        - litellm
+      x-speakeasy-name-override: rotateInstanceKey
+      x-speakeasy-react-hook:
+        name: RotateLiteLLMInstanceKey
   /rpc/mcpEndpoints.checkSlugAvailability:
     get:
       description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -18738,6 +20066,123 @@ paths:
       tags:
         - mcpRegistries
       x-speakeasy-name-override: getServerDetails
+  /rpc/mcpRegistries.getSetupDocs:
+    get:
+      description: Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier
+      operationId: getMCPSetupDocs
+      parameters:
+        - allowEmptyValue: true
+          description: URL of the upstream MCP server endpoint
+          example: https://mcp.box.com
+          in: query
+          name: server_url
+          schema:
+            description: URL of the upstream MCP server endpoint
+            example: https://mcp.box.com
+            type: string
+        - allowEmptyValue: true
+          description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
+          example: com.pulsemcp.mirror/box
+          in: query
+          name: registry_specifier
+          schema:
+            description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
+            example: com.pulsemcp.mirror/box
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSetupDocsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSetupDocs mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: getSetupDocs
+      x-speakeasy-react-hook:
+        name: GetMCPSetupDocs
   /rpc/mcpRegistries.listCatalog:
     get:
       description: List available MCP servers from configured registries
@@ -24151,7 +25596,7 @@ paths:
         name: UpdateInviteRole
   /rpc/organizations.verifyOnboardingHooksSetup:
     get:
-      description: Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+      description: Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
       operationId: verifyOnboardingHooksSetup
       parameters:
         - allowEmptyValue: true
@@ -30099,7 +31544,12 @@ paths:
         name: FetchRemoteSessionIssuerMetadata
   /rpc/remoteSessionIssuers.get:
     get:
-      description: Get a remote_session_issuer by id or by slug. Provide exactly one.
+      description: |-
+        Get a remote_session_issuer by id, by slug, or by upstream issuer URL. Provide exactly one.
+
+        Looking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.
+
+        The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.
       operationId: getRemoteSessionIssuer
       parameters:
         - allowEmptyValue: true
@@ -30116,6 +31566,13 @@ paths:
           name: slug
           schema:
             description: The remote_session_issuer slug.
+            type: string
+        - allowEmptyValue: true
+          description: The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -33293,6 +34750,124 @@ paths:
       x-speakeasy-react-hook:
         name: RiskListCustomDetectionRules
         type: query
+  /rpc/risk.listDismissedResults:
+    get:
+      description: List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.
+      operationId: listDismissedRiskResults
+      parameters:
+        - allowEmptyValue: true
+          description: Cursor to fetch the next page of results.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor to fetch the next page of results.
+            type: string
+        - allowEmptyValue: true
+          description: Maximum number of results to return per page.
+          in: query
+          name: limit
+          schema:
+            description: Maximum number of results to return per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRiskResultsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listDismissedRiskResults risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.results
+      x-speakeasy-name-override: listDismissed
+      x-speakeasy-react-hook:
+        name: RiskListDismissedResults
+        type: query
   /rpc/risk.listExclusions:
     get:
       description: List risk exclusions for the current project. Optionally filter to a single policy.
@@ -34123,6 +35698,109 @@ paths:
       x-speakeasy-name-override: listForAgent
       x-speakeasy-react-hook:
         name: RiskListResultsForAgent
+  /rpc/risk.markResultsFalsePositive:
+    post:
+      description: 'Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.'
+      operationId: markRiskResultsFalsePositive
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkRiskResultsFalsePositiveRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: markRiskResultsFalsePositive risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.results
+      x-speakeasy-name-override: markFalsePositive
+      x-speakeasy-react-hook:
+        name: RiskMarkResultsFalsePositive
+        type: mutation
   /rpc/risk.revokePolicyBypassRequest:
     post:
       description: Revoke a previously approved risk policy bypass request.
@@ -34429,7 +36107,7 @@ paths:
         type: mutation
   /rpc/risk.suggestExclusion:
     post:
-      description: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.
+      description: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.
       operationId: suggestExclusion
       parameters:
         - allowEmptyValue: true
@@ -34741,6 +36419,109 @@ paths:
         - risk
       x-speakeasy-group: risk.policies
       x-speakeasy-name-override: trigger
+  /rpc/risk.unmarkResultsFalsePositive:
+    post:
+      description: Undo a false-positive dismissal for one or more risk results.
+      operationId: unmarkRiskResultsFalsePositive
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnmarkRiskResultsFalsePositiveRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: unmarkRiskResultsFalsePositive risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.results
+      x-speakeasy-name-override: unmarkFalsePositive
+      x-speakeasy-react-hook:
+        name: RiskUnmarkResultsFalsePositive
+        type: mutation
   /rpc/risk.unmaskResult:
     post:
       description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
@@ -49258,7 +51039,7 @@ components:
           description: Whether the provider integration is active.
         external_organization_id:
           type: string
-          description: Provider organization identifier. Required for anthropic_compliance and codex_compliance; omitted for providers that do not need one.
+          description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.
         has_api_key:
           type: boolean
           description: Whether an API key is currently stored. The key itself is never returned.
@@ -49295,7 +51076,7 @@ components:
           description: Project used as the telemetry write target. Omitted when no config is set.
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
         updated_at:
           type: string
           description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -50668,6 +52449,22 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    BlockShadowMCPInventoryServerRequestBody:
+      type: object
+      properties:
+        policy_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        server_url:
+          type: string
+          format: uri
+      required:
+        - project_id
+        - server_url
+        - policy_id
     BuiltinExclusionCategory:
       type: object
       properties:
@@ -50705,6 +52502,87 @@ components:
         - id
         - reason
         - description
+    BusinessMemory:
+      type: object
+      properties:
+        body:
+          type: string
+          description: Normalized knowledge body.
+        content_scope:
+          type: array
+          items:
+            type: string
+          description: Canonical entity and topic labels.
+        embedding_model:
+          type: string
+          description: Model used to create the semantic-search vector.
+        extracted_at:
+          type: string
+          description: Extraction timestamp.
+          format: date-time
+        extraction_model:
+          type: string
+          description: Model used to extract the memory.
+        id:
+          type: string
+          description: Memory ID.
+          format: uuid
+        lifecycle_state:
+          type: string
+          description: Current lifecycle state.
+        memory_type:
+          type: string
+          description: Knowledge type.
+          enum:
+            - glossary
+            - procedure
+            - result
+        similarity:
+          type: number
+          description: Cosine similarity for semantic-search results.
+          format: double
+        source_author_id:
+          type: string
+          description: Author associated with the source session.
+        source_chat_id:
+          type: string
+          description: Chat the memory was extracted from, or unavailable if the source chat was deleted.
+        source_turn:
+          type: integer
+          description: One-based transcript turn cited by the extractor.
+          format: int64
+        structural_scope:
+          type: string
+          description: Materialized structural scope path.
+      description: Knowledge extracted from a completed business session.
+      required:
+        - id
+        - body
+        - memory_type
+        - structural_scope
+        - content_scope
+        - embedding_model
+        - extraction_model
+        - source_chat_id
+        - extracted_at
+        - lifecycle_state
+    BusinessMemoryContentScopeNode:
+      type: object
+      properties:
+        memory_count:
+          type: integer
+          description: Number of distinct memories assigned to this scope.
+          format: int64
+        parent_scope:
+          type: string
+          description: Parent namespace. Omitted for namespace nodes.
+        scope:
+          type: string
+          description: Namespace or exact content-scope tag.
+      description: A content-scope namespace or exact tag and its distinct-memory count.
+      required:
+        - scope
+        - memory_count
     CanonicalToolAttributes:
       type: object
       properties:
@@ -51069,6 +52947,15 @@ components:
     ChatAnalysisSettings:
       type: object
       properties:
+        business_memory_daily_cap:
+          type: integer
+          description: Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.
+          format: int64
+          minimum: 0
+          maximum: 10000
+        business_memory_enabled:
+          type: boolean
+          description: Whether completed sessions are mined for business memories.
         is_default:
           type: boolean
           description: Whether these values are platform defaults rather than stored organization settings.
@@ -51089,6 +52976,8 @@ components:
         - organization_id
         - work_units_enabled
         - work_units_daily_cap
+        - business_memory_enabled
+        - business_memory_daily_cap
         - is_default
     ChatContentPart:
       type: object
@@ -52111,6 +54000,19 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
+    CreateInstanceRequestBody:
+      type: object
+      properties:
+        failure_posture:
+          type: string
+          enum:
+            - fail_closed
+            - fail_open
+        name:
+          type: string
+          maxLength: 255
+      required:
+        - name
     CreateIssuerRequestBody:
       type: object
       properties:
@@ -52807,6 +54709,11 @@ components:
           items:
             type: string
           description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+        shadow_mcp_blocked_urls:
+          type: array
+          items:
+            type: string
+          description: 'For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.'
         shadow_mcp_disposition:
           type: string
           description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
@@ -53310,9 +55217,16 @@ components:
         is_updating:
           type: boolean
           description: The custom domain is actively being registered
+        openai_apps_challenge_token:
+          type: string
+          description: The token served for OpenAI app-submission domain verification, if configured
         organization_id:
           type: string
           description: The ID of the organization this domain belongs to
+        root_mcp_endpoint_id:
+          type: string
+          description: The MCP endpoint currently mapped to the domain root, if any
+          format: uuid
         unhealthy_since:
           type: string
           description: When the current unhealthy period began.
@@ -53341,6 +55255,9 @@ components:
           type: string
           description: The ID of the MCP endpoint
           format: uuid
+        is_domain_root:
+          type: boolean
+          description: Whether this endpoint is mapped to the custom-domain root
         mcp_server_id:
           type: string
           description: The ID of the parent MCP server
@@ -53372,6 +55289,7 @@ components:
         - project_name
         - project_slug
         - mcp_server_id
+        - is_domain_root
     DeclineRiskPolicyChallengeResponseBody:
       type: object
       properties:
@@ -53385,7 +55303,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
       required:
         - provider
     DeleteGlobalToolVariationForm:
@@ -53677,6 +55595,34 @@ components:
       required:
         - id
         - user_session_issuer_id
+    DeviceAgentConfiguration:
+      type: object
+      properties:
+        config:
+          type: object
+          description: Forward-compatible non-secret settings document. Platform values use false, user, or managed enforcement layers.
+          additionalProperties: true
+        etag:
+          type: string
+          description: Opaque revision identifier for this configuration.
+        is_configured:
+          type: boolean
+          description: Whether an administrator has saved a remote configuration. False means agents should not add a remote resolver layer.
+        schema_version:
+          type: integer
+          description: Schema version for this remote configuration envelope.
+          format: int64
+          minimum: 1
+        updated_at:
+          type: string
+          description: When this remote configuration was last saved. Absent when is_configured is false.
+          format: date-time
+      description: Versioned organization-wide settings delivered to enrolled device agents. Agents must ignore unknown config keys. Remote settings override the shareable local/MDM settings after a successful fetch; per-device identity and secrets always remain local.
+      required:
+        - schema_version
+        - config
+        - is_configured
+        - etag
     DeviceIntegrationConfig:
       type: object
       properties:
@@ -55601,9 +57547,11 @@ components:
     GetPluginsResult:
       type: object
       properties:
+        configuration:
+          $ref: '#/components/schemas/DeviceAgentConfiguration'
         etag:
           type: string
-          description: Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.
+          description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
         marketplaces:
           type: array
           items:
@@ -55621,6 +57569,9 @@ components:
     GetProductFeaturesResponseBody:
       type: object
       properties:
+        ai_platform_push_integrations_enabled:
+          type: boolean
+          description: Whether the organization can provision push integrations for AI platforms
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -55673,6 +57624,7 @@ components:
         - custom_model_keys_enabled
         - skills_enabled
         - skill_capture_metadata_only
+        - ai_platform_push_integrations_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -55772,6 +57724,16 @@ components:
       required:
         - message
         - acknowledged
+    GetSetupDocsResponseBody:
+      type: object
+      properties:
+        guides:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPSetupGuide'
+          description: Matching setup guides, most specific match first. Empty when no guide has been published for the server.
+      required:
+        - guides
     GetSignedAssetURLForm:
       type: object
       properties:
@@ -56772,6 +58734,52 @@ components:
         - schema_version
         - source
         - event
+    IngestRequestBody2:
+      type: object
+      properties:
+        additional_provider_specific_params:
+          type: object
+          additionalProperties: true
+        images:
+          type: array
+          items:
+            type: string
+        input_type:
+          type: string
+          enum:
+            - request
+            - response
+        litellm_call_id:
+          type: string
+        litellm_trace_id:
+          type: string
+        litellm_version:
+          type: string
+        model:
+          type: string
+        request_data:
+          $ref: '#/components/schemas/LiteLLMRequestData'
+        request_headers:
+          type: object
+          additionalProperties:
+            type: string
+        structured_messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteLLMStructuredMessage'
+        texts:
+          type: array
+          items:
+            type: string
+        tool_calls:
+          type: array
+          items: {}
+        tools:
+          type: array
+          items: {}
+      required:
+        - input_type
+        - request_data
     InstanceMcpServer:
       type: object
       properties:
@@ -57104,6 +59112,32 @@ components:
       required:
         - version
         - categories
+    ListBusinessMemoriesResponseBody:
+      type: object
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessMemory'
+        next_cursor:
+          type: string
+      required:
+        - memories
+    ListBusinessMemoryContentScopesResponseBody:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessMemoryContentScopeNode'
+          description: Namespace and exact-tag nodes in lexical order.
+        total_memories:
+          type: integer
+          description: Total number of active memories, including memories without a content scope.
+          format: int64
+      required:
+        - nodes
+        - total_memories
     ListCatalogResponseBody:
       type: object
       properties:
@@ -57376,6 +59410,15 @@ components:
       description: Result of listing hook traces
       required:
         - traces
+    ListInstancesResponseBody:
+      type: object
+      properties:
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteLLMInstance'
+      required:
+        - instances
     ListIntegrationsForm:
       type: object
       properties:
@@ -57758,6 +59801,7 @@ components:
             - skill:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - risk_policy:block
             - chat:read
         selectors:
           type: array
@@ -57793,6 +59837,7 @@ components:
               - skill:blocked_write
               - risk_policy:evaluate
               - risk_policy:bypass
+              - risk_policy:block
               - chat:read
           description: The inherited scopes the primary scope grants.
       required:
@@ -58423,6 +60468,169 @@ components:
       required:
         - package
         - versions
+    LiteLLMInstance:
+      type: object
+      properties:
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        created_by_user_id:
+          type: string
+        diagnostics:
+          $ref: '#/components/schemas/LiteLLMInstanceDiagnostics'
+        failure_posture:
+          type: string
+          description: How LiteLLM behaves when Gram cannot evaluate a request.
+          enum:
+            - fail_closed
+            - fail_open
+        id:
+          type: string
+          format: uuid
+        key_prefix:
+          type: string
+        last_used_at:
+          type: string
+          format: date-time
+        name:
+          type: string
+        organization_id:
+          type: string
+        project:
+          $ref: '#/components/schemas/ProjectEntry'
+        updated_at:
+          type: string
+          format: date-time
+      description: A provisioned LiteLLM integration and its project-bound ingestion credential metadata.
+      required:
+        - id
+        - organization_id
+        - project
+        - name
+        - failure_posture
+        - key_prefix
+        - created_by_user_id
+        - created_at
+        - updated_at
+        - active
+        - diagnostics
+    LiteLLMInstanceDiagnostics:
+      type: object
+      properties:
+        last_error_at:
+          type: string
+          format: date-time
+        last_error_kind:
+          type: string
+          description: Safe category for the latest observed ingest error.
+          enum:
+            - auth_failure
+            - decode_failure
+            - limit_exceeded
+        last_guardrail_event_at:
+          type: string
+          format: date-time
+        last_otel_event_at:
+          type: string
+          format: date-time
+        platform_user_pct_24h:
+          type: number
+          description: Percentage of model requests in the last 24 hours that resolved to a Gram user.
+          format: double
+          minimum: 0
+          maximum: 100
+        reported_litellm_version:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          description: Derived health of a LiteLLM integration's latest ingest activity.
+          enum:
+            - pending
+            - success
+            - failed
+        virtual_key_email_pct_24h:
+          type: number
+          description: Percentage of model requests in the last 24 hours that supplied a virtual-key email.
+          format: double
+          minimum: 0
+          maximum: 100
+      description: Health and identity-attribution diagnostics for a LiteLLM integration. No prompt, credential, or identity values are returned.
+      required:
+        - status
+    LiteLLMRequestData:
+      type: object
+      properties:
+        user_api_key_alias:
+          type: string
+        user_api_key_end_user_id:
+          type: string
+        user_api_key_hash:
+          type: string
+        user_api_key_org_id:
+          type: string
+        user_api_key_team_alias:
+          type: string
+        user_api_key_team_id:
+          type: string
+        user_api_key_user_email:
+          type: string
+        user_api_key_user_id:
+          type: string
+      description: Sanitized metadata bound to the LiteLLM virtual key and request.
+    LiteLLMStructuredMessage:
+      type: object
+      properties:
+        content: {}
+        role:
+          type: string
+      description: A message supplied to LiteLLM for the guarded model request.
+      required:
+        - role
+    LitellmIngestResult:
+      type: object
+      properties:
+        action:
+          enum:
+            - BLOCKED
+            - NONE
+            - GUARDRAIL_INTERVENED
+          type: string
+          x-speakeasy-name-override: LiteLLMGuardrailAction
+        blocked_reason:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+        stream_holdback_chars:
+          type: array
+          items:
+            type: integer
+            format: int64
+        texts:
+          type: array
+          items:
+            type: string
+        tools:
+          type: array
+          items: {}
+      description: LiteLLM Generic Guardrail decision.
+      required:
+        - action
+    LitellmInstanceKeyResult:
+      type: object
+      properties:
+        instance:
+          $ref: '#/components/schemas/LiteLLMInstance'
+        key:
+          type: string
+      description: A LiteLLM instance and its newly minted plaintext key. The key is shown only once.
+      required:
+        - instance
+        - key
     LogFilter:
       type: object
       properties:
@@ -58502,6 +60710,83 @@ components:
         - id
         - name
         - url
+    MCPSetupGuide:
+      type: object
+      properties:
+        add_server_flow:
+          type: string
+          description: How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')
+        aliases:
+          type: array
+          items:
+            type: string
+          description: Registry identifiers the guide is also published under
+        external_markdown:
+          type: string
+          description: Markdown instructions for the setup work that happens in the upstream provider
+        match_kind:
+          type: string
+          description: How the lookup matched this guide. The most specific kind, when both lookup keys matched it.
+          enum:
+            - endpoint
+            - alias
+        matched_remote_id:
+          type: string
+          description: ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
+          example: hosted
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPSetupGuideRemote'
+          description: Endpoints documented by the guide
+        slug:
+          type: string
+          description: Stable identifier of the guide
+          example: box
+        speakeasy_markdown:
+          type: string
+          description: Markdown instructions for the setup work that happens in Gram
+        summary:
+          type: string
+          description: One-line summary of what the guide covers
+        title:
+          type: string
+          description: Display title of the guide
+          example: Box
+      description: Published setup documentation for an upstream MCP server
+      required:
+        - slug
+        - title
+        - summary
+        - aliases
+        - remotes
+        - match_kind
+        - external_markdown
+        - speakeasy_markdown
+    MCPSetupGuideRemote:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable identifier of the endpoint within the guide
+          example: hosted
+        tenanted:
+          type: boolean
+          description: Whether the endpoint URL is customer-specific and has to be filled in per tenant
+        transport_type:
+          type: string
+          description: Transport type as published by the guide (e.g., 'streamable-http', 'sse')
+          example: streamable-http
+        url:
+          type: string
+          description: URL of the endpoint
+          format: uri
+      description: An MCP server endpoint documented by a setup guide
+      required:
+        - id
+        - url
+        - transport_type
+        - tenanted
     ManagedDevice:
       type: object
       properties:
@@ -58569,6 +60854,21 @@ components:
         - coverage_bucket
         - first_seen_at
         - last_seen_at
+    MarkRiskResultsFalsePositiveRequestBody:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional free-text reason for the dismissal.
+        result_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of the risk results to mark as false positive.
+          minItems: 1
+          maxItems: 500
+      required:
+        - result_ids
     MarketplaceSettingsResult:
       type: object
       properties:
@@ -58599,6 +60899,9 @@ components:
           type: string
           description: The ID of the MCP endpoint
           format: uuid
+        is_domain_root:
+          type: boolean
+          description: Whether this endpoint is mapped to its custom-domain root
         mcp_server_id:
           type: string
           description: The ID of the MCP server this endpoint addresses
@@ -58622,6 +60925,7 @@ components:
         - project_id
         - mcp_server_id
         - slug
+        - is_domain_root
         - created_at
         - updated_at
     McpEnvironmentConfig:
@@ -61939,7 +64243,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
         schedule:
           type: string
           description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
@@ -62433,7 +64737,7 @@ components:
           maximum: 10
         shadow_mcp_disposition:
           type: string
-          description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
+          description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
           enum:
             - block_all
             - allow_all
@@ -62695,6 +64999,10 @@ components:
           type: integer
           description: End byte position within the message content.
           format: int64
+        false_positive_at:
+          type: string
+          description: When this result was manually marked as a false positive. Null when not dismissed.
+          format: date-time
         id:
           type: string
           description: The result ID.
@@ -63051,6 +65359,7 @@ components:
             - skill:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - risk_policy:block
             - chat:read
         selectors:
           type: array
@@ -63212,6 +65521,7 @@ components:
             - skill:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+            - risk_policy:block
             - chat:read
         visibility:
           type: string
@@ -63224,6 +65534,40 @@ components:
         - description
         - resource_type
         - visibility
+    SearchBusinessMemoriesRequestBody:
+      type: object
+      properties:
+        content_scope:
+          type: string
+          description: Exact content-scope tag to match.
+          pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
+        content_scope_namespace:
+          type: string
+          description: Content-scope namespace to match.
+          pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
+        limit:
+          type: integer
+          description: Maximum search results.
+          default: 20
+          format: int64
+          minimum: 1
+          maximum: 100
+        query:
+          type: string
+          description: Natural-language semantic search query.
+          minLength: 1
+          maxLength: 2000
+      required:
+        - query
+    SearchBusinessMemoriesResponseBody:
+      type: object
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessMemory'
+      required:
+        - memories
     SearchChatsFilter:
       type: object
       properties:
@@ -63557,7 +65901,7 @@ components:
             - desc
         source:
           type: string
-          description: Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.
+          description: Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat, LiteLLM), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.
           default: logs
           enum:
             - logs
@@ -63731,6 +66075,13 @@ components:
           description: The user's message text.
           minLength: 1
           maxLength: 10000
+        skill_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Project skills to make available for this turn.
+          maxItems: 10
       required:
         - assistant_id
         - message
@@ -64154,6 +66505,7 @@ components:
             - custom_model_keys
             - skills
             - skill_capture_metadata_only
+            - ai_platform_push_integrations
           maxLength: 60
       required:
         - feature_name
@@ -64173,6 +66525,19 @@ components:
           $ref: '#/components/schemas/Project'
       required:
         - project
+    SetRootMcpEndpointRequestBody:
+      type: object
+      properties:
+        custom_domain_id:
+          type: string
+          description: The custom domain whose root mapping to change
+          format: uuid
+        mcp_endpoint_id:
+          type: string
+          description: The MCP endpoint to map to the domain root. Omit to clear the mapping.
+          format: uuid
+      required:
+        - custom_domain_id
     SetScheduleEnabledRequestBody:
       type: object
       properties:
@@ -64181,7 +66546,7 @@ components:
           description: Whether the schedule should be polled.
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
         schedule:
           type: string
           description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
@@ -64381,6 +66746,11 @@ components:
           type: array
           items:
             type: string
+        blocked_policy_ids:
+          type: array
+          items:
+            type: string
+          description: Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
         canonical_server_url:
           type: string
         first_seen:
@@ -64425,6 +66795,7 @@ components:
         - access
         - request_count
         - allowed_policy_ids
+        - blocked_policy_ids
     ShadowMCPInventoryURLState:
       type: object
       properties:
@@ -64434,6 +66805,11 @@ components:
           type: array
           items:
             type: string
+        blocked_policy_ids:
+          type: array
+          items:
+            type: string
+          description: Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
         latest_request:
           $ref: '#/components/schemas/ShadowMCPInventoryRequestSummary'
         request_count:
@@ -64443,6 +66819,7 @@ components:
         - access
         - request_count
         - allowed_policy_ids
+        - blocked_policy_ids
     ShadowMCPInventoryUser:
       type: object
       properties:
@@ -65952,6 +68329,12 @@ components:
     SuggestExclusionRequestBody:
       type: object
       properties:
+        finding_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side rather than trusted from the client, but only rule_id/source cross into the suggestion — a finding's matched value (a detected secret/PII value the caller hasn't reviewed) is never read for this, so batch-derived suggestions are rule_id/source scoped rather than exact-value. Optional when prompt is provided.
+          maxItems: 50
         known_rule_ids:
           type: array
           items:
@@ -65959,11 +68342,9 @@ components:
           description: Built-in and custom rule ids the suggestion may reference in rule_id filters.
         prompt:
           type: string
-          description: Natural-language description of the findings to stop flagging.
+          description: Natural-language description of the findings to stop flagging. Optional when finding_ids is provided.
           minLength: 3
           maxLength: 500
-      required:
-        - prompt
     SuggestExclusionResult:
       type: object
       properties:
@@ -68148,6 +70529,18 @@ components:
         - provider
         - seen_at
         - reason
+    UnmarkRiskResultsFalsePositiveRequestBody:
+      type: object
+      properties:
+        result_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of the risk results to restore.
+          minItems: 1
+          maxItems: 500
+      required:
+        - result_ids
     UnshareSkillRequestBody:
       type: object
       properties:
@@ -68256,6 +70649,15 @@ components:
         - external_credential_id
         - algorithm
         - name
+    UpdateConfigurationRequestBody:
+      type: object
+      properties:
+        config:
+          type: object
+          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, and sync_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.
+          additionalProperties: true
+      required:
+        - config
     UpdateCustomDetectionRuleRequestBody:
       type: object
       properties:
@@ -68296,8 +70698,9 @@ components:
           items:
             type: string
           description: Replacement IP allowlist. Pass an empty list to remove all restrictions.
-      required:
-        - ip_allowlist
+        openai_apps_challenge_token:
+          type: string
+          description: Replacement OpenAI app-submission verification token. Pass an empty string to clear it.
     UpdateEnvironmentForm:
       type: object
       properties:
@@ -68954,6 +71357,11 @@ components:
           items:
             type: string
           description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+        shadow_mcp_blocked_urls:
+          type: array
+          items:
+            type: string
+          description: 'For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.'
         shadow_mcp_disposition:
           type: string
           description: 'The policy''s shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.'
@@ -69478,6 +71886,21 @@ components:
           $ref: '#/components/schemas/AllowedOrigin'
       required:
         - allowed_origin
+    UpsertBusinessMemorySettingsRequestBody:
+      type: object
+      properties:
+        business_memory_daily_cap:
+          type: integer
+          description: Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.
+          format: int64
+          minimum: 0
+          maximum: 10000
+        business_memory_enabled:
+          type: boolean
+          description: Whether completed sessions are mined for business memories.
+      required:
+        - business_memory_enabled
+        - business_memory_daily_cap
     UpsertConfigRequestBody:
       type: object
       properties:
@@ -69492,10 +71915,10 @@ components:
           description: Whether the integration should be active.
         external_organization_id:
           type: string
-          description: Provider organization identifier. Required for anthropic_compliance and codex_compliance.
+          description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID).
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
       required:
         - provider
         - api_key
@@ -70257,6 +72680,8 @@ tags:
     description: Manages audit logs in Gram.
   - name: auth
     description: Managed auth for gram producers and dashboard.
+  - name: businessMemories
+    description: Inspect and semantically search business memories.
   - name: chat
     description: Managed chats for gram AI consumers.
   - name: chatSessions
@@ -70291,6 +72716,8 @@ tags:
     description: Explore third-party tools in Gram.
   - name: keys
     description: Managing system api keys.
+  - name: litellm
+    description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata

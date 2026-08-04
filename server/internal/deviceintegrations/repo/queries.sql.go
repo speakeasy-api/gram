@@ -599,7 +599,11 @@ SELECT
   , d.serial_number
   , d.hostname
   , d.user_email
-  , das.last_seen_at AS agent_last_seen_at
+  , (CASE
+      WHEN $1::boolean AND dads.id IS NOT NULL THEN dads.last_seen_at
+      ELSE das.last_seen_at
+    END)::timestamptz AS agent_last_seen_at
+  , ($1::boolean AND dads.id IS NOT NULL) AS device_attested
 FROM mdm_devices d
 JOIN device_integration_configs c
   ON c.id = d.device_integration_config_id
@@ -607,10 +611,18 @@ JOIN device_integration_configs c
 LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
-WHERE d.organization_id = $1
+LEFT JOIN device_agent_device_syncs dads
+  ON dads.organization_id = d.organization_id
+ AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+WHERE d.organization_id = $2
   AND d.missing_since IS NULL
 ORDER BY d.external_id ASC, d.id ASC
 `
+
+type ListCoverageSnapshotDevicesParams struct {
+	DeviceLevel    bool
+	OrganizationID string
+}
 
 type ListCoverageSnapshotDevicesRow struct {
 	ExternalID      string
@@ -618,19 +630,19 @@ type ListCoverageSnapshotDevicesRow struct {
 	Hostname        pgtype.Text
 	UserEmail       pgtype.Text
 	AgentLastSeenAt pgtype.Timestamptz
+	DeviceAttested  pgtype.Bool
 }
 
 // ListCoverageSnapshotDevices feeds evidence-sink pushes: every present
 // device across the org's live configs, with the assigned user's agent
 // heartbeat. Ordered by external id so the snapshot digest is deterministic.
-// Deliberately still user-level. Pushed evidence keeps matching on email
-// until the sink field names change with it: under device-level matching
-// assigned_user_agent_active would be backed by a device heartbeat while
-// still claiming to describe the assigned user, and an auditor reading a
-// stronger claim than the field name supports is the one outcome this
-// integration must not produce. Flipped together with the rename.
-func (q *Queries) ListCoverageSnapshotDevices(ctx context.Context, organizationID string) ([]ListCoverageSnapshotDevicesRow, error) {
-	rows, err := q.db.Query(ctx, listCoverageSnapshotDevices, organizationID)
+// Prefers the machine's own heartbeat, falling back to its assigned user's.
+// device_attested travels with each row because the answer is per device, not
+// per org: even with device-level matching on, a machine whose agent cannot
+// report a serial is still only user-attested, and pushed evidence must say
+// so rather than let the stronger claim leak across.
+func (q *Queries) ListCoverageSnapshotDevices(ctx context.Context, arg ListCoverageSnapshotDevicesParams) ([]ListCoverageSnapshotDevicesRow, error) {
+	rows, err := q.db.Query(ctx, listCoverageSnapshotDevices, arg.DeviceLevel, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -644,6 +656,7 @@ func (q *Queries) ListCoverageSnapshotDevices(ctx context.Context, organizationI
 			&i.Hostname,
 			&i.UserEmail,
 			&i.AgentLastSeenAt,
+			&i.DeviceAttested,
 		); err != nil {
 			return nil, err
 		}
@@ -981,7 +994,7 @@ func (q *Queries) MarkDevicesMissing(ctx context.Context, arg MarkDevicesMissing
 	return err
 }
 
-const recordSyncFailure = `-- name: RecordSyncFailure :exec
+const recordSyncFailure = `-- name: RecordSyncFailure :one
 
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + make_interval(secs => $1::int),
@@ -1007,6 +1020,7 @@ JOIN device_integration_configs c
 WHERE s.id = $5
   AND sch.id = s.device_integration_schedule_id
   AND c.updated_at = $6
+RETURNING (s.auto_paused_at IS NOT NULL)::boolean AS auto_paused
 `
 
 type RecordSyncFailureParams struct {
@@ -1022,8 +1036,12 @@ type RecordSyncFailureParams struct {
 // positive and the new streak reaches it, auto-pauses the schedule so
 // candidate selection stops re-enqueueing it. Callers pass zero pause_after
 // for failures that should never pause (e.g. transient network errors).
-func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailureParams) error {
-	_, err := q.db.Exec(ctx, recordSyncFailure,
+// Returns whether this call left the schedule auto-paused: the caller loads a
+// runnable (never-paused) sync, so a non-null auto_paused_at can only mean
+// THIS failure crossed the threshold — a clean auto-pause metric signal. Zero
+// rows (a concurrent config save moved updated_at) returns no row.
+func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, recordSyncFailure,
 		arg.NextInSeconds,
 		arg.LastPollError,
 		arg.AuthRejection,
@@ -1031,7 +1049,9 @@ func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailurePa
 		arg.SyncID,
 		arg.ConfigUpdatedAt,
 	)
-	return err
+	var auto_paused bool
+	err := row.Scan(&auto_paused)
+	return auto_paused, err
 }
 
 const recordSyncSuccess = `-- name: RecordSyncSuccess :execrows

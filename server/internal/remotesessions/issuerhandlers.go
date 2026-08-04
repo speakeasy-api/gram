@@ -303,6 +303,34 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
+// resolveIssuerByPrecedence picks the single issuer a project should use out of
+// every tier-visible candidate matching one upstream URL.
+//
+// Precedence is project > organization > platform, ranked by scopeOf so the
+// ladder has one definition shared with issuer migration. Row order carries no
+// tier information, so it can never stand in for this.
+//
+// Within a tier the oldest issuer wins. That tie-break is load-bearing rather
+// than cosmetic: several project-tier rows on one URL are normal, because the
+// manual attach form creates unconditionally and always has. Without it the
+// endpoint would return whichever row the planner happened to emit first and
+// two identical calls could disagree. Candidates arrive ordered oldest-first by
+// created_at, so keeping the first of the best tier is "oldest" — see the query
+// for why id ordering is not a substitute.
+func resolveIssuerByPrecedence(candidates []repo.RemoteSessionIssuer) (repo.RemoteSessionIssuer, bool) {
+	var best repo.RemoteSessionIssuer
+	found := false
+
+	for _, candidate := range candidates {
+		if !found || scopeOf(candidate) < scopeOf(best) {
+			best = candidate
+			found = true
+		}
+	}
+
+	return best, found
+}
+
 // UpdateRemoteSessionIssuer applies an optional patch to an existing
 // remote_session_issuer.
 func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.UpdateRemoteSessionIssuerPayload) (*types.RemoteSessionIssuer, error) {
@@ -489,8 +517,15 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	}, nil
 }
 
-// GetRemoteSessionIssuer resolves a single issuer by either id or slug.
-// Exactly one of the two must be supplied.
+// GetRemoteSessionIssuer resolves a single issuer by id, slug, or upstream
+// issuer URL. Exactly one of the three must be supplied.
+//
+// The not-found returns are logged at warn rather than error on purpose. A miss
+// is a client-fault 404, and .LogError would also mark the OpenTelemetry span as
+// errored — which matters most for the issuer arm, where a miss is the normal
+// path: automatic setup asks "does an identity provider already describe this
+// upstream?" and creates one when the answer is no. See AGE-3082 for the
+// codebase-wide migration of the remaining CodeNotFound .LogError call sites.
 func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRemoteSessionIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -501,8 +536,9 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 
 	hasID := payload.ID != nil && *payload.ID != ""
 	hasSlug := payload.Slug != nil && *payload.Slug != ""
-	if hasID == hasSlug {
-		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of id or slug is required").LogError(ctx, logger)
+	hasIssuer := payload.Issuer != nil && strings.TrimSpace(*payload.Issuer) != ""
+	if conv.Ternary(hasID, 1, 0)+conv.Ternary(hasSlug, 1, 0)+conv.Ternary(hasIssuer, 1, 0) != 1 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of id, slug, or issuer is required").LogError(ctx, logger)
 	}
 
 	var issuer repo.RemoteSessionIssuer
@@ -524,10 +560,42 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogWarn(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 		}
+	case hasIssuer:
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+			return nil, err
+		}
+
+		canonical, err := parseCanonicalIssuerURL(*payload.Issuer)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
+		}
+
+		// Both inherited tiers are in scope: an organization-level or platform
+		// issuer describing this upstream is one the project may attach its own
+		// client to, so it counts as found.
+		candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
+			Issuers:               canonical.matchCandidates(),
+			ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+			IncludeOrganizational: true,
+			OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+			IncludeGlobal:         true,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers by issuer url").LogError(ctx, logger)
+		}
+
+		// Unlike id and slug, an issuer URL can match several rows: duplicates
+		// across tiers are legitimate by design. Precedence decides which one the
+		// project should use.
+		match, found := resolveIssuerByPrecedence(candidates)
+		if !found {
+			return nil, oops.E(oops.CodeNotFound, nil, "remote session issuer not found").LogWarn(ctx, logger)
+		}
+		issuer = match
 	default: // hasSlug
 		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 			return nil, err
@@ -539,7 +607,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogWarn(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 		}

@@ -1,6 +1,8 @@
 package deviceintegrations
 
 import (
+	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -327,4 +329,42 @@ func TestCredentialRotationMergesSavedSecrets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "original-id", creds["client_id"], "blank supplied secret keeps the stored value")
 	require.Equal(t, "rotated-again!", creds["client_secret"])
+}
+
+// TestProvisionRunsOnMergedConfig covers the P1: provisioning must see the
+// fully-merged effective config, not the sparse client payload, so a partial
+// update (a stored secret/setting the client omitted) still provisions.
+func TestProvisionRunsOnMergedConfig(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+
+	desc, ok := providers.Lookup(testProviderID)
+	require.True(t, ok)
+
+	var seenCreds providers.Credentials
+	var seenSettings providers.Settings
+	provision := func(_ context.Context, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+		seenCreds = maps.Clone(creds)
+		seenSettings = maps.Clone(settings)
+		out := maps.Clone(settings)
+		out["note"] = "provisioned"
+		return out, nil
+	}
+
+	// Partial update: settings-only, no credentials — the client relies on the
+	// stored api_key surviving the merge.
+	err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		_, err := store.upsertWithTx(ctx, tx, desc, orgID, nil, providers.Settings{"instance_url": "https://example.test"}, true, provision)
+		return err
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "secret-token", seenCreds["api_key"], "provision runs on the merged credentials, not the sparse payload")
+	require.Equal(t, "https://example.test", seenSettings["instance_url"])
+
+	cfg, err := store.LoadConfig(ctx, orgID, testProviderID)
+	require.NoError(t, err)
+	require.Equal(t, "provisioned", cfg.Settings["note"], "settings the provision step returns are persisted")
 }

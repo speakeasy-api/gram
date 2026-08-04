@@ -1,4 +1,6 @@
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useSearchParams, useNavigate } from "react-router";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";

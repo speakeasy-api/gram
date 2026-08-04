@@ -1,5 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { Workflow } from "lucide-react";
 import { useState } from "react";
 import { HooksSetupDialog } from "./HooksSetupDialog";

@@ -17,8 +17,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
-import { DashboardCard } from "@/components/ui/dashboard-card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";

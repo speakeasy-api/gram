@@ -69,7 +69,7 @@ vi.mock("@gram/client/react-query/riskOverview.js", () => ({
   useRiskOverview: mocks.useRiskOverview,
 }));
 
-vi.mock("@speakeasy-api/moonshine", async () => {
+vi.mock("@/components/ui/Icon", async () => {
   const { createElement } = await import("react");
 
   return {

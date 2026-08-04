@@ -4,20 +4,20 @@ import {
 } from "@/components/ai-elements/code-block";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Dialog } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TextArea } from "@/components/ui/textarea";
+} from "@/components/ui/Select";
+import { Dialog } from "@/components/ui/Dialog";
+import { Switch } from "@/components/ui/Switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { TextArea } from "@/components/ui/Textarea";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -38,7 +38,7 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -439,7 +439,7 @@ function ChatElementsInner() {
                             </Select>
                           )}
                           <Button
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             className="w-full"
                             onClick={() => routes.mcp.goTo()}
@@ -739,7 +739,7 @@ function ChatElementsInner() {
                   <div className="flex h-[700px] w-2/3 flex-col">
                     <div className="bg-muted/30 relative flex-1 overflow-hidden rounded-lg border">
                       <Button
-                        variant="ghost"
+                        variant="tertiary"
                         size="sm"
                         onClick={refreshPreview}
                         className={cn(

@@ -153,6 +153,15 @@
         color: var(--text-default);
       }
 
+      .loopback-warning {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--text-default-warning);
+      }
+
       .remotes {
         display: flex;
         flex-direction: column;
@@ -347,11 +356,23 @@
         <dl class="info">
           <dt>Signing in as</dt>
           <dd>{{.SubjectDisplay}}</dd>
+          {{if .ClientIDOrigin}}
+          <dt>Client verified from</dt>
+          <dd>{{.ClientIDOrigin}}</dd>
+          {{end}}
           {{if .RedirectURI}}
           <dt>Will redirect to</dt>
           <dd>{{.RedirectURI}}</dd>
           {{end}}
         </dl>
+
+        {{if .LoopbackRedirectWarning}}
+        <p class="loopback-warning">
+          This client receives its authorization at a local address on your
+          device. Only approve if you just started this request from an app
+          running on this computer.
+        </p>
+        {{end}}
 
         {{if .RemoteSessionCards}}
         <div class="remotes">

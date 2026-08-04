@@ -610,3 +610,196 @@ func TestCoverageAttestationIgnoresMissingDevices(t *testing.T) {
 		coverageAttestation(true, counts.AgentActive, counts.AgentActiveDeviceAttested),
 		"every ACTIVE device is serial-attested, so the strong claim holds")
 }
+
+// TestUnmanagedAgentUsersSerialEscapeHatch covers the device-level branch of
+// CountUnmanagedAgentUsers, which had no test: every existing call passes
+// DeviceLevel:false. The tile answers "agent users we know no device for", and
+// under device-level matching the email link is no longer the only way a user
+// can be managed — one of their machines may be in inventory under a different
+// email. Without the escape hatch the tile calls a user unmanaged while the
+// coverage list beside it shows that very device as active.
+func TestUnmanagedAgentUsersSerialEscapeHatch(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	// The agent reports under the SSO email; the MDM recorded a different one
+	// for the same machine (a stale or personal address). The email join cannot
+	// connect them, but the serial can.
+	const agentEmail = "sso@example.test"
+	seedAgentSync(t, ctx, conn, orgID, agentEmail, now)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "mismatched", "old-address@example.test", nil, "S-MISMATCH", false)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "S-MISMATCH", agentEmail, now)
+
+	params := func(deviceLevel bool) repo.CountUnmanagedAgentUsersParams {
+		return repo.CountUnmanagedAgentUsersParams{
+			DeviceLevel:    deviceLevel,
+			OrganizationID: orgID,
+			Provider:       conv.ToPGTextEmpty(""),
+		}
+	}
+
+	userLevel, err := store.repo.CountUnmanagedAgentUsers(ctx, params(false))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, userLevel,
+		"the email join cannot see the machine, so user-level matching reports the user unmanaged")
+
+	deviceLevel, err := store.repo.CountUnmanagedAgentUsers(ctx, params(true))
+	require.NoError(t, err)
+	require.EqualValues(t, 0, deviceLevel,
+		"the serial links the user to a managed device the email never could")
+}
+
+// TestUnmanagedAgentUsersIgnoresMissingAndOtherProviders keeps the escape hatch
+// from being over-broad: a serial-matched device that has left MDM inventory, or
+// belongs to a different provider than the one being scoped, must not count as
+// managed.
+func TestUnmanagedAgentUsersIgnoresMissingAndOtherProviders(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	const agentEmail = "retired-hw@example.test"
+	seedAgentSync(t, ctx, conn, orgID, agentEmail, now)
+	// Serial matches, but the device is gone from inventory.
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "gone", "someone@example.test", nil, "S-GONE", true)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "S-GONE", agentEmail, now)
+
+	count, err := store.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
+		DeviceLevel:    true,
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count,
+		"a device absent from inventory cannot make its user managed, serial match or not")
+}
+
+// TestDeviceLevelCoverageNullSerialMatchesNothing pins the SQL NULL trap: a
+// device the MDM reports with no serial joins on LOWER(NULL), which is NULL and
+// therefore matches no heartbeat row. Worth pinning because a well-meaning
+// coalesce(d.serial_number, ”) on either side of that join would make every
+// serial-less device collide with every other one.
+func TestDeviceLevelCoverageNullSerialMatchesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	// Two devices with NO serial in inventory, and an unrelated heartbeat row.
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "no-serial-a", "", nil, "", false)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "no-serial-b", "", nil, "", false)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "S-SOMEONE-ELSE", "other@example.test", now)
+
+	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+		DeviceLevel:    true,
+		ActiveCutoff:   conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, counts.Total, "no fan-out between two serial-less devices")
+	require.EqualValues(t, 2, counts.NoEmail, "both fall through to the email path, which has nothing either")
+	require.EqualValues(t, 0, counts.AgentActive)
+	require.EqualValues(t, 0, counts.AgentActiveDeviceAttested)
+}
+
+// TestDeviceLevelCoverageStaleOtherMachineIsNotOtherDevice pins the freshness
+// requirement on agent_other_device. The bucket tells an admin "install it
+// here", so it must mean the user is demonstrably running the agent NOW
+// somewhere else — a heartbeat from a machine that went quiet months ago is not
+// evidence of that.
+func TestDeviceLevelCoverageStaleOtherMachineIsNotOtherDevice(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	const email = "twomachines@example.test"
+	userID := seedUser(t, ctx, conn, email)
+	// Machine A ran the agent, but went quiet. Machine B never reported.
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "machine-a", email, &userID, "S-A", false)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "S-A", email, now.Add(-25*time.Hour))
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "machine-b", email, &userID, "S-B", false)
+	seedAgentSync(t, ctx, conn, orgID, email, now.Add(-25*time.Hour))
+
+	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+		DeviceLevel:    true,
+		ActiveCutoff:   conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 0, counts.AgentOtherDevice,
+		"a quiet machine elsewhere is not evidence the user runs the agent now")
+	// Both land in agent_stale, and that is the intended unified fallback:
+	// machine A's OWN heartbeat went quiet, and machine B has none of its own
+	// while its assigned user's also went quiet. Identical to what flag-off
+	// reports for the same fleet, which is the property that makes enabling
+	// device-level matching safe.
+	require.EqualValues(t, 2, counts.AgentStale)
+	require.EqualValues(t, 2, counts.Total)
+
+	off, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+		DeviceLevel:    false,
+		ActiveCutoff:   conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.Equal(t, off.AgentStale, counts.AgentStale, "the stale classification is mode-independent")
+}
+
+// TestListManagedDevicesFiltersNewBucket exercises the drill-down for
+// agent_other_device. The tile is only useful if clicking it returns exactly the
+// devices it counted, and the filter reads the same lateral the projection does.
+func TestListManagedDevicesFiltersNewBucket(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	const email = "filter@example.test"
+	userID := seedUser(t, ctx, conn, email)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "has-agent", email, &userID, "S-HAS", false)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "S-HAS", email, now)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "needs-agent", email, &userID, "S-NEEDS", false)
+
+	rows, err := store.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
+		DeviceLevel:    true,
+		ActiveCutoff:   conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+		CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Bucket:         conv.ToPGTextEmpty("agent_other_device"),
+		PageLimit:      50,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the drill-down must return exactly what the tile counted")
+	require.Equal(t, "needs-agent", rows[0].ExternalID)
+	require.Equal(t, "agent_other_device", rows[0].CoverageBucket)
+	// No timestamp, and that is correct rather than a gap in the fixture: the
+	// evidence for this bucket lives on ANOTHER machine's heartbeat row, and
+	// agent_last_seen_at reports only this device's own heartbeat or its
+	// assigned user's aggregate one — neither exists here. Surfacing "last seen
+	// on another machine at X" would need a new field, not this one.
+	require.False(t, rows[0].AgentLastSeenAt.Valid,
+		"agent_other_device has no heartbeat of its own to report")
+
+	// The counted total and the drill-down must agree for this bucket too.
+	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+		DeviceLevel:    true,
+		ActiveCutoff:   conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, counts.AgentOtherDevice)
+}

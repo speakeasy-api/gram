@@ -6,6 +6,10 @@ on:
       - main
   merge_group:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint-pr:
     name: Lint PR Title and Changesets
@@ -149,7 +153,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ steps.check.outputs.lint == 'true' }}
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true

@@ -40,10 +40,38 @@ func TokenV1(enc *encryption.Client, req TokenRequestV1) (string, error) {
 	return fmt.Sprintf("v01.%s", encBs), nil
 }
 
+// CallToolPayload is the request body Gram POSTs to a function runner's
+// /tool-call endpoint. Mirrored by the runner's own decode type in
+// `functions/internal/runner/handle_tool_call.go` — the two live in separate
+// `internal` subtrees and cannot import one another, so they must be changed
+// together.
 type CallToolPayload struct {
 	ToolName    string            `json:"name"`
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
+	Meta        *ToolCallMeta     `json:"_meta,omitempty"`
+}
+
+// ToolCallMeta carries per-call metadata about the caller, keyed the way MCP
+// keys request `_meta`. Configuration belongs in Environment; this is about
+// who is on the other end of this particular call.
+//
+// Everything here is attribution, not authorization. A function receives it as
+// ordinary request metadata and cannot tell which host attached it, so tools
+// are documented never to gate access on it.
+type ToolCallMeta struct {
+	// ClientInfo is what the MCP client reports about itself.
+	ClientInfo *MCPClientInfo `json:"io.modelcontextprotocol/clientInfo,omitempty"`
+	// OAuthClientID is the OAuth client the caller authenticated as, read here
+	// from the verified bearer token.
+	OAuthClientID string `json:"gram.ai/oauth-client-id,omitempty"`
+}
+
+// MCPClientInfo is an MCP `Implementation` value: the name and version a
+// client reports for itself.
+type MCPClientInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 type ReadResourcePayload struct {

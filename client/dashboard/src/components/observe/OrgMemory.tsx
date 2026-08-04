@@ -1,8 +1,9 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { smoothData } from "@/components/chart/chartUtils";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { RequireScope } from "@/components/require-scope";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
 import { formatCompact } from "@/lib/format";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 import { useRoutes } from "@/routes";
@@ -24,6 +25,7 @@ import {
 import { useMemo, useState } from "react";
 import { Chart } from "react-chartjs-2";
 import { Navigate } from "react-router";
+import { BusinessMemoryCorpus } from "./BusinessMemoryCorpus";
 
 ChartJS.register(
   CategoryScale,
@@ -306,8 +308,8 @@ function EfficiencyChart({
   );
 }
 
-export default function OrgMemory(): JSX.Element {
-  const telemetry = useTelemetry();
+function OrgMemoryContent(): JSX.Element {
+  const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
   const routes = useRoutes();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
@@ -323,12 +325,11 @@ export default function OrgMemory(): JSX.Element {
     {
       throwOnError: false,
       // Don't fire the fetch for users the redirect below is about to bounce.
-      enabled: telemetry.isFeatureEnabled("org-memory") !== false,
+      enabled: isOrgMemoryEnabled,
     },
   );
 
-  // `=== false` so the page still renders while the flag is resolving.
-  if (telemetry.isFeatureEnabled("org-memory") === false) {
+  if (!isOrgMemoryEnabled) {
     return <Navigate to={routes.home.href()} replace />;
   }
 
@@ -336,40 +337,52 @@ export default function OrgMemory(): JSX.Element {
   const scoresAvailable = data?.scoresAvailable ?? false;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Org Memory</h1>
-          <ReleaseStageBadge stage="preview" />
+    <div className="h-full w-full overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6 pb-24">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold">Org Memory</h1>
+            <ReleaseStageBadge stage="preview" />
+          </div>
+          <p className="text-muted-foreground mt-1 text-sm">
+            How much work your agents deliver and what it costs, judged by work
+            analysis over the last {TREND_WINDOW_DAYS} days.
+          </p>
         </div>
-        <p className="text-muted-foreground mt-1 text-sm">
-          How much work your agents deliver and what it costs, judged by work
-          analysis over the last {TREND_WINDOW_DAYS} days.
-        </p>
-      </div>
 
-      {!isLoading && !error && !scoresAvailable ? (
-        <div className="border-border bg-card flex h-64 items-center justify-center rounded-lg border">
-          <WidgetEmptyState message="No work analysis data yet. Sessions appear here once work analysis is enabled for your organization." />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <WorkDoneChart
-            buckets={buckets}
-            loading={isLoading}
-            error={Boolean(error)}
-            expandedChart={expandedChart}
-            onExpand={setExpandedChart}
-          />
-          <EfficiencyChart
-            buckets={buckets}
-            loading={isLoading}
-            error={Boolean(error)}
-            expandedChart={expandedChart}
-            onExpand={setExpandedChart}
-          />
-        </div>
-      )}
+        {!isLoading && !error && !scoresAvailable ? (
+          <div className="border-border bg-card flex h-64 items-center justify-center rounded-lg border">
+            <WidgetEmptyState message="No work analysis data yet. Sessions appear here once work analysis is enabled for your organization." />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <WorkDoneChart
+              buckets={buckets}
+              loading={isLoading}
+              error={Boolean(error)}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+            <EfficiencyChart
+              buckets={buckets}
+              loading={isLoading}
+              error={Boolean(error)}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+          </div>
+        )}
+
+        <BusinessMemoryCorpus />
+      </div>
     </div>
+  );
+}
+
+export default function OrgMemory(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <OrgMemoryContent />
+    </RequireScope>
   );
 }

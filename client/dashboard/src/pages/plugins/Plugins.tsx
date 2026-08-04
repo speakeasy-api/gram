@@ -2,9 +2,9 @@ import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotCard } from "@/components/ui/DotCard";
+import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
@@ -24,16 +24,16 @@ import {
   useMarketplaceSettingsSuspense,
 } from "@gram/client/react-query/marketplaceSettings";
 import { useUpdateMarketplaceSettingsMutation } from "@gram/client/react-query/updateMarketplaceSettings";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
 import { Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -279,7 +279,7 @@ export default function Plugins(): JSX.Element {
   const createCard = (
     <CreateResourceCard
       title="New Plugin"
-      description="Bundle MCP servers and hooks for distribution to Claude Code, Cursor, and Codex."
+      description="Bundle MCP servers and hooks for distribution to supported coding agents."
       onClick={() => setIsCreateDialogOpen(true)}
     />
   );
@@ -294,8 +294,8 @@ export default function Plugins(): JSX.Element {
           <Page.Section.Title>Plugins</Page.Section.Title>
           <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
             Create distributable plugin bundles that package MCP servers and
-            skills together. Assign plugins to roles and publish them to Claude
-            Code, Cursor, and Codex marketplaces via GitHub.
+            skills together. Assign plugins to roles and publish them to
+            supported agent marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={8}>
@@ -368,12 +368,12 @@ export default function Plugins(): JSX.Element {
                   />
                 </Page.Toolbar>
               )}
-              <Type small muted>
+              <Text small muted>
                 The default plugin is where all newly created MCP servers will
                 be automatically published to. If you have the default plugin
                 installed in your coding agent, then any new MCP servers will
                 become instantly available for installation.
-              </Type>
+              </Text>
               <PluginGrid
                 plugins={filteredPlugins}
                 publishStatus={publishStatus}
@@ -382,13 +382,13 @@ export default function Plugins(): JSX.Element {
               />
               <div className="flex items-center gap-3">
                 <div className="border-border flex-1 border-t" />
-                <Type
+                <Text
                   small
                   muted
                   className="shrink-0 font-mono text-xs tracking-wide uppercase"
                 >
                   Platform Plugins
-                </Type>
+                </Text>
                 <div className="border-border flex-1 border-t" />
               </div>
               <div className="grid grid-cols-2 gap-6">
@@ -458,8 +458,9 @@ export default function Plugins(): JSX.Element {
               <Dialog.Title>Marketplace settings</Dialog.Title>
               <Dialog.Description>
                 The marketplace name is the identifier your team types after the
-                plugin slug ({"<plugin>@<marketplace>"}) when installing from
-                Claude Code or Codex. Applies to all plugins in this project.
+                plugin slug ({"<plugin>@<marketplace>"}) when installing from a
+                supported agent marketplace. Applies to all plugins in this
+                project.
               </Dialog.Description>
             </Dialog.Header>
             <form
@@ -485,7 +486,7 @@ export default function Plugins(): JSX.Element {
                 required={chainToPublishAfterSave}
                 autoFocus
               />
-              <Type small muted>
+              <Text small muted>
                 Will publish as{" "}
                 <code>
                   {trimmedMarketplaceName || marketplaceSettings.defaultName}
@@ -494,7 +495,7 @@ export default function Plugins(): JSX.Element {
                 {publishStatus?.connected
                   ? "Saving will regenerate the marketplace and push to GitHub."
                   : "Will take effect on your next publish."}
-              </Type>
+              </Text>
               <Dialog.Footer>
                 <Button
                   variant="secondary"
@@ -561,31 +562,30 @@ function ObservabilityPluginCard({
       icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
     >
       <div className="mb-2 flex items-center gap-1.5">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md truncate"
           title="Observability"
         >
           Observability
-        </Type>
+        </Text>
         <Badge variant="information">
           <Badge.Text>Platform</Badge.Text>
         </Badge>
       </div>
 
-      <Type small muted className="mb-3 line-clamp-3">
-        Forwards tool events from your team&apos;s Claude Code, Cursor and Codex
-        installs to your project dashboard. Ships first in your marketplace,
-        marked Required.
-      </Type>
+      <Text small muted className="mb-3 line-clamp-3">
+        Forwards tool events from your team&apos;s coding agent installs to your
+        project dashboard. Ships first in your marketplace, marked Required.
+      </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <Type small muted>
+        <Text small muted>
           {isConnected
             ? "Included in your marketplace"
             : "Available as a direct download"}
-        </Type>
+        </Text>
         <DropdownMenu
           open={isDownloadMenuOpen}
           onOpenChange={onDownloadMenuOpenChange}
@@ -677,7 +677,7 @@ function PluginGrid({
     return (
       <div className="space-y-4">
         {searchQuery ? (
-          <Type muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Type>
+          <Text muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Text>
         ) : null}
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {createCard}

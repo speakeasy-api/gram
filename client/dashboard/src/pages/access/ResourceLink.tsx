@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
 import { Link } from "react-router";
@@ -23,9 +23,9 @@ export function ResourceLink({
 
   if (!resourceKind || !resourceId) {
     return (
-      <Type variant="body" className="text-muted-foreground text-sm">
+      <Text variant="body" className="text-muted-foreground text-sm">
         —
-      </Type>
+      </Text>
     );
   }
 

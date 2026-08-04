@@ -421,7 +421,10 @@ func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttoke
 		return fmt.Errorf("build token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth(claims.ClientID, clientSecret)
+	// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
+	// going into the Basic authorization header. Upstreams that decode per
+	// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
+	req.SetBasicAuth(url.QueryEscape(claims.ClientID), url.QueryEscape(clientSecret))
 	resp, err := s.core.guardianPolicy.Client(guardian.WithDefaultRetryConfig()).Do(req)
 	if err != nil {
 		return fmt.Errorf("send token request: %w", err)

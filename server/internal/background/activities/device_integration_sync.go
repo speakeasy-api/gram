@@ -8,10 +8,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
@@ -19,9 +21,9 @@ type GetDeviceIntegrationSyncCandidates struct {
 	syncer *deviceintegrations.Syncer
 }
 
-func NewGetDeviceIntegrationSyncCandidates(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy) *GetDeviceIntegrationSyncCandidates {
+func NewGetDeviceIntegrationSyncCandidates(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy, features feature.Provider) *GetDeviceIntegrationSyncCandidates {
 	return &GetDeviceIntegrationSyncCandidates{
-		syncer: deviceintegrations.NewSyncer(logger, db, encryptionClient, guardianPolicy),
+		syncer: deviceintegrations.NewSyncer(logger, meterProvider, db, encryptionClient, guardianPolicy, features),
 	}
 }
 
@@ -50,9 +52,9 @@ type RunDeviceIntegrationSync struct {
 	syncer *deviceintegrations.Syncer
 }
 
-func NewRunDeviceIntegrationSync(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy) *RunDeviceIntegrationSync {
+func NewRunDeviceIntegrationSync(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy, features feature.Provider) *RunDeviceIntegrationSync {
 	return &RunDeviceIntegrationSync{
-		syncer: deviceintegrations.NewSyncer(logger, db, encryptionClient, guardianPolicy),
+		syncer: deviceintegrations.NewSyncer(logger, meterProvider, db, encryptionClient, guardianPolicy, features),
 	}
 }
 

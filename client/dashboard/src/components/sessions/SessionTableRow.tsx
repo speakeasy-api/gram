@@ -1,16 +1,16 @@
 import { useState } from "react";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { DotRow } from "@/components/ui/dot-row";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/ContextMenu";
+import { DotRow } from "@/components/ui/DotRow";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import {
   sessionStatus,
   sessionTimeLabel,
@@ -63,28 +63,28 @@ export function SessionTableRow({
 
       {/* Subject */}
       <td className="px-3 py-3">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="truncate text-sm"
           title={subjectLabel(session)}
         >
           {subjectLabel(session)}
-        </Type>
+        </Text>
       </td>
 
       {/* Client */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           {session.clientName ?? "—"}
-        </Type>
+        </Text>
       </td>
 
       {/* MCP server */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           {session.issuerSlug}
-        </Type>
+        </Text>
       </td>
 
       {/* Status */}
@@ -94,9 +94,9 @@ export function SessionTableRow({
 
       {/* Expires / Revoked */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           {sessionTimeLabel(session)}
-        </Type>
+        </Text>
       </td>
 
       {/* Actions */}

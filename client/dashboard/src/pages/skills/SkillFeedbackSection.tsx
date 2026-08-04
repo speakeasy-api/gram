@@ -1,14 +1,14 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Collapsible";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
@@ -18,7 +18,8 @@ import type { SkillFeedbackMetrics } from "@gram/client/models/components/skillf
 import type { SkillFeedbackTimelinePoint } from "@gram/client/models/components/skillfeedbacktimelinepoint.js";
 import { useSkillFeedbackInfinite } from "@gram/client/react-query/skillFeedback.js";
 import { useTriggerSkillSuggestionMutation } from "@gram/client/react-query/triggerSkillSuggestion.js";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -150,13 +151,13 @@ export function SkillFeedbackSection({
         <SettingsSection.Panel>
           <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-5 text-left">
             <span className="block">
-              <Type as="span" variant="subheading" className="block">
+              <Text as="span" variant="subheading" className="block">
                 All agent reviews
-              </Type>
-              <Type as="span" small muted className="block">
+              </Text>
+              <Text as="span" small muted className="block">
                 See collection health, recurring findings, and the evidence used
                 to improve this skill.
-              </Type>
+              </Text>
             </span>
             <Icon
               name="chevron-right"
@@ -182,7 +183,7 @@ export function SkillFeedbackSection({
                   />
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => void query.refetch()}
                   >
                     Retry
@@ -285,10 +286,10 @@ function FeedbackOverview({
 
       <div className="bg-muted/20 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
         <div>
-          <Type variant="subheading">Turn reviews into an edit</Type>
-          <Type small muted>
+          <Text variant="subheading">Turn reviews into an edit</Text>
+          <Text small muted>
             Run analysis now using unresolved reviews and efficacy evidence.
-          </Type>
+          </Text>
         </div>
         <RequireScope
           scope="skill:write"
@@ -326,15 +327,15 @@ function OutcomeDistribution({
   return (
     <section className="space-y-3">
       <div>
-        <Type variant="subheading">Outcome distribution</Type>
-        <Type small muted>
+        <Text variant="subheading">Outcome distribution</Text>
+        <Text small muted>
           {counts.total.toLocaleString()} resolved reports, all time
-        </Type>
+        </Text>
       </div>
       {counts.total === 0 ? (
-        <Type small muted>
+        <Text small muted>
           No resolved outcomes yet.
-        </Type>
+        </Text>
       ) : (
         <>
           <div
@@ -376,10 +377,10 @@ function FeedbackTimeline({
   return (
     <section className="space-y-3">
       <div>
-        <Type variant="subheading">Feedback volume</Type>
-        <Type small muted>
+        <Text variant="subheading">Feedback volume</Text>
+        <Text small muted>
           Daily reports over the last 30 days
-        </Type>
+        </Text>
       </div>
       <div
         className="bg-muted/20 flex h-28 items-end gap-1 rounded-lg border px-3 pt-3"
@@ -412,16 +413,16 @@ function GroupedFindings({
   return (
     <section className="space-y-3">
       <div>
-        <Type variant="subheading">Recurring findings</Type>
-        <Type small muted>
+        <Text variant="subheading">Recurring findings</Text>
+        <Text small muted>
           Similar recent notes are grouped. Expand a finding for its full
           evidence and attribution.
-        </Type>
+        </Text>
       </div>
       {groups.length === 0 ? (
-        <Type small muted>
+        <Text small muted>
           No notes among recent feedback.
-        </Type>
+        </Text>
       ) : (
         <div className="divide-y overflow-hidden rounded-lg border">
           {groups.map((group) => (
@@ -431,9 +432,9 @@ function GroupedFindings({
                   name="chevron-right"
                   className="text-muted-foreground mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-90"
                 />
-                <Type small className="min-w-0 flex-1">
+                <Text small className="min-w-0 flex-1">
                   {group.note}
-                </Type>
+                </Text>
                 <Badge variant="neutral">{group.items.length}</Badge>
               </summary>
               <div className="bg-muted/15 divide-y border-t">
@@ -446,12 +447,12 @@ function GroupedFindings({
                       <Badge variant="neutral">
                         {feedback.source === "dev" ? "Developer" : "Assistant"}
                       </Badge>
-                      <Type small muted>
+                      <Text small muted>
                         {feedback.skillVersionId
                           ? `Version ${feedback.skillVersionId.slice(0, 8)}`
                           : "Version unknown"}
-                      </Type>
-                      <Type
+                      </Text>
+                      <Text
                         small
                         muted
                         title={dateTimeFormatters.full.format(
@@ -459,9 +460,9 @@ function GroupedFindings({
                         )}
                       >
                         <HumanizeDateTime date={feedback.createdAt} />
-                      </Type>
+                      </Text>
                     </div>
-                    <Type small>{feedback.note}</Type>
+                    <Text small>{feedback.note}</Text>
                   </div>
                 ))}
               </div>
@@ -473,7 +474,7 @@ function GroupedFindings({
         <div className="flex justify-center">
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             disabled={loadingMore}
             onClick={onLoadMore}
           >

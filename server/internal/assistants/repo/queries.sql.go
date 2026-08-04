@@ -1966,8 +1966,10 @@ type LoadAssistantSkillsRow struct {
 	Description       pgtype.Text
 }
 
-// The active/resolvable predicates in LoadAssistantSkills and
-// LoadAttachedAssistantSkill must stay identical.
+// The active/resolvable distribution predicates in LoadAssistantSkills and
+// LoadAttachedAssistantSkill must stay identical. ResolveAssistantTurnSkills
+// intentionally omits distribution and pinning because turn-selected skills
+// resolve directly from the project registry.
 func (q *Queries) LoadAssistantSkills(ctx context.Context, arg LoadAssistantSkillsParams) ([]LoadAssistantSkillsRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantSkills, arg.AssistantIds, arg.ProjectID)
 	if err != nil {
@@ -2844,6 +2846,71 @@ func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg Re
 		arg.ProjectID,
 	)
 	return err
+}
+
+const resolveAssistantTurnSkills = `-- name: ResolveAssistantTurnSkills :many
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description,
+  resolved.content
+FROM skills s
+JOIN LATERAL (
+  SELECT sv.id, sv.description, sv.content
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = s.id
+    AND sv.spec_valid IS TRUE
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE s.project_id = $1
+  AND s.id = ANY($2::uuid[])
+  AND s.archived_at IS NULL
+ORDER BY s.name ASC, s.id ASC
+`
+
+type ResolveAssistantTurnSkillsParams struct {
+	ProjectID uuid.UUID
+	SkillIds  []uuid.UUID
+}
+
+type ResolveAssistantTurnSkillsRow struct {
+	SkillID           uuid.UUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	Description       pgtype.Text
+	Content           string
+}
+
+func (q *Queries) ResolveAssistantTurnSkills(ctx context.Context, arg ResolveAssistantTurnSkillsParams) ([]ResolveAssistantTurnSkillsRow, error) {
+	rows, err := q.db.Query(ctx, resolveAssistantTurnSkills, arg.ProjectID, arg.SkillIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveAssistantTurnSkillsRow
+	for rows.Next() {
+		var i ResolveAssistantTurnSkillsRow
+		if err := rows.Scan(
+			&i.SkillID,
+			&i.Name,
+			&i.ResolvedVersionID,
+			&i.Description,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resolveEnvironmentsForWrite = `-- name: ResolveEnvironmentsForWrite :many

@@ -6,11 +6,12 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { MdmIntegrationsTab } from "@/pages/org/device-integrations/DeviceIntegrations";
 import React from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import { DeviceAgentConfigurationTab } from "./device-agent-configuration";
 import { DeviceAgentSetup } from "./device-agent-setup";
 
 // Route shell: subPages (the MDM tab and provider detail pages) render
@@ -61,10 +62,19 @@ function DeviceAgentTabs() {
   // switches never build double-slash URLs.
   const segments = location.pathname.split("/").filter(Boolean);
   const lastSegment = segments[segments.length - 1] ?? "";
+  const onConfigurationTab = lastSegment === "configuration";
   const onMdmTab = lastSegment === "mdm-integrations";
-  const currentTab = onMdmTab && mdmEnabled ? "mdm-integrations" : "setup";
+  let currentTab = "setup";
+  if (onConfigurationTab) {
+    currentTab = "configuration";
+  } else if (onMdmTab && mdmEnabled) {
+    currentTab = "mdm-integrations";
+  }
   const basePath =
-    "/" + (onMdmTab ? segments.slice(0, -1) : segments).join("/");
+    "/" +
+    (onMdmTab || onConfigurationTab ? segments.slice(0, -1) : segments).join(
+      "/",
+    );
 
   const handleTabChange = (value: string) => {
     void navigate(value === "setup" ? basePath : `${basePath}/${value}`);
@@ -82,6 +92,12 @@ function DeviceAgentTabs() {
       <div className="border-border -mx-8 border-b px-8">
         <PageTabsList>
           <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
+          <PageTabsTrigger value="configuration">
+            <span className="inline-flex items-center gap-2">
+              Configuration
+              <ReleaseStageBadge stage="preview" noTooltip />
+            </span>
+          </PageTabsTrigger>
           {mdmEnabled && (
             <PageTabsTrigger value="mdm-integrations">
               <span className="inline-flex items-center gap-2">
@@ -95,6 +111,10 @@ function DeviceAgentTabs() {
 
       <TabsContent value="setup" className="mt-6">
         <DeviceAgentSetup />
+      </TabsContent>
+
+      <TabsContent value="configuration" className="mt-6">
+        <DeviceAgentConfigurationTab />
       </TabsContent>
 
       {mdmEnabled && (
