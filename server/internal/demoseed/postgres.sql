@@ -15,13 +15,22 @@
 --   org id       org_gram_demo_workspace
 --   project ids  dec0de00-0000-4000-a000-000000000001 (acme-support)
 --                dec0de00-0000-4000-a000-000000000002 (acme-platform)
---   chat ids     md5('gram-demo-chat-' || n)::uuid
---   message ids  md5('gram-demo-msg-' || n || '-' || m)::uuid
+--   chat ids     demo.det_uuid('gram-demo-chat-' || n) — md5 with RFC nibbles
+--   message ids  demo.det_uuid('gram-demo-msg-' || n || '-' || m)
 --   users        user_demo_* / *@demo.getgram.ai (parallel arrays below; the
 --                per-chat owner index formula 1 + (n % 6) is mirrored in the
 --                ClickHouse seed's arrayElement calls)
 
 CREATE SCHEMA IF NOT EXISTS demo;
+
+-- Deterministic RFC-compliant UUID from a name. Plain md5(...)::uuid leaves
+-- random version/variant nibbles, which fails the dashboard SDK's strict
+-- uuid validation (zod requires version 1-8 + variant [89ab]) — so the
+-- version nibble is forced to '5' and the variant to '8'. The ClickHouse
+-- seed reproduces this formatting exactly (see clickhouse.sql).
+CREATE OR REPLACE FUNCTION demo.det_uuid(name text) RETURNS uuid
+LANGUAGE sql IMMUTABLE
+RETURN (overlay(overlay(md5(name) placing '5' from 13) placing '8' from 17))::uuid;
 
 CREATE OR REPLACE FUNCTION demo.ensure_demo_org() RETURNS void
 LANGUAGE plpgsql
@@ -168,8 +177,12 @@ BEGIN
   -- explicitly before the projects delete cascades everything else
   -- (chats -> chat_messages -> risk_results, risk_policies, skills, ...).
   ------------------------------------------------------------------
+  -- 'enterprise' account type: the demo must showcase enterprise-gated
+  -- surfaces (Logs page and other EnterpriseGate features). Demo identity is
+  -- carried by the fixed org id (constants.DemoOrganizationID) — NOT by
+  -- account type, which the auth callback overwrites anyway.
   INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-  VALUES (demo_org, 'Acme Demo Workspace', 'acme-demo', 'demo', TRUE)
+  VALUES (demo_org, 'Acme Demo Workspace', 'acme-demo', 'enterprise', TRUE)
   ON CONFLICT (id) DO UPDATE
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
         gram_account_type = EXCLUDED.gram_account_type;
@@ -354,18 +367,22 @@ BEGIN
   ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
   ------------------------------------------------------------------
-  INSERT INTO prompt_templates (id, tool_urn, project_id, history_id, name, description, prompt, kind)
+  -- engine must be 'mustache': the dashboard SDK's Engine enum is closed and
+  -- a NULL/empty engine fails client-side validation, crashing every page
+  -- that embeds a prompt template (Prompts list, source detail via
+  -- tools.list). URN kind is 'prompt', not the http tools' kind.
+  INSERT INTO prompt_templates (id, tool_urn, project_id, history_id, name, description, prompt, engine, kind)
   VALUES
-    ('dec0de00-0000-4000-a000-00000000dd01', 'tools:http:acme:process_refund', proj_a,
+    ('dec0de00-0000-4000-a000-00000000dd01', 'tools:prompt:acme:triage-ticket', proj_a,
      'dec0de00-0000-4000-a000-00000000dd11', 'triage-ticket',
      'Structured first response for a new support ticket.',
      'Read the customer message, identify the order id, check recent errors with search_logs, and draft a first response.',
-     'prompt'),
-    ('dec0de00-0000-4000-a000-00000000dd02', 'tools:http:acme:fetch_traces', proj_a,
+     'mustache', 'prompt'),
+    ('dec0de00-0000-4000-a000-00000000dd02', 'tools:prompt:acme:latency-investigation', proj_a,
      'dec0de00-0000-4000-a000-00000000dd12', 'latency-investigation',
      'Investigate a latency regression end to end.',
      'Fetch traces for the affected service, compare p95 against the last deploy, and summarize the likely cause.',
-     'prompt');
+     'mustache', 'prompt');
 
   ------------------------------------------------------------------
   -- Skills: three manual skills with one version each and an open edit
@@ -433,7 +450,7 @@ E'@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount wit
      '{regex,presidio}', TRUE, 'flag', 'everyone', TRUE, 1);
 
   FOR i IN 1 .. bulk_chats LOOP
-    chat_id := md5('gram-demo-chat-' || i)::uuid;
+    chat_id := demo.det_uuid('gram-demo-chat-' || i);
     chat_proj := CASE WHEN i % 3 = 0 THEN proj_b ELSE proj_a END;
     chat_policy := CASE WHEN i % 3 = 0 THEN policy_b ELSE policy_a END;
     owner_idx := 1 + (i % array_length(demo_user_ids, 1));
@@ -451,7 +468,7 @@ E'@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount wit
     flagged_msg := NULL;
 
     FOR m IN 1 .. n_msgs LOOP
-      msg_id := md5('gram-demo-msg-' || i || '-' || m)::uuid;
+      msg_id := demo.det_uuid('gram-demo-msg-' || i || '-' || m);
 
       IF (i % 7 = 0 AND m = 3) OR (i % 2 = 1 AND m IN (3, 5) AND m < n_msgs) THEN
         -- Tool message. call_demo_<i>_1 / _2 join the ClickHouse tool_result
@@ -502,7 +519,7 @@ E'@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount wit
                                 risk_policy_version, chat_message_id, source, found,
                                 rule_id, description, match, start_pos, end_pos,
                                 confidence, tags, created_at)
-      VALUES (md5('gram-demo-risk-' || i)::uuid, chat_proj, demo_org, chat_policy, 1,
+      VALUES (demo.det_uuid('gram-demo-risk-' || i), chat_proj, demo_org, chat_policy, 1,
               flagged_msg, 'gitleaks', TRUE, 'stripe-access-token',
               'Stripe live secret key found in tool output', leak,
               55, 55 + length(leak), 0.97, '{secret,stripe}',
@@ -519,7 +536,7 @@ E'@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount wit
     INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
                             actor_display_name, action, subject_id, subject_type,
                             subject_display_name, created_at)
-    VALUES (md5('gram-demo-audit-' || i)::uuid, demo_org,
+    VALUES (demo.det_uuid('gram-demo-audit-' || i), demo_org,
             CASE WHEN i % 2 = 0 THEN proj_b ELSE proj_a END,
             demo_user_ids[1 + (i % 6)], 'user', demo_user_names[1 + (i % 6)],
             audit_actions[1 + (i % array_length(audit_actions, 1))],

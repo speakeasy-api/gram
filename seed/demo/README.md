@@ -21,13 +21,13 @@ directory holds the authoring docs:
 
 ## Fixed constants
 
-| Thing      | Value                                                                    |
-| ---------- | ------------------------------------------------------------------------ |
-| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, `gram_account_type='demo'`) |
-| Project A  | `dec0de00-0000-4000-a000-000000000001` (`acme-support`)                  |
-| Project B  | `dec0de00-0000-4000-a000-000000000002` (`acme-platform`)                 |
-| Chat ids   | `md5('gram-demo-chat-' concatenated with n)::uuid` — same in both stores |
-| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                      |
+| Thing      | Value                                                                                                           |
+| ---------- | --------------------------------------------------------------------------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
+| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, `gram_account_type='enterprise'` (unlocks enterprise-gated pages)) |
+| Project A  | `dec0de00-0000-4000-a000-000000000001` (`acme-support`)                                                         |
+| Project B  | `dec0de00-0000-4000-a000-000000000002` (`acme-platform`)                                                        |
+| Chat ids   | `demo.det_uuid('gram-demo-chat-'                                                                                |     | n)`: md5 with version nibble 5, variant 8 (RFC-valid for the SDK's strict uuid checks) — same formula in both stores |
+| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                                             |
 
 Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
 rerun regenerates a fresh window, data never goes stale, and no MV backfill is
@@ -67,28 +67,23 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
    impersonation gets a read-only grant set (`org:read`, `project:read`,
    `mcp:read`, `skill:read`, `chat:read`; NO `environment:read`, no writes) —
    not `allScopeGrants()`.
-3. Lift the impersonation transcript block in
-   `server/internal/chat/impl.go:679` when the impersonated org is the demo
-   org (its transcripts are fake).
+3. DONE (commit ae256351c1): transcript block lifted for the demo org in
+   `chat.LoadChat` via `constants.DemoOrganizationID`.
 4. Force scope enforcement for demo impersonation regardless of the org's RBAC
    product feature, PLUS a defense-in-depth guard rejecting mutating RPCs when
    `ActiveOrganizationID == demo org` (scope coverage across handlers is not
    complete).
 5. Frontend: reuse the `ImpersonationBanner` machinery for a "Demo workspace —
    read only" banner + exit; add the entry point ("Explore demo workspace").
-6. `access.listMembers` / `access.listRoles` / `access.listGrants` return 400
-   ("organization is not linked to WorkOS") for the demo org (`workos_id` is
-   NULL by design). Consequences observed: the insights dock's `useMembers()`
-   throws to the page error boundary (project pages crash), and the frontend
-   retry-loops `listGrants` (~1,500 requests) while `RequireScope
-scope="org:admin"` gates the page into "Access restricted". Those endpoints
-   must tolerate WorkOS-less orgs (return empty lists) or the frontend must
-   catch the error — impersonating a non-WorkOS org currently breaks the whole
-   RBAC-gated frontend.
-7. The Logs page sits behind `EnterpriseGate` (`useProductTier` wants
-   `gram_account_type === 'enterprise'`); the demo org is `'demo'` by design,
-   so either the gate learns the demo account type or the demo skips that
-   page.
+6. DONE for impersonation (commits 0f8d13113e + ae256351c1):
+   `access.listGrants` returns the admin scope set before the WorkOS check,
+   and `listMembers`/`listRoles` fall through to the pure-Postgres role
+   manager reads for impersonated WorkOS-less orgs. The dedicated
+   demo-impersonation path (change 1) should reuse the same carve-outs.
+7. RESOLVED by data: the demo org is seeded with
+   `gram_account_type='enterprise'`, so `EnterpriseGate` pages (Logs, …) are
+   unlocked. Demo identity is carried by the org id constant, never by
+   account type.
 8. The auth callback's org-metadata upsert overwrites `gram_account_type`
    (observed: 'demo' → 'pro' after one impersonation login). The daily seed
    run restores it, but the server should preserve the demo account type so
