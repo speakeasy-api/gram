@@ -20,7 +20,11 @@ describe("formatPlatform", () => {
   it("uses canonical labels for other known surfaces", () => {
     expect(formatPlatform("cursor")).toBe("Cursor");
     expect(formatPlatform("codex")).toBe("Codex");
+    expect(formatPlatform("chatgpt")).toBe("ChatGPT");
+    expect(formatPlatform("ChatGPT")).toBe("ChatGPT");
+    expect(formatPlatform("chatgpt-work")).toBe("ChatGPT Work");
     expect(formatPlatform("opencode")).toBe("opencode");
+    expect(formatPlatform("litellm")).toBe("LiteLLM");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 

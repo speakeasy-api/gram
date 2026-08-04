@@ -1330,6 +1330,37 @@ func TestSearchUsers_AgentMetricsSource(t *testing.T) {
 	assert.NotEqual(t, "0", emaillessUser.LastSeenUnixNano, "email-less identity should carry last activity")
 }
 
+func TestSearchUsers_AgentMetricsSourceIncludesLiteLLMUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now().UTC()
+	email := "litellm-user-" + uuid.NewString() + "@example.test"
+	insertLiteLLMSpan(t, ctx, liteLLMSpanParams{
+		projectID: authCtx.ProjectID.String(), timestamp: now.Add(-10 * time.Minute), chatID: uuid.NewString(), callID: uuid.NewString(),
+		gramURN: "litellm:otel:traces", eventURN: "urn:telemetry:provider_otel:span:embeddings",
+		requestModel: "embedding-group", responseModel: "openai/text-embedding-3-small", email: email,
+		inputTokens: 13, outputTokens: 0, cost: 0.0003,
+	})
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+		},
+		UserType: "internal", Limit: 100, Sort: "desc", Source: "agent_metrics",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, email, res.Users[0].UserID)
+	require.Equal(t, email, res.Users[0].UserEmail)
+	require.EqualValues(t, 13, res.Users[0].TotalInputTokens)
+	require.EqualValues(t, 13, res.Users[0].TotalTokens)
+}
+
 // TestSearchUsers_AgentMetricsSourceRejectsUnsupportedFilters pins that the
 // agent-metrics source fails loud rather than silently returning project-wide
 // data when given a filter it cannot honor (the view is keyed by email + time

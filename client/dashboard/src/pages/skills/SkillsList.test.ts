@@ -1,10 +1,6 @@
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { describe, expect, it } from "vitest";
-import {
-  filterSkills,
-  prioritizeAddableSkills,
-  sortSkills,
-} from "./skills-list-helpers";
+import { filterSkills, prioritizeAddableSkills } from "./skills-list-helpers";
 
 function skill(overrides: Partial<Skill>): Skill {
   return {
@@ -73,38 +69,5 @@ describe("SkillsList filtering", () => {
         availableSecond,
       ]).map((item) => item.id),
     ).toEqual(["b", "d", "a", "c"]);
-  });
-
-  it("sorts sampled metrics ahead of missing values", () => {
-    const first = skill({ id: "a", displayName: "Alpha" });
-    const second = skill({ id: "b", displayName: "Beta" });
-    const metrics = new Map([
-      [
-        second.id,
-        {
-          activations: 4,
-          activatedSessions: 3,
-          averageSessionCostUsd: 1,
-          sessionCostUsd: 3,
-          efficacy: {
-            averageScore: 0.8,
-            estimatedMinutesSavedAverage: 5,
-            estimatedMinutesSavedSamples: 1,
-            estimatedMinutesSavedTotal: 5,
-            estimatedTurnsSavedAverage: 1,
-            estimatedTurnsSavedSamples: 1,
-            estimatedTurnsSavedTotal: 1,
-            flagCounts: {},
-            roiConfidenceCounts: {},
-            scoredSessions: 1,
-          },
-        },
-      ],
-    ]);
-
-    expect(sortSkills([first, second], metrics, "efficacy")[0]?.id).toBe("b");
-    expect(sortSkills([first, second], metrics, "activations")[0]?.id).toBe(
-      "b",
-    );
   });
 });

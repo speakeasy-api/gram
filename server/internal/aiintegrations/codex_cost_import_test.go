@@ -131,11 +131,15 @@ func TestBuildCodexCostLogParamsRoutesNonCodexProductsToChatGPTURN(t *testing.T)
 
 	workRow := logParams[2]
 	require.Equal(t, chatgptUsageMetricsURN, workRow.ToolInfo.URN)
-	require.Equal(t, chatgptHookSource, workRow.ToolInfo.Name)
+	// Work shares the chatgpt URN but gets its own hook_source: hook_source
+	// is a summary GROUP BY dimension, so this is what keeps ChatGPT and
+	// Work spend separable after the raw rows age out.
+	require.Equal(t, chatgptWorkHookSource, workRow.ToolInfo.Name)
+	require.Equal(t, chatgptWorkHookSource, workRow.Attributes[attr.HookSourceKey])
 	require.Equal(t, "Work", workRow.Attributes[attr.CodexComplianceProductKey])
 	require.Equal(t, int64(30), workRow.Attributes[attr.GenAIUsageInputTokensKey])
 	// Billing still prices non-Codex rows; the cost just lands under the
-	// parked URN instead of the codex stream.
+	// chatgpt URN instead of the codex stream.
 	require.InDelta(t, 0.04, workRow.Attributes[attr.GenAIUsageCostKey], 0.000001)
 }
 
@@ -199,36 +203,9 @@ func TestBuildCodexCostLogParamsRejectsMissingEventID(t *testing.T) {
 	require.Contains(t, err.Error(), "missing event_id")
 }
 
-func TestCodexCostSourceUpperBoundReturnsStartWhenNoLogs(t *testing.T) {
-	t.Parallel()
-
-	cfg := codexCostConfig()
-	cfg.PollWatermarkAt = time.Time{}
-	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(time.Time{})
-	endTime := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
-	start := endTime.Add(-CodexComplianceInitialLookback)
-	client := &stubCodexComplianceClient{
-		listPages: []*codexapi.LogsPage{
-			{Data: nil, HasMore: false, LastEndTime: time.Time{}},
-		},
-		listParams: nil,
-		downloads:  nil,
-	}
-	source := &codexCostSource{
-		client:      client,
-		cfg:         cfg,
-		pageLimit:   codexCompliancePageLimit,
-		processPage: nil,
-		progress:    &CodexCostSyncProgress{},
-	}
-
-	upperBound, err := source.UpperBound(t.Context(), endTime)
-
-	require.NoError(t, err)
-	require.Equal(t, start, upperBound)
-	require.Len(t, client.listParams, 1)
-	require.Equal(t, start, client.listParams[0].After)
-}
+// Pagination edge cases (empty windows, non-advancing last_end_time, window
+// truncation, foreign-type filtering) are covered for this source and the
+// ChatGPT conversation source together in logfile_source_pagination_test.go.
 
 func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 	t.Parallel()
@@ -277,97 +254,6 @@ func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, store.checkpoints)
 	require.Len(t, client.listParams, 1)
-}
-
-func TestCodexCostSourceUpperBoundRejectsNonAdvancingLastEndTime(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, 7, 16, 10, 0, 0, 123456000, time.UTC)
-	cfg := codexCostConfig()
-	cfg.PollWatermarkAt = start
-	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(start)
-	client := &stubCodexComplianceClient{
-		listPages: []*codexapi.LogsPage{
-			{Data: nil, HasMore: true, LastEndTime: start},
-		},
-		listParams: nil,
-		downloads:  nil,
-	}
-	source := &codexCostSource{
-		client:      client,
-		cfg:         cfg,
-		pageLimit:   codexCompliancePageLimit,
-		processPage: nil,
-		progress:    &CodexCostSyncProgress{},
-	}
-
-	_, err := source.UpperBound(t.Context(), start.Add(time.Hour))
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "last_end_time did not advance")
-	require.Len(t, client.listParams, 1)
-	require.Equal(t, start, client.listParams[0].After)
-}
-
-func TestCodexCostSourceFetchPageStopsAtWindowEnd(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 7, 16, 11, 0, 0, 0, time.UTC)
-	inWindow := codexapi.LogFile{ID: "eclf_1", EventType: codexComplianceCostsEventType, EndTime: start.Add(30 * time.Minute), FileName: "", FileSize: 0, FileSHA256: ""}
-	afterWindow := codexapi.LogFile{ID: "eclf_2", EventType: codexComplianceCostsEventType, EndTime: end.Add(time.Minute), FileName: "", FileSize: 0, FileSHA256: ""}
-	client := &stubCodexComplianceClient{
-		listPages: []*codexapi.LogsPage{
-			{Data: []codexapi.LogFile{inWindow, afterWindow}, HasMore: true, LastEndTime: afterWindow.EndTime},
-		},
-		listParams: nil,
-		downloads:  nil,
-	}
-	source := &codexCostSource{
-		client:      client,
-		cfg:         codexCostConfig(),
-		pageLimit:   codexCompliancePageLimit,
-		processPage: nil,
-		progress:    &CodexCostSyncProgress{},
-	}
-
-	page, err := source.FetchPage(t.Context(), start, end, "")
-
-	require.NoError(t, err)
-	require.False(t, page.HasMore)
-	require.Empty(t, page.NextPage)
-	require.Equal(t, []codexapi.LogFile{inWindow}, page.Payload)
-}
-
-func TestCodexCostSourceFetchPageRejectsNonAdvancingLastEndTime(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, 7, 16, 10, 0, 0, 123456000, time.UTC)
-	end := start.Add(time.Hour)
-	client := &stubCodexComplianceClient{
-		listPages: []*codexapi.LogsPage{
-			{Data: nil, HasMore: true, LastEndTime: start},
-		},
-		listParams: nil,
-		downloads:  nil,
-	}
-	source := &codexCostSource{
-		client:      client,
-		cfg:         codexCostConfig(),
-		pageLimit:   codexCompliancePageLimit,
-		processPage: nil,
-		progress:    &CodexCostSyncProgress{},
-	}
-
-	page, err := source.FetchPage(t.Context(), start, end, "")
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "last_end_time did not advance")
-	require.False(t, page.HasMore)
-	require.Empty(t, page.NextPage)
-	require.Nil(t, page.Payload)
-	require.Len(t, client.listParams, 1)
-	require.Equal(t, start, client.listParams[0].After)
 }
 
 func codexCostConfig() Config {

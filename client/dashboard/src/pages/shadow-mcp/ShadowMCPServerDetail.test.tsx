@@ -88,6 +88,20 @@ vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPolicies: mocks.useRiskListPolicies,
 }));
 
+vi.mock("@gram/client/react-query/blockShadowMCPInventoryServer.js", () => ({
+  useBlockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
+vi.mock("@gram/client/react-query/unblockShadowMCPInventoryServer.js", () => ({
+  useUnblockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: mocks.useMembers,
 }));
@@ -824,6 +838,7 @@ describe("ShadowMCPServerDetail", () => {
       data: inventoryServer({
         access: "none",
         allowedPolicyIds: [],
+        blockedPolicyIds: [],
       }),
       error: null,
       isLoading: false,
@@ -964,6 +979,7 @@ describe("ShadowMCPServerDetail", () => {
       data: inventoryServer({
         access: "none",
         allowedPolicyIds: [],
+        blockedPolicyIds: [],
         latestRequest: {
           id: "request-1",
           policyId: "cached-policy",

@@ -359,7 +359,7 @@ jobs:
 
   docker-build-pystreams:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, pystreams-build-lint]
+    needs: [changes]
     if: needs.changes.outputs.pystreams == 'true'
     steps:
       - name: Checkout
@@ -1465,11 +1465,10 @@ jobs:
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     # Build dashboard docker image when server OR client changes exist (needed for preview environments)
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -1625,10 +1624,9 @@ jobs:
 
   client-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
@@ -1679,10 +1677,9 @@ jobs:
 
   client-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout

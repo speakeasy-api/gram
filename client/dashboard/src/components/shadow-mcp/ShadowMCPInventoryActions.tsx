@@ -15,6 +15,7 @@ import {
   ALLOW_RULE_POLICY_REQUIRED,
   shadowMCPInventoryActions,
 } from "./shadowMCPInventoryActionItems";
+import type { ShadowMCPPolicyDisposition } from "./shadowMCPInventoryStatus";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
@@ -32,10 +33,20 @@ import { useEffect, useState } from "react";
 
 export type ShadowMCPPolicy = Pick<
   RiskPolicy,
-  "audienceType" | "audiencePrincipalUrns" | "id" | "name"
+  | "audienceType"
+  | "audiencePrincipalUrns"
+  | "id"
+  | "name"
+  | "shadowMcpDisposition"
 >;
 
-export type InventoryActionMode = "review" | "add" | "edit" | "delete";
+export type InventoryActionMode =
+  | "review"
+  | "add"
+  | "edit"
+  | "delete"
+  | "block"
+  | "unblock";
 export type ReviewDecision = "allow" | "deny";
 export type ActiveInventoryAction = {
   mode: InventoryActionMode;
@@ -98,6 +109,10 @@ function actionSheetTitle(mode: InventoryActionMode) {
       return "Edit Rule";
     case "delete":
       return "Delete Rule";
+    case "block":
+      return "Block Server";
+    case "unblock":
+      return "Unblock Server";
   }
 }
 
@@ -111,6 +126,10 @@ function actionSheetDescription(mode: InventoryActionMode) {
       return "Change which policies allow this Shadow MCP server.";
     case "delete":
       return "Remove the allow decision for this Shadow MCP server.";
+    case "block":
+      return "Add this server to the policy's blocked list. Everyone in the project loses access.";
+    case "unblock":
+      return "Remove this server from the policy's blocked list. Everyone in the project regains access.";
   }
 }
 
@@ -118,16 +137,20 @@ function actionSheetSubmitLabel(
   mode: InventoryActionMode,
   decision: ReviewDecision,
 ) {
-  if (mode === "review") {
-    return decision === "allow" ? "Approve Request" : "Deny Request";
+  switch (mode) {
+    case "review":
+      return decision === "allow" ? "Approve Request" : "Deny Request";
+    case "delete":
+      return "Delete Rule";
+    case "edit":
+      return "Save Changes";
+    case "block":
+      return "Block Server";
+    case "unblock":
+      return "Unblock Server";
+    case "add":
+      return "Add Allow Rule";
   }
-  if (mode === "delete") {
-    return "Delete Rule";
-  }
-  if (mode === "edit") {
-    return "Save Changes";
-  }
-  return "Add Allow Rule";
 }
 
 function initialPolicyIDsForAction(
@@ -153,11 +176,13 @@ function initialPolicyIDsForAction(
 export function ShadowMCPInventoryActionMenu({
   canManageAllowRules,
   disabled,
+  disposition = null,
   onOpenAction,
   server,
 }: {
   canManageAllowRules: boolean;
   disabled: boolean;
+  disposition?: ShadowMCPPolicyDisposition | null;
   onOpenAction: (
     mode: InventoryActionMode,
     server: ShadowMCPInventoryServer,
@@ -167,6 +192,7 @@ export function ShadowMCPInventoryActionMenu({
   const actions = shadowMCPInventoryActions(server, {
     canManageAllowRules,
     disabled,
+    disposition,
     onOpenAction,
   });
 
@@ -286,6 +312,7 @@ function PolicySelection({
 
 export function ShadowMCPInventoryActionSheet({
   action,
+  disposition = null,
   isSubmitting,
   members,
   onOpenChange,
@@ -296,6 +323,7 @@ export function ShadowMCPInventoryActionSheet({
   shadowMCPPolicies,
 }: {
   action: ActiveInventoryAction | null;
+  disposition?: ShadowMCPPolicyDisposition | null;
   isSubmitting: boolean;
   members: AccessMember[];
   onOpenChange: (open: boolean) => void;
@@ -325,13 +353,23 @@ export function ShadowMCPInventoryActionSheet({
   if (!action) return null;
 
   const server = action.server;
+  const isBlocklistAction =
+    action.mode === "block" || action.mode === "unblock";
+  // Under allow_all, approving a request unblocks the server project-wide, so
+  // there is no policy selection to make.
+  const isAllowAllReview =
+    action.mode === "review" && disposition === "allow_all";
   const canChoosePolicies =
+    !isBlocklistAction &&
+    !isAllowAllReview &&
     action.mode !== "delete" &&
     (action.mode !== "review" || decision === "allow");
   const needsPolicySelection = canChoosePolicies;
   const canSubmit =
     !isSubmitting &&
-    (action.mode === "delete" ||
+    (isBlocklistAction ||
+      isAllowAllReview ||
+      action.mode === "delete" ||
       (action.mode === "review" && decision === "deny") ||
       selectedPolicyIDs.length > 0);
 
@@ -393,7 +431,9 @@ export function ShadowMCPInventoryActionSheet({
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    Add an allow decision.
+                    {isAllowAllReview
+                      ? "Unblock the server for everyone in the project."
+                      : "Add an allow decision."}
                   </Text>
                 </span>
               </label>
@@ -433,6 +473,14 @@ export function ShadowMCPInventoryActionSheet({
               This removes the current allow decision for the URL.
             </Text>
           )}
+
+          {isBlocklistAction && (
+            <Text muted small>
+              {action.mode === "block"
+                ? "The block applies to everyone in the project immediately."
+                : "The server becomes available to everyone in the project immediately."}
+            </Text>
+          )}
         </div>
 
         <SheetFooter>
@@ -443,7 +491,9 @@ export function ShadowMCPInventoryActionSheet({
               void onSubmit({ action, decision, policyIDs: selectedPolicyIDs });
             }}
             variant={
-              action.mode === "delete" ? "destructive-primary" : "primary"
+              action.mode === "delete" || action.mode === "block"
+                ? "destructive-primary"
+                : "primary"
             }
           >
             <Button.LeftIcon>

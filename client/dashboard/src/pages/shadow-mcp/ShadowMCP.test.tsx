@@ -143,7 +143,7 @@ describe("ShadowMCP", () => {
     id = `${action}-policy`,
     sources = ["shadow_mcp"],
   }: {
-    action: "block" | "flag";
+    action: "block" | "flag" | "warn";
     enabled?: boolean;
     id?: string;
     sources?: string[];
@@ -247,6 +247,28 @@ describe("ShadowMCP", () => {
     ).toBeTruthy();
     expect(screen.getByText("Roles: Admin")).toBeTruthy();
     expect(screen.getByText("Members: Admin User")).toBeTruthy();
+  });
+
+  it("renders warning policy status when no blocking policy is enabled", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: { policies: [riskPolicy({ action: "warn" })] },
+      isError: false,
+      isLoading: false,
+    });
+
+    render(<ShadowMCP />);
+
+    expect(screen.getByText("Warning")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Warn policy is enabled. Users must acknowledge warnings before continuing.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Shadow MCP inventory for project-1 with policy warning",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders flagging policy status when no blocking policy is enabled", () => {

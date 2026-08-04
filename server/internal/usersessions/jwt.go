@@ -35,6 +35,16 @@ type RevocationChecker interface {
 	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
 }
 
+// TokenRevoker pushes a JTI into the revocation cache the RevocationChecker
+// reads. Declared as an interface rather than taking *chatsessions.Manager
+// directly so revoke handlers can be tested against a failing revoker without
+// standing up an unreachable Redis, which costs seconds per call (1s
+// DialTimeout plus go-redis retries) and so taxes every run of these tests
+// once per seeded session.
+type TokenRevoker interface {
+	RevokeToken(ctx context.Context, jti string) error
+}
+
 // SessionClaims is the unified JWT claim shape for Gram-issued user sessions
 // (and, as the chat-session path retires, all Gram session tokens). Carries
 // the standard OIDC registered claims plus the OAuth client the token was
@@ -146,7 +156,7 @@ func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return s.key, nil
-	}, jwt.WithAudience(expectedAudience))
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithAudience(expectedAudience))
 	if err != nil {
 		return nil, fmt.Errorf("validate token: %w", err)
 	}
@@ -202,12 +212,13 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	return ValidatedSession{Subject: subject, JTI: claims.ID, ClientID: claims.ClientID}, nil
 }
 
-// ParseUnverifiedJTI extracts the `jti` claim from a token without verifying
-// the signature. Used by /revoke to push the JTI into the revocation cache —
-// the token's authenticity is established by the client_secret check in the
-// revoke handler, not by signature verification (RFC 7009 doesn't require it).
-func (s *Signer) ParseUnverifiedJTI(token string) (string, error) {
-	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
+// VerifiedJTI extracts the `jti` claim from a token after verifying its
+// signature. Used by /revoke to push the JTI into the revocation cache.
+// Claims validation (expiry etc.) is deliberately skipped so an expired
+// token can still be revoked, but the signature must be ours: for public
+// clients the client_secret check does not apply, so signature verification
+// is what proves the caller actually holds the token being revoked.
+func (s *Signer) VerifiedJTI(token string) (string, error) {
 	claims := SessionClaims{RegisteredClaims: jwt.RegisteredClaims{
 		Issuer:    "",
 		Subject:   "",
@@ -217,8 +228,14 @@ func (s *Signer) ParseUnverifiedJTI(token string) (string, error) {
 		IssuedAt:  nil,
 		ID:        "",
 	}, ClientID: ""}
-	if _, _, err := parser.ParseUnverified(token, &claims); err != nil {
-		return "", fmt.Errorf("parse unverified token: %w", err)
+	_, err := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return s.key, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithoutClaimsValidation())
+	if err != nil {
+		return "", fmt.Errorf("parse token: %w", err)
 	}
 	if claims.ID == "" {
 		return "", errors.New("token missing jti claim")

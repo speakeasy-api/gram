@@ -119,6 +119,21 @@ describe("BlockPage", () => {
     expect(screen.getByText(sampleBlock.reason)).toBeTruthy();
   });
 
+  it("falls back to spend-rule framing when the block has no policy name", () => {
+    // Spend-gate blocks carry no risk policy, so policyName is empty; the
+    // headline must not render `Blocked by policy ""`.
+    mockLoadedBlock({
+      ...sampleBlock,
+      policyName: "",
+      reason: `Speakeasy blocked this tool call: spend rule "Intern hard limit" — budget resets Aug 31, 2026 00:00 UTC`,
+    });
+
+    render(<BlockPage />);
+
+    expect(screen.getByText(/Blocked by a Speakeasy spend rule/)).toBeTruthy();
+    expect(screen.queryByText(/Blocked by policy/)).toBeNull();
+  });
+
   it("submits 'up' feedback and refetches when Helpful is clicked", async () => {
     mockLoadedBlock(sampleBlock);
     mocks.mutateAsync.mockResolvedValue({});

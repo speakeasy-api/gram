@@ -3,6 +3,7 @@ import type { ShadowMCPInventoryServer } from "@gram/client/models/components/sh
 import { describe, expect, it } from "vitest";
 import {
   eligibleShadowMCPAllowRulePolicies,
+  shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusDescription,
   shadowMCPPolicyState,
@@ -75,13 +76,27 @@ describe("eligibleShadowMCPAllowRulePolicies", () => {
 });
 
 describe("shadowMCPPolicyState", () => {
-  it("prioritizes blocking policies over flagging policies", () => {
+  it("prioritizes blocking policies over warning and flagging policies", () => {
     expect(
       shadowMCPPolicyState([
         policy({ action: "flag", id: "flag" }),
+        policy({ action: "warn", id: "warn" }),
         policy({ action: "block", id: "block" }),
       ]),
     ).toBe("blocking");
+  });
+
+  it("returns warning for enabled warn policy without blocking policy", () => {
+    expect(shadowMCPPolicyState([policy({ action: "warn" })])).toBe("warning");
+  });
+
+  it("prioritizes warning policies over flagging policies", () => {
+    expect(
+      shadowMCPPolicyState([
+        policy({ action: "flag", id: "flag" }),
+        policy({ action: "warn", id: "warn" }),
+      ]),
+    ).toBe("warning");
   });
 
   it("returns flagging for enabled flag policy without blocking policy", () => {
@@ -128,6 +143,9 @@ describe("shadowMCPInventoryStatus", () => {
 
   it("shows observed when blocking is inactive", () => {
     expect(
+      shadowMCPInventoryStatus(server({ access: "none" }), "warning"),
+    ).toBe("observed");
+    expect(
       shadowMCPInventoryStatus(server({ access: "none" }), "flagging"),
     ).toBe("observed");
     expect(shadowMCPInventoryStatus(server({ access: "none" }), "none")).toBe(
@@ -163,5 +181,25 @@ describe("shadowMCPInventoryStatus", () => {
     expect(
       shadowMCPInventoryStatusDescription(server({ access: "none" }), "none"),
     ).toBe("Not blocking");
+  });
+});
+
+describe("shadowMCPBlockingPolicyDisposition", () => {
+  it("returns null with no blocking policies", () => {
+    expect(shadowMCPBlockingPolicyDisposition([])).toBeNull();
+  });
+
+  it("returns allow_all only when every blocking policy declares it", () => {
+    expect(
+      shadowMCPBlockingPolicyDisposition([
+        { shadowMcpDisposition: "allow_all" },
+      ]),
+    ).toBe("allow_all");
+    expect(
+      shadowMCPBlockingPolicyDisposition([
+        { shadowMcpDisposition: "allow_all" },
+        { shadowMcpDisposition: undefined },
+      ]),
+    ).toBe("block_all");
   });
 });
