@@ -61,20 +61,3 @@ func TestListTools_NotFound(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
-
-func TestListTools_NonStaffEmailForbidden(t *testing.T) {
-	t.Parallel()
-
-	// newTestService seeds the default mock user (dev@example.com), which is
-	// not a Speakeasy-owned domain, so ListTools must reject it before ever
-	// dialing the vendor server.
-	ctx, ti := newTestService(t)
-
-	_, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
-		ID:               "00000000-0000-0000-0000-000000000000",
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-	})
-	requireOopsCode(t, err, oops.CodeForbidden)
-}

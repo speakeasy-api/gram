@@ -1212,15 +1212,7 @@ func requireStaffForUnproxiedBackend(ctx context.Context, authCtx *contextvalues
 		return nil
 	}
 
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if !access.IsSpeakeasyStaffEmail(email) {
-		return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be attached by Speakeasy staff").LogWarn(ctx, logger)
-	}
-
-	return nil
+	return access.RequireStaffForUnproxiedMcp(ctx, authCtx, "attached", logger)
 }
 
 // verifyServerReferenceOwnership checks that every non-null referenced

@@ -90,23 +90,6 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// requireStaffAccess rejects the request unless the caller's email is on the
-// Speakeasy staff domain allowlist. Unproxied MCP servers are staff-only
-// while this workflow is being validated (DNO-697). action is the verb used
-// in the resulting error message, e.g. "added", "viewed", "deleted".
-func (s *Service) requireStaffAccess(ctx context.Context, authCtx *contextvalues.AuthContext, action string) error {
-	email := ""
-	if authCtx.Email != nil {
-		email = *authCtx.Email
-	}
-	if access.IsSpeakeasyStaffEmail(email) {
-		return nil
-	}
-
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-	return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be %s by Speakeasy staff", action).LogWarn(ctx, logger)
-}
-
 func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPayload) (*types.UnproxiedMcpServer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -119,7 +102,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := s.requireStaffAccess(ctx, authCtx, "added"); err != nil {
+	if err := access.RequireStaffForUnproxiedMcp(ctx, authCtx, "added", logger); err != nil {
 		return nil, err
 	}
 
@@ -206,10 +189,6 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, err
 	}
 
-	if err := s.requireStaffAccess(ctx, authCtx, "viewed"); err != nil {
-		return nil, err
-	}
-
 	servers, err := repo.New(s.db).ListServersByProjectID(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list unproxied mcp servers").LogError(ctx, s.logger)
@@ -230,10 +209,6 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	if err := s.requireStaffAccess(ctx, authCtx, "viewed"); err != nil {
 		return nil, err
 	}
 
@@ -287,10 +262,6 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	if err := s.requireStaffAccess(ctx, authCtx, "viewed"); err != nil {
 		return nil, err
 	}
 
@@ -375,7 +346,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := s.requireStaffAccess(ctx, authCtx, "deleted"); err != nil {
+	if err := access.RequireStaffForUnproxiedMcp(ctx, authCtx, "deleted", logger); err != nil {
 		return err
 	}
 

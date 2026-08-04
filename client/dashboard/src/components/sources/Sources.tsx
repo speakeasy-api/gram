@@ -127,9 +127,7 @@ export default function Sources(): JSX.Element {
       enabled: isTunneledMcpEnabled,
     });
   const { data: unproxiedMcpServersResult, isLoading: isLoadingUnproxiedMcp } =
-    useUnproxiedMcpServers(undefined, undefined, {
-      enabled: isSpeakeasyStaff,
-    });
+    useUnproxiedMcpServers();
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
   // Remote/tunneled/unproxied sources bypass deployments, so page loading
@@ -137,7 +135,7 @@ export default function Sources(): JSX.Element {
   const isLoading =
     isLoadingDeployment ||
     isLoadingRemoteMcp ||
-    (isSpeakeasyStaff && isLoadingUnproxiedMcp) ||
+    isLoadingUnproxiedMcp ||
     (isTunneledMcpEnabled && isLoadingTunneledMcp);
 
   const [viewMode, setViewMode] = useViewMode();
