@@ -533,6 +533,9 @@ importers:
         specifier: 8.8.5-lite
         version: 8.8.5-lite
     devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.29.0(zod@4.4.3)
       '@types/archiver':
         specifier: ^8.0.0
         version: 8.0.0
