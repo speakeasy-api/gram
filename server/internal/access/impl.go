@@ -104,6 +104,20 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // ListRoles reads local role records and enriches them with Gram's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
+	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
+	// roleOrgContext, but the listing itself is pure Postgres — serve it.
+	if s.isImpersonatingUnlinkedOrg(ctx) {
+		ac, err := s.authContext(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		}
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(ac.ActiveOrganizationID),
+			attr.UserID(ac.UserID),
+		)
+		return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
+	}
+
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -296,6 +310,20 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 // ListMembers follows the original access API contract by returning WorkOS user
 // identifiers while decorating them with the role information the UI needs.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
+	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
+	// roleOrgContext, but the listing itself is pure Postgres — serve it.
+	if s.isImpersonatingUnlinkedOrg(ctx) {
+		ac, err := s.authContext(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		}
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(ac.ActiveOrganizationID),
+			attr.UserID(ac.UserID),
+		)
+		return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
+	}
+
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -328,18 +356,28 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
+	// Admins impersonating a customer org won't have an organization_users row
+	// (the Info endpoint intentionally skips that upsert). Return full scopes so
+	// the MembershipSyncGuard doesn't block the dashboard. This must run before
+	// roleOrgContext: impersonated orgs are not necessarily WorkOS-linked (e.g.
+	// a locally provisioned org), and its 400 would mask this carve-out.
+	acPre, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if acPre.IsAdmin {
+		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
+			trace.SpanFromContext(ctx).SetAttributes(
+				attr.OrganizationID(acPre.ActiveOrganizationID),
+				attr.UserID(acPre.UserID),
+			)
+			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
+		}
+	}
+
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	// Admins impersonating a customer org won't have an organization_users row
-	// (the Info endpoint intentionally skips that upsert). Return full scopes so
-	// the MembershipSyncGuard doesn't block the dashboard.
-	if ac.IsAdmin {
-		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
-		}
 	}
 
 	logger := s.logger.With(
@@ -413,6 +451,28 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 	}
 
 	return ac, nil
+}
+
+// isImpersonatingUnlinkedOrg reports whether a platform admin is impersonating
+// an organization that has no WorkOS link (e.g. a locally provisioned org).
+// WorkOS-backed member/role listings cannot work for such orgs, so the list
+// endpoints return empty results instead of a 400 the frontend treats as
+// fatal (page error boundaries and request retry loops).
+func (s *Service) isImpersonatingUnlinkedOrg(ctx context.Context) bool {
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil || !ac.IsAdmin {
+		return false
+	}
+	if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); !hasOverride {
+		return false
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return false
+	}
+
+	return !org.WorkosID.Valid || org.WorkosID.String == ""
 }
 
 func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
