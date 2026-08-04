@@ -29,10 +29,13 @@ const (
 	// skillInjectionScanBatchTimeout bounds one batch activity. A batch is 8
 	// ~10s judge calls, so this is generous headroom, not the expected duration.
 	skillInjectionScanBatchTimeout = 5 * time.Minute
-	// skillInjectionScanRunTimeout must exceed the worst-case drain loop
-	// (maxBatches * batchTimeout) so a slow-but-succeeding run reaches its natural
-	// continue-as-new instead of being killed mid-batch. Persistent failure bails
-	// earlier via retry exhaustion. The extra 10m absorbs retry/backoff slack.
+	// skillInjectionScanRunTimeout caps one drain run's liveness, it does not
+	// guarantee a full drain: the 1-minute schedule (SKIP overlap) is the outer
+	// retry loop, and each completed batch persists its verdicts, so a run killed
+	// mid-drain simply resumes on the next tick with the remaining backlog. We keep
+	// the cap short on purpose — a longer timeout would let one wedged run block
+	// every scheduled tick behind it. Sized to cover a no-retry drain
+	// (maxBatches * batchTimeout) plus slack for the low per-batch retry budget.
 	skillInjectionScanRunTimeout = skillInjectionScanMaxBatches*skillInjectionScanBatchTimeout + 10*time.Minute
 )
 
@@ -43,7 +46,10 @@ func ScanSkillVersionsForInjectionWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: skillInjectionScanBatchTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
+			// The schedule reruns every minute and is the real retry loop, so keep
+			// per-batch retries low: one in-activity retry smooths a single blip
+			// without the run's worst case ballooning past its timeout.
+			MaximumAttempts:    2,
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2,
 			MaximumInterval:    10 * time.Second,

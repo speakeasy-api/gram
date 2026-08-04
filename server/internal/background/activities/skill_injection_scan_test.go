@@ -36,6 +36,17 @@ func flagOnKeyword(_ context.Context, req promptinjection.Request) ([]promptinje
 	return results, nil
 }
 
+func TestScanSkillVersionsForInjection_RejectsNonPositiveBatchSize(t *testing.T) {
+	t.Parallel()
+
+	// The guard fires before any DB access, so a nil pool is fine here.
+	act := activities.NewSkillInjectionScanner(testenv.NewLogger(t), nil, promptinjection.NewScanner(testenv.NewLogger(t), flagOnKeyword))
+	for _, size := range []int32{0, -1} {
+		_, err := act.Scan(t.Context(), activities.ScanSkillVersionsForInjectionParams{BatchSize: size})
+		require.Error(t, err)
+	}
+}
+
 func TestScanSkillVersionsForInjection_RecordsVerdictAndMarksScanned(t *testing.T) {
 	t.Parallel()
 

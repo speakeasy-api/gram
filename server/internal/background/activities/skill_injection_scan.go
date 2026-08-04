@@ -40,6 +40,12 @@ func NewSkillInjectionScanner(logger *slog.Logger, db *pgxpool.Pool, scanner *pr
 }
 
 func (s *SkillInjectionScanner) Scan(ctx context.Context, params ScanSkillVersionsForInjectionParams) (*ScanSkillVersionsForInjectionResult, error) {
+	if params.BatchSize <= 0 {
+		// A non-positive batch would either error every attempt (negative LIMIT) or
+		// wedge the drain in a perpetual continue-as-new (zero rows, HasMore false is
+		// never reached because nothing is scanned). Reject malformed inputs early.
+		return nil, fmt.Errorf("batch size must be positive, got %d", params.BatchSize)
+	}
 	queries := repo.New(s.db)
 	rows, err := queries.ListUnscannedSkillVersions(ctx, params.BatchSize)
 	if err != nil {
@@ -60,6 +66,10 @@ func (s *SkillInjectionScanner) Scan(ctx context.Context, params ScanSkillVersio
 				attr.SlogError(err),
 				attr.SlogOrganizationID(row.OrganizationID),
 			)
+			// ponytail: a row whose judge call always fails rides the head of the
+			// queue and burns one call per sweep forever. Bounded (other rows in the
+			// batch still drain), so no dead-letter yet; add a failure-count column and
+			// a permanent-failure verdict if a stuck manifest shows up in practice.
 			continue
 		}
 
