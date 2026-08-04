@@ -331,6 +331,10 @@ func findCodexBinary() string {
 		filepath.Join(codexHome, "packages", "standalone", "current", "bin", "codex"),
 		filepath.Join(home, ".local", "bin", "codex"),
 		"/usr/local/bin/codex",
+		// OpenAI merged the standalone Codex app into the ChatGPT app, which
+		// bundles the codex binary at this path. Ordered ahead of the frozen
+		// Codex.app so a machine carrying both prefers the maintained copy.
+		"/Applications/ChatGPT.app/Contents/Resources/codex",
 		"/Applications/Codex.app/Contents/Resources/codex",
 	} {
 		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
