@@ -50,6 +50,41 @@ func (q *Queries) AcceptInvitation(ctx context.Context, arg AcceptInvitationPara
 	return i, err
 }
 
+const claimXaaRedeemedJag = `-- name: ClaimXaaRedeemedJag :one
+INSERT INTO xaa_redeemed_jags (issuer, jti, resource_id, expires_at)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (issuer, jti) DO NOTHING
+RETURNING issuer, jti, resource_id, expires_at, redeemed_at
+`
+
+type ClaimXaaRedeemedJagParams struct {
+	Issuer     string
+	Jti        string
+	ResourceID uuid.UUID
+	ExpiresAt  time.Time
+}
+
+// ClaimXaaRedeemedJag enforces single use. The insert conflicts when this
+// (issuer, jti) pair was already redeemed, and DO NOTHING makes RETURNING
+// yield no row -- so ErrNoRows from this query IS the replay signal.
+func (q *Queries) ClaimXaaRedeemedJag(ctx context.Context, arg ClaimXaaRedeemedJagParams) (XaaRedeemedJag, error) {
+	row := q.db.QueryRowContext(ctx, claimXaaRedeemedJag,
+		arg.Issuer,
+		arg.Jti,
+		arg.ResourceID,
+		arg.ExpiresAt,
+	)
+	var i XaaRedeemedJag
+	err := row.Scan(
+		&i.Issuer,
+		&i.Jti,
+		&i.ResourceID,
+		&i.ExpiresAt,
+		&i.RedeemedAt,
+	)
+	return i, err
+}
+
 const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :one
 UPDATE organizations
 SET workos_id = NULL, updated_at = ?1
@@ -488,6 +523,232 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const createXaaApp = `-- name: CreateXaaApp :one
+
+INSERT INTO xaa_apps (id, client_id, client_secret, name, enabled)
+VALUES (
+  ?1,
+  ?2,
+  COALESCE(?3, ''),
+  ?4,
+  ?5
+)
+ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
+RETURNING id, client_id, client_secret, name, enabled, created_at, updated_at
+`
+
+type CreateXaaAppParams struct {
+	ID           uuid.UUID
+	ClientID     string
+	ClientSecret interface{}
+	Name         string
+	Enabled      bool
+}
+
+// =============================================================================
+// xaa_apps
+// =============================================================================
+// CreateXaaApp is find-or-create on client_id, matching the idiom used by
+// CreateOrganization: the no-op DO UPDATE makes RETURNING fire on the
+// existing row so callers always get a usable record back.
+func (q *Queries) CreateXaaApp(ctx context.Context, arg CreateXaaAppParams) (XaaApp, error) {
+	row := q.db.QueryRowContext(ctx, createXaaApp,
+		arg.ID,
+		arg.ClientID,
+		arg.ClientSecret,
+		arg.Name,
+		arg.Enabled,
+	)
+	var i XaaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createXaaAppAssignment = `-- name: CreateXaaAppAssignment :one
+
+INSERT INTO xaa_app_assignments (id, app_id, user_id, resource_id, granted_scopes)
+VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT (app_id, user_id, resource_id) DO UPDATE SET
+  granted_scopes = excluded.granted_scopes
+RETURNING id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at
+`
+
+type CreateXaaAppAssignmentParams struct {
+	ID            uuid.UUID
+	AppID         uuid.UUID
+	UserID        uuid.UUID
+	ResourceID    uuid.UUID
+	GrantedScopes string
+}
+
+// =============================================================================
+// xaa_app_assignments
+// =============================================================================
+// CreateXaaAppAssignment is idempotent on the (app, user, resource) triple.
+// Re-assigning with different scopes overwrites them, because an assignment
+// carries no other state worth preserving.
+func (q *Queries) CreateXaaAppAssignment(ctx context.Context, arg CreateXaaAppAssignmentParams) (XaaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, createXaaAppAssignment,
+		arg.ID,
+		arg.AppID,
+		arg.UserID,
+		arg.ResourceID,
+		arg.GrantedScopes,
+	)
+	var i XaaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createXaaIssuedJag = `-- name: CreateXaaIssuedJag :one
+
+INSERT INTO xaa_issued_jags (jti, app_id, user_id, resource_id, scope, expires_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+RETURNING jti, app_id, user_id, resource_id, scope, expires_at, created_at
+`
+
+type CreateXaaIssuedJagParams struct {
+	Jti        string
+	AppID      uuid.UUID
+	UserID     uuid.UUID
+	ResourceID uuid.UUID
+	Scope      string
+	ExpiresAt  time.Time
+}
+
+// =============================================================================
+// xaa_issued_jags / xaa_redeemed_jags
+// =============================================================================
+func (q *Queries) CreateXaaIssuedJag(ctx context.Context, arg CreateXaaIssuedJagParams) (XaaIssuedJag, error) {
+	row := q.db.QueryRowContext(ctx, createXaaIssuedJag,
+		arg.Jti,
+		arg.AppID,
+		arg.UserID,
+		arg.ResourceID,
+		arg.Scope,
+		arg.ExpiresAt,
+	)
+	var i XaaIssuedJag
+	err := row.Scan(
+		&i.Jti,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createXaaResource = `-- name: CreateXaaResource :one
+
+INSERT INTO xaa_resources (id, slug, name, resource_identifier)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
+RETURNING id, slug, name, resource_identifier, created_at, updated_at
+`
+
+type CreateXaaResourceParams struct {
+	ID                 uuid.UUID
+	Slug               string
+	Name               string
+	ResourceIdentifier string
+}
+
+// =============================================================================
+// xaa_resources
+// =============================================================================
+func (q *Queries) CreateXaaResource(ctx context.Context, arg CreateXaaResourceParams) (XaaResource, error) {
+	row := q.db.QueryRowContext(ctx, createXaaResource,
+		arg.ID,
+		arg.Slug,
+		arg.Name,
+		arg.ResourceIdentifier,
+	)
+	var i XaaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createXaaTrustRule = `-- name: CreateXaaTrustRule :one
+
+INSERT INTO xaa_trust_rules (
+  id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled
+)
+VALUES (
+  ?1,
+  ?2,
+  ?3,
+  ?4,
+  ?5,
+  ?6
+)
+ON CONFLICT (resource_id, trusted_issuer) DO UPDATE SET
+  allowed_client_ids = excluded.allowed_client_ids,
+  allowed_scopes = excluded.allowed_scopes,
+  enabled = excluded.enabled
+RETURNING id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at
+`
+
+type CreateXaaTrustRuleParams struct {
+	ID               uuid.UUID
+	ResourceID       uuid.UUID
+	TrustedIssuer    string
+	AllowedClientIds string
+	AllowedScopes    string
+	Enabled          bool
+}
+
+// =============================================================================
+// xaa_trust_rules
+// =============================================================================
+func (q *Queries) CreateXaaTrustRule(ctx context.Context, arg CreateXaaTrustRuleParams) (XaaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, createXaaTrustRule,
+		arg.ID,
+		arg.ResourceID,
+		arg.TrustedIssuer,
+		arg.AllowedClientIds,
+		arg.AllowedScopes,
+		arg.Enabled,
+	)
+	var i XaaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteCurrentUser = `-- name: DeleteCurrentUser :exec
 DELETE FROM current_users WHERE mode = ?1
 `
@@ -551,6 +812,42 @@ DELETE FROM users WHERE id = ?1
 
 func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, deleteUser, id)
+	return err
+}
+
+const deleteXaaApp = `-- name: DeleteXaaApp :exec
+DELETE FROM xaa_apps WHERE id = ?1
+`
+
+func (q *Queries) DeleteXaaApp(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteXaaApp, id)
+	return err
+}
+
+const deleteXaaAppAssignment = `-- name: DeleteXaaAppAssignment :exec
+DELETE FROM xaa_app_assignments WHERE id = ?1
+`
+
+func (q *Queries) DeleteXaaAppAssignment(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteXaaAppAssignment, id)
+	return err
+}
+
+const deleteXaaResource = `-- name: DeleteXaaResource :exec
+DELETE FROM xaa_resources WHERE id = ?1
+`
+
+func (q *Queries) DeleteXaaResource(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteXaaResource, id)
+	return err
+}
+
+const deleteXaaTrustRule = `-- name: DeleteXaaTrustRule :exec
+DELETE FROM xaa_trust_rules WHERE id = ?1
+`
+
+func (q *Queries) DeleteXaaTrustRule(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteXaaTrustRule, id)
 	return err
 }
 
@@ -805,6 +1102,180 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.GithubHandle,
 		&i.Admin,
 		&i.Whitelisted,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaApp = `-- name: GetXaaApp :one
+SELECT id, client_id, client_secret, name, enabled, created_at, updated_at FROM xaa_apps WHERE id = ?1
+`
+
+func (q *Queries) GetXaaApp(ctx context.Context, id uuid.UUID) (XaaApp, error) {
+	row := q.db.QueryRowContext(ctx, getXaaApp, id)
+	var i XaaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaAppAssignment = `-- name: GetXaaAppAssignment :one
+SELECT id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at FROM xaa_app_assignments WHERE id = ?1
+`
+
+func (q *Queries) GetXaaAppAssignment(ctx context.Context, id uuid.UUID) (XaaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, getXaaAppAssignment, id)
+	var i XaaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaAppAssignmentForMint = `-- name: GetXaaAppAssignmentForMint :one
+SELECT id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at FROM xaa_app_assignments
+WHERE app_id = ?1 AND user_id = ?2 AND resource_id = ?3
+`
+
+type GetXaaAppAssignmentForMintParams struct {
+	AppID      uuid.UUID
+	UserID     uuid.UUID
+	ResourceID uuid.UUID
+}
+
+// GetXaaAppAssignmentForMint is the mint leg's policy lookup. ErrNoRows here
+// is the denial: either the user was never assigned the app, or the app was
+// never pointed at this resource.
+func (q *Queries) GetXaaAppAssignmentForMint(ctx context.Context, arg GetXaaAppAssignmentForMintParams) (XaaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, getXaaAppAssignmentForMint, arg.AppID, arg.UserID, arg.ResourceID)
+	var i XaaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaAppByClientID = `-- name: GetXaaAppByClientID :one
+SELECT id, client_id, client_secret, name, enabled, created_at, updated_at FROM xaa_apps WHERE client_id = ?1
+`
+
+func (q *Queries) GetXaaAppByClientID(ctx context.Context, clientID string) (XaaApp, error) {
+	row := q.db.QueryRowContext(ctx, getXaaAppByClientID, clientID)
+	var i XaaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaResource = `-- name: GetXaaResource :one
+SELECT id, slug, name, resource_identifier, created_at, updated_at FROM xaa_resources WHERE id = ?1
+`
+
+func (q *Queries) GetXaaResource(ctx context.Context, id uuid.UUID) (XaaResource, error) {
+	row := q.db.QueryRowContext(ctx, getXaaResource, id)
+	var i XaaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaResourceBySlug = `-- name: GetXaaResourceBySlug :one
+SELECT id, slug, name, resource_identifier, created_at, updated_at FROM xaa_resources WHERE slug = ?1
+`
+
+// GetXaaResourceBySlug backs both the mint leg (resolving the `audience`
+// parameter's issuer URL to a row) and every request to a resource
+// authorization server (resolving the {slug} path wildcard).
+func (q *Queries) GetXaaResourceBySlug(ctx context.Context, slug string) (XaaResource, error) {
+	row := q.db.QueryRowContext(ctx, getXaaResourceBySlug, slug)
+	var i XaaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaTrustRule = `-- name: GetXaaTrustRule :one
+SELECT id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at FROM xaa_trust_rules WHERE id = ?1
+`
+
+func (q *Queries) GetXaaTrustRule(ctx context.Context, id uuid.UUID) (XaaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, getXaaTrustRule, id)
+	var i XaaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getXaaTrustRuleForIssuer = `-- name: GetXaaTrustRuleForIssuer :one
+SELECT id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at FROM xaa_trust_rules
+WHERE resource_id = ?1 AND trusted_issuer = ?2
+`
+
+type GetXaaTrustRuleForIssuerParams struct {
+	ResourceID    uuid.UUID
+	TrustedIssuer string
+}
+
+// GetXaaTrustRuleForIssuer is the redeem leg's trust lookup. ErrNoRows means
+// this resource has no rule for the ID-JAG's `iss` at all, which is the
+// deny-by-default path.
+func (q *Queries) GetXaaTrustRuleForIssuer(ctx context.Context, arg GetXaaTrustRuleForIssuerParams) (XaaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, getXaaTrustRuleForIssuer, arg.ResourceID, arg.TrustedIssuer)
+	var i XaaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1231,6 +1702,242 @@ func (q *Queries) ListUsersFiltered(ctx context.Context, arg ListUsersFilteredPa
 	return items, nil
 }
 
+const listXaaAppAssignments = `-- name: ListXaaAppAssignments :many
+SELECT id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at FROM xaa_app_assignments
+WHERE id > ?1
+  AND (?2 IS NULL OR app_id = ?2)
+  AND (?3 IS NULL OR user_id = ?3)
+  AND (?4 IS NULL OR resource_id = ?4)
+ORDER BY id ASC
+LIMIT ?5
+`
+
+type ListXaaAppAssignmentsParams struct {
+	After      uuid.UUID
+	AppID      interface{}
+	UserID     interface{}
+	ResourceID interface{}
+	MaxRows    int64
+}
+
+// ListXaaAppAssignments keyset-paginates by id with optional exact-match
+// filters. Any narg may be NULL, in which case that filter is not applied.
+func (q *Queries) ListXaaAppAssignments(ctx context.Context, arg ListXaaAppAssignmentsParams) ([]XaaAppAssignment, error) {
+	rows, err := q.db.QueryContext(ctx, listXaaAppAssignments,
+		arg.After,
+		arg.AppID,
+		arg.UserID,
+		arg.ResourceID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []XaaAppAssignment
+	for rows.Next() {
+		var i XaaAppAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.AppID,
+			&i.UserID,
+			&i.ResourceID,
+			&i.GrantedScopes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listXaaApps = `-- name: ListXaaApps :many
+SELECT id, client_id, client_secret, name, enabled, created_at, updated_at FROM xaa_apps
+WHERE id > ?1
+ORDER BY id ASC
+LIMIT ?2
+`
+
+type ListXaaAppsParams struct {
+	After   uuid.UUID
+	MaxRows int64
+}
+
+func (q *Queries) ListXaaApps(ctx context.Context, arg ListXaaAppsParams) ([]XaaApp, error) {
+	rows, err := q.db.QueryContext(ctx, listXaaApps, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []XaaApp
+	for rows.Next() {
+		var i XaaApp
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientID,
+			&i.ClientSecret,
+			&i.Name,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listXaaIssuedJags = `-- name: ListXaaIssuedJags :many
+SELECT jti, app_id, user_id, resource_id, scope, expires_at, created_at FROM xaa_issued_jags
+WHERE (?1 IS NULL OR user_id = ?1)
+  AND (?2 IS NULL OR resource_id = ?2)
+ORDER BY created_at DESC, jti DESC
+LIMIT ?3
+`
+
+type ListXaaIssuedJagsParams struct {
+	UserID     interface{}
+	ResourceID interface{}
+	MaxRows    int64
+}
+
+// ListXaaIssuedJags is newest-first for the dashboard rather than keyset
+// paginated: it is a debugging view over a short-lived ledger, and reading it
+// in mint order is the whole point.
+func (q *Queries) ListXaaIssuedJags(ctx context.Context, arg ListXaaIssuedJagsParams) ([]XaaIssuedJag, error) {
+	rows, err := q.db.QueryContext(ctx, listXaaIssuedJags, arg.UserID, arg.ResourceID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []XaaIssuedJag
+	for rows.Next() {
+		var i XaaIssuedJag
+		if err := rows.Scan(
+			&i.Jti,
+			&i.AppID,
+			&i.UserID,
+			&i.ResourceID,
+			&i.Scope,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listXaaResources = `-- name: ListXaaResources :many
+SELECT id, slug, name, resource_identifier, created_at, updated_at FROM xaa_resources
+WHERE id > ?1
+ORDER BY id ASC
+LIMIT ?2
+`
+
+type ListXaaResourcesParams struct {
+	After   uuid.UUID
+	MaxRows int64
+}
+
+func (q *Queries) ListXaaResources(ctx context.Context, arg ListXaaResourcesParams) ([]XaaResource, error) {
+	rows, err := q.db.QueryContext(ctx, listXaaResources, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []XaaResource
+	for rows.Next() {
+		var i XaaResource
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.ResourceIdentifier,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listXaaTrustRules = `-- name: ListXaaTrustRules :many
+SELECT id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at FROM xaa_trust_rules
+WHERE id > ?1
+  AND (?2 IS NULL OR resource_id = ?2)
+ORDER BY id ASC
+LIMIT ?3
+`
+
+type ListXaaTrustRulesParams struct {
+	After      uuid.UUID
+	ResourceID interface{}
+	MaxRows    int64
+}
+
+func (q *Queries) ListXaaTrustRules(ctx context.Context, arg ListXaaTrustRulesParams) ([]XaaTrustRule, error) {
+	rows, err := q.db.QueryContext(ctx, listXaaTrustRules, arg.After, arg.ResourceID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []XaaTrustRule
+	for rows.Next() {
+		var i XaaTrustRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.ResourceID,
+			&i.TrustedIssuer,
+			&i.AllowedClientIds,
+			&i.AllowedScopes,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeInvitation = `-- name: RevokeInvitation :one
 UPDATE invitations
 SET
@@ -1516,6 +2223,162 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.GithubHandle,
 		&i.Admin,
 		&i.Whitelisted,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateXaaApp = `-- name: UpdateXaaApp :one
+UPDATE xaa_apps
+SET
+  client_id = COALESCE(?1, client_id),
+  client_secret = COALESCE(?2, client_secret),
+  name = COALESCE(?3, name),
+  enabled = ?4,
+  updated_at = ?5
+WHERE id = ?6
+RETURNING id, client_id, client_secret, name, enabled, created_at, updated_at
+`
+
+type UpdateXaaAppParams struct {
+	ClientID     sql.NullString
+	ClientSecret sql.NullString
+	Name         sql.NullString
+	Enabled      bool
+	Ts           time.Time
+	ID           uuid.UUID
+}
+
+func (q *Queries) UpdateXaaApp(ctx context.Context, arg UpdateXaaAppParams) (XaaApp, error) {
+	row := q.db.QueryRowContext(ctx, updateXaaApp,
+		arg.ClientID,
+		arg.ClientSecret,
+		arg.Name,
+		arg.Enabled,
+		arg.Ts,
+		arg.ID,
+	)
+	var i XaaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateXaaAppAssignment = `-- name: UpdateXaaAppAssignment :one
+UPDATE xaa_app_assignments
+SET
+  granted_scopes = ?1,
+  updated_at = ?2
+WHERE id = ?3
+RETURNING id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at
+`
+
+type UpdateXaaAppAssignmentParams struct {
+	GrantedScopes string
+	Ts            time.Time
+	ID            uuid.UUID
+}
+
+func (q *Queries) UpdateXaaAppAssignment(ctx context.Context, arg UpdateXaaAppAssignmentParams) (XaaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, updateXaaAppAssignment, arg.GrantedScopes, arg.Ts, arg.ID)
+	var i XaaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateXaaResource = `-- name: UpdateXaaResource :one
+UPDATE xaa_resources
+SET
+  slug = COALESCE(?1, slug),
+  name = COALESCE(?2, name),
+  resource_identifier = COALESCE(?3, resource_identifier),
+  updated_at = ?4
+WHERE id = ?5
+RETURNING id, slug, name, resource_identifier, created_at, updated_at
+`
+
+type UpdateXaaResourceParams struct {
+	Slug               sql.NullString
+	Name               sql.NullString
+	ResourceIdentifier sql.NullString
+	Ts                 time.Time
+	ID                 uuid.UUID
+}
+
+func (q *Queries) UpdateXaaResource(ctx context.Context, arg UpdateXaaResourceParams) (XaaResource, error) {
+	row := q.db.QueryRowContext(ctx, updateXaaResource,
+		arg.Slug,
+		arg.Name,
+		arg.ResourceIdentifier,
+		arg.Ts,
+		arg.ID,
+	)
+	var i XaaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateXaaTrustRule = `-- name: UpdateXaaTrustRule :one
+UPDATE xaa_trust_rules
+SET
+  trusted_issuer = COALESCE(?1, trusted_issuer),
+  allowed_client_ids = COALESCE(?2, allowed_client_ids),
+  allowed_scopes = COALESCE(?3, allowed_scopes),
+  enabled = ?4,
+  updated_at = ?5
+WHERE id = ?6
+RETURNING id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at
+`
+
+type UpdateXaaTrustRuleParams struct {
+	TrustedIssuer    sql.NullString
+	AllowedClientIds sql.NullString
+	AllowedScopes    sql.NullString
+	Enabled          bool
+	Ts               time.Time
+	ID               uuid.UUID
+}
+
+func (q *Queries) UpdateXaaTrustRule(ctx context.Context, arg UpdateXaaTrustRuleParams) (XaaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, updateXaaTrustRule,
+		arg.TrustedIssuer,
+		arg.AllowedClientIds,
+		arg.AllowedScopes,
+		arg.Enabled,
+		arg.Ts,
+		arg.ID,
+	)
+	var i XaaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

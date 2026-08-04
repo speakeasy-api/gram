@@ -103,3 +103,61 @@ type User struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
+
+type XaaApp struct {
+	ID           uuid.UUID
+	ClientID     string
+	ClientSecret string
+	Name         string
+	Enabled      bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type XaaAppAssignment struct {
+	ID            uuid.UUID
+	AppID         uuid.UUID
+	UserID        uuid.UUID
+	ResourceID    uuid.UUID
+	GrantedScopes string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type XaaIssuedJag struct {
+	Jti        string
+	AppID      uuid.UUID
+	UserID     uuid.UUID
+	ResourceID uuid.UUID
+	Scope      string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+}
+
+type XaaRedeemedJag struct {
+	Issuer     string
+	Jti        string
+	ResourceID uuid.UUID
+	ExpiresAt  time.Time
+	RedeemedAt time.Time
+}
+
+type XaaResource struct {
+	ID                 uuid.UUID
+	Slug               string
+	Name               string
+	ResourceIdentifier string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type XaaTrustRule struct {
+	ID               uuid.UUID
+	ResourceID       uuid.UUID
+	TrustedIssuer    string
+	AllowedClientIds string
+	AllowedScopes    string
+	Enabled          bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
