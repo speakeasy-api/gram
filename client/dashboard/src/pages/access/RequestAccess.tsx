@@ -128,11 +128,12 @@ export default function RequestAccess(): React.JSX.Element {
 
                   {requestState === "sent" && (
                     <div className="flex w-full flex-col items-center gap-3">
-                      <div className="bg-success-softest w-full rounded-lg border border-green-200 px-4 py-3 text-center">
-                        <p className="text-success-strong text-sm font-medium">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+                          <Icon name="check" className="size-4" />
                           Request sent successfully
-                        </p>
-                        <p className="text-success-strong mt-1 text-xs opacity-80">
+                        </div>
+                        <p className="text-muted-foreground text-xs">
                           Your organization administrators have been notified.
                           They will review your request and grant access if
                           appropriate.

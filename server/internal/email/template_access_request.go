@@ -18,8 +18,12 @@ type AccessRequest struct {
 	// need access.
 	Message string
 	// ManageAccessLink is the absolute URL to the access management page
-	// where the admin can grant the requested scope.
+	// where the admin can grant the requested scope. It carries query params
+	// that pre-fill the grant dialog for the requester and scope.
 	ManageAccessLink string
+	// RolesWithScope is a comma-separated list of role names whose grants
+	// already include the requested scope. Empty when no role covers it.
+	RolesWithScope string
 }
 
 func (AccessRequest) TransactionalID() TransactionalID {
@@ -35,6 +39,7 @@ func (t AccessRequest) Variables() map[string]string {
 		"resource_name":      t.ResourceName,
 		"message":            t.Message,
 		"manage_access_link": t.ManageAccessLink,
+		"roles_with_scope":   t.RolesWithScope,
 	}
 }
 

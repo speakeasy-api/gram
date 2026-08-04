@@ -244,9 +244,12 @@ function Unauthorized({
         )}
 
         {requestState === "sent" && (
-          <div className="bg-success-softest text-success-strong rounded-lg border border-green-200 px-4 py-2">
-            <p className="text-sm font-medium">Request sent</p>
-            <p className="text-xs opacity-80">
+          <div className="flex flex-col items-center gap-1">
+            <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+              <Icon name="check" className="size-4" />
+              Request sent
+            </div>
+            <p className="text-muted-foreground text-xs">
               Your organization admins have been notified.
             </p>
           </div>

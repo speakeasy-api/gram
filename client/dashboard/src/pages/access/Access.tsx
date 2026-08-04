@@ -13,8 +13,15 @@ import { useOrgRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Link, Navigate, useLocation, useNavigate } from "react-router";
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
+import { GrantAccessDialog } from "./GrantAccessDialog";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
 
@@ -61,6 +68,19 @@ export default function Access(): JSX.Element {
 function AccessInner() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Access request emails deep-link here with ?grant_user=<id>&scope=<scope>
+  // to open a pre-filled one-click grant dialog.
+  const grantUserId = searchParams.get("grant_user");
+  const grantScope = searchParams.get("scope");
+
+  const closeGrantDialog = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("grant_user");
+    next.delete("scope");
+    setSearchParams(next, { replace: true });
+  };
   const organization = useOrganization();
   const orgRoutes = useOrgRoutes();
   const { data: rolesData } = useRoles();
@@ -132,6 +152,14 @@ function AccessInner() {
           <ChallengesTab />
         </TabsContent>
       </Tabs>
+
+      {grantUserId && grantScope && (
+        <GrantAccessDialog
+          userId={grantUserId}
+          scope={grantScope}
+          onClose={closeGrantDialog}
+        />
+      )}
     </>
   );
 }

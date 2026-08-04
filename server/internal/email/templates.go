@@ -119,5 +119,6 @@ var RegisteredTemplates = []Template{
 		ResourceName:     "",
 		Message:          "",
 		ManageAccessLink: "",
+		RolesWithScope:   "",
 	},
 }
