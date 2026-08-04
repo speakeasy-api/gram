@@ -127,6 +127,10 @@ func run() error {
 	service.AttachOrganizationRoles(goaMux, service.NewOrganizationRolesService(logger, tp, db))
 	service.AttachInvitations(goaMux, service.NewInvitationsService(logger, tp, db))
 	service.AttachDevIdp(goaMux, service.NewDevIdpService(logger, tp, db))
+	service.AttachXaaApps(goaMux, service.NewXaaAppsService(logger, tp, db))
+	service.AttachXaaResources(goaMux, service.NewXaaResourcesService(logger, tp, db, pubURL))
+	service.AttachXaaAppAssignments(goaMux, service.NewXaaAppAssignmentsService(logger, tp, db))
+	service.AttachXaaTrustRules(goaMux, service.NewXaaTrustRulesService(logger, tp, db))
 
 	outer := http.NewServeMux()
 

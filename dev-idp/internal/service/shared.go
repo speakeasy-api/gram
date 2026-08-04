@@ -29,6 +29,20 @@ func paginate[T any](rows []T, limit int, cursorOf func(T) string) (page []T, ne
 	return page, cursorOf(page[len(page)-1])
 }
 
+// cursorUUID parses a list method's opaque cursor into the `after` bound the
+// keyset queries take. An absent or empty cursor means "start at the
+// beginning", which is uuid.Nil since every real id sorts above it.
+func cursorUUID(cursor *string) (uuid.UUID, error) {
+	if cursor == nil || *cursor == "" {
+		return uuid.Nil, nil
+	}
+	parsed, err := uuid.Parse(*cursor)
+	if err != nil {
+		return uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+	}
+	return parsed, nil
+}
+
 // optionalUUID parses a *string into a uuid.NullUUID for use as a sqlc
 // nullable filter parameter. Returns Valid=false when the pointer is nil or
 // points to "". Wraps parse errors as a CodeBadRequest oops naming the

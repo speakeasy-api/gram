@@ -46,3 +46,13 @@ func PtrBool(p *bool, def bool) bool {
 	}
 	return *p
 }
+
+// PtrValOrEmpty dereferences a *string, treating nil as "". Use it where the
+// column is NOT NULL with an empty-string default, so "absent" and "empty"
+// mean the same thing to the caller.
+func PtrValOrEmpty(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
