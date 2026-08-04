@@ -161,6 +161,12 @@ FROM device_agent_configurations
 WHERE organization_id = @organization_id
 FOR UPDATE;
 
+-- UpsertDeviceAgentConfiguration deliberately replaces the whole document:
+-- @config is the already-merged result computed by UpdateConfiguration under
+-- the org advisory lock, where stored keys outside the caller's replaceable
+-- set (unknown keys, platform-admin-only keys for org admins) were carried
+-- over. Do not call this with a raw client payload.
+
 -- name: UpsertDeviceAgentConfiguration :one
 INSERT INTO device_agent_configurations (
   organization_id,

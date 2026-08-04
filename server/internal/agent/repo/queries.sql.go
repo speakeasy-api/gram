@@ -259,6 +259,7 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 }
 
 const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one
+
 INSERT INTO device_agent_configurations (
   organization_id,
   schema_version,
@@ -282,6 +283,11 @@ type UpsertDeviceAgentConfigurationParams struct {
 	Config         []byte
 }
 
+// UpsertDeviceAgentConfiguration deliberately replaces the whole document:
+// @config is the already-merged result computed by UpdateConfiguration under
+// the org advisory lock, where stored keys outside the caller's replaceable
+// set (unknown keys, platform-admin-only keys for org admins) were carried
+// over. Do not call this with a raw client payload.
 func (q *Queries) UpsertDeviceAgentConfiguration(ctx context.Context, arg UpsertDeviceAgentConfigurationParams) (DeviceAgentConfiguration, error) {
 	row := q.db.QueryRow(ctx, upsertDeviceAgentConfiguration, arg.OrganizationID, arg.SchemaVersion, arg.Config)
 	var i DeviceAgentConfiguration
