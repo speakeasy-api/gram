@@ -16,13 +16,10 @@ import (
 
 const callbackTemplateKey = "{{ gram.oauth.callback_url }}"
 
-// setupDocsFixture picks a published guide that exercises both lookup keys
-// unambiguously: one registry alias and one endpoint URL each resolve to that
-// guide alone. The guide also carries the callback template key, so the
-// rendering assertions have a substitution to observe. Deriving the fixture from
-// the SDK rather than naming a vendor keeps these tests pinned to the endpoint's
-// resolution and mapping behaviour, so re-publishing the guide catalog can't
-// silently break them.
+// setupDocsFixture picks a published guide that resolves unambiguously by both
+// lookup keys and carries the callback template key. Deriving it from the SDK
+// rather than naming a vendor pins these tests to endpoint behaviour, not to the
+// catalog.
 func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 	t.Helper()
 
@@ -42,7 +39,7 @@ func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 		}
 	}
 
-	t.Fatal("no published setup guide carries the callback template key and resolves unambiguously by both registry alias and endpoint URL")
+	t.Fatal("no published setup guide carries the callback template key and resolves unambiguously by both lookup keys")
 
 	return guides.Guide{}, "", guides.Remote{}
 }
@@ -88,8 +85,7 @@ func TestExternalMCP_GetSetupDocs_ByRegistrySpecifier(t *testing.T) {
 	require.Equal(t, guide.Summary, got.Summary)
 	require.Equal(t, guide.Aliases, got.Aliases)
 
-	// The callback URL belongs to the deployment, not to the guide, so the
-	// endpoint substitutes it on the way out.
+	// The callback URL belongs to the deployment, so the endpoint substitutes it.
 	vars := guides.Vars{OAuthCallbackURL: testCallbackURL}
 	require.Equal(t, string(guide.RenderExternal(vars)), got.ExternalMarkdown)
 	require.Equal(t, string(guide.RenderSpeakeasy(vars)), got.SpeakeasyMarkdown)

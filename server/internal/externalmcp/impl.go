@@ -294,9 +294,8 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of server_url or registry_specifier must be provided").LogError(ctx, s.logger)
 	}
 
-	// One stable redirect_uri for every provider and slug
-	// (canonicalCallbackRouteBase in remotesessions/challenge.go). oauth/impl.go
-	// and the dashboard derive it the same way.
+	// The one redirect_uri for every provider and slug. remotesessions/challenge.go,
+	// oauth/impl.go, and the dashboard derive it the same way.
 	callbackURL := s.serverURL.JoinPath("mcp", "remote_login_callback").String()
 
 	return &gen.GetSetupDocsResult{

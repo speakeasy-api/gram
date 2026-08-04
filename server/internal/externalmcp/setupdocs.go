@@ -38,8 +38,6 @@ func setupGuideMatchKind(kind guides.MatchKind) (wire string, ok bool) {
 // Both inputs can match the same guide, so results are deduplicated by slug: the
 // most specific match wins its match_kind, and the endpoint it selected lands in
 // matched_remote_id.
-//
-// callbackURL is substituted into the returned content.
 func resolveSetupGuides(registrySpecifier, serverURL, callbackURL string) []*types.MCPSetupGuide {
 	// ByURL is the only source of endpoint matches and Resolve the only source of
 	// alias matches, so this order is descending specificity and the first match
