@@ -907,6 +907,9 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("first_seen_at", String, "When this exact version was first activated.", func() { Format(FormatDateTime) })
 	Attribute("last_seen_at", String, "When this exact version was most recently activated.", func() { Format(FormatDateTime) })
 	Attribute("seen_count", Int64, "The number of activations attributed to this exact version.")
+	Attribute("injection_scanned_at", String, "When the manifest was scanned for prompt injection. Absent until the background sweep classifies this version.", func() { Format(FormatDateTime) })
+	Attribute("injection_flagged", Boolean, "Whether the prompt-injection judge flagged this manifest. Absent until scanned.")
+	Attribute("injection_rationale", String, "The judge's reasoning when the manifest was flagged for prompt injection.")
 
 	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count")
 })

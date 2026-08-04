@@ -298,6 +298,9 @@ function SkillDetailSections({
             {latestVersion && !latestVersion.specValid && (
               <ValidationErrors errors={latestVersion.validationErrors} />
             )}
+            {latestVersion?.injectionFlagged && (
+              <InjectionWarning rationale={latestVersion.injectionRationale} />
+            )}
             <div className="overflow-x-auto">
               {latestVersion ? (
                 <ManifestBody body={body} />
@@ -632,6 +635,28 @@ function ValidationErrors({
   );
 }
 
+// Surfaces the prompt-injection judge's verdict on the current manifest. Renders
+// only when the background scan flagged the version, mirroring ValidationErrors
+// so a flagged manifest carries the same visual weight as an invalid one.
+function InjectionWarning({
+  rationale,
+}: {
+  rationale: SkillVersion["injectionRationale"];
+}): JSX.Element {
+  return (
+    <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4">
+      <Text variant="subheading" className="text-destructive mb-2">
+        Manifest flagged for prompt injection
+      </Text>
+      {rationale && (
+        <Text small className="text-destructive">
+          {rationale}
+        </Text>
+      )}
+    </div>
+  );
+}
+
 function versionColumns({
   currentVersionId,
   comparable,
@@ -688,9 +713,19 @@ function versionColumns({
       width: "2fr",
       render: (version) => (
         <div className="space-y-2">
-          <Badge variant={version.specValid ? "success" : "destructive"}>
-            {version.specValid ? "Valid" : "Invalid"}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={version.specValid ? "success" : "destructive"}>
+              {version.specValid ? "Valid" : "Invalid"}
+            </Badge>
+            {version.injectionFlagged && (
+              <Badge
+                variant="destructive"
+                title={version.injectionRationale ?? undefined}
+              >
+                Injection flagged
+              </Badge>
+            )}
+          </div>
           {!version.specValid && (
             <SkillValidationErrors errors={version.validationErrors} />
           )}

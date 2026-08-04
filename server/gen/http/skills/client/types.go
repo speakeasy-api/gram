@@ -4499,6 +4499,14 @@ type SkillVersionResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of activations attributed to this exact version.
 	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+	// When the manifest was scanned for prompt injection. Absent until the
+	// background sweep classifies this version.
+	InjectionScannedAt *string `form:"injection_scanned_at,omitempty" json:"injection_scanned_at,omitempty" xml:"injection_scanned_at,omitempty"`
+	// Whether the prompt-injection judge flagged this manifest. Absent until
+	// scanned.
+	InjectionFlagged *bool `form:"injection_flagged,omitempty" json:"injection_flagged,omitempty" xml:"injection_flagged,omitempty"`
+	// The judge's reasoning when the manifest was flagged for prompt injection.
+	InjectionRationale *string `form:"injection_rationale,omitempty" json:"injection_rationale,omitempty" xml:"injection_rationale,omitempty"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body
@@ -14448,6 +14456,9 @@ func ValidateSkillVersionResponseBody(body *SkillVersionResponseBody) (err error
 	}
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	if body.InjectionScannedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.injection_scanned_at", *body.InjectionScannedAt, goa.FormatDateTime))
 	}
 	return
 }

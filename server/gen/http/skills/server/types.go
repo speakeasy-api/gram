@@ -4501,6 +4501,14 @@ type SkillVersionResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of activations attributed to this exact version.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+	// When the manifest was scanned for prompt injection. Absent until the
+	// background sweep classifies this version.
+	InjectionScannedAt *string `form:"injection_scanned_at,omitempty" json:"injection_scanned_at,omitempty" xml:"injection_scanned_at,omitempty"`
+	// Whether the prompt-injection judge flagged this manifest. Absent until
+	// scanned.
+	InjectionFlagged *bool `form:"injection_flagged,omitempty" json:"injection_flagged,omitempty" xml:"injection_flagged,omitempty"`
+	// The judge's reasoning when the manifest was flagged for prompt injection.
+	InjectionRationale *string `form:"injection_rationale,omitempty" json:"injection_rationale,omitempty" xml:"injection_rationale,omitempty"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body

@@ -68014,6 +68014,16 @@ components:
                     type: string
                     description: The skill version ID.
                     format: uuid
+                injection_flagged:
+                    type: boolean
+                    description: Whether the prompt-injection judge flagged this manifest. Absent until scanned.
+                injection_rationale:
+                    type: string
+                    description: The judge's reasoning when the manifest was flagged for prompt injection.
+                injection_scanned_at:
+                    type: string
+                    description: When the manifest was scanned for prompt injection. Absent until the background sweep classifies this version.
+                    format: date-time
                 last_seen_at:
                     type: string
                     description: When this exact version was most recently activated.
