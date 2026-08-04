@@ -67,6 +67,23 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
    complete).
 5. Frontend: reuse the `ImpersonationBanner` machinery for a "Demo workspace —
    read only" banner + exit; add the entry point ("Explore demo workspace").
+6. `access.listMembers` / `access.listRoles` / `access.listGrants` return 400
+   ("organization is not linked to WorkOS") for the demo org (`workos_id` is
+   NULL by design). Consequences observed: the insights dock's `useMembers()`
+   throws to the page error boundary (project pages crash), and the frontend
+   retry-loops `listGrants` (~1,500 requests) while `RequireScope
+scope="org:admin"` gates the page into "Access restricted". Those endpoints
+   must tolerate WorkOS-less orgs (return empty lists) or the frontend must
+   catch the error — impersonating a non-WorkOS org currently breaks the whole
+   RBAC-gated frontend.
+7. The Logs page sits behind `EnterpriseGate` (`useProductTier` wants
+   `gram_account_type === 'enterprise'`); the demo org is `'demo'` by design,
+   so either the gate learns the demo account type or the demo skips that
+   page.
+8. The auth callback's org-metadata upsert overwrites `gram_account_type`
+   (observed: 'demo' → 'pro' after one impersonation login). The daily seed
+   run restores it, but the server should preserve the demo account type so
+   the flag is trustworthy between runs.
 
 Until these land, verify locally with a platform-admin user (local `mise run
 seed` makes you one) via the existing admin override — expect the chat

@@ -55,14 +55,18 @@ DECLARE
     'Reconciled — every charge in the batch has a matching ledger entry.'
   ];
   -- Demo employee roster. TEXT ids, all under the reserved demo email domain.
-  demo_users CONSTANT text[][] := ARRAY[
-    ARRAY['user_demo_amara',  'amara@demo.getgram.ai',  'Amara Okafor'],
-    ARRAY['user_demo_jonas',  'jonas@demo.getgram.ai',  'Jonas Lindqvist'],
-    ARRAY['user_demo_priya',  'priya@demo.getgram.ai',  'Priya Raman'],
-    ARRAY['user_demo_mateo',  'mateo@demo.getgram.ai',  'Mateo Alvarez'],
-    ARRAY['user_demo_hana',   'hana@demo.getgram.ai',   'Hana Sato'],
-    ARRAY['user_demo_lucas',  'lucas@demo.getgram.ai',  'Lucas Meyer']
-  ];
+  -- Parallel arrays, NOT text[][]: subscripting a 2-D array with a single
+  -- index (arr[i]) yields NULL in PostgreSQL, which silently nulled every
+  -- chat owner in an earlier version.
+  demo_user_ids CONSTANT text[] := ARRAY[
+    'user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+    'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'];
+  demo_user_emails CONSTANT text[] := ARRAY[
+    'amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+    'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'];
+  demo_user_names CONSTANT text[] := ARRAY[
+    'Amara Okafor', 'Jonas Lindqvist', 'Priya Raman',
+    'Mateo Alvarez', 'Hana Sato', 'Lucas Meyer'];
 
   i int;
   m int;
@@ -71,7 +75,7 @@ DECLARE
   msg_id uuid;
   flagged_msg uuid;
   chat_proj uuid;
-  chat_owner text[];
+  owner_idx int;
   chat_ts timestamptz;
   leak text;
   chat_count int;
@@ -82,11 +86,16 @@ BEGIN
   -- Preflight isolation asserts: refuse to run if the demo constants
   -- collide with anything that is not unambiguously the demo org.
   ------------------------------------------------------------------
+  -- Identity check deliberately does NOT use gram_account_type: the auth
+  -- callback's org-metadata upsert overwrites it (e.g. to 'pro') whenever
+  -- someone impersonates the org, and the seed's own upsert below restores
+  -- it. A WorkOS link or a foreign slug, however, means this id belongs to a
+  -- real org — abort.
   IF EXISTS (
     SELECT 1 FROM organization_metadata
-    WHERE id = demo_org AND (gram_account_type <> 'demo' OR workos_id IS NOT NULL)
+    WHERE id = demo_org AND (workos_id IS NOT NULL OR slug <> 'acme-demo')
   ) THEN
-    RAISE EXCEPTION 'demo seed aborted: org % exists but is not a demo org', demo_org;
+    RAISE EXCEPTION 'demo seed aborted: org % exists but is not the demo org', demo_org;
   END IF;
 
   IF EXISTS (
@@ -115,12 +124,15 @@ BEGIN
 
   INSERT INTO organization_features (organization_id, feature_name)
   SELECT demo_org, f
-  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills']) AS f
+  -- 'rbac' is required for the agent-sessions list: without it
+  -- authz.ShouldEnforce is false and chatVisibilityScope falls back to
+  -- own-sessions-only, hiding every seeded chat (owned by user_demo_*).
+  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac']) AS f
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
-  FOR i IN 1 .. array_length(demo_users, 1) LOOP
+  FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
     INSERT INTO users (id, email, display_name)
-    VALUES (demo_users[i][1], demo_users[i][2], demo_users[i][3])
+    VALUES (demo_user_ids[i], demo_user_emails[i], demo_user_names[i])
     ON CONFLICT (id) DO UPDATE
       SET email = EXCLUDED.email, display_name = EXCLUDED.display_name;
   END LOOP;
@@ -142,14 +154,14 @@ BEGIN
   FOR i IN 1 .. bulk_chats LOOP
     chat_id := md5('gram-demo-chat-' || i)::uuid;
     chat_proj := CASE WHEN i % 3 = 0 THEN proj_b ELSE proj_a END;
-    chat_owner := demo_users[1 + (i % array_length(demo_users, 1))];
+    owner_idx := 1 + (i % array_length(demo_user_ids, 1));
     -- 5h spacing = ~12.5 days for 60 chats. Must stay well inside the ~90-day
     -- TTLs; also matches the ClickHouse formula in clickhouse.sql exactly.
     chat_ts := now() - (interval '5 hours' * i) - (interval '13 minutes' * (i % 7));
 
     INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id,
                        title, created_at, updated_at)
-    VALUES (chat_id, chat_proj, demo_org, chat_owner[1], chat_owner[2],
+    VALUES (chat_id, chat_proj, demo_org, demo_user_ids[owner_idx], demo_user_emails[owner_idx],
             titles[1 + (i % array_length(titles, 1))] || ' #' || (1000 + i),
             chat_ts, chat_ts);
 
@@ -212,6 +224,13 @@ BEGIN
   END IF;
   IF finding_count = 0 THEN
     RAISE EXCEPTION 'demo seed postflight: no risk findings were created';
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM chats WHERE organization_id = demo_org
+    AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % chats have no owner (sessions would render as anonymous)', stray;
   END IF;
 
   SELECT count(*) INTO stray

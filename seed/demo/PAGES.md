@@ -9,15 +9,15 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 
 ## Phase 1 (current)
 
-| Page                                   | Backing data                                                                                                                                            | Status |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Agent sessions list                    | PG `chats` (needs unrestricted `chat:read`)                                                                                                             | `[~]`  |
-| Chat detail sheet (transcript)         | PG `chat_messages`, `risk_results`                                                                                                                      | `[~]`  |
-| Risk events / findings                 | PG `risk_results` + `risk_policies` (enabled)                                                                                                           | `[~]`  |
-| Cost dashboard (by user/model/agent)   | CH `attribute_metrics_summaries` (MV admits ONLY provenance rows: Claude OTEL `api_request`/`tool_result`, `cursor:usage:*`, agent `PostToolUse` hooks) | `[~]`  |
-| Sessions list (telemetry.listSessions) | CH `chat_session_summaries` (via MV)                                                                                                                    | `[~]`  |
-| Project overview metric cards          | CH `metrics_summaries` (via MV)                                                                                                                         | `[~]`  |
-| Tool logs / traces                     | CH `trace_summaries` (via MV from `tools:` rows)                                                                                                        | `[~]`  |
+| Page                                   | Backing data                                                                                                                                             | Status |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Agent sessions list                    | PG `chats`; needs unrestricted `chat:read` AND the org's `rbac` feature row (without it ShouldEnforce=false → own-sessions-only filter hides everything) | `[~]`  |
+| Chat detail sheet (transcript)         | PG `chat_messages`, `risk_results` — blocked while impersonating until README server change 3                                                            | `[ ]`  |
+| Risk events / findings                 | PG `risk_results` + `risk_policies` (enabled)                                                                                                            | `[x]`  |
+| Cost dashboard (by user/model/agent)   | CH `attribute_metrics_summaries` (MV admits ONLY provenance rows: Claude OTEL `api_request`/`tool_result`, `cursor:usage:*`, agent `PostToolUse` hooks)  | `[x]`  |
+| Sessions list (telemetry.listSessions) | CH `chat_session_summaries` (via MV)                                                                                                                     | `[~]`  |
+| Project overview metric cards          | CH `metrics_summaries` (via MV)                                                                                                                          | `[x]`  |
+| Tool logs / traces                     | CH `trace_summaries` — data seeded, but page is enterprise-gated for the demo account type (README server change 7)                                      | `[~]`  |
 
 ## Later phases (not seeded yet)
 
