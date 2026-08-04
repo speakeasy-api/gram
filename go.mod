@@ -4,12 +4,6 @@ go 1.26.5
 
 tool goa.design/goa/v3/cmd/goa
 
-// k8s-config-connector requires terraform-provider-google-beta at a zero
-// pseudo-version and replaces it with a local ./third_party copy; replaces
-// don't apply transitively, so full-graph resolution (go list -m all,
-// go get -u) fails without this exclude. Nothing here imports its packages.
-exclude github.com/hashicorp/terraform-provider-google-beta v0.0.0-00010101000000-000000000000
-
 require (
 	cloud.google.com/go/compute/metadata v0.9.0
 	cloud.google.com/go/kms v1.26.0
