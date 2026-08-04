@@ -366,7 +366,7 @@ SELECT
     ',"gram.hook.hostname":"', hostname, '"',
     ',"gram.hook.source":"cursor"',
     ',"gram.provider":"', if(model = 'gpt-5.6', 'openai', 'anthropic'), '"',
-    ',"gram.account_type":"team"',
+    ',"gram.account_type":"', if(email = 'mateo@demo.getgram.ai', 'personal', 'team'), '"',
     ',"gram.billing_mode":"flat_rate"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',

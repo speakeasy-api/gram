@@ -311,6 +311,14 @@ BEGIN
           'demo-acct-mateo-personal', 'user_demo_mateo_personal',
           'mateo.alvarez@personal.example', 'personal', 'flat_rate');
 
+  -- Enterprise billing contract: without a contracted TUM baseline the
+  -- Billing page's Platform+Overage estimate shows "Requires a contracted
+  -- baseline", which reads broken for an enterprise org.
+  INSERT INTO billing_metadata (organization_id, tum_monthly_token_limit, billing_cycle_anchor_day)
+  VALUES (demo_org, 50000000, 1)
+  ON CONFLICT (organization_id) DO UPDATE
+    SET tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit;
+
   ------------------------------------------------------------------
   -- Deployment stack: one completed deployment with 8 HTTP tools whose URNs
   -- (tools:http:acme:*) match the ClickHouse telemetry, feeding the
