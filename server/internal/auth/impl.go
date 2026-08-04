@@ -38,7 +38,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -96,6 +98,18 @@ type AssistantsSubscriptionCancelScheduler interface {
 	ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error
 }
 
+// OrgProvisioner seeds an organization's baseline capabilities. EnableRBAC runs
+// in its own transaction for the best-effort flag-off Register path; the *Tx
+// methods participate in a caller-supplied transaction for the atomic
+// enterprise-trial path. Implemented by *productfeatures.Client and declared
+// here because auth cannot import productfeatures directly (import cycle:
+// productfeatures -> auth).
+type OrgProvisioner interface {
+	EnableRBAC(ctx context.Context, organizationID string) error
+	EnableRBACTx(ctx context.Context, tx pgx.Tx, organizationID string) error
+	SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error
+}
+
 type Service struct {
 	tracer              trace.Tracer
 	logger              *slog.Logger
@@ -107,11 +121,12 @@ type Service struct {
 	billing             billing.Repository
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler
 	posthog             *posthog.Posthog
+	flags               feature.Provider
 	nonceStore          cache.Cache
 	projectsRepo        *projectsRepo.Queries
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
-	rbac                identity.RBACEnabler
+	rbac                OrgProvisioner
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -128,7 +143,8 @@ func NewService(
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
-	rbac identity.RBACEnabler,
+	flags feature.Provider,
+	rbac OrgProvisioner,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -143,6 +159,7 @@ func NewService(
 		billing:             billingRepo,
 		cancelSubsScheduler: cancelSubsScheduler,
 		posthog:             posthogClient,
+		flags:               flags,
 		nonceStore:          nonceStore,
 		projectsRepo:        projectsRepo.New(db),
 		envRepo:             envRepo.New(db),
@@ -738,30 +755,85 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").LogError(ctx, s.logger)
 	}
 
-	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          gramOrgID,
-		Name:        payload.OrgName,
-		Slug:        slug,
-		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
-		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
-	}
+	// Evaluate the enterprise-trials rollout flag for the new org. Fail closed:
+	// a PostHog error leaves Register on its current free, non-whitelisted path.
+	enterpriseTrial, _ := s.flags.IsFlagEnabled(ctx, feature.FlagEnterpriseTrials, gramOrgID, feature.OrgProjectGroups(slug, ""))
 
-	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: org.ID,
-		UserID:         conv.ToPGText(authCtx.UserID),
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").LogError(ctx, s.logger)
-	}
+	var org orgRepo.OrganizationMetadatum
+	if enterpriseTrial {
+		// Provision a ready-to-use enterprise trial atomically: metadata
+		// (enterprise + whitelisted, trial window from schema defaults),
+		// membership, RBAC, and the feature bundle all commit together or not at
+		// all. RBAC and bundle seeding are fail-closed inside the tx.
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error beginning enterprise trial transaction").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	// Enable RBAC for the new org so access control is on from the start. Fail
-	// closed: a newly created org must not come up without RBAC seeded. The
-	// nil guard is only for tests that do not wire an enabler. Idempotent.
-	if s.rbac != nil {
-		if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "enable RBAC for new organization").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
+		q := s.orgRepo.WithTx(tx)
+		org, err = q.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+			ID:          gramOrgID,
+			Name:        payload.OrgName,
+			Slug:        slug,
+			WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
+			Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error creating enterprise trial organization").LogError(ctx, s.logger)
+		}
+
+		if err := q.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+			ID:              org.ID,
+			GramAccountType: "enterprise",
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error setting enterprise account type").LogError(ctx, s.logger)
+		}
+
+		if _, err := q.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+			OrganizationID: org.ID,
+			UserID:         conv.ToPGText(authCtx.UserID),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").LogError(ctx, s.logger)
+		}
+
+		if err := s.rbac.EnableRBACTx(ctx, tx, org.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enable RBAC for enterprise trial organization").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
+		}
+
+		if err := s.rbac.SeedEnterpriseTrialBundleTx(ctx, tx, org.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "seed enterprise trial feature bundle").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error committing enterprise trial transaction").LogError(ctx, s.logger)
+		}
+	} else {
+		org, err = s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+			ID:          gramOrgID,
+			Name:        payload.OrgName,
+			Slug:        slug,
+			WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
+			Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
+		}
+
+		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+			OrganizationID: org.ID,
+			UserID:         conv.ToPGText(authCtx.UserID),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").LogError(ctx, s.logger)
+		}
+
+		// Enable RBAC for the new org so access control is on from the start. Fail
+		// closed: a newly created org must not come up without RBAC seeded. The
+		// nil guard is only for tests that do not wire an enabler. Idempotent.
+		if s.rbac != nil {
+			if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "enable RBAC for new organization").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
+			}
 		}
 	}
 

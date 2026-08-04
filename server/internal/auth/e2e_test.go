@@ -20,8 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -168,9 +170,12 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, nil)
+	flags := &feature.InMemory{}
+	provisioner := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, flags, provisioner)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	ti.flags = flags
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
 }
 
@@ -1339,4 +1344,53 @@ func TestE2E_FullOnboardingFlow(t *testing.T) {
 	logoutResult, err := inst.service.Logout(ctx, &gen.LogoutPayload{})
 	require.NoError(t, err)
 	assert.Empty(t, logoutResult.SessionCookie)
+}
+
+// TestE2E_Register_EnterpriseTrialResolvesAsEnterprise drives a flagged public
+// self-signup end to end and asserts the existing session spine resolves the new
+// org as enterprise: Info returns rawGramAccountType == "enterprise" with an
+// active subscription (Polar bypassed) and whitelisted true, so the onboarding
+// CTA and setup wizard become eligible immediately.
+func TestE2E_Register_EnterpriseTrialResolvesAsEnterprise(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01ENT_RESOLVE"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "enterprise-resolve@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotEmpty(t, callbackResult.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	const orgName = "Enterprise Resolve Org"
+	gramOrgID := orgid.FromWorkOSID("workos_org_" + orgName)
+	inst.flags.SetFlag(feature.FlagEnterpriseTrials, gramOrgID, true)
+
+	require.NoError(t, inst.service.Register(ctx, &gen.RegisterPayload{OrgName: orgName}))
+
+	// Re-authenticate so the session hydrates the freshly-provisioned org.
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	assert.Equal(t, gramOrgID, infoResult.ActiveOrganizationID)
+	assert.Equal(t, "enterprise", infoResult.GramAccountType)
+	assert.True(t, infoResult.HasActiveSubscription, "enterprise short-circuits Polar with an active subscription")
+	assert.True(t, infoResult.Whitelisted)
+	require.Len(t, infoResult.Organizations, 1)
+	assert.Equal(t, orgName, infoResult.Organizations[0].Name)
 }

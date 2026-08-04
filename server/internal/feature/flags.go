@@ -65,4 +65,16 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
+
+	// FlagEnterpriseTrials gates atomic enterprise-trial provisioning on the
+	// public self-signup path. While set for the new org, Register creates a
+	// ready-to-use enterprise trial (gram_account_type=enterprise,
+	// whitelisted=true, the default 14-day trial window, and the enterprise
+	// feature bundle minus sso/scim) in one Postgres transaction instead of a
+	// bare free org. Targeted by PostHog organization group (org slug), the same
+	// way FlagBudgets is evaluated, with distinctID = the new org's Gram ID. It
+	// fails closed to false: on a PostHog error or unconfigured client Register
+	// keeps its current free, non-whitelisted behavior. v1 gates the Register
+	// path only.
+	FlagEnterpriseTrials Flag = "enterprise-trials"
 )

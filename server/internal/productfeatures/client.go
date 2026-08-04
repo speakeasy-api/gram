@@ -119,6 +119,42 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 	}
 }
 
+// enterpriseTrialBundle is the set of capability entitlements seeded for a
+// self-signup enterprise trial. rbac is universal and seeded separately
+// (EnableRBACTx); sso/scim are deliberately withheld (identity is the paid
+// conversion lever); the two behavioral toggles (hooks_fail_open,
+// skill_capture_metadata_only) are excluded because their safe default is off.
+// skills is not listed here — it is seeded via EnableSkillsTx (precondition
+// chain) inside SeedEnterpriseTrialBundleTx.
+var enterpriseTrialBundle = []Feature{
+	FeatureLogs, FeatureToolIOLogs, FeatureSessionCapture, FeatureAuthzChallengeLogging,
+	FeatureWebhooks, FeatureHooksBrowserLogin, FeatureCustomModelKeys,
+}
+
+// SeedEnterpriseTrialBundleTx enables the enterprise trial feature bundle in the
+// caller's transaction. It inserts the plain capability entitlements (ON CONFLICT
+// DO NOTHING → idempotent) and then runs EnableSkillsTx for skills, whose
+// precondition chain requires RBAC to already be seeded — the caller must have
+// run EnableRBACTx first. It deliberately touches no cache: a brand-new org has
+// nothing cached yet.
+func SeedEnterpriseTrialBundleTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := repo.New(dbtx)
+	for _, f := range enterpriseTrialBundle {
+		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(f),
+		}); err != nil {
+			return fmt.Errorf("seed %s feature flag: %w", f, err)
+		}
+	}
+
+	if err := EnableSkillsTx(ctx, dbtx, organizationID); err != nil {
+		return fmt.Errorf("seed skills feature flag: %w", err)
+	}
+
+	return nil
+}
+
 func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
 	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
 		{
@@ -261,4 +297,18 @@ func (c *Client) EnableRBAC(ctx context.Context, organizationID string) error {
 
 	c.UpdateFeatureCache(ctx, organizationID, FeatureRBAC, true)
 	return nil
+}
+
+// EnableRBACTx exposes the package-level EnableRBACTx as a method so callers that
+// hold a *Client through an interface (e.g. the auth service, which cannot import
+// this package directly without forming an import cycle) can seed RBAC inside
+// their own transaction.
+func (c *Client) EnableRBACTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	return EnableRBACTx(ctx, tx, organizationID)
+}
+
+// SeedEnterpriseTrialBundleTx exposes the package-level seeder as a method for
+// the same interface-seam reason as EnableRBACTx.
+func (c *Client) SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	return SeedEnterpriseTrialBundleTx(ctx, tx, organizationID)
 }
