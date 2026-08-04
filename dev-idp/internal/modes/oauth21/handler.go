@@ -451,7 +451,7 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code})
+	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code, Ts: time.Now()})
 	if err != nil {
 		// Includes ErrNoRows (unknown / consumed / expired). Don't leak which.
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "auth code is unknown, consumed, or expired")
@@ -498,7 +498,7 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken, Ts: time.Now()})
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is unknown, revoked, or expired")
 		return
@@ -671,7 +671,7 @@ func (h *Handler) handleUserinfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer, Ts: time.Now()})
 	if err != nil || stored.Kind != "access_token" {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="oauth2-1", error="invalid_token"`)
 		oauthError(w, http.StatusUnauthorized, "invalid_token", "bearer is unknown, revoked, expired, or not an access token")
