@@ -385,6 +385,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReconcileSkillObservations)
 	temporalWorker.RegisterActivity(activities.SyncSkillSessionVersions)
 	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
+	temporalWorker.RegisterActivity(activities.ScanSkillVersionsForInjection)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
@@ -488,6 +489,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
 	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
+	temporalWorker.RegisterWorkflow(ScanSkillVersionsForInjectionWorkflow)
 	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
@@ -602,6 +604,10 @@ func NewTemporalWorker(
 
 	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
+	}
+
+	if err := AddSkillInjectionScanSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add skill injection scan schedule", attr.SlogError(err))
 	}
 
 	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {

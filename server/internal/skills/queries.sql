@@ -2654,3 +2654,32 @@ WHERE link.project_id = @project_id
   AND link.change_id = @change_id
 ORDER BY feedback.created_at DESC, feedback.id DESC
 LIMIT GREATEST(@page_limit::int, 0);
+
+-- name: ListUnscannedSkillVersions :many
+-- Cross-project scan queue for prompt-injection classification. Rows drop out of
+-- the partial index once injection_scanned_at is set, so a plain LIMIT re-query
+-- walks the backlog without a cursor. organization_id/project_id ride along so
+-- the judge attributes to and rate-limits by the owning tenant.
+SELECT
+  sv.id AS skill_version_id,
+  sv.skill_id,
+  s.project_id,
+  p.organization_id,
+  sv.content
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+JOIN projects p ON p.id = s.project_id
+WHERE sv.injection_scanned_at IS NULL
+ORDER BY sv.id
+LIMIT @batch_size;
+
+-- name: MarkSkillVersionInjectionScan :exec
+UPDATE skill_versions sv
+SET
+  injection_scanned_at = clock_timestamp(),
+  injection_flagged = @injection_flagged,
+  injection_rationale = @injection_rationale
+FROM skills s
+WHERE sv.skill_id = s.id
+  AND s.project_id = @project_id
+  AND sv.id = @skill_version_id;
