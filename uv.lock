@@ -55,16 +55,16 @@ trio = [
 
 [[package]]
 name = "asyncer"
-version = "0.0.17"
+version = "0.0.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "sniffio" },
     { name = "typing-extensions", marker = "python_full_version < '3.15'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d2/4c/62b6044679e08788322bbd0dee5b487a6f7f60bb4e2bd45617ff0d94d1e3/asyncer-0.0.17.tar.gz", hash = "sha256:8a41e185e7ec2ecd583c269d72907a0f9f832e744b6c7474aeb21e349c4becf4", size = 19516, upload-time = "2026-02-21T16:35:54.068Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/95/e3/a9de31596d386b8e76e17c609e20775c6a414cff95d025551aca3c63f282/asyncer-0.0.18.tar.gz", hash = "sha256:dc233a466f85f1bc17dafcdb861b06291b64777a8d9076f7884467cbb66f95ef", size = 24503, upload-time = "2026-06-25T13:41:08.826Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/c5/b72735a095b4b3170b34150e89314a40dd0450d0eb6746b331cb664479d1/asyncer-0.0.17-py3-none-any.whl", hash = "sha256:b0055950e094fb84fd8d21611c7e7b6f5715ddcb57c522c058f64c20badd1438", size = 9252, upload-time = "2026-02-21T16:35:55.022Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/62/73cea402f7c55b830bc02850f84724d9f6e3538c68610f69016f6f480a94/asyncer-0.0.18-py3-none-any.whl", hash = "sha256:054be3c0c3d7f0f79aac5b7d2cf7ad3a740bc465b62a77b48716a30c22679962", size = 12099, upload-time = "2026-06-25T13:41:07.98Z" },
 ]
 
 [[package]]
@@ -420,7 +420,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.14.1" },
-    { name = "asyncer", specifier = ">=0.0.17" },
+    { name = "asyncer", specifier = ">=0.0.18" },
     { name = "google-cloud-pubsub", specifier = ">=2.31.0" },
     { name = "opentelemetry-api", specifier = ">=1.44.0" },
     { name = "protobuf", specifier = ">=7.35.0,<8" },
@@ -1086,7 +1086,7 @@ dev = [
 requires-dist = [
     { name = "aiocop", specifier = ">=1.1.4" },
     { name = "anyio", specifier = ">=4.14.1" },
-    { name = "asyncer", specifier = ">=0.0.17" },
+    { name = "asyncer", specifier = ">=0.0.18" },
     { name = "click", specifier = ">=8.4.2" },
     { name = "en-core-web-lg", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" },
     { name = "gram-infra", editable = "infra" },
