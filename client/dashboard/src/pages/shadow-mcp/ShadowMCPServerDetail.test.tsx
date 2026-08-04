@@ -15,6 +15,7 @@ import {
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import ShadowMCPServerDetail from "./ShadowMCPServerDetail";
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   useResolveShadowMCPInventoryRequestMutation: vi.fn(),
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
+  useNavigate: vi.fn(),
+  useRoutes: vi.fn(),
   useShadowMCPInventoryServer: vi.fn(),
   useShadowMCPInventoryUsers: vi.fn(),
   useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
@@ -33,12 +36,18 @@ const mocks = vi.hoisted(() => ({
   invalidateShadowMCPInventoryUsers: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
+  useNavigate: mocks.useNavigate,
   useParams: () => ({
     serverSlug: "github-example-com-mcp-d8860eea",
   }),
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: mocks.useRoutes,
 }));
 
 vi.mock("@/components/page-layout", () => {
@@ -259,6 +268,7 @@ vi.mock("@/components/ui/Table", () => ({
         data,
         handleLoadMore,
         hasMore,
+        renderRow,
         rowKey,
       }: {
         columns: Array<{
@@ -268,16 +278,24 @@ vi.mock("@/components/ui/Table", () => ({
         data: Array<{ userKey: string }>;
         handleLoadMore?: () => void;
         hasMore?: boolean;
+        renderRow?: (
+          row: { userKey: string },
+          rowElement: ReactElement,
+        ) => ReactNode;
         rowKey: (row: { userKey: string }) => string;
       }) => (
         <tbody>
-          {data.map((row) => (
-            <tr key={rowKey(row)}>
-              {columns.map((column) => (
-                <td key={column.key}>{column.render?.(row)}</td>
-              ))}
-            </tr>
-          ))}
+          {data.map((row) => {
+            const rowElement = (
+              <tr key={rowKey(row)}>
+                {columns.map((column) => (
+                  <td key={column.key}>{column.render?.(row)}</td>
+                ))}
+              </tr>
+            );
+
+            return renderRow ? renderRow(row, rowElement) : rowElement;
+          })}
           {hasMore && handleLoadMore ? (
             <tr>
               <td colSpan={columns.length}>
@@ -439,6 +457,10 @@ describe("ShadowMCPServerDetail", () => {
       isError: false,
       isLoading: false,
     });
+    mocks.useNavigate.mockReturnValue(mocks.navigate);
+    mocks.useRoutes.mockReturnValue({
+      costs: { href: () => "/costs" },
+    });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer(),
       error: null,
@@ -449,8 +471,14 @@ describe("ShadowMCPServerDetail", () => {
         nextCursor: undefined,
         users: [
           {
+            email: "alex@example.com",
             lastCalled: new Date("2026-01-04T10:00:00Z"),
-            observedUseCount: 5,
+            observedUseCount: 15,
+            sources: [
+              { source: "claude-code", observedUseCount: 12 },
+              { source: "cursor", observedUseCount: 3 },
+              { source: "", observedUseCount: 1 },
+            ],
             userKey: "alex@example.com",
           },
           {
@@ -498,7 +526,7 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByText("2 users")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "User" })).toBeTruthy();
     expect(screen.getByText("alex@example.com")).toBeTruthy();
-    expect(screen.getByText("5 calls")).toBeTruthy();
+    expect(screen.getByText("15 calls")).toBeTruthy();
     expect(screen.getByText("sam@example.com")).toBeTruthy();
 
     expect(mocks.useShadowMCPInventoryServer).toHaveBeenCalledWith(
@@ -518,6 +546,32 @@ describe("ShadowMCPServerDetail", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  it("renders user sources and only links email-backed users to Costs", () => {
+    const lastCalled = new Date("2026-01-04T10:00:00Z");
+    renderDetailPage();
+
+    expect(screen.getByText("Claude Code · 12")).toBeTruthy();
+    expect(screen.getByText("Cursor · 3")).toBeTruthy();
+    expect(screen.getByText("Unknown · 1")).toBeTruthy();
+    expect(screen.getByText("15 calls")).toBeTruthy();
+
+    const emailRow = screen.getByText("alex@example.com").closest("tr");
+    expect(emailRow).toBeTruthy();
+    expect(
+      within(emailRow!).getByText(formatShortDate(lastCalled)),
+    ).toBeTruthy();
+    fireEvent.click(emailRow!);
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/costs/email~alex%40example.com",
+    );
+
+    const noEmailRow = screen.getByText("sam@example.com").closest("tr");
+    expect(noEmailRow).toBeTruthy();
+    expect(noEmailRow!.classList.contains("cursor-pointer")).toBe(false);
+    fireEvent.click(noEmailRow!);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
   });
 
   it("exposes the current server name and Policy-style editor attributes", () => {

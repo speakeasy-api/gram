@@ -2,6 +2,12 @@ import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { type Column, Table } from "@/components/ui/Table";
+import { Text } from "@/components/ui/Text";
 import {
   type ActiveInventoryAction,
   type InventoryActionMode,
@@ -21,11 +27,14 @@ import {
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { ALLOW_RULE_POLICY_REQUIRED } from "@/components/shadow-mcp/shadowMCPInventoryActionItems";
-import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
+import { formatPlatform } from "@/lib/formatPlatform";
+import { encodeCrumb } from "@/pages/costs/taxonomy";
+import { useRoutes } from "@/routes";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
+import type { ShadowMCPInventoryUserSource } from "@gram/client/models/components/shadowmcpinventoryusersource.js";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useDeleteShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/deleteShadowMCPInventoryPolicyBypass.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useResolveShadowMCPInventoryRequestMutation } from "@gram/client/react-query/resolveShadowMCPInventoryRequest.js";
@@ -44,13 +53,16 @@ import {
   useShadowMCPInventoryUsers,
 } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
-import { type Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router";
+import {
+  cloneElement,
+  type ComponentPropsWithoutRef,
+  type ReactElement,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
 const USERS_PAGE_LIMIT = 50;
@@ -66,6 +78,35 @@ const EMPTY_USER_PAGES: UsersPage[] = [];
 
 function usageCountLabel(count: number) {
   return `${count} ${count === 1 ? "call" : "calls"}`;
+}
+
+function sourceLabel(source: string) {
+  return formatPlatform(source) || "Unknown";
+}
+
+function UserSources({
+  sources,
+}: {
+  sources: ShadowMCPInventoryUserSource[] | undefined;
+}) {
+  const orderedSources = [...(sources ?? [])].sort((left, right) => {
+    const countDifference = right.observedUseCount - left.observedUseCount;
+    if (countDifference !== 0) return countDifference;
+
+    return sourceLabel(left.source).localeCompare(sourceLabel(right.source));
+  });
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {orderedSources.map((source) => (
+        <Badge key={source.source} variant="neutral">
+          <Badge.Text>
+            {`${sourceLabel(source.source)} · ${source.observedUseCount}`}
+          </Badge.Text>
+        </Badge>
+      ))}
+    </div>
+  );
 }
 
 function userCountLabel(count: number) {
@@ -204,11 +245,13 @@ function ServerSummary({
 }
 
 function TopUsersTable({
+  onOpenUser,
   onLoadMore,
   users,
   hasMore,
   isLoading,
 }: {
+  onOpenUser: (user: ShadowMCPInventoryUser) => void;
   onLoadMore: () => void;
   users: ShadowMCPInventoryUser[];
   hasMore: boolean;
@@ -220,6 +263,12 @@ function TopUsersTable({
       header: "User",
       render: (user) => <Text variant="small">{user.userKey}</Text>,
       width: "1fr",
+    },
+    {
+      key: "sources",
+      header: "Sources",
+      render: (user) => <UserSources sources={user.sources} />,
+      width: "280px",
     },
     {
       key: "calls",
@@ -262,6 +311,19 @@ function TopUsersTable({
         hasMore={hasMore}
         isLoading={isLoading}
         rowKey={(row) => row.userKey}
+        renderRow={(user, rowElement) => {
+          if (!user.email) return rowElement;
+
+          const userRow = rowElement as ReactElement<
+            ComponentPropsWithoutRef<"tr">
+          >;
+          return cloneElement(userRow, {
+            className: [userRow.props.className, "cursor-pointer"]
+              .filter(Boolean)
+              .join(" "),
+            onClick: () => onOpenUser(user),
+          });
+        }}
       />
     </Table>
   );
@@ -337,6 +399,8 @@ function DetailActionButtons({
 export default function ShadowMCPServerDetail(): JSX.Element {
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
+  const routes = useRoutes();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const policiesQuery = useRiskListPolicies();
   const membersQuery = useMembers();
@@ -415,6 +479,13 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     membersQuery.isLoading ||
     rolesQuery.isLoading ||
     serverQuery.isLoading;
+  const onOpenUser = (user: ShadowMCPInventoryUser) => {
+    if (!user.email) return;
+
+    navigate(
+      `${routes.costs.href()}/${encodeCrumb({ dim: Dimension.Email, value: user.email })}`,
+    );
+  };
 
   useEffect(() => {
     setUsersPaginationScope(usersScope);
@@ -698,6 +769,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                         hasMore={Boolean(nextUsersCursor)}
                         isLoading={isLoadingMoreUsers}
                         onLoadMore={loadMoreUsers}
+                        onOpenUser={onOpenUser}
                         users={displayedUsers}
                       />
                     )}
