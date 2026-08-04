@@ -455,8 +455,8 @@ describe("SkillsList pagination surfaces", () => {
       ]),
     );
 
-    expect(widthsByKey.get("activations")).toBe("1fr");
-    expect(widthsByKey.get("estimatedSavings")).toBe("1fr");
+    expect(widthsByKey.get("activations")).toBe("0.8fr");
+    expect(widthsByKey.get("estimatedSavings")).toBe("0.8fr");
   });
 
   it("sorts the approved columns through header controls without a toolbar sort", () => {

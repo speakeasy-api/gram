@@ -190,7 +190,7 @@ export default function SkillsList(): JSX.Element {
     {
       key: "name",
       header: "Skill",
-      width: "1.5fr",
+      width: "2fr",
       sortable: true,
       sortValue: (skill) => skill.displayName.toLocaleLowerCase(),
       render: (skill) => (
@@ -221,7 +221,7 @@ export default function SkillsList(): JSX.Element {
           tooltip="How the skill entered the registry: added manually, or captured from agent use."
         />
       ),
-      width: "120px",
+      width: "0.8fr",
       sortable: true,
       sortLabel: "Source",
       sortValue: (skill) =>
@@ -232,7 +232,7 @@ export default function SkillsList(): JSX.Element {
     {
       key: "activations",
       header: "Activations (30d)",
-      width: "1fr",
+      width: "0.8fr",
       sortable: true,
       sortValue: (skill) => metricsBySkill.get(skill.id)?.activations ?? 0,
       render: (skill) => (
@@ -250,7 +250,7 @@ export default function SkillsList(): JSX.Element {
           tooltip="Average usefulness score from sampled sessions that used this skill."
         />
       ),
-      width: "110px",
+      width: "0.8fr",
       sortable: true,
       sortLabel: "Efficacy",
       sortValue: (skill) =>
@@ -280,7 +280,7 @@ export default function SkillsList(): JSX.Element {
           tooltip="Estimated time saved across scored sessions that used this skill."
         />
       ),
-      width: "1fr",
+      width: "0.8fr",
       sortable: true,
       sortLabel: "Estimated savings",
       sortValue: (skill) =>
@@ -299,7 +299,7 @@ export default function SkillsList(): JSX.Element {
     {
       key: "updated",
       header: "Updated",
-      width: "150px",
+      width: "0.8fr",
       sortable: true,
       sortValue: (skill) => skill.updatedAt,
       render: (skill) => (
