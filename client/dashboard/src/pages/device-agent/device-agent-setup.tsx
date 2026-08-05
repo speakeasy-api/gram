@@ -108,6 +108,16 @@ function psVersionAssign(version: string | null) {
     : `$VERSION = (Invoke-RestMethod ${MANIFEST_URL}).latest.speakeasyd.version`;
 }
 
+// Every Linux artifact — the raw binaries and both helper package flavors —
+// ships amd64 + arm64 under the same *_linux_{arch} naming, so the swap note
+// is shared by the download step and the helper-package step.
+const LINUX_ARCH_SWAP_NOTE = (
+  <>
+    amd64 shown — swap <code>linux_amd64</code> for <code>linux_arm64</code> on
+    ARM.
+  </>
+);
+
 type OsSpec = {
   label: string;
   tileDesc: string;
@@ -191,12 +201,7 @@ Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile spea
     logo: "/icons/platforms/linux.svg",
     logoSize: "h-9 w-9",
     lang: "bash",
-    archNote: (
-      <>
-        amd64 shown — swap <code>linux_amd64</code> for <code>linux_arm64</code>{" "}
-        on ARM.
-      </>
-    ),
+    archNote: LINUX_ARCH_SWAP_NOTE,
     download: (version) => `${bashVersionAssign(version)}
 BASE=${RELEASES_BASE}/v$VERSION
 curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64"
@@ -477,14 +482,9 @@ BASE=${RELEASES_BASE}/v$VERSION
 curl -fSLO "$BASE/speakeasy-helper_\${VERSION}_linux_amd64.${fmt}"
 ${install}`;
 
-  // Both package flavors ship amd64 + arm64; the swap note sits above each
-  // snippet it applies to, matching the archNote convention in DownloadStep.
-  const archNote = (
-    <StepNote>
-      amd64 shown — swap <code>linux_amd64</code> for <code>linux_arm64</code>{" "}
-      on ARM.
-    </StepNote>
-  );
+  // The swap note sits above each snippet it applies to, matching the
+  // archNote convention in DownloadStep.
+  const archNote = <StepNote>{LINUX_ARCH_SWAP_NOTE}</StepNote>;
 
   return (
     <div className="flex flex-col gap-6">
