@@ -589,7 +589,7 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 }
 
 func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID string) {
-	jti, err := s.signer.ParseUnverifiedJTI(token)
+	jti, err := s.signer.VerifiedJTI(token)
 	if err != nil {
 		return
 	}

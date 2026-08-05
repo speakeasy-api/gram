@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -123,6 +124,9 @@ func (s *PostgresOAuthStore) GetConnection(ctx context.Context, organizationID, 
 func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input platformoauth.AuthorizeConnectionInput) (platformoauth.Connection, error) {
 	if s == nil || s.db == nil {
 		return platformoauth.Connection{}, platformoauth.ErrNotFound
+	}
+	if !validPKCES256Challenge(input.Grant.CodeChallenge) {
+		return platformoauth.Connection{}, platformoauth.ErrPKCE
 	}
 	connectionID, err := uuid.Parse(input.Connection.ID)
 	if err != nil {
@@ -578,11 +582,32 @@ func opaqueHash(value string) string {
 }
 
 func verifyPKCE(verifier, challenge string) error {
+	if !validPKCEVerifier(verifier) || !validPKCES256Challenge(challenge) {
+		return platformoauth.ErrPKCE
+	}
 	hash := sha256.Sum256([]byte(verifier))
 	if base64.RawURLEncoding.EncodeToString(hash[:]) == challenge {
 		return nil
 	}
 	return platformoauth.ErrPKCE
+}
+
+func validPKCEVerifier(verifier string) bool {
+	if len(verifier) < 43 || len(verifier) > 128 {
+		return false
+	}
+	return strings.IndexFunc(verifier, func(r rune) bool {
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || strings.ContainsRune("-._~", r))
+	}) == -1
+}
+
+func validPKCES256Challenge(challenge string) bool {
+	if len(challenge) != 43 {
+		return false
+	}
+	return strings.IndexFunc(challenge, func(r rune) bool {
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_')
+	}) == -1
 }
 
 func mapOAuthReadError(err error) error {
