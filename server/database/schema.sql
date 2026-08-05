@@ -4970,6 +4970,7 @@ CREATE TABLE IF NOT EXISTS publish_outbox (
   last_error TEXT,
   retry_after timestamptz,
   locked_until timestamptz,
+  lease_token uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4989,6 +4990,7 @@ COMMENT ON COLUMN publish_outbox.message IS 'proto.Marshal of that message, publ
 COMMENT ON COLUMN publish_outbox.attributes IS 'Pub/Sub message attributes. Carries the producer traceparent so the trace survives the database hop. content-type and schema are derived at publish time and cannot be overridden from here.';
 COMMENT ON COLUMN publish_outbox.attempts IS 'Incremented when a row is claimed, not when it fails, so it counts deliveries attempted — the number dead-lettering acts on.';
 COMMENT ON COLUMN publish_outbox.locked_until IS 'Claim lease held by the draining relay. Deliberately absent from every index predicate: predicate columns are HOT-blocking, so indexing this would force a new index tuple on every claim.';
+COMMENT ON COLUMN publish_outbox.lease_token IS 'Identifies the claim currently holding the row, minted by the drainer. Settlement matches on it so a drain that outlived its lease cannot delete, dead-letter or release a row another drainer has since claimed. NULL means unclaimed. Unindexed, like locked_until, so claiming stays a HOT update.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS publish_outbox_public_id_key
 ON publish_outbox (public_id);
