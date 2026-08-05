@@ -137,28 +137,50 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 			// matched entry carries the full sanitized prefix.
 			evidence.ServerIdentity = matched.ToolPrefix
 		}
-		if matched.URL != "" {
-			evidence.FullURL = matched.URL
-		}
-		if matched.Command != "" {
-			// Pin stdio identity to the launch command, mirroring the Claude
-			// guard — a bypass grant must not follow a renamed config alias.
-			evidence.ServerIdentity = matched.Command
-		}
+		applyMCPEntryToEvidence(&evidence, matched)
 	}
 	return evidence, matched
+}
+
+// applyMCPEntryToEvidence upgrades evidence to the target a matched inventory
+// entry actually routes to. Shared by the legacy Codex endpoint and the
+// canonical ingest guard so the two cannot drift on what a resolved entry
+// means — the guard's allow/deny turns on exactly this mapping.
+func applyMCPEntryToEvidence(evidence *shadowmcp.AccessEvidence, matched *MCPServerEntry) {
+	if matched == nil {
+		return
+	}
+	if matched.URL != "" {
+		evidence.FullURL = matched.URL
+	}
+	if matched.Command != "" {
+		// Pin stdio identity to the launch command, mirroring the Claude
+		// guard — a bypass grant must not follow a renamed config alias.
+		evidence.ServerIdentity = matched.Command
+	}
 }
 
 func codexMCPMetaToolServer(payload *gen.CodexPayload) (string, bool) {
 	if payload == nil {
 		return "", false
 	}
-	switch conv.PtrValOr(payload.ToolName, "") {
+	return codexMetaToolServer(conv.PtrValOr(payload.ToolName, ""), payload.ToolInput)
+}
+
+// codexMetaToolServer reports whether a tool call is one of Codex's built-in
+// MCP resource tools and, if so, the server it targets. These are the only MCP
+// calls Codex makes that carry no mcp__ prefix — the target lives in
+// tool_input.server instead — so every gate that decides "is this an MCP call"
+// has to ask here as well as checking the tool name. An unreadable input still
+// reports true with an empty server: it is an MCP call whose target could not
+// be established, which callers must treat as unproven rather than absent.
+func codexMetaToolServer(toolName string, toolInput any) (string, bool) {
+	switch toolName {
 	case "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource":
 	default:
 		return "", false
 	}
-	input, ok := payload.ToolInput.(map[string]any)
+	input, ok := toolInput.(map[string]any)
 	if !ok {
 		return "", true
 	}
