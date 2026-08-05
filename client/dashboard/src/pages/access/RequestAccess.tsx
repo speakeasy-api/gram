@@ -59,10 +59,6 @@ export default function RequestAccess(): React.JSX.Element {
   return (
     <FullScreenPage contentClassName="max-w-md">
       <div className="flex w-full flex-col items-center gap-4 text-center">
-        <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-full">
-          <Icon name="lock" className="text-muted-foreground h-6 w-6" />
-        </div>
-
         <h1 className="text-xl font-semibold">Request Access</h1>
 
         {!isValidScope ? (

@@ -94,9 +94,6 @@ function BlockBody({ id }: { id: string | undefined }) {
   return (
     <Stack gap={6} align="center" className="w-full">
       <Stack gap={3} align="center">
-        <div className="bg-destructive/10 flex size-11 items-center justify-center rounded-full">
-          <Icon name="shield" className="text-destructive size-5" />
-        </div>
         <Stack gap={1} align="center">
           <Text variant="subheading" className="text-center">
             Tool call blocked

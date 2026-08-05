@@ -1,11 +1,12 @@
 import { GramLogo } from "@/components/gram-logo";
 import { Stack } from "@/components/ui/Stack";
 import { cn } from "@/lib/utils";
+import { SpeakeasyWordmark } from "@/pages/login/components/speakeasy-wordmark";
 
 /**
  * Chrome-less full-screen surface for pages a user reaches outside the normal
  * app shell: access requests, policy blocks, fatal errors. Centers its
- * children under a vertical Speakeasy logo.
+ * children under the Speakeasy icon, with a subtle escape hatch back home.
  */
 export function FullScreenPage({
   children,
@@ -16,14 +17,25 @@ export function FullScreenPage({
   contentClassName?: string;
 }): JSX.Element {
   return (
-    <main className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
-      <Stack
-        gap={8}
-        align="center"
-        className={cn("w-full max-w-sm", contentClassName)}
-      >
-        <GramLogo className="w-25" variant="vertical" />
-        {children}
+    <main className="bg-background flex min-h-screen w-full flex-col items-center p-8">
+      <div className="flex w-full flex-1 flex-col items-center justify-center">
+        <Stack
+          gap={8}
+          align="center"
+          className={cn("w-full max-w-sm", contentClassName)}
+        >
+          <GramLogo className="w-14" variant="icon" />
+          {children}
+        </Stack>
+      </div>
+      <Stack gap={3} align="center" className="mt-auto pt-8">
+        <SpeakeasyWordmark className="text-muted-foreground h-auto w-24" />
+        <a
+          href="/"
+          className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+        >
+          Back to home
+        </a>
       </Stack>
     </main>
   );
