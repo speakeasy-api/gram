@@ -429,7 +429,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 			// per-event idle bound firing is the stream's expected end, not
 			// a fault. End the response cleanly; the client re-opens the
 			// stream per spec § Listening for Messages from the Server.
-			if sr, ok := upstreamResp.Body.(*streamReader); ok && sr.IdleTimedOut() {
+			if streamIdledOut(upstreamResp.Body) {
 				p.Logger.DebugContext(ctx, "closing idle remote mcp listen stream",
 					attr.SlogComponent("remotemcp.proxy"))
 				return nil
@@ -599,7 +599,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			// idle means the upstream stalled mid-reply — the client is still
 			// owed a terminal response event. Surface it as an upstream
 			// fault with the idle bound named, not a bare context error.
-			if sr, ok := upstreamResp.Body.(*streamReader); ok && sr.IdleTimedOut() {
+			if streamIdledOut(upstreamResp.Body) {
 				return oops.E(oops.CodeGatewayError, streamErr,
 					"remote MCP server went idle mid-response (no data for %s)", p.StreamingTimeout,
 				).LogWarn(ctx, p.Logger)
