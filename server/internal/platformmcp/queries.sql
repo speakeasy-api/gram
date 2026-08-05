@@ -184,6 +184,10 @@ JOIN platform_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
 WHERE session.organization_id = @organization_id
   AND session.refresh_token_hash = @refresh_token_hash
+  AND session.revoked_at IS NULL
+  AND session.refresh_expires_at > clock_timestamp()
+  AND connection.revoked_at IS NULL
+  AND connection.active_generation = session.connection_generation
   AND client.revoked_at IS NULL;
 
 -- name: GetPlatformMCPSessionForRefreshForUpdate :one

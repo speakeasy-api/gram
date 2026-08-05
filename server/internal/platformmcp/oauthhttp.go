@@ -235,6 +235,10 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			redirectOAuthError(w, r, request.RedirectURI, request.State, err)
 			return
 		}
+		if !validPKCES256Challenge(request.CodeChallenge) {
+			redirectOAuthError(w, r, request.RedirectURI, request.State, &usersessions.OAuthError{Code: "invalid_request", Description: "code_challenge is invalid"})
+			return
+		}
 
 		csrfToken, err := opaqueToken()
 		if err != nil {
@@ -536,13 +540,13 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				return
 			}
 			refreshHash := opaqueHash(request.RefreshToken)
-			old, err := s.store.GetSessionByRefreshHash(r.Context(), organizationID, refreshHash)
-			if err != nil || old.ClientID != client.ID {
+			reused, err := s.store.DetectRefreshReuse(r.Context(), organizationID, refreshHash, client.ID, time.Now())
+			if err != nil || reused {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 				return
 			}
-			reused, err := s.store.DetectRefreshReuse(r.Context(), organizationID, refreshHash, time.Now())
-			if err != nil || reused {
+			old, err := s.store.GetSessionByRefreshHash(r.Context(), organizationID, refreshHash)
+			if err != nil || old.ClientID != client.ID {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 				return
 			}
@@ -589,7 +593,7 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 }
 
 func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID string) {
-	jti, err := s.signer.ParseUnverifiedJTI(token)
+	jti, err := s.signer.VerifiedJTI(token)
 	if err != nil {
 		return
 	}

@@ -98,7 +98,7 @@ type Store interface {
 	ConsumeGrant(ctx context.Context, input ConsumeGrantInput) (Grant, error)
 	CreateSession(ctx context.Context, session Session) error
 	GetSessionByRefreshHash(ctx context.Context, organizationID, refreshHash string) (Session, error)
-	DetectRefreshReuse(ctx context.Context, organizationID, refreshHash string, now time.Time) (bool, error)
+	DetectRefreshReuse(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (bool, error)
 	RotateSession(ctx context.Context, input RotateSessionInput) (Session, error)
 	RevokeSession(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (Session, error)
 	RevokeAccessSession(ctx context.Context, organizationID, jti, clientID string, now time.Time) (Session, error)
@@ -325,12 +325,12 @@ func (s *InMemoryStore) GetSessionByRefreshHash(_ context.Context, organizationI
 	return session, nil
 }
 
-func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, organizationID, refreshHash string, now time.Time) (bool, error) {
+func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, organizationID, refreshHash, clientID string, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	session, ok := s.sessions[refreshHash]
-	if !ok || session.Connection.OrganizationID != organizationID {
+	if !ok || session.Connection.OrganizationID != organizationID || session.ClientID != clientID {
 		return false, ErrNotFound
 	}
 	if session.RevokedAt == nil {
@@ -496,7 +496,7 @@ func validPKCEVerifier(verifier string) bool {
 		return false
 	}
 	return strings.IndexFunc(verifier, func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || strings.ContainsRune("-._~", r))
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && !strings.ContainsRune("-._~", r)
 	}) == -1
 }
 
@@ -505,6 +505,6 @@ func validPKCES256Challenge(challenge string) bool {
 		return false
 	}
 	return strings.IndexFunc(challenge, func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_')
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_'
 	}) == -1
 }

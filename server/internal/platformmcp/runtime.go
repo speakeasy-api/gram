@@ -95,7 +95,11 @@ func (r *Runtime) Handler() http.Handler {
 			return
 		}
 		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			if errors.Is(err, ErrForbidden) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+			} else {
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			}
 			return
 		}
 

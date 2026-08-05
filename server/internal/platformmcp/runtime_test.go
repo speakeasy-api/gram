@@ -56,16 +56,29 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
-	authorizer := &testAuthorizer{err: errors.New("org:admin grant removed")}
-	handler := NewRuntime(&testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", nil).Handler()
-	req := httptest.NewRequest(http.MethodPost, Path, nil)
-	req.Header.Set("Authorization", "Bearer access-token")
-	res := httptest.NewRecorder()
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+	}{
+		{name: "denied", err: ErrForbidden, status: http.StatusForbidden},
+		{name: "unavailable", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	handler.ServeHTTP(res, req)
+			authorizer := &testAuthorizer{err: tc.err}
+			handler := NewRuntime(&testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", nil).Handler()
+			req := httptest.NewRequest(http.MethodPost, Path, nil)
+			req.Header.Set("Authorization", "Bearer access-token")
+			res := httptest.NewRecorder()
 
-	require.Equal(t, http.StatusForbidden, res.Code)
-	require.Equal(t, 1, authorizer.calls)
+			handler.ServeHTTP(res, req)
+
+			require.Equal(t, tc.status, res.Code)
+			require.Equal(t, 1, authorizer.calls)
+		})
+	}
 }
 
 func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
