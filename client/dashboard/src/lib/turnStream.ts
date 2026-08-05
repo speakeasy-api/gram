@@ -189,7 +189,18 @@ export async function streamTurn(args: {
         continue;
       }
       if (!response.ok || !response.body) {
-        if (++reconnects > MAX_RECONNECTS) {
+        // A 4xx is the server refusing the subscription — streaming disabled,
+        // bad chat id — and retrying cannot change its answer. Failing now
+        // matters because the caller's send waits on `subscribed`: burning the
+        // retry budget here would delay every message on a deployment without
+        // streaming, when the poll fallback could start immediately.
+        const refused =
+          !response.ok &&
+          response.status >= 400 &&
+          response.status < 500 &&
+          response.status !== 408 &&
+          response.status !== 429;
+        if (refused || ++reconnects > MAX_RECONNECTS) {
           throw new Error(`turn stream failed: ${response.status}`);
         }
         await new Promise((r) => {

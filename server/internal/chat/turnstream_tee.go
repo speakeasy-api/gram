@@ -210,6 +210,12 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		if plainErr != nil {
 			return nil, s.classifyCompletionError(ctx, "completion failed", plainErr)
 		}
+		// The recovered content never passed through the stream, so the watcher
+		// has seen none of it — publish it as one frame or the dashboard renders
+		// an empty reply for a request that succeeded.
+		if plain.Content != "" {
+			publish(plain.Content)
+		}
 		return plain, nil
 	}
 
@@ -229,9 +235,9 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 // turnTextQueueDepth bounds the deltas waiting to be published. An io.Pipe
 // write blocks until the reader takes it, so publishing inline would put Redis
 // on the critical path of every token reaching the caller. The queue absorbs a
-// slow Redis; if it fills, frames are dropped rather than delaying the reply,
-// because the dashboard's cursor resync recovers dropped text while a stalled
-// completion is visible to the user.
+// slow Redis; if it fills, deltas divert into an overflow tail rather than
+// delaying the reply, and the tail re-enters the stream (in order) once the
+// queue drains — or as one final frame before the turn's message frame.
 const turnTextQueueDepth = 256
 
 // teeStreamText returns a writer that republishes assistant text as turn
@@ -257,24 +263,38 @@ func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Write
 		}
 	}()
 
+	// Deltas that found the queue full. Losing them permanently would leave the
+	// dashboard showing a partial reply that still ends in a normal `done` —
+	// the persisted `message` frame carries no content, so nothing triggers a
+	// resync. Instead they accumulate here, re-enter the queue as one frame the
+	// moment space frees (before any newer delta, preserving order), and any
+	// remainder is published after the queue drains. Owned by the parse
+	// goroutine until `parsed` closes.
+	var overflow strings.Builder
+	overflowing := false
+
 	go func() {
 		defer close(parsed)
-		dropped := 0
 		publish := func(text string) {
+			if overflowing {
+				overflow.WriteString(text)
+				select {
+				case queue <- overflow.String():
+					overflow.Reset()
+					overflowing = false
+				default:
+				}
+				return
+			}
 			select {
 			case queue <- text:
 			default:
-				dropped++
+				overflowing = true
+				overflow.WriteString(text)
 			}
 		}
 		if _, err := teeCompletionStream(pr, publish); err != nil {
 			s.logger.WarnContext(ctx, "parse streamed completion for turn frames", attr.SlogError(err))
-		}
-		if dropped > 0 {
-			s.logger.WarnContext(ctx, "dropped turn text frames",
-				attr.SlogChatID(chatID.String()),
-				attr.SlogChatTurnFramesDropped(int64(dropped)),
-			)
 		}
 		// Drain whatever is left so a tee write never blocks on a reader that
 		// stopped early.
@@ -290,5 +310,16 @@ func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Write
 		// Only the tail of the stream waits here — never an individual token.
 		close(queue)
 		<-published
+		if overflow.Len() > 0 {
+			s.logger.WarnContext(ctx, "publishing overflowed turn text as one frame",
+				attr.SlogChatID(chatID.String()),
+			)
+			if _, err := s.turnStream.Publish(ctx, chatID, TurnFrame{
+				Kind: TurnFrameText, Cursor: "", Text: overflow.String(), MessageID: "",
+				ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "publish overflowed turn text frame", attr.SlogError(err))
+			}
+		}
 	}
 }

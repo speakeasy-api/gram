@@ -136,9 +136,6 @@ func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFr
 	return cursor, nil
 }
 
-// Replay returns frames already published after the given cursor. An empty
-// cursor replays the chat's whole retained history, which is what a client
-// joining a turn late (or reconnecting without a cursor) wants.
 // lastID returns the id of the most recent frame retained for a chat, or the
 // zero id when nothing is retained yet. Reading from it is exclusive, so it
 // means "everything published from now on" without the race "$" carries.
@@ -155,6 +152,9 @@ func (t *TurnStream) lastID(ctx context.Context, chatID uuid.UUID) (string, erro
 	return entries[0].ID, nil
 }
 
+// Replay returns frames already published after the given cursor. An empty
+// cursor replays the chat's whole retained history, which is what a client
+// joining a turn late (or reconnecting without a cursor) wants.
 func (t *TurnStream) Replay(ctx context.Context, chatID uuid.UUID, after string) ([]TurnFrame, error) {
 	if t == nil {
 		return nil, errors.New("turn stream is not configured")
