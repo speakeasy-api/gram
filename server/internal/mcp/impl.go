@@ -79,6 +79,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -118,8 +119,13 @@ type Service struct {
 	cimdOrgFlagMu        sync.RWMutex
 	cimdOrgFlagLastKnown map[string]bool
 	// cimdResolver fetches + validates Client ID Metadata Documents for
-	// URL-shaped client_ids and owns the cimd.* telemetry.
-	cimdResolver           *cimd.Resolver
+	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
+	cimdResolver *cimd.Resolver
+	// cimdAdmissionMetrics records the per-issuer admission decisions made
+	// before the resolver runs, on their own cimd.admission.decisions
+	// instrument (a denial performs no fetch, so it has no place under
+	// cimd.fetch.attempts).
+	cimdAdmissionMetrics   *admission.Metrics
 	toolProxy              *gateway.ToolProxy
 	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
@@ -331,6 +337,7 @@ func NewService(
 		cimdOrgFlagMu:        sync.RWMutex{},
 		cimdOrgFlagLastKnown: map[string]bool{},
 		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,

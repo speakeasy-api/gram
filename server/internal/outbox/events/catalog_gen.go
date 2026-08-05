@@ -62,6 +62,7 @@ var All = []outbox.EventRegistration{
 	UnproxiedMcpServerV1,
 	UserSessionClientV1,
 	UserSessionConsentV1,
+	UserSessionIssuerCimdClientV1,
 	UserSessionIssuerV1,
 	UserSessionV1,
 	VariationV1,

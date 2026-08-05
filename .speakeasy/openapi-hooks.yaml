@@ -880,6 +880,8 @@ tags:
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuers
     description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+  - name: userSessionIssuersCimdClients
+    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
   - name: variations

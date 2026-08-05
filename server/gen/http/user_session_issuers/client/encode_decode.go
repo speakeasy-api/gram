@@ -1482,13 +1482,14 @@ func DecodeMigrateLegacyGramRegistrationsResponse(decoder func(*http.Response) g
 // *UserSessionIssuerResponseBody.
 func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	res := &types.UserSessionIssuer{
-		ID:                   *v.ID,
-		ProjectID:            *v.ProjectID,
-		Slug:                 *v.Slug,
-		AuthnChallengeMode:   *v.AuthnChallengeMode,
-		SessionDurationHours: *v.SessionDurationHours,
-		CreatedAt:            *v.CreatedAt,
-		UpdatedAt:            *v.UpdatedAt,
+		ID:                            *v.ID,
+		ProjectID:                     *v.ProjectID,
+		Slug:                          *v.Slug,
+		AuthnChallengeMode:            *v.AuthnChallengeMode,
+		SessionDurationHours:          *v.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: *v.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     *v.CreatedAt,
+		UpdatedAt:                     *v.UpdatedAt,
 	}
 
 	return res

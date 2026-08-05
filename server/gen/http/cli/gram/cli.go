@@ -80,6 +80,7 @@ import (
 	usersessionclientsc "github.com/speakeasy-api/gram/server/gen/http/user_session_clients/client"
 	usersessionconsentsc "github.com/speakeasy-api/gram/server/gen/http/user_session_consents/client"
 	usersessionissuersc "github.com/speakeasy-api/gram/server/gen/http/user_session_issuers/client"
+	usersessionissuerscimdclientsc "github.com/speakeasy-api/gram/server/gen/http/user_session_issuers_cimd_clients/client"
 	usersessionsc "github.com/speakeasy-api/gram/server/gen/http/user_sessions/client"
 	variationsc "github.com/speakeasy-api/gram/server/gen/http/variations/client"
 	goahttp "goa.design/goa/v3/http"
@@ -158,6 +159,7 @@ func UsageCommands() []string {
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer|migrate-legacy-gram-registrations)",
+		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
@@ -3137,6 +3139,39 @@ func ParseEndpoint(
 		userSessionIssuersMigrateLegacyGramRegistrationsApikeyTokenFlag      = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("apikey-token", "", "")
 		userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInputFlag = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("project-slug-input", "", "")
 
+		userSessionIssuersCimdClientsFlags = flag.NewFlagSet("user-session-issuers-cimd-clients", flag.ContinueOnError)
+
+		userSessionIssuersCimdClientsListPresetsFlags                = flag.NewFlagSet("list-presets", flag.ExitOnError)
+		userSessionIssuersCimdClientsListPresetsSessionTokenFlag     = userSessionIssuersCimdClientsListPresetsFlags.String("session-token", "", "")
+		userSessionIssuersCimdClientsListPresetsApikeyTokenFlag      = userSessionIssuersCimdClientsListPresetsFlags.String("apikey-token", "", "")
+		userSessionIssuersCimdClientsListPresetsProjectSlugInputFlag = userSessionIssuersCimdClientsListPresetsFlags.String("project-slug-input", "", "")
+
+		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags                = flag.NewFlagSet("create-user-session-issuer-cimd-client", flag.ExitOnError)
+		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientBodyFlag             = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("body", "REQUIRED", "")
+		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientSessionTokenFlag     = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("session-token", "", "")
+		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientApikeyTokenFlag      = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("apikey-token", "", "")
+		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientProjectSlugInputFlag = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("project-slug-input", "", "")
+
+		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags                   = flag.NewFlagSet("list-user-session-issuer-cimd-clients", flag.ExitOnError)
+		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUserSessionIssuerIDFlag = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("user-session-issuer-id", "REQUIRED", "")
+		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsCursorFlag              = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("cursor", "", "")
+		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsLimitFlag               = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("limit", "", "")
+		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsSessionTokenFlag        = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("session-token", "", "")
+		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsApikeyTokenFlag         = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("apikey-token", "", "")
+		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsProjectSlugInputFlag    = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("project-slug-input", "", "")
+
+		userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags                = flag.NewFlagSet("get-user-session-issuer-cimd-client", flag.ExitOnError)
+		userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientIDFlag               = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags.String("id", "REQUIRED", "")
+		userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientSessionTokenFlag     = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags.String("session-token", "", "")
+		userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientApikeyTokenFlag      = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags.String("apikey-token", "", "")
+		userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientProjectSlugInputFlag = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags.String("project-slug-input", "", "")
+
+		userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags                = flag.NewFlagSet("delete-user-session-issuer-cimd-client", flag.ExitOnError)
+		userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientIDFlag               = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags.String("id", "REQUIRED", "")
+		userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientSessionTokenFlag     = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags.String("session-token", "", "")
+		userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientApikeyTokenFlag      = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags.String("apikey-token", "", "")
+		userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientProjectSlugInputFlag = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags.String("project-slug-input", "", "")
+
 		userSessionsFlags = flag.NewFlagSet("user-sessions", flag.ContinueOnError)
 
 		userSessionsListUserSessionsFlags                   = flag.NewFlagSet("list-user-sessions", flag.ExitOnError)
@@ -3847,6 +3882,13 @@ func ParseEndpoint(
 	userSessionIssuersDeleteUserSessionIssuerFlags.Usage = userSessionIssuersDeleteUserSessionIssuerUsage
 	userSessionIssuersMigrateLegacyGramRegistrationsFlags.Usage = userSessionIssuersMigrateLegacyGramRegistrationsUsage
 
+	userSessionIssuersCimdClientsFlags.Usage = userSessionIssuersCimdClientsUsage
+	userSessionIssuersCimdClientsListPresetsFlags.Usage = userSessionIssuersCimdClientsListPresetsUsage
+	userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage
+	userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.Usage = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUsage
+	userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientUsage
+	userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientUsage
+
 	userSessionsFlags.Usage = userSessionsUsage
 	userSessionsListUserSessionsFlags.Usage = userSessionsListUserSessionsUsage
 	userSessionsListFacetsFlags.Usage = userSessionsListFacetsUsage
@@ -4009,6 +4051,8 @@ func ParseEndpoint(
 			svcf = userSessionConsentsFlags
 		case "user-session-issuers":
 			svcf = userSessionIssuersFlags
+		case "user-session-issuers-cimd-clients":
+			svcf = userSessionIssuersCimdClientsFlags
 		case "user-sessions":
 			svcf = userSessionsFlags
 		case "variations":
@@ -5847,6 +5891,25 @@ func ParseEndpoint(
 
 			case "migrate-legacy-gram-registrations":
 				epf = userSessionIssuersMigrateLegacyGramRegistrationsFlags
+
+			}
+
+		case "user-session-issuers-cimd-clients":
+			switch epn {
+			case "list-presets":
+				epf = userSessionIssuersCimdClientsListPresetsFlags
+
+			case "create-user-session-issuer-cimd-client":
+				epf = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags
+
+			case "list-user-session-issuer-cimd-clients":
+				epf = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags
+
+			case "get-user-session-issuer-cimd-client":
+				epf = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags
+
+			case "delete-user-session-issuer-cimd-client":
+				epf = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags
 
 			}
 
@@ -7739,6 +7802,25 @@ func ParseEndpoint(
 			case "migrate-legacy-gram-registrations":
 				endpoint = c.MigrateLegacyGramRegistrations()
 				data, err = usersessionissuersc.BuildMigrateLegacyGramRegistrationsPayload(*userSessionIssuersMigrateLegacyGramRegistrationsBodyFlag, *userSessionIssuersMigrateLegacyGramRegistrationsSessionTokenFlag, *userSessionIssuersMigrateLegacyGramRegistrationsApikeyTokenFlag, *userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInputFlag)
+			}
+		case "user-session-issuers-cimd-clients":
+			c := usersessionissuerscimdclientsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-presets":
+				endpoint = c.ListPresets()
+				data, err = usersessionissuerscimdclientsc.BuildListPresetsPayload(*userSessionIssuersCimdClientsListPresetsSessionTokenFlag, *userSessionIssuersCimdClientsListPresetsApikeyTokenFlag, *userSessionIssuersCimdClientsListPresetsProjectSlugInputFlag)
+			case "create-user-session-issuer-cimd-client":
+				endpoint = c.CreateUserSessionIssuerCimdClient()
+				data, err = usersessionissuerscimdclientsc.BuildCreateUserSessionIssuerCimdClientPayload(*userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientBodyFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientSessionTokenFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientApikeyTokenFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientProjectSlugInputFlag)
+			case "list-user-session-issuer-cimd-clients":
+				endpoint = c.ListUserSessionIssuerCimdClients()
+				data, err = usersessionissuerscimdclientsc.BuildListUserSessionIssuerCimdClientsPayload(*userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUserSessionIssuerIDFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsCursorFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsLimitFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsSessionTokenFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsApikeyTokenFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsProjectSlugInputFlag)
+			case "get-user-session-issuer-cimd-client":
+				endpoint = c.GetUserSessionIssuerCimdClient()
+				data, err = usersessionissuerscimdclientsc.BuildGetUserSessionIssuerCimdClientPayload(*userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientIDFlag, *userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientSessionTokenFlag, *userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientApikeyTokenFlag, *userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientProjectSlugInputFlag)
+			case "delete-user-session-issuer-cimd-client":
+				endpoint = c.DeleteUserSessionIssuerCimdClient()
+				data, err = usersessionissuerscimdclientsc.BuildDeleteUserSessionIssuerCimdClientPayload(*userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientIDFlag, *userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientSessionTokenFlag, *userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientApikeyTokenFlag, *userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientProjectSlugInputFlag)
 			}
 		case "user-sessions":
 			c := usersessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -20710,7 +20792,7 @@ func userSessionIssuersUpdateUserSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers update-user-session-issuer --body '{\n      \"authn_challenge_mode\": \"interactive\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers update-user-session-issuer --body '{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionIssuersListUserSessionIssuersUsage() {
@@ -20811,6 +20893,143 @@ func userSessionIssuersMigrateLegacyGramRegistrationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers migrate-legacy-gram-registrations --body '{\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// userSessionIssuersCimdClientsUsage displays the usage of the
+// user-session-issuers-cimd-clients command and its subcommands.
+func userSessionIssuersCimdClientsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] user-session-issuers-cimd-clients COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-presets: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.`)
+	fmt.Fprintln(os.Stderr, `    create-user-session-issuer-cimd-client: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.`)
+	fmt.Fprintln(os.Stderr, `    list-user-session-issuer-cimd-clients: List the custom CIMD document URLs configured on a user_session_issuer. Does not include the preset catalog — call listPresets for that.`)
+	fmt.Fprintln(os.Stderr, `    get-user-session-issuer-cimd-client: Get a single custom CIMD document URL entry by id.`)
+	fmt.Fprintln(os.Stderr, `    delete-user-session-issuer-cimd-client: Remove a custom CIMD document URL from a user_session_issuer. New authorization requests from that client are denied immediately; sessions already issued to it are unaffected and continue until they expire.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s user-session-issuers-cimd-clients COMMAND --help\n", os.Args[0])
+}
+func userSessionIssuersCimdClientsListPresetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers-cimd-clients list-presets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients list-presets --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers-cimd-clients create-user-session-issuer-cimd-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients create-user-session-issuer-cimd-client --body '{\n      \"client_id_metadata_uri\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers-cimd-clients list-user-session-issuer-cimd-clients", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the custom CIMD document URLs configured on a user_session_issuer. Does not include the preset catalog — call listPresets for that.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients list-user-session-issuer-cimd-clients --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers-cimd-clients get-user-session-issuer-cimd-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a single custom CIMD document URL entry by id.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients get-user-session-issuer-cimd-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers-cimd-clients delete-user-session-issuer-cimd-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a custom CIMD document URL from a user_session_issuer. New authorization requests from that client are denied immediately; sessions already issued to it are unaffected and continue until they expire.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients delete-user-session-issuer-cimd-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // userSessionsUsage displays the usage of the user-sessions command and its

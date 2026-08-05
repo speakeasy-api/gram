@@ -33,15 +33,21 @@ const (
 
 	// The remaining results are PROVISIONAL: they label lifecycle stages that
 	// follow-up issues add inside this package — document caching (AIS-216:
-	// cached, conditional_not_modified), per-origin rate limiting (AIS-215:
-	// rate_limited), and admission control (AIS-371: admission_denied). They
-	// are declared now so the label vocabulary is stable for dashboards, but
-	// nothing records them yet and their exact semantics may still shift when
-	// the emitting code lands — do not build monitors on them until then.
+	// cached, conditional_not_modified) and per-origin rate limiting
+	// (AIS-215: rate_limited). They are declared now so the label vocabulary
+	// is stable for dashboards, but nothing records them yet and their exact
+	// semantics may still shift when the emitting code lands — do not build
+	// monitors on them until then.
+	//
+	// An admission_denied result was formerly reserved here for AIS-371.
+	// Admission control instead records to its own cimd.admission.decisions
+	// counter (internal/usersessions/cimd/admission): a denial means no
+	// fetch ran at all, so counting it under fetch.attempts would break this
+	// instrument's one-point-per-Resolve invariant and quietly change the
+	// denominator of every fetch-success chart.
 	fetchResultCached                 fetchResult = "cached"
 	fetchResultConditionalNotModified fetchResult = "conditional_not_modified"
 	fetchResultRateLimited            fetchResult = "rate_limited"
-	fetchResultAdmissionDenied        fetchResult = "admission_denied"
 )
 
 // validationReason is the machine-readable label recorded on

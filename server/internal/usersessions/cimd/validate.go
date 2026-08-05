@@ -7,13 +7,13 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // validationError pairs a validation rejection with the machine-readable
 // reason label recorded on cimd.validation.failures. Unwrap keeps the
-// *usersessions.OAuthError (or wrapped equivalent) reachable via errors.As,
-// so callers' wire-format mapping is unaffected by the annotation.
+// *oauthwire.Error (or a wrapped equivalent) reachable via errors.As, so
+// callers' wire-format mapping is unaffected by the annotation.
 type validationError struct {
 	reason validationReason
 	err    error
@@ -25,7 +25,7 @@ func (e *validationError) Unwrap() error { return e.err }
 // oauthValidationError builds the standard rejection shape: a client-safe
 // OAuth error annotated with its metric reason.
 func oauthValidationError(reason validationReason, code string, description string) error {
-	return &validationError{reason: reason, err: &usersessions.OAuthError{Code: code, Description: description}}
+	return &validationError{reason: reason, err: &oauthwire.Error{Code: code, Description: description}}
 }
 
 // validationReasonOf extracts the reason label from a validation rejection,
@@ -37,8 +37,15 @@ func validationReasonOf(err error) validationReason {
 	return ""
 }
 
-// validateClientIDURL enforces the -02 §3 Client Identifier URL syntax rules
-// on the presented client_id and returns the parsed URL:
+// ValidateClientIDURL enforces the -02 §3 Client Identifier URL syntax rules
+// on the presented client_id and returns the parsed URL.
+//
+// Exported so the management API can apply exactly these rules when an
+// operator adds a custom CIMD URL to an issuer: a URL that would be
+// rejected at authorization time is worth rejecting at configuration time,
+// where the error is actionable, rather than storing a dead policy entry.
+//
+// Rules:
 //
 //   - https scheme (IsClientIDURL gates entry, so a violation here means a
 //     mixed-case or otherwise mangled prefix)
@@ -51,7 +58,7 @@ func validationReasonOf(err error) validationReason {
 // No normalization is applied anywhere — -02 §3 mandates simple string
 // comparison per RFC 3986 §6.2.1, so https://example.com/c and
 // https://example.com:443/c are different client identifiers.
-func validateClientIDURL(clientID string) (*url.URL, error) {
+func ValidateClientIDURL(clientID string) (*url.URL, error) {
 	if len(clientID) > maxClientIDLength {
 		return nil, oauthValidationError(reasonClientIDTooLong, "invalid_request", fmt.Sprintf("client_id exceeds the %d byte limit", maxClientIDLength))
 	}
@@ -102,14 +109,26 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) erro
 	if len(doc.ClientName) > maxClientNameLength {
 		return oauthValidationError(reasonClientNameTooLong, "invalid_client_metadata", fmt.Sprintf("client_name exceeds the %d byte limit", maxClientNameLength))
 	}
-	// Only public clients are accepted. -02 §8.2's direction of travel is that
-	// capable clients SHOULD authenticate (MCP clients MAY use
-	// private_key_jwt — ChatGPT's documents do); accepting those is
-	// deferred, and when it lands §8.2's RFC 7523 §2.2 enforcement MUST
-	// come with it. An absent value is rejected too: the RFC 7591 default
-	// is client_secret_basic, a symmetric method the spec bans for CIMD.
-	if doc.TokenEndpointAuthMethod != "none" {
-		return oauthValidationError(reasonInvalidAuthMethod, "invalid_client_metadata", `token_endpoint_auth_method must be "none"`)
+	// Only public clients are accepted. -02 §8.2's direction of travel is
+	// that capable clients SHOULD authenticate (MCP clients MAY use
+	// private_key_jwt); accepting those is deferred, and when it lands
+	// §8.2's RFC 7523 §2.2 enforcement MUST come with it.
+	//
+	// An ABSENT value is treated as "none", not rejected. The field is not
+	// required by -02 (only client_id is) and RFC 7591's
+	// client_secret_basic default cannot apply here, because §4.1 forbids a
+	// CIMD document from using client_secret_post, client_secret_basic,
+	// client_secret_jwt, or any other shared-symmetric-secret method. So
+	// absence cannot mean a secret-bearing client, and the only readings
+	// left are "none" or an explicit asymmetric method — which would have
+	// to say so.
+	//
+	// This is load-bearing for real clients, not a theoretical nicety:
+	// OpenAI's documents (both ChatGPT's and Codex CLI's) omit the field
+	// entirely while being plain public clients, and rejecting them here
+	// would make any preset for them dead on arrival.
+	if doc.TokenEndpointAuthMethod != "" && doc.TokenEndpointAuthMethod != "none" {
+		return oauthValidationError(reasonInvalidAuthMethod, "invalid_client_metadata", `token_endpoint_auth_method must be "none" or absent`)
 	}
 	// -02 §4.1: a metadata document is public, so it must never carry a
 	// client secret in any form. Presence alone invalidates the document.
@@ -130,10 +149,10 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) erro
 		if len(uri) > maxRedirectURILength {
 			return oauthValidationError(reasonRedirectURITooLong, "invalid_redirect_uri", fmt.Sprintf("redirect_uri exceeds the %d byte limit", maxRedirectURILength))
 		}
-		// ValidateRedirectURI returns *usersessions.OAuthError values of its
+		// ValidateRedirectURI returns *oauthwire.Error values of its
 		// own, so the wrap preserves the client-safe wire mapping while the
 		// annotation adds the shared metric reason.
-		if err := usersessions.ValidateRedirectURI(uri); err != nil {
+		if err := oauthwire.ValidateRedirectURI(uri); err != nil {
 			return &validationError{reason: reasonRedirectURIInvalid, err: fmt.Errorf("validate redirect_uri: %w", err)}
 		}
 		if err := validateOriginBinding(clientIDURL, uri); err != nil {

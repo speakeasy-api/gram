@@ -163,15 +163,36 @@ const (
 
 	// CIMDOriginKey is the host of a Client ID Metadata Document URL — the
 	// per-metadata-host dimension on cimd.fetch.* metrics. Attacker-influenced
-	// on the unauthenticated OAuth surface until CIMD admission control
-	// (AIS-371) bounds accepted client_id URLs, so it is deliberately omitted
-	// for client_ids that fail URL-syntax validation before a fetch.
+	// on the unauthenticated OAuth surface, so it is deliberately omitted for
+	// client_ids rejected before a fetch establishes an origin.
+	//
+	// CIMD admission control (AIS-371) bounds this dimension only for issuers
+	// in "presets" mode, where a fetch happens solely for catalog or custom
+	// URLs. Issuers in "open" mode still fetch arbitrary attacker-supplied
+	// origins. Admission denials deliberately carry NO origin attribute: a
+	// denial costs no fetch and no timeout, so tagging it by host would
+	// reintroduce the unbounded dimension at far higher throughput than the
+	// fetch path it replaced.
 	CIMDOriginKey = attribute.Key("gram.cimd.origin")
 
 	// CIMDValidationReasonKey is the machine-readable reason a Client ID
 	// Metadata Document (or its client_id URL) failed validation — the
 	// per-reason dimension on cimd.validation.failures.
 	CIMDValidationReasonKey = attribute.Key("gram.cimd.validation_reason")
+
+	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
+	// ("disabled", "presets", "open") — the low-cardinality dimension on
+	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
+	CIMDAdmissionModeKey = attribute.Key("gram.cimd.admission_mode")
+
+	// CIMDAdmissionOutcomeKey is the machine-readable admission decision on
+	// cimd.admission.decisions. Admissions carry the reason they were
+	// admitted rather than a bare "admitted", so the values are
+	// "admitted_open", "admitted_catalog_exact", "admitted_catalog_pattern",
+	// "admitted_custom", "denied_disabled", "denied_not_listed",
+	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
+	// values as a group; there is no single value meaning "admitted".
+	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
 
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
@@ -949,6 +970,22 @@ func CIMDValidationReason[V ~string](v V) attribute.KeyValue {
 
 func SlogCIMDValidationReason[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDValidationReasonKey), string(v))
+}
+
+func CIMDAdmissionMode[V ~string](v V) attribute.KeyValue {
+	return CIMDAdmissionModeKey.String(string(v))
+}
+
+func SlogCIMDAdmissionMode[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDAdmissionModeKey), string(v))
+}
+
+func CIMDAdmissionOutcome[V ~string](v V) attribute.KeyValue {
+	return CIMDAdmissionOutcomeKey.String(string(v))
+}
+
+func SlogCIMDAdmissionOutcome[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDAdmissionOutcomeKey), string(v))
 }
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }

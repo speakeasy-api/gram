@@ -72,6 +72,7 @@ var (
 	UserSessionConsentV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_consent_event_v1", "Emitted when changes to user session consents are made")
 	UserSessionV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_event_v1", "Emitted when changes to user sessions are made")
 	UserSessionIssuerV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_event_v1", "Emitted when changes to user session issuers are made")
+	UserSessionIssuerCimdClientV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_cimd_client_event_v1", "Emitted when the CIMD client URLs a user session issuer admits are changed")
 	VariationV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.variation_event_v1", "Emitted when changes to tool names and other properties are made")
 )
 

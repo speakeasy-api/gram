@@ -131,11 +131,13 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
+		testenv.NewMeterProvider(t),
 		conn,
 		sessionManager,
 		tokenRevoker,
 		authzEngine,
 		audit.NewLogger(),
+		guardianPolicy,
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
 		remoteSessionsService,
