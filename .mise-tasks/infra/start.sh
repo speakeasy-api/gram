@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
 
+# Warn when a cached image's architecture differs from the Docker host's.
+# `compose up` never re-pulls a tag that already exists locally, so an image
+# pulled while DOCKER_DEFAULT_PLATFORM=linux/amd64 was exported keeps running
+# under emulation on every stack — on Apple Silicon an emulated Postgres
+# backend segfaults under load (exit code 2 → crash recovery → every daemon
+# fails its DB ping mid-boot). Warn-only: emulation mostly works, and a hard
+# fail would strand hosts that have no native variant. Digest-pinned images are
+# skipped because a re-pull cannot change what a digest points at.
+host_arch="$(docker version --format '{{.Server.Arch}}' 2>/dev/null)"
+if [ -n "$host_arch" ]; then
+    while IFS= read -r img; do
+        case "$img" in *@sha256:*) continue ;; esac
+        img_arch="$(docker image inspect "$img" --format '{{.Architecture}}' 2>/dev/null)"
+        if [ -n "$img_arch" ] && [ "$img_arch" != "$host_arch" ]; then
+            echo "⚠️  Cached image $img is $img_arch but this Docker host is $host_arch — it runs emulated and can crash under load. Fix: docker pull $img" >&2
+        fi
+    done < <(docker compose config --images 2>/dev/null | sort -u)
+fi
+
 # This worktree's own stack, first — with --remove-orphans. A pre-existing
 # worktree (and the main tree) still runs a gram-presidio container under its own
 # project that compose.yml no longer declares; removing it here, BEFORE asserting
