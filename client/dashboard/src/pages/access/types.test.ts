@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toRoleSlug } from "./types";
+import { isProjectSelectableResourceType, toRoleSlug } from "./types";
 
 describe("toRoleSlug", () => {
   it("adds org- prefix to plain name", () => {
@@ -57,4 +57,20 @@ describe("system role slug resolution", () => {
   it("custom role with spaces → org-prefixed slug", () => {
     expect(resolveSlug("API Developer", false)).toBe("org-api-developer");
   });
+});
+
+describe("isProjectSelectableResourceType", () => {
+  it.each(["project", "skill", "assistant"] as const)(
+    "allows selecting projects for %s scopes",
+    (resourceType) => {
+      expect(isProjectSelectableResourceType(resourceType)).toBe(true);
+    },
+  );
+
+  it.each(["org", "mcp", "environment", "risk_policy", "chat"] as const)(
+    "does not treat %s scopes as project resources",
+    (resourceType) => {
+      expect(isProjectSelectableResourceType(resourceType)).toBe(false);
+    },
+  );
 });

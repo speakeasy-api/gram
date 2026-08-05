@@ -44,7 +44,7 @@ func (s *stubWorkflowSignaler) SignalThread(_ context.Context, threadID, _ uuid.
 	return nil
 }
 
-func TestServiceRequiresProjectGrants(t *testing.T) {
+func TestServiceRequiresAssistantGrants(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID := newRBACService(t)
@@ -124,17 +124,14 @@ func TestServiceRequiresProjectGrants(t *testing.T) {
 		})
 	}
 
-	readCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeProjectRead,
-		Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String()),
-	})
+	readCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantRead, projectID.String()))
 	_, err := svc.ListAssistants(readCtx, &gen.ListAssistantsPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
 
-	// getManaged is read-scoped — with project:read but no managed assistant
+	// getManaged is read-scoped: with assistant:read but no managed assistant
 	// provisioned yet, it must surface NotFound (so the dashboard can decide
 	// whether to call ensureManaged or show the viewer notice) rather than
 	// 403, which would conflate "missing" with "no permission".
@@ -145,14 +142,26 @@ func TestServiceRequiresProjectGrants(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+func TestServiceProjectGrantsDoNotAuthorizeAssistants(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID := newRBACService(t)
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeProjectRead, projectID.String()),
+		authz.NewGrant(authz.ScopeProjectWrite, projectID.String()),
+	)
+
+	_, err := svc.ListAssistants(ctx, &gen.ListAssistantsPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestServiceCreateAssistantMapsInvalidToolsetToBadRequest(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID := newRBACService(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeProjectWrite,
-		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
 
 	_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		SessionToken:     nil,
@@ -174,10 +183,7 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable")
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeProjectWrite,
-		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
 
 	toolsetsQ := toolsetsRepo.New(conn)
 	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
@@ -220,10 +226,7 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_update")
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeProjectWrite,
-		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
 
 	toolsetsQ := toolsetsRepo.New(conn)
 	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
@@ -282,10 +285,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_mcp_server")
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeProjectWrite,
-		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
 
 	// Seed a remote-backed mcp_server with a Gram-hosted endpoint, mirroring
 	// how the dashboard registers an external "Remote MCP" server.
@@ -375,10 +375,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_mcp_server_reject")
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeProjectWrite,
-		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
 
 	remote, err := remotemcpRepo.New(conn).CreateServer(t.Context(), remotemcpRepo.CreateServerParams{
 		ID:            uuid.New(),

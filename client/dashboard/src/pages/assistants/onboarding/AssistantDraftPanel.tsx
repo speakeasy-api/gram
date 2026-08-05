@@ -24,6 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 
@@ -36,10 +37,20 @@ function toDetailTab(value: string): DetailTab {
     : "overview";
 }
 
+function instructionsActionLabel(
+  canWrite: boolean,
+  hasInstructions: boolean,
+): string {
+  if (!canWrite) return "View";
+  return hasInstructions ? "Expand & edit" : "Add";
+}
+
 export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
   const routes = useRoutes();
   const project = useProject();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("assistant:write", project.id);
   const queryClient = useQueryClient();
   const { data: productFeatures } = useProductFeatures();
   const [activeTab, setActiveTab] = useQueryState(
@@ -98,25 +109,32 @@ export function AssistantDraftPanel(): JSX.Element {
         <Text variant="body" className="truncate font-medium">
           {a?.name ?? "Loading…"}
         </Text>
-        <Button
-          variant="tertiary"
-          size="sm"
-          className="shrink-0"
-          aria-label="Delete assistant"
-          onClick={() => {
-            if (!draft.assistantId) return;
-            if (!confirm("Delete this assistant? This cannot be undone."))
-              return;
-            del.mutate({ request: { id: draft.assistantId } });
-          }}
-          disabled={del.isPending}
+        <RequireScope
+          scope="assistant:write"
+          resourceId={project.id}
+          level="component"
+          reason="You don't have permission to delete assistants."
         >
-          {del.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Icon name="trash" className="h-3 w-3" />
-          )}
-        </Button>
+          <Button
+            variant="tertiary"
+            size="sm"
+            className="shrink-0"
+            aria-label="Delete assistant"
+            onClick={() => {
+              if (!draft.assistantId) return;
+              if (!confirm("Delete this assistant? This cannot be undone."))
+                return;
+              del.mutate({ request: { id: draft.assistantId } });
+            }}
+            disabled={del.isPending}
+          >
+            {del.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Icon name="trash" className="h-3 w-3" />
+            )}
+          </Button>
+        </RequireScope>
       </div>
 
       {!a ? (
@@ -146,6 +164,7 @@ export function AssistantDraftPanel(): JSX.Element {
                 <Row label="Status">
                   <AssistantStatusToggle
                     assistant={a}
+                    canWrite={canWrite}
                     onUpdated={() => void draft.refetchAssistant()}
                   />
                 </Row>
@@ -176,7 +195,7 @@ export function AssistantDraftPanel(): JSX.Element {
                     onClick={() => setEditingInstructions(true)}
                   >
                     <Icon name="pencil" className="h-3 w-3" />
-                    {a.instructions ? "Expand & edit" : "Add"}
+                    {instructionsActionLabel(canWrite, !!a.instructions)}
                   </Button>
                 }
               >
@@ -323,6 +342,7 @@ export function AssistantDraftPanel(): JSX.Element {
       {a && (
         <EditInstructionsDialog
           assistant={a}
+          canWrite={canWrite}
           open={editingInstructions}
           onOpenChange={setEditingInstructions}
           onUpdated={() => void draft.refetchAssistant()}

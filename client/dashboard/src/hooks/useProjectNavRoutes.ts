@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { AppRoute, useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
@@ -63,7 +63,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
-      { route: routes.chat, scope: read },
+      {
+        route: routes.chat,
+        scope: ["assistant:read"],
+        resourceId: projectId,
+      },
       { route: routes.sources, scope: readWrite },
       { route: routes.catalog, scope: ["project:read", "mcp:write"] },
       {
@@ -75,7 +79,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : []),
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       ...(isAssistantsEnabled
-        ? [{ route: routes.assistants, scope: read }]
+        ? [
+            {
+              route: routes.assistants,
+              scope: ["assistant:read"] as Scope[],
+              resourceId: projectId,
+            },
+          ]
         : []),
       {
         route: routes.skills,

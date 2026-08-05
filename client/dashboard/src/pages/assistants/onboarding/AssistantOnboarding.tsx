@@ -129,7 +129,9 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     productFeatures?.skillsEnabled === true &&
     hasScope("skill:read", project.id);
   const skillMutationsEnabled =
-    skillsEnabled && hasScope("project:write", project.id);
+    skillsEnabled &&
+    hasScope("assistant:write", project.id) &&
+    hasScope("project:write", project.id);
   const { theme: resolvedTheme } = useMoonshineConfig();
   const [searchParams] = useSearchParams();
 

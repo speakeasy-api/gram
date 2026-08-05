@@ -1,5 +1,6 @@
 import { CommandGroup, CommandItem } from "@/components/ui/Command";
 import { useSlugs } from "@/contexts/Sdk";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
@@ -198,9 +199,12 @@ function EnvironmentsGroup({ onNavigate }: GroupProps) {
 
 function AssistantsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = useAssistantsListSuspense(undefined, undefined, {
-    retry: false,
-  });
+  const project = useProject();
+  const { data } = useAssistantsListSuspense(
+    { gramProject: project.slug },
+    undefined,
+    { retry: false },
+  );
   const assistants = data?.assistants ?? [];
   if (!assistants.length) return null;
   return (
@@ -365,9 +369,11 @@ export function ResourceResults({
   query,
 }: GroupProps & { query: string }): JSX.Element {
   const { hasAnyScope } = useRBAC();
+  const project = useProject();
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
   const isAdmin = hasAnyScope(["org:admin"]);
+  const canReadAssistants = hasAnyScope(["assistant:read"], project.id);
   // Detection rules are high-cardinality (dozens of built-ins), so they'd flood
   // the default view and fetch on open. Make them search-only: render (and
   // fetch) the group only once the user types, letting cmdk filter the results.
@@ -387,9 +393,11 @@ export function ResourceResults({
       <LazyGroup>
         <EnvironmentsGroup onNavigate={onNavigate} />
       </LazyGroup>
-      <LazyGroup>
-        <AssistantsGroup onNavigate={onNavigate} />
-      </LazyGroup>
+      {canReadAssistants && (
+        <LazyGroup>
+          <AssistantsGroup onNavigate={onNavigate} />
+        </LazyGroup>
+      )}
       <LazyGroup>
         <PluginsGroup onNavigate={onNavigate} />
       </LazyGroup>

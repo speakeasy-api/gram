@@ -11,12 +11,14 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Client struct {
@@ -148,6 +150,46 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	return nil
 }
 
+func provisionAssistantSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := accessrepo.New(dbtx)
+	member, err := q.GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	if err != nil {
+		return fmt.Errorf("resolve member system role: %w", err)
+	}
+	memberPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+member.ID.String())
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, memberPrincipal.String(), []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeAssistantRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision member Assistant grants: %w", err)
+	}
+
+	admin, err := q.GetGlobalRoleBySlug(ctx, authz.SystemRoleAdmin)
+	if err != nil {
+		return fmt.Errorf("resolve admin system role: %w", err)
+	}
+	adminPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+admin.ID.String())
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, adminPrincipal.String(), []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeAssistantRead),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+		{
+			Scope:     string(authz.ScopeAssistantWrite),
+			Effect:    authz.PolicyEffectAllow,
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision admin Assistant grants: %w", err)
+	}
+
+	return nil
+}
+
 // EnableSkillsTx provisions the built-in Skills grants when RBAC is already
 // active, then enables the org-level Skills feature in the caller's transaction.
 // When RBAC is off, EnableRBACTx provisions them after seeding system roles.
@@ -206,6 +248,11 @@ func EnableRBACTx(ctx context.Context, dbtx repo.DBTX, organizationID string) er
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
 		return fmt.Errorf("seed system role grants: %w", err)
+	}
+	// Assistant scopes postdate RBAC, so legacy organizations need their
+	// immutable system-role defaults added without replacing existing grants.
+	if err := provisionAssistantSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
+		return err
 	}
 
 	skillsEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{

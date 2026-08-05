@@ -1,5 +1,5 @@
 import { useRBAC } from "@/hooks/useRBAC";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import React from "react";

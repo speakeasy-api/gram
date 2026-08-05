@@ -67,6 +67,11 @@ describe("computePanelState", () => {
       expect(result).toEqual({ activePanel: "all", label: "All projects" });
     });
 
+    it("null selectors with assistant resourceType", () => {
+      const result = computePanelState(null, [], "assistant");
+      expect(result).toEqual({ activePanel: "all", label: "All projects" });
+    });
+
     it("ignores collection data when null", () => {
       const result = computePanelState(null, collections, "mcp");
       expect(result.activePanel).toBe("all");
@@ -126,6 +131,22 @@ describe("computePanelState", () => {
         ],
         [],
         "skill",
+      );
+      expect(result).toEqual({
+        activePanel: "servers",
+        selectedServerIds: ["proj-1", "proj-2"],
+        label: "2 projects selected",
+      });
+    });
+
+    it("assistant resource type selects projects", () => {
+      const result = computePanelState(
+        [
+          { resourceKind: "assistant", resourceId: "proj-1" },
+          { resourceKind: "assistant", resourceId: "proj-2" },
+        ] as unknown as Selector[],
+        [],
+        "assistant",
       );
       expect(result).toEqual({
         activePanel: "servers",

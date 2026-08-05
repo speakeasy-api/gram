@@ -201,6 +201,11 @@ export function CreateRoleDialog({
         description: "Skills available within projects.",
       },
       {
+        label: "Assistants",
+        resourceType: "assistant",
+        description: "Assistants available within projects.",
+      },
+      {
         label: "MCP Servers",
         resourceType: "mcp",
         description: "MCP server configuration and connections.",

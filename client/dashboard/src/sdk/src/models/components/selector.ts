@@ -32,6 +32,7 @@ export const ResourceKind = {
   Org: "org",
   Environment: "environment",
   Skill: "skill",
+  Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Wildcard: "*",

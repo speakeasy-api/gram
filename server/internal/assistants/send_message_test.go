@@ -21,12 +21,12 @@ import (
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
-func projectWriteGrant(projectID uuid.UUID) authz.Grant {
-	return authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String())}
+func assistantWriteGrant(projectID uuid.UUID) authz.Grant {
+	return authz.NewGrant(authz.ScopeAssistantWrite, projectID.String())
 }
 
-func projectReadGrant(projectID uuid.UUID) authz.Grant {
-	return authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String())}
+func assistantReadGrant(projectID uuid.UUID) authz.Grant {
+	return authz.NewGrant(authz.ScopeAssistantRead, projectID.String())
 }
 
 func skillReadGrant(projectID uuid.UUID) authz.Grant {
@@ -74,7 +74,7 @@ func TestSendMessageEnqueues(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message")
-	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
@@ -99,13 +99,11 @@ func TestSendMessageEnqueues(t *testing.T) {
 	require.Contains(t, string(ingestor.lastPayload), "what are my top errors?")
 }
 
-// project:read alone is sufficient to send a message: a viewer of a project
-// must be able to talk to its assistants even without project:write.
-func TestSendMessageAllowedWithProjectReadOnly(t *testing.T) {
+func TestSendMessageAllowedWithAssistantReadOnly(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_read_only")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
@@ -123,7 +121,7 @@ func TestSendMessageIncludesSelectedSkillContent(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_skills")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID), skillReadGrant(projectID))
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
@@ -155,7 +153,7 @@ func TestSendMessageRejectsUnavailableSelectedSkill(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_missing_skill")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID), skillReadGrant(projectID))
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
@@ -172,7 +170,7 @@ func TestSendMessageRejectsOversizedSelectedSkillContext(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_large_skills")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID), skillReadGrant(projectID))
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
@@ -216,7 +214,7 @@ func TestSendMessageNewConversationsGetDistinctChats(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_distinct")
-	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
@@ -246,7 +244,7 @@ func TestSendMessageContinuesByChatID(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_chatid")
-	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
@@ -275,7 +273,7 @@ func TestSendMessageRequiresAssistant(t *testing.T) {
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_404")
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core})
-	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
 	_, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
 		AssistantID: uuid.New().String(),
@@ -284,7 +282,7 @@ func TestSendMessageRequiresAssistant(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestSendMessageRequiresProjectGrant(t *testing.T) {
+func TestSendMessageRequiresAssistantGrant(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, _ := newRBACService(t)
@@ -293,6 +291,20 @@ func TestSendMessageRequiresProjectGrant(t *testing.T) {
 	_, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
 		AssistantID: uuid.New().String(),
 		Message:     "hello",
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestSendMessageWithSkillsRequiresSkillRead(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID := newRBACService(t)
+	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
+
+	_, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: uuid.NewString(),
+		Message:     "hello",
+		SkillIds:    []string{uuid.NewString()},
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

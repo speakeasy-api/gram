@@ -38,6 +38,10 @@ const (
 	ScopeSkillBlockedRead        Scope = "skill:blocked_read"
 	ScopeSkillWrite              Scope = "skill:write"
 	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
+	ScopeAssistantRead           Scope = "assistant:read"
+	ScopeAssistantBlockedRead    Scope = "assistant:blocked_read"
+	ScopeAssistantWrite          Scope = "assistant:write"
+	ScopeAssistantBlockedWrite   Scope = "assistant:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
@@ -68,6 +72,8 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopeAssistantRead,
+	ScopeAssistantWrite,
 	// chat:read is intentionally NOT a default for any system role: reading
 	// other members' session transcripts is sensitive, so it must be granted
 	// explicitly (via a custom role grant). Everyone reads their own sessions
@@ -101,6 +107,10 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedRead:        scopeVisibilityInternal,
 	ScopeSkillWrite:              scopeVisibilityUserVisible,
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
+	ScopeAssistantRead:           scopeVisibilityUserVisible,
+	ScopeAssistantBlockedRead:    scopeVisibilityInternal,
+	ScopeAssistantWrite:          scopeVisibilityUserVisible,
+	ScopeAssistantBlockedWrite:   scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
@@ -113,6 +123,7 @@ var memberScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPConnect,
 	ScopeSkillRead,
+	ScopeAssistantRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -187,6 +198,10 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedRead:        nil,
 	ScopeSkillWrite:              nil,
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
+	ScopeAssistantRead:           {ScopeAssistantWrite},
+	ScopeAssistantBlockedRead:    nil,
+	ScopeAssistantWrite:          nil,
+	ScopeAssistantBlockedWrite:   {ScopeAssistantBlockedRead},
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
@@ -220,6 +235,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedRead:        "",
 	ScopeSkillWrite:              ScopeSkillBlockedWrite,
 	ScopeSkillBlockedWrite:       "",
+	ScopeAssistantRead:           ScopeAssistantBlockedRead,
+	ScopeAssistantBlockedRead:    "",
+	ScopeAssistantWrite:          ScopeAssistantBlockedWrite,
+	ScopeAssistantBlockedWrite:   "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",

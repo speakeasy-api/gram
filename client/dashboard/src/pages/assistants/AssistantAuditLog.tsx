@@ -141,10 +141,14 @@ export function AssistantsAuditLog(): React.JSX.Element {
     defaultValue: "all",
   });
 
-  const { data: assistantsData } = useAssistantsList(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-  });
+  const { data: assistantsData } = useAssistantsList(
+    { gramProject: projectSlug },
+    undefined,
+    {
+      retry: false,
+      throwOnError: false,
+    },
+  );
   const assistants = useMemo(
     () =>
       [...(assistantsData?.assistants ?? [])].sort((a, b) =>

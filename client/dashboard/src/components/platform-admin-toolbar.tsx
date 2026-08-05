@@ -53,6 +53,7 @@ type ResourceType =
   | "project"
   | "environment"
   | "skill"
+  | "assistant"
   | "mcp"
   | "chat";
 
@@ -109,6 +110,18 @@ const SCOPE_DEFS: {
     label: "skill:write",
     resourceType: "skill",
     description: "Create and modify skills within projects",
+  },
+  {
+    scope: "assistant:read",
+    label: "assistant:read",
+    resourceType: "assistant",
+    description: "View and use assistants within projects",
+  },
+  {
+    scope: "assistant:write",
+    label: "assistant:write",
+    resourceType: "assistant",
+    description: "Create and modify assistants within projects",
   },
   {
     scope: "mcp:read",
@@ -252,6 +265,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "project", label: "Project" },
   { key: "environment", label: "Environments" },
   { key: "skill", label: "Skills" },
+  { key: "assistant", label: "Assistants" },
   { key: "mcp", label: "MCP" },
   { key: "chat", label: "Agent Sessions" },
 ];
@@ -802,7 +816,8 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                             [];
                           if (
                             def.resourceType === "project" ||
-                            def.resourceType === "skill"
+                            def.resourceType === "skill" ||
+                            def.resourceType === "assistant"
                           ) {
                             knownResources = projectResources;
                           } else if (def.resourceType === "mcp") {

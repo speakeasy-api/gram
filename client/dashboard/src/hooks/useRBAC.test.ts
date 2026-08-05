@@ -40,6 +40,11 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("skill:write")).toBe("skill");
   });
 
+  it("returns 'assistant' for assistant scopes", () => {
+    expect(resourceKindForScope("assistant:read")).toBe("assistant");
+    expect(resourceKindForScope("assistant:write")).toBe("assistant");
+  });
+
   it("returns 'risk_policy' for risk_policy scopes", () => {
     expect(resourceKindForScope("risk_policy:evaluate")).toBe("risk_policy");
     expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
@@ -195,7 +200,7 @@ describe("selectorMatchesStrict", () => {
 });
 
 describe("exclusionScopesForScope", () => {
-  it("matches project, MCP, and Skills exclusion expansions", () => {
+  it("matches project, MCP, Skills, and Assistants exclusion expansions", () => {
     expect(exclusionScopesForScope("project:read")).toEqual([
       "project:blocked_read",
     ]);
@@ -222,6 +227,13 @@ describe("exclusionScopesForScope", () => {
       "skill:blocked_write",
       "skill:blocked_read",
     ]);
+    expect(exclusionScopesForScope("assistant:read")).toEqual([
+      "assistant:blocked_read",
+    ]);
+    expect(exclusionScopesForScope("assistant:write")).toEqual([
+      "assistant:blocked_write",
+      "assistant:blocked_read",
+    ]);
   });
 });
 
@@ -231,6 +243,61 @@ describe("hasScopeInGrants", () => {
     selectors: [{ resourceKind: "skill", resourceId: "*" }],
     subScopes: ["skill:read"],
   };
+
+  it("keeps assistant read, write, and denied roles distinct", () => {
+    const readOnly = [
+      {
+        scope: "assistant:read",
+        selectors: [{ resourceKind: "assistant", resourceId: "project_a" }],
+      },
+    ];
+    const writer = [
+      {
+        scope: "assistant:write",
+        selectors: [{ resourceKind: "assistant", resourceId: "project_a" }],
+        subScopes: ["assistant:read"],
+      },
+    ];
+    const projectWriter = [
+      {
+        scope: "project:write",
+        selectors: [{ resourceKind: "project", resourceId: "project_a" }],
+        subScopes: ["project:read"],
+      },
+    ];
+
+    expect(hasScopeInGrants(readOnly, "assistant:read", "project_a")).toBe(
+      true,
+    );
+    expect(hasScopeInGrants(readOnly, "assistant:write", "project_a")).toBe(
+      false,
+    );
+    expect(hasScopeInGrants(writer, "assistant:read", "project_a")).toBe(true);
+    expect(hasScopeInGrants(writer, "assistant:write", "project_a")).toBe(true);
+    expect(hasScopeInGrants(projectWriter, "assistant:read", "project_a")).toBe(
+      false,
+    );
+  });
+
+  it("limits assistant grants and exclusions to the selected project", () => {
+    const grants = [
+      {
+        scope: "assistant:write",
+        selectors: [{ resourceKind: "assistant", resourceId: "*" }],
+        subScopes: ["assistant:read"],
+      },
+      {
+        scope: "assistant:blocked_read",
+        selectors: [{ resourceKind: "assistant", resourceId: "project_a" }],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "assistant:read", "project_a")).toBe(false);
+    expect(hasScopeInGrants(grants, "assistant:write", "project_a")).toBe(
+      false,
+    );
+    expect(hasScopeInGrants(grants, "assistant:read", "project_b")).toBe(true);
+  });
 
   it("applies an unrestricted exclusion to an unscoped check", () => {
     const grants = [

@@ -41,5 +41,72 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		})
 	}
 
-	return grantRows, nil
+	assistantDefaults, err := assistantSystemRoleDefaults(ctx, db, principals)
+	if err != nil {
+		return nil, err
+	}
+
+	return withAssistantSystemRoleDefaults(grantRows, principals, assistantDefaults), nil
+}
+
+func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal) (map[string][]Scope, error) {
+	hasLegacySystemRole := false
+	for _, principal := range principals {
+		if principal.Type == urn.PrincipalTypeRole && (principal.ID == SystemRoleAdmin || principal.ID == SystemRoleMember) {
+			hasLegacySystemRole = true
+			break
+		}
+	}
+	if !hasLegacySystemRole {
+		return nil, nil
+	}
+
+	defaults := make(map[string][]Scope, 2)
+	roles, err := accessrepo.New(db).ListGlobalRoles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list global system roles: %w", err)
+	}
+	scopesBySlug := map[string][]Scope{
+		SystemRoleAdmin:  {ScopeAssistantRead, ScopeAssistantWrite},
+		SystemRoleMember: {ScopeAssistantRead},
+	}
+	for _, role := range roles {
+		scopes, ok := scopesBySlug[role.WorkosSlug]
+		if !ok || role.Deleted || role.WorkosDeleted {
+			continue
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String())
+		defaults[principal.String()] = scopes
+	}
+	if len(defaults) != len(scopesBySlug) {
+		return nil, fmt.Errorf("global system roles are incomplete")
+	}
+
+	return defaults, nil
+}
+
+func withAssistantSystemRoleDefaults(grants []Grant, principals []urn.Principal, scopesByPrincipal map[string][]Scope) []Grant {
+	for _, principal := range principals {
+		scopes, ok := scopesByPrincipal[principal.String()]
+		if !ok {
+			continue
+		}
+		for _, scope := range scopes {
+			found := false
+			for _, grant := range grants {
+				if grant.Scope == scope && grant.Effect == PolicyEffectAllow && grant.Selector[SelectorKeyResourceKind] == ResourceKindAssistant && grant.Selector[SelectorKeyResourceID] == WildcardResource {
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+			grant := NewGrant(scope, WildcardResource)
+			grant.PrincipalUrn = principal.String()
+			grants = append(grants, grant)
+		}
+	}
+
+	return grants
 }

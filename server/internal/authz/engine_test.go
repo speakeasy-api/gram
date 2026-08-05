@@ -1085,6 +1085,7 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
 		ScopeEnvironmentRead, ScopeEnvironmentWrite,
 		ScopeSkillRead, ScopeSkillWrite,
+		ScopeAssistantRead, ScopeAssistantWrite,
 	} {
 		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
 		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)
@@ -1162,6 +1163,36 @@ func TestEngineRequire_skillBlocklistExpansion(t *testing.T) {
 		NewGrant(ScopeSkillBlockedRead, "project_a"),
 	})
 	for _, scope := range []Scope{ScopeSkillRead, ScopeSkillWrite} {
+		err = engine.Require(blockedReadCtx, Check{Scope: scope, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	}
+}
+
+func TestEngineRequire_assistantBlocklistExpansion(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	blockedWriteCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeAssistantWrite, WildcardResource),
+		NewGrant(ScopeAssistantBlockedWrite, "project_a"),
+	})
+
+	require.NoError(t, engine.Require(blockedWriteCtx, Check{Scope: ScopeAssistantWrite, ResourceKind: "", ResourceID: "project_b", Dimensions: nil}))
+	require.NoError(t, engine.Require(blockedWriteCtx, Check{Scope: ScopeAssistantRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil}))
+	err = engine.Require(blockedWriteCtx, Check{Scope: ScopeAssistantWrite, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	blockedReadCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeAssistantWrite, WildcardResource),
+		NewGrant(ScopeAssistantBlockedRead, "project_a"),
+	})
+	for _, scope := range []Scope{ScopeAssistantRead, ScopeAssistantWrite} {
 		err = engine.Require(blockedReadCtx, Check{Scope: scope, ResourceKind: "", ResourceID: "project_a", Dimensions: nil})
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)

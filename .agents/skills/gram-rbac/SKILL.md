@@ -17,7 +17,7 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Scope.** A named permission that authorizes an operation on a particular kind of resource.
 
-**Resource type.** The kind of resource a scope protects — currently `org`, `project`, or `mcp`. Every scope has exactly one resource type.
+**Resource type.** The kind of resource a scope protects — for example `org`, `project`, `assistant`, or `mcp`. Every scope has exactly one resource type.
 
 **Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. In the read/write/connect family the privilege order is `write > read > connect`: `mcp:write` satisfies a `mcp:read` check, and either `mcp:read` or `mcp:write` satisfies a `mcp:connect` check (`connect` is the broadest, easiest-to-satisfy gate). The mapping lives in `scopeExpansions` in `authz/scopes.go` — key = required scope, value = higher-privilege scopes that also satisfy it.
 

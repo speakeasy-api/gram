@@ -78,6 +78,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindEnvironment
 	case "skill":
 		return ResourceKindSkill
+	case "assistant":
+		return ResourceKindAssistant
 	case "risk_policy":
 		return ResourceKindRiskPolicy
 	case "chat":

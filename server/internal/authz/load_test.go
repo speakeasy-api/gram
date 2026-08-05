@@ -3,6 +3,7 @@ package authz
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
@@ -172,4 +173,84 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, projectIDs)
+}
+
+func TestLoadGrantsAddsAssistantDefaultsOnlyForCanonicalSystemRole(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	organizationID := "org_canonical_assistant_defaults"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
+
+	q := accessrepo.New(conn)
+	adminRole, err := q.GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
+	require.NoError(t, err)
+	admin := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+adminRole.ID.String())
+	_, err = q.DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   admin,
+	})
+	require.NoError(t, err)
+
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{
+		admin,
+		urn.NewPrincipal(urn.PrincipalTypeRole, SystemRoleAdmin),
+	})
+	require.NoError(t, err)
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantWrite, ResourceID: "project_a"}))
+
+	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{
+		urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()),
+		urn.NewPrincipal(urn.PrincipalTypeRole, SystemRoleAdmin),
+	})
+	require.NoError(t, err)
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
+}
+
+func TestWithAssistantSystemRoleDefaultsAddsLegacyAdminGrants(t *testing.T) {
+	t.Parallel()
+
+	admin := urn.NewPrincipal(urn.PrincipalTypeRole, "global:admin-id")
+	grants := withAssistantSystemRoleDefaults(
+		[]Grant{NewGrant(ScopeProjectWrite, WildcardResource)},
+		[]urn.Principal{admin, urn.NewPrincipal(urn.PrincipalTypeRole, SystemRoleAdmin)},
+		map[string][]Scope{admin.String(): {ScopeAssistantRead, ScopeAssistantWrite}},
+	)
+
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantWrite, ResourceID: "project_a"}))
+	require.Equal(t, admin.String(), grants[1].PrincipalUrn)
+}
+
+func TestWithAssistantSystemRoleDefaultsAddsLegacyMemberReadOnly(t *testing.T) {
+	t.Parallel()
+
+	member := urn.NewPrincipal(urn.PrincipalTypeRole, "global:member-id")
+	grants := withAssistantSystemRoleDefaults(
+		nil,
+		[]urn.Principal{member, urn.NewPrincipal(urn.PrincipalTypeRole, SystemRoleMember)},
+		map[string][]Scope{member.String(): {ScopeAssistantRead}},
+	)
+
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantWrite, ResourceID: "project_a"}))
+}
+
+func TestWithAssistantSystemRoleDefaultsDoesNotGrantCustomRoles(t *testing.T) {
+	t.Parallel()
+
+	admin := urn.NewPrincipal(urn.PrincipalTypeRole, "global:admin-id")
+	grants := withAssistantSystemRoleDefaults(
+		[]Grant{NewGrant(ScopeProjectWrite, WildcardResource)},
+		[]urn.Principal{
+			urn.NewPrincipal(urn.PrincipalTypeRole, "organization:custom-id"),
+			urn.NewPrincipal(urn.PrincipalTypeRole, SystemRoleAdmin),
+		},
+		map[string][]Scope{admin.String(): {ScopeAssistantRead, ScopeAssistantWrite}},
+	)
+
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeAssistantRead, ResourceID: "project_a"}))
 }

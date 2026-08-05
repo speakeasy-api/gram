@@ -27,6 +27,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeEnvironmentWrite),
 	string(authz.ScopeSkillRead),
 	string(authz.ScopeSkillWrite),
+	string(authz.ScopeAssistantRead),
+	string(authz.ScopeAssistantWrite),
 	string(authz.ScopeRiskPolicyEvaluate),
 	string(authz.ScopeRiskPolicyBypass),
 	string(authz.ScopeRiskPolicyBlock),
