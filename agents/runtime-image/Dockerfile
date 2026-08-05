@@ -1,4 +1,4 @@
-FROM rust:1.97-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS runner-builder
+FROM rust:1.97-bookworm@sha256:2b0cae921a578edc44aaad3a1fd881dc9d8606604bfc8bfb377e5da2963fb626 AS runner-builder
 
 WORKDIR /src
 COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/
