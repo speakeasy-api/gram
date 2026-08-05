@@ -40,24 +40,22 @@ func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizati
 		return err
 	}
 
-	workOSUserID := admin.WorkOSUserID
-	if workOSUserID == "" {
-		workOSUserID = admin.UserID
-	}
-	rows, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
-		OrganizationID:     organizationID,
-		WorkosUserID:       workOSUserID,
-		UserID:             conv.ToPGText(admin.UserID),
-		WorkosMembershipID: conv.ToPGTextEmpty(admin.WorkOSMembershipID),
-		WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now().UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-		WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
-		WorkosRoleSlug:     SystemRoleAdmin,
-	})
-	if err != nil {
-		return fmt.Errorf("assign initial organization admin: %w", err)
-	}
-	if rows != 1 {
-		return fmt.Errorf("assign initial organization admin: admin role not found")
+	if admin.WorkOSUserID != "" {
+		rows, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
+			OrganizationID:     organizationID,
+			WorkosUserID:       admin.WorkOSUserID,
+			UserID:             conv.ToPGText(admin.UserID),
+			WorkosMembershipID: conv.ToPGTextEmpty(admin.WorkOSMembershipID),
+			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now().UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
+			WorkosRoleSlug:     SystemRoleAdmin,
+		})
+		if err != nil {
+			return fmt.Errorf("assign initial organization admin: %w", err)
+		}
+		if rows != 1 {
+			return fmt.Errorf("assign initial organization admin: admin role not found")
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
