@@ -49,7 +49,13 @@ const SKILL_FILTERS = defineFilters([
     kind: "multiselect",
     pinned: true,
   },
-  { id: "tags", label: "Tags", kind: "multiselect", pinned: true },
+  {
+    id: "tags",
+    label: "Tags",
+    kind: "multiselect",
+    pinned: true,
+    allLabel: "All tags",
+  },
 ]);
 
 const FILTER_OPTIONS = {
