@@ -953,9 +953,17 @@ const ORG_ROUTE_STRUCTURE = {
     component: ExternalServicesRoot,
     indexComponent: ExternalServicesPage,
     subPages: {
+      // Credentials are namespaced under their own collection segment so that a
+      // second kind of external-service resource (encryption keys) can sit
+      // beside them rather than having to share this level.
+      //
+      // The provider segment is part of the resource's own path because the
+      // detail page is per-provider: each provider has its own get/update
+      // endpoints and its own fields, so a deep link has to carry which one it
+      // is rather than relying on state handed over from the list.
       credentialDetail: {
         title: "External Credential",
-        url: ":credentialId",
+        url: "credentials/:provider/:credentialId",
         component: ExternalCredentialDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },

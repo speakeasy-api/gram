@@ -9,7 +9,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/Sidebar";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -60,7 +59,6 @@ export function OrgSidebar({
     staleTime: 30_000,
     throwOnError: false,
   });
-  const isPlatformAdmin = useIsPlatformAdmin();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -175,11 +173,14 @@ export function OrgSidebar({
                     : []),
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
-                  // Platform-admin only for now; gated on the platform-admin
-                  // flag rather than an org RBAC scope. Later expands to org
-                  // admins managing their own external credentials.
-                  ...(isPlatformAdmin
-                    ? [{ item: orgRoutes.externalServices }]
+                  ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
+                  true
+                    ? [
+                        {
+                          item: orgRoutes.externalServices,
+                          scope: orgReadOrAdmin,
+                        },
+                      ]
                     : []),
                 ]}
               />
