@@ -12,6 +12,7 @@ import (
 
 	adminrepo "github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -19,23 +20,29 @@ import (
 )
 
 type JWTAuthenticator struct {
-	signer   *sessiontokens.Signer
-	store    *adminrepo.Queries
-	issuer   string
-	audience string
+	signer      *sessiontokens.Signer
+	store       *adminrepo.Queries
+	credentials *CredentialCodec
+	issuer      string
+	audience    string
 }
 
-func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, issuer, audience string) *JWTAuthenticator {
-	return &JWTAuthenticator{
-		signer:   signer,
-		store:    adminrepo.New(db),
-		issuer:   issuer,
-		audience: audience,
+func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encryptionClient *encryption.Client, issuer, audience string) (*JWTAuthenticator, error) {
+	credentials, err := NewCredentialCodec(encryptionClient)
+	if err != nil {
+		return nil, fmt.Errorf("create admin credential codec: %w", err)
 	}
+	return &JWTAuthenticator{
+		signer:      signer,
+		store:       adminrepo.New(db),
+		credentials: credentials,
+		issuer:      issuer,
+		audience:    audience,
+	}, nil
 }
 
 func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
-	if a.signer == nil || a.store == nil || a.issuer == "" || a.audience == "" {
+	if a.signer == nil || a.store == nil || a.credentials == nil || a.issuer == "" || a.audience == "" {
 		return Principal{}, ErrUnavailable
 	}
 
@@ -48,7 +55,14 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 		return Principal{}, ErrUnauthorized
 	}
 
-	session, err := a.store.GetActiveAdminMCPSessionByJTI(ctx, claims.ID)
+	organizationID, err := a.credentials.OrganizationID(accessJTICredential, claims.ID)
+	if err != nil {
+		return Principal{}, ErrUnauthorized
+	}
+	session, err := a.store.GetActiveAdminMCPSessionByJTI(ctx, adminrepo.GetActiveAdminMCPSessionByJTIParams{
+		OrganizationID: organizationID,
+		Jti:            claims.ID,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Principal{}, ErrUnauthorized

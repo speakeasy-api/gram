@@ -22,6 +22,7 @@ import (
 	adminoauth "github.com/speakeasy-api/gram/server/internal/adminmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -80,6 +81,7 @@ type OAuthHTTP struct {
 	authorizer    Authorizer
 	organizations OrganizationSelector
 	signer        *sessiontokens.Signer
+	credentials   *CredentialCodec
 	issuer        string
 	audience      string
 }
@@ -94,11 +96,16 @@ type OAuthHTTPConfig struct {
 	Authorizer    Authorizer
 	Organizations OrganizationSelector
 	Signer        *sessiontokens.Signer
+	Encryption    *encryption.Client
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
-	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil {
+	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
 		return nil, errors.New("admin oauth http configuration is incomplete")
+	}
+	credentials, err := NewCredentialCodec(config.Encryption)
+	if err != nil {
+		return nil, err
 	}
 	baseURL := *config.BaseURL
 	issuer, err := url.JoinPath(baseURL.String(), "admin-mcp")
@@ -115,6 +122,7 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		authorizer:    config.Authorizer,
 		organizations: config.Organizations,
 		signer:        config.Signer,
+		credentials:   credentials,
 		issuer:        issuer,
 		audience:      issuer,
 	}, nil
@@ -454,7 +462,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeAuthorizationGateError(w, r, challenge, err)
 		return
 	}
-	code, err := opaqueToken()
+	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
@@ -505,7 +513,12 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeRequestOAuthError(w, http.StatusBadRequest, err)
 				return
 			}
-			grant, err := s.store.ConsumeGrant(r.Context(), adminoauth.ConsumeGrantInput{Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: time.Now()})
+			organizationID, err := s.credentials.OrganizationID(authorizationCodeCredential, request.Code)
+			if err != nil {
+				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
+				return
+			}
+			grant, err := s.store.ConsumeGrant(r.Context(), adminoauth.ConsumeGrantInput{OrganizationID: organizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: time.Now()})
 			if err != nil {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
 				return
@@ -517,13 +530,18 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeRequestOAuthError(w, http.StatusBadRequest, err)
 				return
 			}
+			organizationID, err := s.credentials.OrganizationID(refreshTokenCredential, request.RefreshToken)
+			if err != nil {
+				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
+				return
+			}
 			refreshHash := opaqueHash(request.RefreshToken)
-			old, err := s.store.GetSessionByRefreshHash(r.Context(), refreshHash)
+			old, err := s.store.GetSessionByRefreshHash(r.Context(), organizationID, refreshHash)
 			if err != nil || old.ClientID != client.ID {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 				return
 			}
-			reused, err := s.store.DetectRefreshReuse(r.Context(), refreshHash, time.Now())
+			reused, err := s.store.DetectRefreshReuse(r.Context(), organizationID, refreshHash, time.Now())
 			if err != nil || reused {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 				return
@@ -553,15 +571,14 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 				token := r.PostForm.Get("token")
 				switch r.PostForm.Get("token_type_hint") {
 				case "access_token":
-					if jti, err := s.signer.ParseUnverifiedJTI(token); err == nil {
-						_, _ = s.store.RevokeAccessSession(r.Context(), jti, client.ID, time.Now())
-					}
+					s.revokeAccessToken(r.Context(), token, client.ID)
 				default:
-					if _, err := s.store.RevokeSession(r.Context(), opaqueHash(token), client.ID, time.Now()); err != nil {
-						if jti, parseErr := s.signer.ParseUnverifiedJTI(token); parseErr == nil {
-							_, _ = s.store.RevokeAccessSession(r.Context(), jti, client.ID, time.Now())
+					if organizationID, decodeErr := s.credentials.OrganizationID(refreshTokenCredential, token); decodeErr == nil {
+						if _, err := s.store.RevokeSession(r.Context(), organizationID, opaqueHash(token), client.ID, time.Now()); err == nil {
+							break
 						}
 					}
+					s.revokeAccessToken(r.Context(), token, client.ID)
 				}
 			}
 		}
@@ -569,6 +586,18 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 		w.Header().Set("Pragma", "no-cache")
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID string) {
+	jti, err := s.signer.ParseUnverifiedJTI(token)
+	if err != nil {
+		return
+	}
+	organizationID, err := s.credentials.OrganizationID(accessJTICredential, jti)
+	if err != nil {
+		return
+	}
+	_, _ = s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, time.Now())
 }
 
 func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, connection adminoauth.Connection, clientID string) {
@@ -582,12 +611,17 @@ func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, conne
 		writeTokenGateError(w, err)
 		return
 	}
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: adminAccessTokenLifetime, ClientID: clientID})
+	jti, err := s.credentials.Issue(accessJTICredential, connection.OrganizationID)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	refreshToken, err := opaqueToken()
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: adminAccessTokenLifetime, ClientID: clientID, JTI: jti})
+	if err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
+		return
+	}
+	refreshToken, err := s.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -605,19 +639,24 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: adminAccessTokenLifetime, ClientID: clientID})
+	jti, err := s.credentials.Issue(accessJTICredential, old.Connection.OrganizationID)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	refreshToken, err := opaqueToken()
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: adminAccessTokenLifetime, ClientID: clientID, JTI: jti})
+	if err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
+		return
+	}
+	refreshToken, err := s.credentials.Issue(refreshTokenCredential, old.Connection.OrganizationID)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
 	now := time.Now()
 	replacement := adminoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: old.Connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(adminAccessTokenLifetime), RefreshExpiresAt: now.Add(adminRefreshTokenLifetime), RevokedAt: nil}
-	if _, err := s.store.RotateSession(r.Context(), adminoauth.RotateSessionInput{RefreshHash: old.RefreshHash, ClientID: clientID, Generation: old.Connection.Generation, Now: now, Replacement: replacement}); err != nil {
+	if _, err := s.store.RotateSession(r.Context(), adminoauth.RotateSessionInput{OrganizationID: old.Connection.OrganizationID, RefreshHash: old.RefreshHash, ClientID: clientID, Generation: old.Connection.Generation, Now: now, Replacement: replacement}); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 		return
 	}

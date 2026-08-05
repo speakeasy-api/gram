@@ -16,6 +16,7 @@ import (
 
 type AdminMcpAuthorizationGrant struct {
 	ID                    uuid.UUID
+	OrganizationID        string
 	AuthorizationCodeHash string
 	OauthClientID         uuid.UUID
 	ConnectionID          uuid.UUID
@@ -70,6 +71,7 @@ type AdminMcpOnboardingMilestone struct {
 
 type AdminMcpSession struct {
 	ID                   uuid.UUID
+	OrganizationID       string
 	ConnectionID         uuid.UUID
 	OauthClientID        uuid.UUID
 	ConnectionGeneration uuid.UUID

@@ -1,3 +1,7 @@
+-- The OAuth client registry is global because dynamic registration happens before
+-- browser authentication and organization selection. Every other Admin-owned
+-- state transition below receives an explicit organization_id predicate.
+
 -- name: CreateAdminMCPOAuthClient :one
 INSERT INTO admin_mcp_oauth_clients (
     client_id,
@@ -28,16 +32,13 @@ WHERE client_id = @client_id
   AND revoked_at IS NULL
 RETURNING id;
 
--- name: RevokeAdminMCPConnectionsForClient :many
-UPDATE admin_mcp_connections
-SET revoked_at = @revoked_at,
-    updated_at = @revoked_at
-WHERE oauth_client_id = @oauth_client_id
-  AND revoked_at IS NULL
-RETURNING id, active_generation;
-
 -- name: LockAdminMCPConnectionAuthorization :exec
-SELECT pg_advisory_xact_lock(hashtext(@organization_id || ':' || @subject_urn || ':' || @oauth_client_id::text));
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        format('%s:%s:%s', @organization_id::text, @subject_urn::text, @oauth_client_id::text),
+        0
+    )
+);
 
 -- name: CreateAdminMCPConnection :one
 INSERT INTO admin_mcp_connections (
@@ -69,6 +70,7 @@ FROM admin_mcp_connections AS connection
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
 WHERE connection.id = @id
+  AND connection.organization_id = @organization_id
   AND connection.revoked_at IS NULL
   AND client.revoked_at IS NULL;
 
@@ -78,6 +80,7 @@ FROM admin_mcp_connections AS connection
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
 WHERE connection.id = @id
+  AND connection.organization_id = @organization_id
 FOR UPDATE OF connection;
 
 -- name: RevokeAdminMCPConnection :one
@@ -85,20 +88,23 @@ UPDATE admin_mcp_connections
 SET revoked_at = @revoked_at,
     updated_at = @revoked_at
 WHERE id = @id
+  AND organization_id = @organization_id
   AND revoked_at IS NULL
 RETURNING *;
 
 -- name: RotateAdminMCPConnectionGeneration :one
 UPDATE admin_mcp_connections
 SET active_generation = @active_generation,
-    reauthorized_at = clock_timestamp(),
-    updated_at = clock_timestamp()
+    reauthorized_at = @reauthorized_at,
+    updated_at = @reauthorized_at
 WHERE id = @connection_id
+  AND organization_id = @organization_id
   AND revoked_at IS NULL
 RETURNING *;
 
 -- name: CreateAdminMCPAuthorizationGrant :one
 INSERT INTO admin_mcp_authorization_grants (
+    organization_id,
     authorization_code_hash,
     oauth_client_id,
     connection_id,
@@ -107,6 +113,7 @@ INSERT INTO admin_mcp_authorization_grants (
     code_challenge,
     expires_at
 ) VALUES (
+    @organization_id,
     @authorization_code_hash,
     @oauth_client_id,
     @connection_id,
@@ -118,23 +125,26 @@ INSERT INTO admin_mcp_authorization_grants (
 RETURNING *;
 
 -- name: GetAdminMCPAuthorizationGrantForConsume :one
-SELECT auth_grant.*, connection.organization_id, connection.subject_urn, connection.active_generation, client.client_id
+SELECT auth_grant.*, connection.subject_urn, connection.active_generation, client.client_id
 FROM admin_mcp_authorization_grants AS auth_grant
 JOIN admin_mcp_connections AS connection
   ON connection.id = auth_grant.connection_id
- AND connection.oauth_client_id = auth_grant.oauth_client_id
+  AND connection.organization_id = auth_grant.organization_id
+  AND connection.oauth_client_id = auth_grant.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = auth_grant.oauth_client_id
-WHERE auth_grant.authorization_code_hash = @authorization_code_hash
+WHERE auth_grant.organization_id = @organization_id
+  AND auth_grant.authorization_code_hash = @authorization_code_hash
   AND connection.revoked_at IS NULL
   AND client.revoked_at IS NULL
 FOR UPDATE OF auth_grant;
 
 -- name: ConsumeAdminMCPAuthorizationGrant :one
 UPDATE admin_mcp_authorization_grants
-SET consumed_at = clock_timestamp(),
-    updated_at = clock_timestamp()
+SET consumed_at = @consumed_at,
+    updated_at = @consumed_at
 WHERE id = @id
+  AND organization_id = @organization_id
   AND consumed_at IS NULL
   AND revoked_at IS NULL
 RETURNING *;
@@ -142,6 +152,7 @@ RETURNING *;
 -- name: CreateAdminMCPSession :one
 INSERT INTO admin_mcp_sessions (
     id,
+    organization_id,
     connection_id,
     oauth_client_id,
     connection_generation,
@@ -151,6 +162,7 @@ INSERT INTO admin_mcp_sessions (
     refresh_expires_at
 ) VALUES (
     @id,
+    @organization_id,
     @connection_id,
     @oauth_client_id,
     @connection_generation,
@@ -162,24 +174,30 @@ INSERT INTO admin_mcp_sessions (
 RETURNING *;
 
 -- name: GetAdminMCPSessionForRefresh :one
-SELECT session.*, connection.organization_id, connection.subject_urn, connection.active_generation, client.client_id
+SELECT session.*, connection.subject_urn, connection.active_generation, client.client_id
 FROM admin_mcp_sessions AS session
 JOIN admin_mcp_connections AS connection
   ON connection.id = session.connection_id
- AND connection.oauth_client_id = session.oauth_client_id
+  AND connection.organization_id = session.organization_id
+  AND connection.oauth_client_id = session.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
-WHERE session.refresh_token_hash = @refresh_token_hash;
+WHERE session.organization_id = @organization_id
+  AND session.refresh_token_hash = @refresh_token_hash
+  AND client.revoked_at IS NULL;
 
 -- name: GetAdminMCPSessionForRefreshForUpdate :one
-SELECT session.*, connection.organization_id, connection.subject_urn, connection.active_generation, client.client_id
+SELECT session.*, connection.subject_urn, connection.active_generation, client.client_id
 FROM admin_mcp_sessions AS session
 JOIN admin_mcp_connections AS connection
   ON connection.id = session.connection_id
- AND connection.oauth_client_id = session.oauth_client_id
+  AND connection.organization_id = session.organization_id
+  AND connection.oauth_client_id = session.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
-WHERE session.refresh_token_hash = @refresh_token_hash
+WHERE session.organization_id = @organization_id
+  AND session.refresh_token_hash = @refresh_token_hash
+  AND client.revoked_at IS NULL
 FOR UPDATE OF session;
 
 -- name: RotateAdminMCPSession :one
@@ -189,39 +207,36 @@ SET revoked_at = @rotated_at,
     replaced_by_session_id = @replaced_by_session_id,
     updated_at = @rotated_at
 WHERE id = @id
+  AND organization_id = @organization_id
   AND revoked_at IS NULL
 RETURNING *;
 
 -- name: RevokeAdminMCPSession :one
 UPDATE admin_mcp_sessions
-SET revoked_at = clock_timestamp(),
-    updated_at = clock_timestamp()
+SET revoked_at = @revoked_at,
+    updated_at = @revoked_at
 WHERE id = @id
+  AND organization_id = @organization_id
   AND revoked_at IS NULL
 RETURNING *;
 
 -- name: RevokeAdminMCPSessionByJTI :one
 UPDATE admin_mcp_sessions
-SET revoked_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE jti = @jti
+SET revoked_at = @revoked_at,
+    updated_at = @revoked_at
+WHERE organization_id = @organization_id
+  AND jti = @jti
   AND oauth_client_id = @oauth_client_id
   AND revoked_at IS NULL
 RETURNING *;
 
 -- name: RevokeAdminMCPSessionFamily :exec
 UPDATE admin_mcp_sessions
-SET revoked_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE connection_id = @connection_id
-  AND connection_generation = @connection_generation
-  AND revoked_at IS NULL;
-
--- name: RevokeAdminMCPSessionsForClient :exec
-UPDATE admin_mcp_sessions
 SET revoked_at = @revoked_at,
     updated_at = @revoked_at
-WHERE oauth_client_id = @oauth_client_id
+WHERE organization_id = @organization_id
+  AND connection_id = @connection_id
+  AND connection_generation = @connection_generation
   AND revoked_at IS NULL;
 
 -- name: GetActiveAdminMCPSessionByJTI :one
@@ -229,17 +244,19 @@ SELECT
     session.connection_id,
     session.oauth_client_id,
     session.connection_generation,
-    connection.organization_id,
+    session.organization_id,
     connection.subject_urn,
     connection.active_generation,
     client.client_id
 FROM admin_mcp_sessions AS session
 JOIN admin_mcp_connections AS connection
   ON connection.id = session.connection_id
- AND connection.oauth_client_id = session.oauth_client_id
+  AND connection.organization_id = session.organization_id
+  AND connection.oauth_client_id = session.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
-WHERE session.jti = @jti
+WHERE session.organization_id = @organization_id
+  AND session.jti = @jti
   AND session.expires_at > clock_timestamp()
   AND session.revoked_at IS NULL
   AND connection.revoked_at IS NULL
