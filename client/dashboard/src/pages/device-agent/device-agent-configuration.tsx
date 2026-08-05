@@ -445,7 +445,12 @@ function DeviceAgentConfigurationForm({
                   </SelectItem>
                 ))}
                 {isUnknownAutoUpdate && (
-                  <SelectItem value={autoUpdate}>{autoUpdate}</SelectItem>
+                  <SelectItem
+                    value={autoUpdate}
+                    description="Currently stored value not recognized by this UI"
+                  >
+                    {autoUpdate}
+                  </SelectItem>
                 )}
               </SelectContent>
             </Select>
