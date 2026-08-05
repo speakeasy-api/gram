@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -1276,30 +1275,10 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		manageAccessLink = accessURL.String()
 	}
 
-	// Name the roles that would satisfy the requested scope so admins know
-	// what to assign without digging through role definitions.
-	rolesWithScope := s.roleNamesCoveringScope(ctx, logger, ac.ActiveOrganizationID, payload.Scope)
-
-	// Build email template
-	requesterName := conv.Default(requester.DisplayName, requester.Email)
-	resourceName := ""
-	if payload.ResourceName != nil {
-		resourceName = *payload.ResourceName
-	}
-	message := ""
-	if payload.Message != nil {
-		message = *payload.Message
-	}
-
 	tmpl := email.AccessRequest{
-		RequesterName:    requesterName,
-		RequesterEmail:   requester.Email,
+		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
 		OrganizationName: org.Name,
-		Scope:            payload.Scope,
-		ResourceName:     resourceName,
-		Message:          message,
 		ManageAccessLink: manageAccessLink,
-		RolesWithScope:   strings.Join(rolesWithScope, ", "),
 	}
 
 	// Send emails to all admins
@@ -1326,27 +1305,4 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	)
 
 	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
-}
-
-// roleNamesCoveringScope returns the names of the organization's roles whose
-// grants satisfy the given scope, either directly or via scope expansion
-// (e.g. mcp:write covers mcp:connect). Failures are logged and yield an empty
-// list — the access request email is still worth sending without role hints.
-func (s *Service) roleNamesCoveringScope(ctx context.Context, logger *slog.Logger, organizationID string, scope string) []string {
-	rolesResult, err := s.roleMgr.ListRoles(ctx, organizationID)
-	if err != nil {
-		logger.WarnContext(ctx, "list roles for access request email", attr.SlogError(err))
-		return nil
-	}
-
-	var names []string
-	for _, role := range rolesResult.Roles {
-		for _, grant := range role.Grants {
-			if grant.Scope == scope || slices.Contains(authz.CalculateSubScopes(authz.Scope(grant.Scope)), scope) {
-				names = append(names, role.Name)
-				break
-			}
-		}
-	}
-	return names
 }

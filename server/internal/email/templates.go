@@ -113,12 +113,7 @@ var RegisteredTemplates = []Template{
 	},
 	AccessRequest{
 		RequesterName:    "",
-		RequesterEmail:   "",
 		OrganizationName: "",
-		Scope:            "",
-		ResourceName:     "",
-		Message:          "",
 		ManageAccessLink: "",
-		RolesWithScope:   "",
 	},
 }
