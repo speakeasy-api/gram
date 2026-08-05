@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
@@ -850,12 +849,8 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("user already has an active organization"), "user already has an active organization")
 	}
 
-	if payload.OrgName == "" {
-		return oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
-	}
-
-	if !validOrgNameRegex.MatchString(payload.OrgName) {
-		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
+	if err := validateOrgName(payload.OrgName); err != nil {
+		return err
 	}
 
 	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, false)
@@ -1136,9 +1131,6 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 
 	return returnAddress + "/rpc/auth.callback"
 }
-
-// validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and underscores.
-var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
 
 // callbackRedirectURL determines the redirect location after authentication. It
 // only allows relative URLs to prevent open redirect attacks (see relativeURL).
