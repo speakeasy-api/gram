@@ -11,8 +11,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // recordSpanForRequest runs the middleware inside a recorded span, mimicking
@@ -78,6 +80,39 @@ func TestMCPProtocolVersionTelemetryCoversGetAndDelete(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodDelete} {
 		got := recordSpanForRequest(t, method, "/x/mcp/my-server", mcpversions.Version20250618)
 		require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)], "method %s", method)
+	}
+}
+
+// routePathForSlug turns a chi route pattern into a concrete request path by
+// substituting a slug for its single parameter.
+func routePathForSlug(t *testing.T, pattern, slug string) string {
+	t.Helper()
+
+	open := strings.IndexByte(pattern, '{')
+	closing := strings.IndexByte(pattern, '}')
+	require.Greater(t, closing, open, "pattern %q has no route parameter", pattern)
+	require.GreaterOrEqual(t, open, 0, "pattern %q has no route parameter", pattern)
+
+	return pattern[:open] + slug + pattern[closing+1:]
+}
+
+// TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes derives paths from the
+// route patterns the server actually registers rather than from string literals
+// repeated here. The middleware duplicates route knowledge outside the router,
+// so a route that moves out from under it would otherwise be served
+// uninstrumented with nothing to signal it.
+//
+// Covers the two MCP JSON-RPC endpoints that expose their pattern as a
+// constant. The hosted /mcp/{mcpSlug} route is registered as a bare literal, so
+// it has nothing to derive from and is asserted separately above.
+func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
+	t.Parallel()
+
+	for _, pattern := range []string{mcp.PlatformToolsetRoute, xmcp.RuntimePath} {
+		path := routePathForSlug(t, pattern, "my-server")
+		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
+		require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
+			"route %q resolved to %q, which the middleware does not match", pattern, path)
 	}
 }
 

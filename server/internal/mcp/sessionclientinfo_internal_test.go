@@ -6,7 +6,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
@@ -224,4 +227,38 @@ func TestResolveClientIdentity_UnknownCallerIsZero(t *testing.T) {
 	store, payload := newClientIdentityFixture(t)
 
 	require.True(t, resolveClientIdentity(ctx, logger, store, payload, nil).IsZero())
+}
+
+// TestResolveClientIdentity_StampsBothProtocolVersions covers the cohort this
+// propagation exists for: a client predating the MCP-Protocol-Version header
+// gets no attribute from middleware, so this is the only place either half of
+// the protocol version reaches the span on a tool call.
+func TestResolveClientIdentity_StampsBothProtocolVersions(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20241105)
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+
+	spanCtx, span := provider.Tracer("test").Start(ctx, "tools/call")
+	resolveClientIdentity(spanCtx, logger, store, payload, nil)
+	span.End()
+
+	ended := recorder.Ended()
+	require.Len(t, ended, 1)
+
+	got := map[string]string{}
+	for _, kv := range ended[0].Attributes() {
+		got[string(kv.Key)] = kv.Value.AsString()
+	}
+
+	require.Equal(t, mcpversions.Version20241105, got[string(attr.McpRequestedProtocolVersionKey)])
+	require.Equal(t, mcpversions.ServedHostedToolset, got[string(attr.McpNegotiatedProtocolVersionKey)],
+		"this surface answers its served constant, so the negotiated half is deterministic here")
 }
