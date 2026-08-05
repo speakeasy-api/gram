@@ -25,9 +25,8 @@ const (
 	CodeInsufficientCredits Code = "insufficient_credits"
 	CodeRateLimitExceeded   Code = "rate_limit_exceeded"
 	// CodeInferenceDisabled marks an organization whose platform inference key
-	// an operator locked down, such as an enterprise trial that expired without
-	// converting. No credit top-up clears it, which is what separates it from
-	// CodeInsufficientCredits: only a deliberate reinstatement does. Maps to 403.
+	// an operator locked down. No top-up clears it, which is what separates it
+	// from CodeInsufficientCredits: only a deliberate reinstatement does.
 	CodeInferenceDisabled Code = "inference_disabled"
 	// CodeCanceled represents a request whose client disconnected mid-flight,
 	// surfacing as a context.Canceled cause while the request context is itself

@@ -299,10 +299,9 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		}
 
 	default:
-		// This is where the lockdown binds. Every platform-key completion
-		// resolves through here, so refusing the key is what turns a demotion
-		// into an error the caller can explain, rather than an upstream
-		// rejection whose status also means "our provisioning key is broken".
+		// Every platform-key completion resolves through here, so this is where
+		// the lockdown binds. Refusing locally beats an upstream rejection
+		// whose status also means "our provisioning key is broken".
 		if key.Disabled {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
@@ -433,9 +432,8 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	creditLimit := float64(keyLimit)
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
 	if key.Disabled {
-		// Setting a limit on a disabled key does not bring it back, so
-		// reinstatement has to clear the flag upstream too. UpdateOpenRouterKey
-		// clears the local one.
+		// Setting a limit on a disabled key does not bring it back upstream.
+		// UpdateOpenRouterKey clears the local flag.
 		enabled := false
 		patch.Disabled = &enabled
 	}
@@ -461,11 +459,8 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 
 // DisableAPIKey stops an organization from spending on its platform key. Gram
 // enforces the lockdown itself: ProvisionAPIKey refuses a disabled key and
-// returns ErrPlatformKeyDisabled, so each surface fails with a reason it can
-// state to the user. The upstream flag covers any spend that never passes
-// through key resolution, such as a key that leaked.
-//
-// The key survives, so RefreshAPIKeyLimit can reinstate it.
+// returns ErrPlatformKeyDisabled. The upstream flag covers any spend that never
+// passes through key resolution, such as a key that leaked.
 //
 // The upstream PATCH runs before the local write. The reverse order would
 // record a lockdown that a permanently failing PATCH never made.

@@ -71,9 +71,7 @@ func IsInsufficientCredits(err error) bool {
 }
 
 // ErrTypeInferenceDisabled tags the non-retryable Temporal application error
-// emitted when an operator locked the organization's platform key down. It is
-// separate from ErrTypeInsufficientCredits so the workflow log says which of
-// the two happened.
+// emitted when an operator locked the organization's platform key down.
 const ErrTypeInferenceDisabled = "ChatResolutionInferenceDisabled"
 
 func newInferenceDisabledError(cause error) error {
