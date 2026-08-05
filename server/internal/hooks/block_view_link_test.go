@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -237,16 +238,45 @@ func TestOptionalBlockLinksCoverSchema(t *testing.T) {
 	require.NotNil(t, table, "tool_call_blocks table not found in database/schema.sql")
 	body := string(table[1])
 
+	// Match named, unnamed and composite table-level foreign keys. A form this
+	// does not recognize would produce no match at all and silently shrink the
+	// expected set, so the count is checked against every REFERENCES in the
+	// definition — an inline column-level reference fails here rather than
+	// passing as "no new foreign keys".
+	matches := regexp.MustCompile(`(?:CONSTRAINT (\w+) )?FOREIGN KEY\s*\(([^)]+)\)`).FindAllStringSubmatch(body, -1)
+	require.Len(t, matches, strings.Count(body, "REFERENCES"),
+		"a foreign key in tool_call_blocks is written in a form this test cannot parse; widen the pattern rather than leaving it unchecked")
+
 	// Optional links are the foreign keys whose referencing column is nullable.
 	// The required tenancy keys (organization_id, project_id) are NOT NULL, so
 	// their columns carry the marker and are skipped.
 	var optional []string
-	for _, fk := range regexp.MustCompile(`CONSTRAINT (\w+) FOREIGN KEY \((\w+)\)`).FindAllStringSubmatch(body, -1) {
-		column := regexp.MustCompile(`(?m)^\s+` + fk[2] + `\s+[^,]*`).FindString(body)
-		require.NotEmpty(t, column, "column %s not found in the tool_call_blocks definition", fk[2])
-		if !regexp.MustCompile(`(?i)NOT NULL`).MatchString(column) {
-			optional = append(optional, fk[1])
+	for _, fk := range matches {
+		name, columns := fk[1], strings.Split(fk[2], ",")
+
+		nullable := false
+		for _, column := range columns {
+			column = strings.TrimSpace(column)
+			// One column per line, so match to end of line: truncating at the
+			// first comma would misread a definition like
+			// `DEFAULT coalesce(a, b) NOT NULL` as nullable.
+			definition := regexp.MustCompile(`(?m)^\s+` + regexp.QuoteMeta(column) + `\s+.*$`).FindString(body)
+			require.NotEmpty(t, definition, "column %s not found in the tool_call_blocks definition", column)
+			if !regexp.MustCompile(`(?i)NOT NULL`).MatchString(definition) {
+				nullable = true
+			}
 		}
+		if !nullable {
+			continue
+		}
+
+		// The salvage matches on the constraint name the database reports, so a
+		// nullable foreign key without an explicit one cannot be cleared.
+		require.NotEmpty(t, name,
+			"nullable foreign key on %s has no explicit CONSTRAINT name, so the salvage cannot match it", strings.Join(columns, ","))
+		require.Len(t, columns, 1,
+			"composite nullable foreign key %s cannot be salvaged by clearing a single column", name)
+		optional = append(optional, name)
 	}
 
 	var params repo.InsertToolCallBlockParams
