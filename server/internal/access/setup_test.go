@@ -3,7 +3,9 @@ package access
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,13 +21,35 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
+
+// recordingEmailSender captures transactional sends so tests can assert on
+// access-request notification emails without a live Loops client.
+type recordingEmailSender struct {
+	mu   sync.Mutex
+	sent []loops.SendTransactionalInput
+}
+
+func (r *recordingEmailSender) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sent = append(r.sent, input)
+	return nil
+}
+
+func (r *recordingEmailSender) Sent() []loops.SendTransactionalInput {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]loops.SendTransactionalInput(nil), r.sent...)
+}
 
 var (
 	infra *testenv.Environment
@@ -56,10 +80,12 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *Service
-	conn    *pgxpool.Pool
-	chConn  clickhouse.Conn
-	roles   *MockRoleProvider
+	service     *Service
+	conn        *pgxpool.Pool
+	chConn      clickhouse.Conn
+	roles       *MockRoleProvider
+	emailSender *recordingEmailSender
+	siteURL     *url.URL
 }
 
 func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
@@ -95,13 +121,19 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger)
+	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
+	emailService := email.NewService(logger, emailSender)
+	siteURL, err := url.Parse("https://app.example.com")
+	require.NoError(t, err)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger, emailService, siteURL)
 
 	return ctx, &testInstance{
-		service: svc,
-		conn:    conn,
-		chConn:  chConn,
-		roles:   roles,
+		service:     svc,
+		conn:        conn,
+		chConn:      chConn,
+		roles:       roles,
+		emailSender: emailSender,
+		siteURL:     siteURL,
 	}
 }
 

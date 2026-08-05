@@ -2462,6 +2462,102 @@ paths:
             x-speakeasy-name-override: listShadowMCPInventoryUsers
             x-speakeasy-react-hook:
                 name: ShadowMCPInventoryUsers
+    /rpc/access.requestAccess:
+        post:
+            description: Request access to a scope by sending an email notification to organization administrators.
+            operationId: requestAccess
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RequestAccessForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RequestAccessResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: requestAccess access
+            tags:
+                - access
+            x-speakeasy-name-override: requestAccess
+            x-speakeasy-react-hook:
+                name: RequestAccess
+                type: mutation
     /rpc/access.resolveChallenge:
         post:
             description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
@@ -65305,6 +65401,49 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        RequestAccessForm:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Optional message from the requester explaining why they need access.
+                    maxLength: 1000
+                resource_id:
+                    type: string
+                    description: Optional resource ID the scope applies to.
+                resource_name:
+                    type: string
+                    description: Optional human-readable name for the resource (e.g. project name, MCP server name).
+                scope:
+                    type: string
+                    description: The scope being requested.
+                    enum:
+                        - org:read
+                        - org:admin
+                        - project:read
+                        - project:write
+                        - mcp:read
+                        - mcp:write
+                        - mcp:connect
+                        - environment:read
+                        - environment:write
+                        - skill:read
+                        - skill:write
+                        - risk_policy:evaluate
+                        - risk_policy:bypass
+                        - chat:read
+            description: Form for requesting access to a scope.
+            required:
+                - scope
+        RequestAccessResult:
+            type: object
+            properties:
+                sent_to_count:
+                    type: integer
+                    description: Number of administrators who were notified.
+                    format: int64
+            required:
+                - sent_to_count
         ResolveChallengeForm:
             type: object
             properties:

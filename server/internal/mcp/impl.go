@@ -379,13 +379,17 @@ func NewService(
 	}
 }
 
-func (s *Service) authorizationChallengesURL(ctx context.Context) string {
+func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return ""
 	}
 
-	return mcpaccess.AuthorizationChallengesURL(s.siteURL, authCtx.OrganizationSlug)
+	return mcpaccess.RequestAccessURL(s.siteURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+		Scope:        "mcp:connect",
+		ResourceID:   serverID,
+		ResourceName: serverName,
+	})
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
@@ -845,7 +849,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.authorizationChallengesURL(ctx)))
+				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, toolset.ID.String(), toolset.Name)))
 			}
 		}
 
