@@ -122,6 +122,12 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
+	return newTestAuthServiceWithWorkOSClient(t, userInfo, nil)
+}
+
+func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := authztest.WithAdminGrants(t.Context())
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -148,7 +154,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	authzProvisioner := authz.NewProvisioner(conn)
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cache.SuffixNone)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cache.SuffixNone)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
@@ -166,6 +172,22 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
+
+	return ctx, result
+}
+
+func newTestAuthServiceForOrganizationProvisioning(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx, result := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	})
+	require.NoError(t, result.createTestUser(ctx, userInfo))
+	require.NoError(t, userRepo.New(result.conn).OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
+		ID:       userInfo.UserID,
+		WorkosID: conv.ToPGText(userInfo.UserID),
+	}))
 
 	return ctx, result
 }

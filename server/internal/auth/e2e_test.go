@@ -1373,7 +1373,11 @@ func TestE2E_FullOnboardingFlow(t *testing.T) {
 		Organizations: []MockOrganizationEntry{},
 	}
 
-	ctx, inst := newE2EAuthService(t, userInfo, nil)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
 	// Step 1: Login — get authorization URL
 	loginResult, err := inst.service.Login(ctx, &gen.LoginPayload{})

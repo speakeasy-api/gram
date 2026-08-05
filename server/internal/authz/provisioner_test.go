@@ -3,13 +3,14 @@ package authz
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestProvisionOrganizationAdminWithoutWorkOSUserIDSeedsGrantsWithoutAssignment(t *testing.T) {
+func TestProvisionOrganizationAdminWithoutWorkOSUserIDReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -23,23 +24,10 @@ func TestProvisionOrganizationAdminWithoutWorkOSUserIDSeedsGrantsWithoutAssignme
 		WorkOSUserID:       "",
 		WorkOSMembershipID: "",
 	})
-	require.NoError(t, err)
+	require.EqualError(t, err, "assign initial organization admin: WorkOS user ID is required")
 
-	adminRole, err := repo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
-	require.NoError(t, err)
-	grants, err := repo.New(conn).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
-		OrganizationID: organizationID,
-		PrincipalUrns:  []string{"role:global:" + adminRole.ID.String()},
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, grants)
-
-	assignments, err := repo.New(conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, repo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
-		OrganizationID: organizationID,
-		WorkosUserID:   "user_test",
-	})
-	require.NoError(t, err)
-	require.Empty(t, assignments)
+	_, err = repo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestProvisionOrganizationAdminTxUsesCallerTransaction(t *testing.T) {
