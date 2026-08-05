@@ -57,6 +57,7 @@ import (
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
+	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
@@ -129,6 +130,7 @@ func UsageCommands() []string {
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
+		"platform-mcp (get-lifecycle|revoke-connection)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -1512,6 +1514,15 @@ func ParseEndpoint(
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-platform-credential", flag.ExitOnError)
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		platformMcpFlags = flag.NewFlagSet("platform-mcp", flag.ContinueOnError)
+
+		platformMcpGetLifecycleFlags            = flag.NewFlagSet("get-lifecycle", flag.ExitOnError)
+		platformMcpGetLifecycleSessionTokenFlag = platformMcpGetLifecycleFlags.String("session-token", "", "")
+
+		platformMcpRevokeConnectionFlags            = flag.NewFlagSet("revoke-connection", flag.ExitOnError)
+		platformMcpRevokeConnectionBodyFlag         = platformMcpRevokeConnectionFlags.String("body", "REQUIRED", "")
+		platformMcpRevokeConnectionSessionTokenFlag = platformMcpRevokeConnectionFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -3446,6 +3457,10 @@ func ParseEndpoint(
 	adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage
 	adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage
 
+	platformMcpFlags.Usage = platformMcpUsage
+	platformMcpGetLifecycleFlags.Usage = platformMcpGetLifecycleUsage
+	platformMcpRevokeConnectionFlags.Usage = platformMcpRevokeConnectionUsage
+
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
@@ -3864,6 +3879,8 @@ func ParseEndpoint(
 			svcf = adminChatAnalysisFlags
 		case "admin-external-credentials":
 			svcf = adminExternalCredentialsFlags
+		case "platform-mcp":
+			svcf = platformMcpFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -4831,6 +4848,16 @@ func ParseEndpoint(
 
 			case "delete-gcp-iam-platform-credential":
 				epf = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags
+
+			}
+
+		case "platform-mcp":
+			switch epn {
+			case "get-lifecycle":
+				epf = platformMcpGetLifecycleFlags
+
+			case "revoke-connection":
+				epf = platformMcpRevokeConnectionFlags
 
 			}
 
@@ -6681,6 +6708,16 @@ func ParseEndpoint(
 			case "delete-gcp-iam-platform-credential":
 				endpoint = c.DeleteGcpIamPlatformCredential()
 				data, err = adminexternalcredentialsc.BuildDeleteGcpIamPlatformCredentialPayload(*adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag)
+			}
+		case "platform-mcp":
+			c := platformmcpc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-lifecycle":
+				endpoint = c.GetLifecycle()
+				data, err = platformmcpc.BuildGetLifecyclePayload(*platformMcpGetLifecycleSessionTokenFlag)
+			case "revoke-connection":
+				endpoint = c.RevokeConnection()
+				data, err = platformmcpc.BuildRevokeConnectionPayload(*platformMcpRevokeConnectionBodyFlag, *platformMcpRevokeConnectionSessionTokenFlag)
 			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13700,6 +13737,56 @@ func adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials delete-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+// platformMcpUsage displays the usage of the platform-mcp command and its
+// subcommands.
+func platformMcpUsage() {
+	fmt.Fprintln(os.Stderr, `Read Platform MCP lifecycle state and revoke organization-scoped Platform MCP connections. OAuth credentials and client metadata are never returned.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] platform-mcp COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-lifecycle: Get Platform MCP onboarding, publication, authorization, and discovery facts for the active organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke-connection: Revoke the active Platform MCP connection for the active organization. This remains available when Platform MCP rollout gates are unavailable. Requires live org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s platform-mcp COMMAND --help\n", os.Args[0])
+}
+func platformMcpGetLifecycleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp get-lifecycle", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get Platform MCP onboarding, publication, authorization, and discovery facts for the active organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp get-lifecycle --session-token \"abc123\"")
+}
+
+func platformMcpRevokeConnectionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp revoke-connection", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke the active Platform MCP connection for the active organization. This remains available when Platform MCP rollout gates are unavailable. Requires live org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp revoke-connection --body '{\n      \"connection_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // pluginsUsage displays the usage of the plugins command and its subcommands.

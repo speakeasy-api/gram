@@ -90,6 +90,9 @@ type GenerateConfig struct {
 	// manifests as new and refresh installed copies. Empty pins deterministic
 	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
+	// PlatformMCPEnabled adds the first-party organization-level Platform MCP
+	// package to the literal-default project's Claude marketplace only.
+	PlatformMCPEnabled bool
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
@@ -351,6 +354,11 @@ func storedHooksConfigHash(stored []byte) string {
 // placeholder fingerprint pass can't observe.
 const mcpGeneratorVersion = "10"
 
+// platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
+// or changing the first-party Platform MCP never triggers a fleet-wide customer
+// plugin republish.
+const platformMCPGeneratorVersion = "1"
+
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
 // hooksManifestVersion) rather than folded into a content hash, so bumping it is
@@ -380,6 +388,14 @@ const (
 // be assembled per plugin and this reserved entry can be reworked away.
 const mcpSharedFingerprintKey = "__shared__"
 
+// mcpPlatformFingerprintKey is deliberately not a valid customer plugin slug.
+const mcpPlatformFingerprintKey = "__platform_mcp__"
+
+const (
+	platformMCPPluginName = "gram-platform-mcp"
+	platformMCPPluginRoot = "platform-mcp"
+)
+
 // MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
 // plugins that would be generated for the given plugins — a map of plugin slug ->
 // stable hash, plus a reserved mcpSharedFingerprintKey entry covering the shared
@@ -400,13 +416,20 @@ func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]strin
 	// entries are fingerprinted without rotating the hash on every publish.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
-	out := make(map[string]string, len(plugins)+1)
+	out := make(map[string]string, len(plugins)+2)
 	for _, p := range plugins {
 		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
 		}
 		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
+	}
+	if cfg.PlatformMCPEnabled {
+		files, err := generatePlatformMCPFiles(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate Platform MCP files for fingerprint: %w", err)
+		}
+		out[mcpPlatformFingerprintKey] = hashFiles(platformMCPGeneratorVersion, files)
 	}
 
 	shared, err := generateSharedFiles(plugins, cfg)
@@ -529,6 +552,11 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	if err != nil {
 		return nil, err
 	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(mcp, cfg); err != nil {
+			return nil, fmt.Errorf("generate Platform MCP package: %w", err)
+		}
+	}
 	shared, err := generateSharedFiles(plugins, cfg)
 	if err != nil {
 		return nil, err
@@ -591,6 +619,11 @@ func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
 	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, fmt.Errorf("enumerate Platform MCP file paths: %w", err)
+		}
+	}
 	return slices.Sorted(maps.Keys(files)), nil
 }
 
@@ -627,6 +660,15 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	claudePlugins := make([]marketplaceEntry, 0)
 	cursorPlugins := make([]marketplaceEntry, 0)
 	codexPlugins := make([]codexMarketplaceEntry, 0)
+
+	if cfg.PlatformMCPEnabled {
+		claudePlugins = append(claudePlugins, marketplaceEntry{
+			Name:        platformMCPPluginName,
+			DisplayName: "Gram Platform MCP",
+			Source:      "./" + platformMCPPluginRoot,
+			Description: "Read-only organization administration through the Gram Platform MCP.",
+		})
+	}
 
 	if cfg.HooksAPIKey != "" {
 		claudeObservability := ClaudeObservabilitySlug(cfg)
@@ -752,6 +794,11 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	if cfg.HooksAPIKey != "" {
 		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Speakeasy observability. Without it, your team will install MCP servers but tool events will not be reported to your Speakeasy dashboard.\n\n", ClaudeObservabilitySlug(cfg))
+	}
+
+	if cfg.PlatformMCPEnabled {
+		b.WriteString("## Gram Platform MCP\n\n")
+		b.WriteString("The `gram-platform-mcp` plugin provides read-only organization administration through Gram OAuth. Install it in Claude Cowork to authorize a Platform MCP connection.\n\n")
 	}
 
 	if len(plugins) > 0 {
@@ -1865,6 +1912,45 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 `)
 
 	return []byte(b.String())
+}
+
+func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
+	meta, err := marshalJSON(claudePluginMeta{
+		Name:        platformMCPPluginName,
+		DisplayName: "Gram Platform MCP",
+		Description: "Read-only organization administration through the Gram Platform MCP.",
+		Version:     "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0"),
+		Author:      pluginAuthor{Name: "Gram", URL: "https://getgram.ai"},
+		Homepage:    "https://getgram.ai",
+		UserConfig:  nil,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
+	}
+	files[path.Join(platformMCPPluginRoot, ".claude-plugin/plugin.json")] = meta
+
+	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
+		platformMCPPluginName: {
+			Type:    "http",
+			Command: "",
+			Args:    nil,
+			URL:     strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp",
+			Headers: nil,
+		},
+	}})
+	if err != nil {
+		return fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
+	}
+	files[path.Join(platformMCPPluginRoot, ".mcp.json")] = mcpConfig
+	return nil
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {

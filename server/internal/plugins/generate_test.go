@@ -57,6 +57,73 @@ func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 	require.Equal(t, "https://mcp.acme.com/mcp/my-slug", server.URL, "custom domain URL must be preserved verbatim in generated config")
 }
 
+func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:            "Acme Corp",
+		OrgEmail:           "admin@example.com",
+		ServerURL:          "https://app.getgram.ai///",
+		APIKey:             "gram_consumer_secret",
+		HooksAPIKey:        "gram_hooks_secret",
+		ProjectSlug:        "default",
+		PlatformMCPEnabled: true,
+	}
+
+	files, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	var meta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
+	require.Equal(t, platformMCPPluginName, meta.Name)
+	require.Equal(t, "Gram Platform MCP", meta.DisplayName)
+	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
+
+	var mcpConfig claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["platform-mcp/.mcp.json"], &mcpConfig))
+	require.Equal(t, map[string]claudeMCPServer{
+		platformMCPPluginName: {
+			Type: "http",
+			URL:  "https://app.getgram.ai/platform-mcp",
+		},
+	}, mcpConfig.MCPServers)
+
+	for path, content := range files {
+		if path == "platform-mcp/.mcp.json" || path == "platform-mcp/.claude-plugin/plugin.json" {
+			require.NotContains(t, string(content), cfg.APIKey)
+			require.NotContains(t, string(content), cfg.HooksAPIKey)
+			require.NotContains(t, string(content), cfg.ProjectSlug)
+		}
+		require.NotContains(t, path, "cursor-plugins/platform-mcp")
+		require.NotContains(t, path, "platform-mcp-codex")
+	}
+
+	var claude marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
+	require.Contains(t, claude.Plugins, marketplaceEntry{
+		Name:        platformMCPPluginName,
+		DisplayName: "Gram Platform MCP",
+		Source:      "./platform-mcp",
+		Description: "Read-only organization administration through the Gram Platform MCP.",
+	})
+
+	var cursor marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursor))
+	require.NotContains(t, cursor.Plugins, marketplaceEntry{Name: platformMCPPluginName})
+
+	var codex codexMarketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
+	for _, entry := range codex.Plugins {
+		require.NotEqual(t, platformMCPPluginName, entry.Name)
+	}
+
+	cfg.PlatformMCPEnabled = false
+	withoutPlatform, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+	for path := range withoutPlatform {
+		require.NotContains(t, path, platformMCPPluginRoot)
+	}
+}
+
 func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -1946,6 +2013,23 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
+}
+
+func TestMCPFingerprintsIsolatesPlatformMCP(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "default"}
+
+	withoutPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	cfg.PlatformMCPEnabled = true
+	withPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, withoutPlatform["engineering-tools"], withPlatform["engineering-tools"], "Platform MCP must not churn customer plugin fingerprints")
+	require.NotEqual(t, withoutPlatform[mcpSharedFingerprintKey], withPlatform[mcpSharedFingerprintKey], "shared marketplace files list the Platform package and must change with it")
+	require.Contains(t, withPlatform, mcpPlatformFingerprintKey)
+	require.True(t, strings.HasPrefix(withPlatform[mcpPlatformFingerprintKey], "sha256:"))
 }
 
 func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {

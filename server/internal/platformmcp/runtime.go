@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -43,22 +45,49 @@ type Authorizer interface {
 	RequireLiveOrgAdmin(ctx context.Context, principal Principal) error
 }
 
+// ReadinessRecorder persists authenticated discovery completion for a single
+// connection generation. Its input is intentionally the authenticated principal,
+// never an OAuth token or raw MCP message.
+type ReadinessRecorder interface {
+	RecordReady(ctx context.Context, principal Principal, at time.Time) error
+}
+
 type Runtime struct {
 	authenticator        Authenticator
 	gate                 Gate
 	authorizer           Authorizer
 	protectedResourceURL string
+	readiness            ReadinessRecorder
 	server               *mcp.Server
 }
 
-func NewRuntime(authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL string, reader Reader) *Runtime {
-	return &Runtime{
+func NewRuntime(authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL string, reader Reader, readiness ReadinessRecorder) *Runtime {
+	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
 		authorizer:           authorizer,
 		protectedResourceURL: protectedResourceURL,
+		readiness:            readiness,
 		server:               newServer(reader),
 	}
+	if readiness != nil {
+		runtime.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				result, err := next(ctx, method, req)
+				if method == "tools/list" && err == nil && result != nil {
+					if principal, ok := PrincipalFromContext(ctx); ok {
+						if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
+							// Discovery succeeded; the idempotent lifecycle projection is
+							// best-effort and must not turn an MCP response into a failure.
+							slog.Default().WarnContext(ctx, "record platform mcp connection readiness", "error", recordErr)
+						}
+					}
+				}
+				return result, err
+			}
+		})
+	}
+	return runtime
 }
 
 func (r *Runtime) Handler() http.Handler {

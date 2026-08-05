@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -166,6 +167,114 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	return nil
 }
 
+type PostgresNewModelEligibility struct {
+	store *platformrepo.Queries
+}
+
+func NewPostgresNewModelEligibility(db *pgxpool.Pool) *PostgresNewModelEligibility {
+	return &PostgresNewModelEligibility{store: platformrepo.New(db)}
+}
+
+func (e *PostgresNewModelEligibility) EligibleForPlatformMCP(ctx context.Context, organizationID string) (bool, error) {
+	if e == nil || e.store == nil || organizationID == "" {
+		return false, ErrUnavailable
+	}
+	eligible, err := e.store.IsPlatformMCPNewModelEligible(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("check Platform MCP new-model eligibility: %w", err)
+	}
+	return eligible, nil
+}
+
+// Lifecycle is the safe management projection for the active organization. It
+// deliberately excludes OAuth client, subject, token, JTI, and session values.
+type Lifecycle struct {
+	DefaultProjectID     string
+	MarketplacePublished bool
+	Connections          []LifecycleConnection
+}
+
+type LifecycleConnection struct {
+	ID             string
+	AuthorizedAt   *time.Time
+	ReauthorizedAt *time.Time
+	Ready          bool
+}
+
+type PostgresLifecycleStore struct {
+	store *platformrepo.Queries
+	oauth *PostgresOAuthStore
+}
+
+func NewPostgresLifecycleStore(db *pgxpool.Pool) *PostgresLifecycleStore {
+	return &PostgresLifecycleStore{store: platformrepo.New(db), oauth: NewPostgresOAuthStore(db)}
+}
+
+func (s *PostgresLifecycleStore) GetLifecycle(ctx context.Context, organizationID string) (Lifecycle, error) {
+	if s == nil || s.store == nil || organizationID == "" {
+		return Lifecycle{}, ErrUnavailable
+	}
+	row, err := s.store.GetPlatformMCPLifecycle(ctx, organizationID)
+	if err != nil {
+		return Lifecycle{}, fmt.Errorf("get Platform MCP lifecycle: %w", err)
+	}
+	connections, err := s.store.ListPlatformMCPConnections(ctx, organizationID)
+	if err != nil {
+		return Lifecycle{}, fmt.Errorf("list Platform MCP connections: %w", err)
+	}
+	lifecycle := Lifecycle{
+		DefaultProjectID:     uuidString(row.DefaultProjectID),
+		MarketplacePublished: row.MarketplacePublished,
+		Connections:          make([]LifecycleConnection, 0, len(connections)),
+	}
+	for _, connection := range connections {
+		lifecycle.Connections = append(lifecycle.Connections, LifecycleConnection{
+			ID:             connection.ID.String(),
+			AuthorizedAt:   timePointer(connection.AuthorizedAt),
+			ReauthorizedAt: timePointer(connection.ReauthorizedAt),
+			Ready:          connection.Ready,
+		})
+	}
+	return lifecycle, nil
+}
+
+func (s *PostgresLifecycleStore) RevokeConnection(ctx context.Context, organizationID, connectionID string, now time.Time) error {
+	if s == nil || s.oauth == nil {
+		return ErrUnavailable
+	}
+	return s.oauth.RevokeConnection(ctx, organizationID, connectionID, now)
+}
+
+type PostgresReadinessRecorder struct {
+	store *platformrepo.Queries
+}
+
+func NewPostgresReadinessRecorder(db *pgxpool.Pool) *PostgresReadinessRecorder {
+	return &PostgresReadinessRecorder{store: platformrepo.New(db)}
+}
+
+func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal Principal, _ time.Time) error {
+	if r == nil || r.store == nil || principal.OrganizationID == "" || principal.ConnectionID == "" || principal.Generation == "" {
+		return ErrUnavailable
+	}
+	connectionID, err := uuid.Parse(principal.ConnectionID)
+	if err != nil {
+		return fmt.Errorf("parse Platform MCP readiness connection id: %w", err)
+	}
+	generation, err := uuid.Parse(principal.Generation)
+	if err != nil {
+		return fmt.Errorf("parse Platform MCP readiness generation: %w", err)
+	}
+	if err := r.store.RecordPlatformMCPConnectionReady(ctx, platformrepo.RecordPlatformMCPConnectionReadyParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("record Platform MCP connection readiness: %w", err)
+	}
+	return nil
+}
+
 type PostgresReader struct {
 	store *platformrepo.Queries
 }
@@ -252,6 +361,13 @@ func boundedRows[T any](rows []T, limit int) ([]T, bool) {
 		return rows, false
 	}
 	return rows[:limit], true
+}
+
+func uuidString(value uuid.NullUUID) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.UUID.String()
 }
 
 func mcpFromRow(id, projectID uuid.UUID, name, slug, visibility string) MCP {

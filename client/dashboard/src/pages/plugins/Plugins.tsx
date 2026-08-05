@@ -1,4 +1,5 @@
 import { CreateResourceCard } from "@/components/create-resource-card";
+import { RequireScope } from "@/components/require-scope";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
@@ -6,6 +7,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { DotCard } from "@/components/ui/DotCard";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
+import { useProject } from "@/contexts/Auth";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
@@ -35,9 +37,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Stack } from "@/components/ui/Stack";
-import { Activity } from "lucide-react";
+import { Activity, Blocks, LoaderCircle, Unplug } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
@@ -65,7 +67,9 @@ export default function Plugins(): JSX.Element {
     useState(false);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const project = useProject();
   const routes = useRoutes();
+  const defaultProjectRoutes = useRoutes({ projectSlug: "default" });
   const navigate = useNavigate();
 
   const { data } = usePluginsSuspense();
@@ -402,6 +406,13 @@ export default function Plugins(): JSX.Element {
                     void handleObservabilityDownload(platform);
                   }}
                 />
+                <RequireScope scope="org:admin" level="section">
+                  <PlatformMcpLifecycleCard
+                    authFetch={authFetch}
+                    defaultProjectHref={defaultProjectRoutes.plugins.href()}
+                    isDefaultProject={project.slug === "default"}
+                  />
+                </RequireScope>
               </div>
             </Stack>
           </Page.Section.Body>
@@ -527,6 +538,238 @@ export default function Plugins(): JSX.Element {
       </Page.Body>
     </Page>
   );
+}
+
+type PlatformMcpLifecycle = {
+  admission: "enabled" | "disabled" | "indeterminate";
+  reason_code:
+    | "eligible"
+    | "default_project_missing"
+    | "marketplace_unpublished"
+    | "gate_disabled"
+    | "status_indeterminate"
+    | "authorized_awaiting_discovery"
+    | "ready";
+  default_project_id?: string;
+  marketplace_published: boolean;
+  connections?: Array<{
+    id: string;
+    authorized_at?: string;
+    reauthorized_at?: string;
+    ready: boolean;
+  }>;
+  authorized: boolean;
+  ready: boolean;
+};
+
+function PlatformMcpLifecycleCard({
+  authFetch,
+  defaultProjectHref,
+  isDefaultProject,
+}: {
+  authFetch: ReturnType<typeof useFetcher>["fetch"];
+  defaultProjectHref: string;
+  isDefaultProject: boolean;
+}): JSX.Element | null {
+  const [lifecycle, setLifecycle] = useState<PlatformMcpLifecycle | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [revokingConnectionID, setRevokingConnectionID] = useState<string>();
+
+  const loadLifecycle = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await authFetch("/rpc/platformMcp.getLifecycle", {});
+      if (!response.ok) {
+        setLifecycle(null);
+        return;
+      }
+      setLifecycle((await response.json()) as PlatformMcpLifecycle);
+    } catch (error) {
+      console.error("platform MCP lifecycle lookup failed", error);
+      setLifecycle(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authFetch]);
+
+  useEffect(() => {
+    void loadLifecycle();
+  }, [loadLifecycle]);
+
+  const revokeConnection = async (connectionID: string) => {
+    setRevokingConnectionID(connectionID);
+    try {
+      const response = await authFetch("/rpc/platformMcp.revokeConnection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connection_id: connectionID }),
+      });
+      if (!response.ok) {
+        toast.error("Could not revoke the Platform MCP connection");
+        return;
+      }
+      toast.success("Platform MCP connection revoked");
+      await loadLifecycle();
+    } catch (error) {
+      toast.error("Could not revoke the Platform MCP connection");
+      console.error("platform MCP connection revocation failed", error);
+    } finally {
+      setRevokingConnectionID(undefined);
+    }
+  };
+
+  const status = lifecycle
+    ? lifecycleStatus(lifecycle)
+    : {
+        label: "Status unavailable",
+        description:
+          "Platform MCP lifecycle status could not be loaded. Try again later.",
+        variant: "neutral" as const,
+      };
+  return (
+    <DotCard
+      className="border-primary/30 bg-primary/[0.02]"
+      icon={<Blocks className="text-primary h-10 w-10 opacity-80" />}
+    >
+      <div className="mb-2 flex items-center gap-1.5">
+        <Text variant="subheading" as="div" className="text-md truncate">
+          Platform MCP
+        </Text>
+        {isLoading ? (
+          <Badge variant="neutral">
+            <Badge.Text>Checking</Badge.Text>
+          </Badge>
+        ) : (
+          <Badge variant={status.variant}>
+            <Badge.Text>{status.label}</Badge.Text>
+          </Badge>
+        )}
+      </div>
+      <Text small muted className="mb-3 line-clamp-3">
+        {isLoading
+          ? "Loading organization-level connection status…"
+          : status.description}
+      </Text>
+      {!isLoading && !isDefaultProject && lifecycle?.default_project_id && (
+        <Text small muted className="mb-3">
+          This status belongs to the literal default project.{" "}
+          <a className="text-primary hover:underline" href={defaultProjectHref}>
+            Open default project plugins
+          </a>
+          .
+        </Text>
+      )}
+      <div className="mt-auto flex flex-col gap-2 pt-2">
+        {lifecycle?.connections?.length ? (
+          lifecycle.connections.map((connection, index) => {
+            const isRevoking = revokingConnectionID === connection.id;
+            return (
+              <div
+                className="flex items-center justify-between gap-2"
+                key={connection.id}
+              >
+                <Text small muted>
+                  {connection.authorized_at
+                    ? `Connection ${index + 1}: authorized ${new Date(connection.authorized_at).toLocaleDateString()}`
+                    : `Connection ${index + 1}: authorized`}
+                </Text>
+                <Button
+                  size="sm"
+                  variant="destructive-secondary"
+                  disabled={revokingConnectionID !== undefined}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Revoke this Platform MCP connection? Connected agents using it will lose access.",
+                      )
+                    ) {
+                      void revokeConnection(connection.id);
+                    }
+                  }}
+                >
+                  {isRevoking ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <Unplug />
+                  )}
+                  <Button.Text>
+                    {isRevoking ? "Revoking…" : "Revoke"}
+                  </Button.Text>
+                </Button>
+              </div>
+            );
+          })
+        ) : (
+          <Text small muted>
+            No active connection
+          </Text>
+        )}
+      </div>
+    </DotCard>
+  );
+}
+
+function lifecycleStatus(lifecycle: PlatformMcpLifecycle): {
+  label: string;
+  description: string;
+  variant: "destructive" | "information" | "neutral" | "success" | "warning";
+} {
+  switch (lifecycle.reason_code) {
+    case "ready":
+      return {
+        label: "Ready",
+        description:
+          "A connected agent completed tool discovery and can use the Platform MCP.",
+        variant: "success",
+      };
+    case "authorized_awaiting_discovery":
+      return {
+        label: "Awaiting discovery",
+        description:
+          "Authorization succeeded. Open the installed Platform MCP once so the agent can complete discovery.",
+        variant: "warning",
+      };
+    case "eligible":
+      return {
+        label: "Ready to connect",
+        description:
+          "Publish the default project marketplace, then install the Platform MCP from it.",
+        variant: "information",
+      };
+    case "marketplace_unpublished":
+      return {
+        label: "Publish required",
+        description:
+          "Publish the default project marketplace before installing the Platform MCP.",
+        variant: "warning",
+      };
+    case "default_project_missing":
+      return {
+        label: "Default project required",
+        description:
+          "Create the literal default project before setting up the Platform MCP.",
+        variant: "destructive",
+      };
+    case "gate_disabled":
+      return {
+        label: "Not eligible",
+        description: "Platform MCP is not enabled for this organization.",
+        variant: "destructive",
+      };
+    case "status_indeterminate":
+      return {
+        label: "Status unavailable",
+        description:
+          "Platform MCP eligibility could not be confirmed. Existing connections can still be revoked.",
+        variant: "neutral",
+      };
+    default:
+      return {
+        label: "Status unavailable",
+        description: "Platform MCP returned an unrecognized lifecycle status.",
+        variant: "neutral",
+      };
+  }
 }
 
 // Platform-provided plugin, not a real `Plugin` row — always ships first in

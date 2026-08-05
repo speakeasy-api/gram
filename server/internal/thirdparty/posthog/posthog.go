@@ -114,6 +114,41 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
+func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	if p == nil || p.disabled || p.client == nil {
+		return feature.EvaluationIndeterminate, nil
+	}
+
+	var phGroups posthog.Groups
+	if len(groups) > 0 {
+		phGroups = posthog.NewGroups()
+		for groupType, groupKey := range groups {
+			phGroups.Set(groupType, groupKey)
+		}
+	}
+
+	flagState, err := p.client.IsFeatureEnabled(posthog.FeatureFlagPayload{
+		Key:        string(flag),
+		DistinctId: distinctID,
+		Groups:     phGroups,
+	})
+	if err != nil {
+		return feature.EvaluationIndeterminate, fmt.Errorf("evaluate feature flag: %w", err)
+	}
+
+	encoded, err := json.Marshal(flagState)
+	if err != nil {
+		return feature.EvaluationIndeterminate, fmt.Errorf("marshal feature flag result: %w", err)
+	}
+	if string(encoded) == "true" {
+		return feature.EvaluationEnabled, nil
+	}
+	if string(encoded) == "false" {
+		return feature.EvaluationDisabled, nil
+	}
+	return feature.EvaluationIndeterminate, nil
+}
+
 func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
 	if p.disabled {
 		p.logger.InfoContext(ctx, "posthog is disabled, returning false")

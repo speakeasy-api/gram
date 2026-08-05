@@ -20,6 +20,7 @@ import (
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -32,6 +33,15 @@ import (
 
 // mockGitHubPublisher records calls for testing. Set the *Err fields to
 // simulate GitHub-side failures.
+type fixedPlatformAdmission struct {
+	admission platformmcp.Admission
+	err       error
+}
+
+func (f fixedPlatformAdmission) Evaluate(context.Context, string, string) (platformmcp.Admission, error) {
+	return f.admission, f.err
+}
+
 type mockGitHubPublisher struct {
 	createRepoCalled      bool
 	pushFilesCalled       bool
@@ -1930,6 +1940,95 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 // PublishProject with SkipIfUnchanged set re-publishes the first time (no
 // stored fingerprint), skips when nothing changed, and re-publishes again once
 // the plugin set changes.
+func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "default")
+
+	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "platform enabled",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	connection, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var fingerprints map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
+	require.Contains(t, fingerprints, "__platform_mcp__")
+	platformFilesBefore := map[string][]byte{
+		"platform-mcp/.claude-plugin/plugin.json": mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
+		"platform-mcp/.mcp.json":                  mock.lastPushedFiles["platform-mcp/.mcp.json"],
+	}
+
+	// An indeterminate result preserves the prior Platform package and its
+	// fingerprint instead of treating an outage as a package revocation.
+	publisher := newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionIndeterminate})
+	mock.getRepoFilesCalled = false
+	result, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "platform indeterminate",
+		SkipIfUnchanged: false,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.True(t, mock.getRepoFilesCalled)
+	require.Equal(t, platformFilesBefore["platform-mcp/.claude-plugin/plugin.json"], mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"])
+	require.Equal(t, platformFilesBefore["platform-mcp/.mcp.json"], mock.lastPushedFiles["platform-mcp/.mcp.json"])
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var afterIndeterminate map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterIndeterminate))
+	require.Equal(t, fingerprints["__platform_mcp__"], afterIndeterminate["__platform_mcp__"])
+
+	// If the database records a previously published package but the repository
+	// was deleted, an indeterminate admission reconstructs it rather than turning
+	// a rollout dependency outage into a permanent publish failure.
+	mock.repoFiles = nil
+	mock.lastPushedFiles = nil
+	result, err = publisher.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "platform indeterminate missing repo",
+		SkipIfUnchanged: false,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	// A confirmed disable removes only the Platform package. The absence of a
+	// customer MCP change makes the publisher carry customer bytes instead of
+	// issuing a fresh tenant API key.
+	publisher = newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionDisabled})
+	result, err = publisher.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "platform disabled",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
+	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var afterDisabled map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterDisabled))
+	require.NotContains(t, afterDisabled, "__platform_mcp__")
+}
+
 func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 	t.Parallel()
 
@@ -2144,7 +2243,7 @@ func TestPluginsService_PublishProject_PhasedRollout_NonEligibleBlocksHooksBump(
 	phasedRolloutFixture(t, ctx, ti, mock, "Phased NonEligible")
 
 	// Empty provider → no clearance payload → org is not in the rollout phase.
-	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{}, nil)
 
 	mock.pushFilesCalled = false
 	mock.getRepoFilesCalled = false
@@ -2179,7 +2278,7 @@ func TestPluginsService_PublishProject_PhasedRollout_EligibleGetsHooksBump(t *te
 	// A pin above any plausible generator version clears this org for the bump.
 	features := &feature.InMemory{}
 	features.SetFlagPayload(feature.FlagHooksRollout, orgID, []byte(`{"version": 9999}`))
-	pub := newTestPluginPublisher(t, ti, mock, features)
+	pub := newTestPluginPublisher(t, ti, mock, features, nil)
 
 	mock.pushFilesCalled = false
 	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
@@ -2224,7 +2323,7 @@ func TestPluginsService_PublishProject_PhasedRollout_MCPPublishesRegardlessOfPha
 	})
 	require.NoError(t, err)
 
-	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{})
+	pub := newTestPluginPublisher(t, ti, mock, &feature.InMemory{}, nil)
 
 	mock.pushFilesCalled = false
 	mock.getRepoFilesCalled = false
@@ -2257,7 +2356,7 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 
 	mock := &mockGitHubPublisher{}
 	features := &feature.InMemory{}
-	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features, nil)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 

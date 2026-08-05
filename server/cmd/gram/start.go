@@ -1217,13 +1217,14 @@ func newStartCommand() *cli.Command {
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			var pluginPublisher *plugins.Service
+			platformAdmission := platformmcp.NewAdmissionChecker(productFeatures, featureFlags, platformmcp.NewPostgresNewModelEligibility(db))
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
-			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
 			plugins.Attach(mux, pluginsSvc)
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
@@ -1269,7 +1270,8 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
-			platformGate := platformmcp.NewOrganizationGate(productFeatures, featureFlags)
+			platformOrganizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(db)
+			platformGate := platformmcp.NewOrganizationGate(productFeatures, featureFlags, platformOrganizationSlugs)
 			platformAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(db, authzEngine)
 			platformOAuth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
 				BaseURL:       serverURL,
@@ -1296,7 +1298,18 @@ func newStartCommand() *cli.Command {
 				platformAuthorizer,
 				platformOAuth.ProtectedResourceURL(),
 				platformmcp.NewPostgresReader(db),
+				platformmcp.NewPostgresReadinessRecorder(db),
 			)
+			platformmcp.Attach(mux, platformmcp.NewService(
+				logger,
+				tracerProvider,
+				db,
+				sessionManager,
+				authzEngine,
+				platformAuthorizer,
+				platformmcp.NewPostgresLifecycleStore(db),
+				platformAdmission,
+			))
 			platformOAuth.Attach(mux)
 			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)

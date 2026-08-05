@@ -561,6 +561,38 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 	return i, err
 }
 
+const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
+WITH default_project AS (
+    SELECT id
+    FROM projects
+    WHERE organization_id = $1
+      AND slug = 'default'
+      AND deleted IS FALSE
+    LIMIT 1
+)
+SELECT
+    default_project.id AS default_project_id,
+    EXISTS (
+        SELECT 1
+        FROM plugin_github_connections
+        WHERE project_id = default_project.id
+    ) AS marketplace_published
+FROM (VALUES (1)) AS root(value)
+LEFT JOIN default_project ON TRUE
+`
+
+type GetPlatformMCPLifecycleRow struct {
+	DefaultProjectID     uuid.NullUUID
+	MarketplacePublished bool
+}
+
+func (q *Queries) GetPlatformMCPLifecycle(ctx context.Context, organizationID string) (GetPlatformMCPLifecycleRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPLifecycle, organizationID)
+	var i GetPlatformMCPLifecycleRow
+	err := row.Scan(&i.DefaultProjectID, &i.MarketplacePublished)
+	return i, err
+}
+
 const getPlatformMCPServer = `-- name: GetPlatformMCPServer :one
 SELECT server.id, server.project_id, server.name, server.slug, server.visibility
 FROM mcp_servers AS server
@@ -733,6 +765,91 @@ func (q *Queries) GetPlatformMCPSessionForRefreshForUpdate(ctx context.Context, 
 	return i, err
 }
 
+const isPlatformMCPNewModelEligible = `-- name: IsPlatformMCPNewModelEligible :one
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    JOIN projects AS project
+      ON project.id = server.project_id
+     AND project.organization_id = $1
+     AND project.deleted IS FALSE
+    JOIN user_session_issuers AS issuer
+      ON issuer.id = server.user_session_issuer_id
+     AND issuer.project_id = project.id
+     AND issuer.deleted IS FALSE
+    JOIN mcp_endpoints AS endpoint
+      ON endpoint.mcp_server_id = server.id
+     AND endpoint.project_id = project.id
+     AND endpoint.deleted IS FALSE
+    WHERE server.deleted IS FALSE
+)
+`
+
+// Package admission requires at least one active issuer-backed MCP server with
+// an active endpoint. Platform runtime authorization deliberately does not use
+// this condition: a later project-model change must not invalidate an existing
+// organization-bound connection.
+func (q *Queries) IsPlatformMCPNewModelEligible(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, isPlatformMCPNewModelEligible, organizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listPlatformMCPConnections = `-- name: ListPlatformMCPConnections :many
+SELECT
+    connection.id,
+    connection.authorized_at,
+    connection.reauthorized_at,
+    EXISTS (
+        SELECT 1
+        FROM platform_mcp_onboarding_milestones AS milestone
+        WHERE milestone.organization_id = connection.organization_id
+          AND milestone.milestone = 'connection_ready'
+          AND milestone.connection_id = connection.id
+          AND milestone.connection_generation = connection.active_generation
+    ) AS ready
+FROM platform_mcp_connections AS connection
+JOIN platform_mcp_oauth_clients AS client
+  ON client.id = connection.oauth_client_id
+WHERE connection.organization_id = $1
+  AND connection.revoked_at IS NULL
+  AND client.revoked_at IS NULL
+ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC
+`
+
+type ListPlatformMCPConnectionsRow struct {
+	ID             uuid.UUID
+	AuthorizedAt   pgtype.Timestamptz
+	ReauthorizedAt pgtype.Timestamptz
+	Ready          bool
+}
+
+func (q *Queries) ListPlatformMCPConnections(ctx context.Context, organizationID string) ([]ListPlatformMCPConnectionsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPConnections, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPConnectionsRow
+	for rows.Next() {
+		var i ListPlatformMCPConnectionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorizedAt,
+			&i.ReauthorizedAt,
+			&i.Ready,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPProjects = `-- name: ListPlatformMCPProjects :many
 SELECT id, name, slug
 FROM projects
@@ -843,6 +960,43 @@ type LockPlatformMCPConnectionAuthorizationParams struct {
 
 func (q *Queries) LockPlatformMCPConnectionAuthorization(ctx context.Context, arg LockPlatformMCPConnectionAuthorizationParams) error {
 	_, err := q.db.Exec(ctx, lockPlatformMCPConnectionAuthorization, arg.OrganizationID, arg.SubjectUrn, arg.OauthClientID)
+	return err
+}
+
+const recordPlatformMCPConnectionReady = `-- name: RecordPlatformMCPConnectionReady :exec
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    connection_id,
+    connection_generation
+) VALUES (
+    $1,
+    'connection_ready',
+    $2,
+    $3
+)
+ON CONFLICT (milestone, connection_id, connection_generation)
+WHERE connection_id IS NOT NULL
+  AND connection_generation IS NOT NULL
+  AND milestone IN (
+    'authorization_succeeded',
+    'authorization_failed',
+    'connection_ready',
+    'first_read_succeeded',
+    'first_write_succeeded',
+    'read_only_cohort'
+)
+DO NOTHING
+`
+
+type RecordPlatformMCPConnectionReadyParams struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+}
+
+func (q *Queries) RecordPlatformMCPConnectionReady(ctx context.Context, arg RecordPlatformMCPConnectionReadyParams) error {
+	_, err := q.db.Exec(ctx, recordPlatformMCPConnectionReady, arg.OrganizationID, arg.ConnectionID, arg.ConnectionGeneration)
 	return err
 }
 
