@@ -24,7 +24,6 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithInitScripts(rootPath("clickhouse", "schema.sql")),
 		testcontainers.WithWaitStrategy(
-			PortWait("9000/tcp"),
 			wait.ForExec([]string{"clickhouse-client", "--user", "gram", "--password", "gram", "--query", "SELECT 1"}),
 		),
 		WithoutPublishedPorts(),

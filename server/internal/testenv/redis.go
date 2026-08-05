@@ -20,7 +20,6 @@ func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, er
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("* Ready to accept connections"),
-			PortWait("6379/tcp"),
 			wait.ForExec([]string{"redis-cli", "ping"}),
 		),
 		WithoutPublishedPorts(),

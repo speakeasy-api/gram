@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -407,6 +408,61 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs(t *testing.T) {
 	require.NotEmpty(t, result.SessionToken)
 	require.NotContains(t, result.Location, "signin_error=")
 	assert.Equal(t, inst.authConfigs.SignInRedirectURL, result.Location)
+}
+
+func TestSyncMembershipsFromWorkOS_EmptyResponseRevokesWorkOSRelationships(t *testing.T) {
+	t.Parallel()
+
+	const (
+		gramUserID   = "user-empty-memberships"
+		workosUserID = "user_01WORKOS_REMOVED"
+		workosOrgID  = "org_01WORKOS_REMOVED"
+		linkedOrgID  = "linked-org"
+		localOrgID   = "local-org"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+	userInfo := &MockUserInfo{
+		UserID:        gramUserID,
+		Email:         "removed@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	linkedWorkosID := workosOrgID
+	require.NoError(t, inst.createTestUser(ctx, userInfo))
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 linkedOrgID,
+		Name:               "Linked Org",
+		Slug:               "linked-org",
+		WorkosID:           &linkedWorkosID,
+		UserWorkspaceSlugs: []string{"linked-org"},
+	}, gramUserID))
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 localOrgID,
+		Name:               "Local Org",
+		Slug:               "local-org",
+		WorkosID:           nil,
+		UserWorkspaceSlugs: []string{"local-org"},
+	}, gramUserID))
+
+	require.NoError(t, inst.identityResolver.SyncMembershipsFromWorkOS(ctx, gramUserID, workosUserID))
+
+	queries := orgRepo.New(inst.conn)
+	_, err := queries.GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: linkedOrgID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	_, err = queries.GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: localOrgID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
 }
 
 // TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition verifies that a

@@ -16,7 +16,6 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -69,7 +68,9 @@ var UsePublishedPorts = sync.OnceValue(func() bool {
 })
 
 // WithoutPublishedPorts strips module-declared exposed ports when tests can
-// route directly to container IPs.
+// route directly to container IPs. Containers using this option must use a
+// log or exec wait strategy: testcontainers' host-port wait always resolves a
+// mapped port, even when its external check is disabled.
 func WithoutPublishedPorts() testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
 		if !UsePublishedPorts() {
@@ -77,15 +78,6 @@ func WithoutPublishedPorts() testcontainers.CustomizeRequestOption {
 		}
 		return nil
 	}
-}
-
-// PortWait checks a container port internally when it is not published.
-func PortWait(port nat.Port) wait.Strategy {
-	w := wait.ForListeningPort(string(port))
-	if !UsePublishedPorts() {
-		return w.SkipExternalCheck()
-	}
-	return w
 }
 
 // ContainerAddr returns the address tests should dial for a container port.

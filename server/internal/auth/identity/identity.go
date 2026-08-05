@@ -372,26 +372,24 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		return fmt.Errorf("list workos memberships: %w", err)
 	}
 
-	if len(members) > 0 {
-		for _, m := range members {
-			if err := r.upsertOrgFromMembership(ctx, m); err != nil {
-				return err
-			}
+	for _, m := range members {
+		if err := r.upsertOrgFromMembership(ctx, m); err != nil {
+			return err
 		}
+	}
 
-		workosOrgIDs := make([]string, len(members))
-		membershipIDs := make([]string, len(members))
-		for i, m := range members {
-			workosOrgIDs[i] = m.OrganizationID
-			membershipIDs[i] = m.ID
-		}
-		if err := r.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
-			UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
-			WorkosOrgIds:        workosOrgIDs,
-			WorkosMembershipIds: membershipIDs,
-		}); err != nil {
-			return fmt.Errorf("set user workos memberships: %w", err)
-		}
+	workosOrgIDs := make([]string, len(members))
+	membershipIDs := make([]string, len(members))
+	for i, m := range members {
+		workosOrgIDs[i] = m.OrganizationID
+		membershipIDs[i] = m.ID
+	}
+	if err := r.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
+		WorkosOrgIds:        workosOrgIDs,
+		WorkosMembershipIds: membershipIDs,
+	}); err != nil {
+		return fmt.Errorf("set user workos memberships: %w", err)
 	}
 
 	if err := r.InvalidateUserInfoCache(ctx, gramUserID); err != nil {

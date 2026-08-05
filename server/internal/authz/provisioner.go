@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -36,6 +37,20 @@ func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizati
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if err := p.ProvisionOrganizationAdminTx(ctx, tx, organizationID, admin); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit organization access provisioning transaction: %w", err)
+	}
+
+	return nil
+}
+
+// ProvisionOrganizationAdminTx seeds the built-in roles and grants, then
+// assigns the organization creator using a caller-owned transaction.
+func (p *Provisioner) ProvisionOrganizationAdminTx(ctx context.Context, tx pgx.Tx, organizationID string, admin InitialOrganizationAdmin) error {
 	if err := SeedSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
 		return err
 	}
@@ -56,10 +71,6 @@ func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizati
 		if rows != 1 {
 			return fmt.Errorf("assign initial organization admin: admin role not found")
 		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit organization access provisioning transaction: %w", err)
 	}
 
 	return nil
