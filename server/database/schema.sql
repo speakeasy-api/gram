@@ -273,6 +273,7 @@ CREATE TABLE IF NOT EXISTS skills (
   summary TEXT,
   source_kind TEXT NOT NULL DEFAULT 'manual',
   classification TEXT NOT NULL DEFAULT 'custom',
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
 
   first_seen_at timestamptz,
   last_seen_at timestamptz,
@@ -291,6 +292,7 @@ CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS skills_suggestion_sweep_idx ON skills (project_id, last_seen_at DESC, id DESC) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS skills_tags_gin ON skills USING gin (tags) WHERE archived_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS skill_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
