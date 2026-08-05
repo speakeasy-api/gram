@@ -14,9 +14,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -131,6 +136,48 @@ func TestRuntimeMethods_RemoteBacked_ProxiedUpstream(t *testing.T) {
 	require.Len(t, hits, 2)
 	require.Equal(t, http.MethodDelete, hits[1].method, "session termination must be relayed upstream")
 	require.Equal(t, "sess-to-end", hits[1].session, "session header must be forwarded upstream")
+}
+
+// TestRuntimeMethods_MountedOnMux drives GET and DELETE through the real
+// /mcp/{mcpSlug} route registrations rather than invoking the handlers
+// directly, so a regression in the mux wiring fails here. The distinctive
+// oops error messages prove our handlers ran instead of the muxer's own
+// method-not-allowed fallback.
+func TestRuntimeMethods_MountedOnMux(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	metadataService := mcpmetadata.NewService(
+		ti.logger,
+		ti.tracerProvider,
+		ti.conn,
+		ti.sessionManager,
+		ti.serverURL,
+		ti.siteURL,
+		ti.cacheAdapter,
+		authz.NewEngine(ti.logger, ti.conn, chConn, nil, nil, workos.NewStubClient()),
+		ti.audit,
+	)
+
+	mux := goahttp.NewMuxer()
+	mcp.Attach(mux, ti.service, metadataService)
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/no-such-slug-"+uuid.NewString(), nil).WithContext(ctx)
+	req.Header.Set("Accept", "text/event-stream")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusMethodNotAllowed, rr.Code)
+	require.Contains(t, rr.Body.String(), "compatibility probe", "GET must be routed to HandleGetServer")
+
+	req = httptest.NewRequest(http.MethodDelete, "/mcp/no-such-slug-"+uuid.NewString(), nil).WithContext(ctx)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusMethodNotAllowed, rr.Code)
+	require.Contains(t, rr.Body.String(), "session termination is not supported", "DELETE must be routed to HandleDeleteServer")
 }
 
 func TestRuntimeMethods_ToolsetBacked_Keep405(t *testing.T) {
