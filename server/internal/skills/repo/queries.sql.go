@@ -96,6 +96,29 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 	return i, err
 }
 
+const backdateReservedSkillEfficacyEvaluationsFixture = `-- name: BackdateReservedSkillEfficacyEvaluationsFixture :execrows
+UPDATE skill_efficacy_evaluations
+SET updated_at = updated_at - $1::interval
+WHERE project_id = $2
+  AND state = 'reserved'
+`
+
+type BackdateReservedSkillEfficacyEvaluationsFixtureParams struct {
+	BackdateBy pgtype.Interval
+	ProjectID  uuid.UUID
+}
+
+// Test-only fixture: age a project's reserved rows past a recovery lease so a
+// test can make staleness deterministic instead of retrying a sweep that
+// recovers rows cumulatively.
+func (q *Queries) BackdateReservedSkillEfficacyEvaluationsFixture(ctx context.Context, arg BackdateReservedSkillEfficacyEvaluationsFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backdateReservedSkillEfficacyEvaluationsFixture, arg.BackdateBy, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const backfillSkillObservationsForCapturedVersion = `-- name: BackfillSkillObservationsForCapturedVersion :execrows
 UPDATE skill_observations so
 SET skill_id = $1::uuid,
