@@ -2706,14 +2706,21 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	for _, m := range mcpRows {
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
-		// An unproxied-backed server has no mcp_endpoints row (Gram never
-		// proxies it), so the query resolves its own vendor URL instead of an
-		// endpoint slug. The customer connects straight to the vendor, so no
-		// Gram host/slug and no Gram-managed OAuth apply.
+		// Classify from the authoritative backend signal (unproxied_url, set
+		// only when s.unproxied_mcp_server_id resolved a live row), not from
+		// endpoint presence/absence: nothing stops an mcp_endpoints row from
+		// existing for an unproxied-backed server (verifyEndpointReferenceOwnership
+		// only checks project ownership, not backend type), and mcp_servers'
+		// own backend-exclusivity check doesn't cover mcp_endpoints either.
+		// An unproxied-backed server's URL always wins so it's never routed
+		// through a Gram endpoint it can't actually be served from.
 		mcpURL := ""
 		isOAuth := false
 		isUnproxied := false
 		switch {
+		case m.UnproxiedUrl.Valid:
+			mcpURL = m.UnproxiedUrl.String
+			isUnproxied = true
 		case m.EndpointSlug != "":
 			// Custom-domain endpoints are served from the domain host; platform
 			// endpoints from the Gram server URL. The query already resolved the
@@ -2727,9 +2734,6 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			// issuer (OAuth), so the generated config carries no static
 			// Authorization header (IsOAuth).
 			isOAuth = true
-		default:
-			mcpURL = conv.FromPGTextOrEmpty[string](m.UnproxiedUrl)
-			isUnproxied = true
 		}
 
 		// Environments are not yet wired to mcp_servers, so there are no
