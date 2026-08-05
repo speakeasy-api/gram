@@ -1,3 +1,4 @@
+import { DevBadge } from "@/components/dev-badge";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
@@ -62,6 +63,30 @@ const PLATFORMS = [
 const MIN_SYNC_INTERVAL_SECONDS = 60;
 const MAX_SYNC_INTERVAL_SECONDS = 86_400;
 
+// Sentinel for "auto_update is unset" — saving it deletes the key so devices
+// fall back to their local or MDM setting. Must not collide with a real agent
+// update mode.
+const AUTO_UPDATE_INHERIT = "inherit";
+
+// Update modes understood by deployed device agent versions.
+const AUTO_UPDATE_POLICIES = [
+  {
+    value: "disabled",
+    label: "Disabled",
+    description: "Agents never self-update",
+  },
+  {
+    value: "notify",
+    label: "Notify",
+    description: "Surface available updates without installing",
+  },
+  {
+    value: "automatic",
+    label: "Automatic",
+    description: "Install updates as they release",
+  },
+] as const;
+
 function recordValue(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -86,6 +111,13 @@ function stringSetting(
 ): string {
   const value = config.config[key];
   return typeof value === "string" ? value : fallback;
+}
+
+function autoUpdateSetting(config: DeviceAgentConfiguration): string {
+  const value = config.config.auto_update;
+  return typeof value === "string" && value.trim()
+    ? value
+    : AUTO_UPDATE_INHERIT;
 }
 
 function syncIntervalSetting(config: DeviceAgentConfiguration): string {
@@ -133,7 +165,7 @@ export function DeviceAgentConfigurationTab(): JSX.Element {
             </Button>
           </Stack>
         ) : (
-          <Skeleton className="h-[640px] w-full max-w-2xl" />
+          <Skeleton className="h-[640px] w-full" />
         )}
       </ConfigurationSection>
     );
@@ -187,7 +219,7 @@ function DeviceAgentConfigurationForm({
     stringSetting(configuration, "update_channel", "stable"),
   );
   const [autoUpdate, setAutoUpdate] = useState(() =>
-    stringSetting(configuration, "auto_update", "notify"),
+    autoUpdateSetting(configuration),
   );
   const [syncInterval, setSyncInterval] = useState(() =>
     syncIntervalSetting(configuration),
@@ -213,6 +245,11 @@ function DeviceAgentConfigurationForm({
   });
 
   const intervalError = syncIntervalError(syncInterval);
+  // A stored auto_update mode this UI predates — keep it selectable so the
+  // dropdown can display it instead of rendering blank.
+  const isUnknownAutoUpdate =
+    autoUpdate !== AUTO_UPDATE_INHERIT &&
+    !AUTO_UPDATE_POLICIES.some((policy) => policy.value === autoUpdate);
   const currentPlatformLayers = Object.fromEntries(
     PLATFORMS.map((platform) => [
       platform.key,
@@ -223,7 +260,7 @@ function DeviceAgentConfigurationForm({
     JSON.stringify(platformLayers) !== JSON.stringify(currentPlatformLayers) ||
     updateChannel !==
       stringSetting(configuration, "update_channel", "stable") ||
-    autoUpdate !== stringSetting(configuration, "auto_update", "notify") ||
+    autoUpdate !== autoUpdateSetting(configuration) ||
     syncInterval !== syncIntervalSetting(configuration) ||
     pinnedTarget !== stringSetting(configuration, "pinned_target", "") ||
     blockedVersions !== blockedVersionsSetting(configuration);
@@ -243,7 +280,11 @@ function DeviceAgentConfigurationForm({
         ]),
       ),
     };
-    config.auto_update = autoUpdate.trim();
+    if (autoUpdate === AUTO_UPDATE_INHERIT) {
+      delete config.auto_update;
+    } else {
+      config.auto_update = autoUpdate;
+    }
     config.sync_interval_seconds = Number(syncInterval);
 
     if (pinnedTarget.trim()) {
@@ -278,7 +319,7 @@ function DeviceAgentConfigurationForm({
   };
 
   return (
-    <div className="border-border bg-card max-w-2xl rounded-lg border p-6">
+    <div className="border-border bg-card rounded-lg border p-6">
       <Stack gap={6}>
         <div>
           <Text variant="body" className="font-medium">
@@ -346,6 +387,7 @@ function DeviceAgentConfigurationForm({
             <Field>
               <FieldLabel htmlFor="device-agent-update-channel">
                 Update channel
+                <DevBadge />
               </FieldLabel>
               <Input
                 id="device-agent-update-channel"
@@ -364,15 +406,41 @@ function DeviceAgentConfigurationForm({
             <FieldLabel htmlFor="device-agent-auto-update">
               Auto-update policy
             </FieldLabel>
-            <Input
-              id="device-agent-auto-update"
+            <Select
               value={autoUpdate}
-              onChange={setAutoUpdate}
+              onValueChange={setAutoUpdate}
               disabled={disabled}
-              placeholder="notify"
-            />
+            >
+              <SelectTrigger
+                id="device-agent-auto-update"
+                className="w-full"
+                aria-label="Auto-update policy"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  value={AUTO_UPDATE_INHERIT}
+                  description="Use each device's local or MDM setting"
+                >
+                  Inherit
+                </SelectItem>
+                {AUTO_UPDATE_POLICIES.map((policy) => (
+                  <SelectItem
+                    key={policy.value}
+                    value={policy.value}
+                    description={policy.description}
+                  >
+                    {policy.label}
+                  </SelectItem>
+                ))}
+                {isUnknownAutoUpdate && (
+                  <SelectItem value={autoUpdate}>{autoUpdate}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
             <FieldDescription>
-              Update mode understood by deployed agent versions.
+              How enrolled agents handle new releases.
             </FieldDescription>
           </Field>
 
@@ -418,6 +486,7 @@ function DeviceAgentConfigurationForm({
           <Field>
             <FieldLabel htmlFor="device-agent-blocked-versions">
               Blocked versions
+              <DevBadge />
             </FieldLabel>
             <Input
               id="device-agent-blocked-versions"
