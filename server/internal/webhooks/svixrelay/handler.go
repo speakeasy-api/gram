@@ -102,6 +102,7 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 	if orgID == "" || eventID == "" {
 		h.drop(ctx, dropReasonInvalidEvent)
 		h.logger.ErrorContext(ctx, "dropping webhook event with missing identifiers",
+			attr.SlogWebhookDropReason(dropReasonInvalidEvent),
 			attr.SlogOrganizationID(orgID),
 			attr.SlogOutboxPublicID(eventID),
 		)
@@ -116,6 +117,11 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 		return fmt.Errorf("resolve svix app for organization: %w", err)
 	}
 	if appID == "" {
+		// Counted but deliberately not logged. Most events belong to
+		// organizations that have never enabled webhooks, so this branch is the
+		// steady state rather than an anomaly, and a line per event would be a
+		// firehose that buries the drops worth reading. The metric carries the
+		// same reason dimension as those log lines, so the rate stays visible.
 		h.drop(ctx, dropReasonNotEligible)
 		return nil
 	}
@@ -125,6 +131,7 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 		// A malformed payload will not become well-formed on redelivery.
 		h.drop(ctx, dropReasonInvalidPayload)
 		h.logger.ErrorContext(ctx, "dropping webhook event with unreadable payload",
+			attr.SlogWebhookDropReason(dropReasonInvalidPayload),
 			attr.SlogOrganizationID(orgID),
 			attr.SlogOutboxPublicID(eventID),
 			attr.SlogError(err),
@@ -175,6 +182,7 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 	case status == 409:
 		h.drop(ctx, dropReasonDuplicate)
 		h.logger.InfoContext(ctx, "webhook event already delivered",
+			attr.SlogWebhookDropReason(dropReasonDuplicate),
 			attr.SlogOrganizationID(orgID),
 			attr.SlogOutboxPublicID(eventID),
 			attr.SlogSvixAppID(appID),
@@ -187,6 +195,7 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 	case status >= 400 && status < 500 && status != 429:
 		h.drop(ctx, dropReasonRejected)
 		h.logger.ErrorContext(ctx, "svix rejected webhook event",
+			attr.SlogWebhookDropReason(dropReasonRejected),
 			attr.SlogOrganizationID(orgID),
 			attr.SlogOutboxPublicID(eventID),
 			attr.SlogSvixAppID(appID),
