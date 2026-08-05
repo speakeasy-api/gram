@@ -1,3 +1,5 @@
+//go:build demoseed_safety
+
 package demoseed
 
 import (

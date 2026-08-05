@@ -1,3 +1,11 @@
+// The demo seed safety test runs as its own CI job (demo-seed-safety in
+// pr.yaml), not inside the sharded server test suite — hence the build tag.
+// Run locally with:
+//
+//	mise run test:server -tags=demoseed_safety ./internal/demoseed/...
+//
+//go:build demoseed_safety
+
 package demoseed
 
 import (
