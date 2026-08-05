@@ -131,9 +131,9 @@ func (c *adminCookieRewriter) Flush() {
 		c.rewrite()
 		c.wroteHeader = true
 	}
-	if f, ok := c.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
+	// ResponseController finds flush support through FlushError and Unwrap
+	// chains that a direct http.Flusher assert would miss.
+	_ = http.NewResponseController(c.ResponseWriter).Flush()
 }
 
 // Unwrap lets http.ResponseController reach controls of the underlying

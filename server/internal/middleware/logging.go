@@ -49,9 +49,9 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 // silently disables streaming (SSE events sit in the server's write buffer
 // until it fills) for every handler behind this middleware.
 func (rw *responseWriter) Flush() {
-	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
+	// ResponseController finds flush support through FlushError and Unwrap
+	// chains that a direct http.Flusher assert would miss.
+	_ = http.NewResponseController(rw.ResponseWriter).Flush()
 }
 
 // Unwrap lets http.ResponseController reach controls of the underlying
