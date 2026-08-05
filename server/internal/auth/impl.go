@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -257,6 +258,26 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
+	// Consume the signup intent on every path, not only the zero-org one, so a
+	// returning user who happens to carry one does not leave a key behind for
+	// its full TTL. Absence is normal — an ordinary login has none.
+	var intent *signupIntent
+	if state := decodeStateParam(payload); state != nil && state.Nonce != "" {
+		var stored signupIntent
+		err := s.nonceStore.GetAndDelete(ctx, signupIntentKey(state.Nonce), &stored)
+		switch {
+		case err == nil:
+			intent = &stored
+		case errors.Is(err, redisCache.ErrCacheMiss):
+			// Ordinary login. Nothing to do.
+		default:
+			// Swallow so a cache blip cannot fail an otherwise valid login, but
+			// say so: without this line a signup silently degrades into landing
+			// on the register page with nothing explaining why.
+			s.logger.WarnContext(ctx, "failed to read signup intent", attr.SlogError(err))
+		}
+	}
+
 	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
@@ -290,6 +311,30 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if len(userInfo.Organizations) == 0 {
+		// Signup: the user typed a company name before authenticating. Create
+		// the org now so they land in the product instead of a second form.
+		// A user-typed name beats a generated one, so this wins over the
+		// assistants disposition below.
+		if intent != nil && intent.OrgName != "" {
+			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, false)
+			if err != nil {
+				return s.redirectSignupError(ctx, err)
+			}
+
+			session.ActiveOrganizationID = org.ID
+			if err := s.sessions.StoreSession(ctx, session); err != nil {
+				return s.redirectSignupError(ctx, err)
+			}
+
+			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
+
+			return &gen.CallbackResult{
+				Location:      s.callbackRedirectURL(ctx, payload),
+				SessionToken:  session.SessionID,
+				SessionCookie: session.SessionID,
+			}, nil
+		}
+
 		if dispositionFromState(payload) == dispositionAssistants {
 			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session)
 			if err != nil {
@@ -987,6 +1032,55 @@ func (s *Service) persistProvisionedOrganization(
 	return org, nil
 }
 
+// redirectSignupError sends a failed signup back to the sign-up page. Task 6
+// gives this its real body.
+func (s *Service) redirectSignupError(ctx context.Context, err error) (*gen.CallbackResult, error) {
+	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err))
+	return &gen.CallbackResult{
+		Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, "init_error"),
+		SessionToken:  "",
+		SessionCookie: "",
+	}, nil
+}
+
+// captureSignupTelemetry records a self-serve signup. new_org_created otherwise
+// only fires client-side from the register page, which a signup never renders —
+// without this the existing funnel would flatline for signup users.
+//
+// Reuses the onboarding_event + action shape that the register page and the
+// onboarding flows already emit, so existing charts stay continuous. is_gram and
+// start_time are stamped by CaptureEvent; organization_id and organization_slug
+// are passed by hand because that auto-population reads the auth context and the
+// callback has none.
+//
+// created_via is the flow tag. Not "source" (already means the OpenAPI spec's
+// origin on spec_uploaded) and not "disposition" (the assistants flow token,
+// which is also a URL param and a callback branch — reusing it would imply
+// ?disposition=signup is a supported entry point, which it is not).
+//
+// Telemetry failures are logged, never returned: the org exists and the user is
+// authenticated, so a dropped analytics event must not fail the request.
+func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName string, org orgRepo.OrganizationMetadatum) {
+	if err := s.posthog.CaptureEvent(ctx, "onboarding_event", email, map[string]any{
+		"action":            "new_org_created",
+		"created_via":       "signup",
+		"company_name":      orgName,
+		"organization_id":   org.ID,
+		"organization_slug": org.Slug,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to capture signup onboarding_event", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+	}
+
+	// Person property, so the cohort is durable rather than only queryable at
+	// the moment of the event. This is what PostHog cohorts, flags, and surveys
+	// target.
+	if err := s.posthog.IdentifyUser(ctx, email, map[string]any{
+		"created_via": "signup",
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set signup created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+	}
+}
+
 func dispositionFromState(payload *gen.CallbackPayload) string {
 	state := decodeStateParam(payload)
 	if state == nil {
@@ -1109,10 +1203,16 @@ func nonceKey(nonce string) string {
 // created.
 //
 // Deliberately growable. Adding fields later (campaign attribution, plan) is
-// additive — this is short-lived JSON in Redis, so there is no migration and no
-// back-compat window.
+// additive — this is short-lived, so there is no migration and no back-compat
+// window.
+//
+// No serialization tag, deliberately. The cache marshals with msgpack, which
+// keys by the Go field name and ignores `json` tags entirely, so a
+// `json:"org_name"` tag here would be inert and would misdescribe the wire
+// format: the stored key is "OrgName". Producer and consumer both use this
+// struct, so the round trip is symmetric either way.
 type signupIntent struct {
-	OrgName string `json:"org_name"`
+	OrgName string
 }
 
 // signupIntentKey namespaces the intent separately from the nonce binding.
