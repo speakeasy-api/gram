@@ -6,7 +6,7 @@ import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/ext
 // Installing this catalog entry creates an unproxied MCP server (see
 // useRemoteMcpInstallWorkflow) instead of a Gram-proxied remote one, since
 // Speakeasy never needs to manage OAuth for it.
-export const FIGMA_REGISTRY_SPECIFIER = "com.figma.mcp/mcp";
+const FIGMA_REGISTRY_SPECIFIER = "com.figma.mcp/mcp";
 
 export function isFigmaCatalogServer(server: PulseMCPServer): boolean {
   return server.registrySpecifier === FIGMA_REGISTRY_SPECIFIER;
