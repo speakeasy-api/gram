@@ -1,0 +1,85 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// EnforcementAnalysisResponse carries an analyzer's verdict back to the server
+// pod blocked on the matching EnforcementAnalysisRequest. Finding matches
+// contain customer content (the flagged text), so retention is the GCP minimum
+// and acked messages are not retained.
+message EnforcementAnalysisResponse {
+  // Mirrors EnforcementAnalysisRequest.correlation_id.
+  string correlation_id = 1;
+  string created_at = 2; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+  // Non-empty when the scan failed. Holds the failure class only (e.g. the
+  // exception type), never content. The requester maps any failure to the
+  // dead-letter sentinel so blocking policies fail closed.
+  string error = 3;
+  // Wall-clock scan time on the consumer, for latency attribution separate
+  // from queueing and transport.
+  double scan_duration_ms = 4;
+  // Denormalized discriminator matching the populated result branch; see
+  // EnforcementAnalysisRequest.analyzer.
+  string analyzer = 5;
+
+  oneof result {
+    PresidioResult presidio = 20;
+    GitleaksResult gitleaks = 21;
+    PromptInjectionResult prompt_injection = 22;
+    PromptPolicyResult prompt_policy = 23;
+    CustomRulesResult custom_rules = 24;
+  }
+
+  // Finding is one detection match, shaped after the in-process
+  // scanners.Finding the policy evaluator consumes (a strict subset of the
+  // audit Finding topic message — no ids, policy refs, or reveal metadata;
+  // the requester owns that context).
+  message Finding {
+    // Detector rule identifier (e.g. "pii.email_address", a gitleaks rule id,
+    // or a custom rule id).
+    string rule_id = 1;
+    // Detector-specific entity label, e.g. the Presidio entity type
+    // "EMAIL_ADDRESS". Empty when the detector has no entity concept.
+    string entity = 2;
+    string description = 3;
+    // The matched text. Sensitive: used in-memory for policy evaluation and
+    // never persisted.
+    string match = 4;
+    // UTF-8 byte offsets into the scanned content.
+    int32 start_pos = 5;
+    int32 end_pos = 6;
+    // Detector confidence in [0,1].
+    double confidence = 7;
+    repeated string tags = 8;
+  }
+
+  message PresidioResult {
+    repeated Finding findings = 1;
+  }
+
+  message GitleaksResult {
+    repeated Finding findings = 1;
+  }
+
+  message PromptInjectionResult {
+    repeated Finding findings = 1;
+  }
+
+  message PromptPolicyResult {
+    repeated Finding findings = 1;
+  }
+
+  message CustomRulesResult {
+    repeated Finding findings = 1;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 600 /* 10 minutes: GCP minimum. A reply is worthless once the
+                      requester's wait times out (seconds). */
+    }
+  };
+}

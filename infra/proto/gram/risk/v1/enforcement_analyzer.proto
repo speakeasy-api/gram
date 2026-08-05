@@ -1,0 +1,34 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// EnforcementAnalyzer is the subscription pystreams consumes enforcement scan
+// requests from. Tuned for the low-latency request-reply path, deliberately
+// unlike the audit PresidioAnalyzer subscription:
+//
+//   - ack_deadline 10s: a crashed consumer redelivers fast enough for a retry
+//     to still land inside the requester's reply timeout; healthy consumers
+//     rely on client-side lease extension for slow scans.
+//   - retention 10m (GCP minimum) and no retain_acked_messages: expired
+//     requests have zero replay value and carry customer content.
+//   - retry backoff 1-5s: a nack must come back quickly or not at all.
+//   - No dead_letter: requests self-expire via the deadline field, the handler
+//     acks poison/expired messages, and a DLQ would only accumulate
+//     PII-bearing content nobody can act on.
+message EnforcementAnalyzer {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.EnforcementAnalysisRequest"
+    ack_deadline: {seconds: 10}
+    retention: {
+      seconds: 600 /* 10 minutes */
+    }
+    retry_policy: {
+      minimum_backoff: {seconds: 1}
+      maximum_backoff: {seconds: 5}
+    }
+  };
+}
