@@ -457,7 +457,7 @@ jobs:
 
       - name: Smoke test assistant runner binary
         run: |
-          ldd ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner 2>&1 | grep -Eq "not a dynamic executable|statically linked" \
+          file -b ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
             || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
           ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner --help
 
