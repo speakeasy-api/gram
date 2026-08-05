@@ -800,6 +800,46 @@ func loadActiveTrial(
 	}
 }
 
+// provisionOrgForUser creates an organization and attaches a user to it as the
+// first member. Shared by the three paths that create orgs: self-serve register,
+// signup with a company name carried through login, and assistants
+// auto-provisioning.
+//
+// Session mutation is deliberately left to the caller. Register updates an
+// already-stored session; the callback-side callers assign
+// ActiveOrganizationID on an in-memory session before storing it once.
+//
+// whitelisted is a parameter because the callers disagree: register and signup
+// create gated orgs, assistants auto-provisioning does not.
+func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, whitelisted bool) (orgRepo.OrganizationMetadatum, error) {
+	var empty orgRepo.OrganizationMetadatum
+
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
+	if err != nil {
+		return empty, fmt.Errorf("find unique slug: %w", err)
+	}
+
+	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
+	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userID)
+	if err != nil {
+		return empty, fmt.Errorf("provision org in WorkOS: %w", err)
+	}
+
+	// Metadata, the user relationship, and the admin grant all land in one
+	// transaction, so a failure part-way cannot leave an organization a user
+	// can authenticate into without access control.
+	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, orgName, slug, userID, whitelisted)
+	if err != nil {
+		return empty, fmt.Errorf("persist provisioned organization: %w", err)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, userID); err != nil {
+		return empty, fmt.Errorf("invalidate user info cache: %w", err)
+	}
+
+	return org, nil
+}
+
 func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
@@ -818,24 +858,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(payload.OrgName))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").LogError(ctx, s.logger)
-	}
-
-	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
-	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").LogError(ctx, s.logger)
-	}
-
-	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, payload.OrgName, slug, authCtx.UserID, false)
+	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, false)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
-	}
-
-	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error invalidating user info cache").LogError(ctx, s.logger)
 	}
 
 	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
@@ -853,24 +878,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
 
-	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
+	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, true)
 	if err != nil {
-		return "", fmt.Errorf("find unique slug: %w", err)
-	}
-
-	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
-	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userInfo.UserID)
-	if err != nil {
-		return "", fmt.Errorf("provision org in WorkOS: %w", err)
-	}
-
-	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, orgName, slug, userInfo.UserID, true)
-	if err != nil {
-		return "", fmt.Errorf("create organization: %w", err)
-	}
-
-	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, userInfo.UserID); invalidationErr != nil {
-		return "", fmt.Errorf("invalidate user info cache: %w", invalidationErr)
+		return "", err
 	}
 
 	projects, err := s.getProjectsOrSetupDefaults(ctx, org.ID)
