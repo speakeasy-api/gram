@@ -22,7 +22,7 @@ const (
 )
 
 // EnforcementAnalysisResponse carries an analyzer's verdict back to the server
-// pod blocked on the matching EnforcementAnalysisRequest. Detection matches
+// pod blocked on the matching EnforcementAnalysisRequest. Finding matches
 // contain customer content (the flagged text), so retention is the GCP minimum
 // and acked messages are not retained.
 type EnforcementAnalysisResponse struct {
@@ -120,6 +120,42 @@ func (x *EnforcementAnalysisResponse) GetPresidio() *EnforcementAnalysisResponse
 	return nil
 }
 
+func (x *EnforcementAnalysisResponse) GetGitleaks() *EnforcementAnalysisResponse_GitleaksResult {
+	if x != nil {
+		if x, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_Gitleaks); ok {
+			return x.Gitleaks
+		}
+	}
+	return nil
+}
+
+func (x *EnforcementAnalysisResponse) GetPromptInjection() *EnforcementAnalysisResponse_PromptInjectionResult {
+	if x != nil {
+		if x, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_PromptInjection); ok {
+			return x.PromptInjection
+		}
+	}
+	return nil
+}
+
+func (x *EnforcementAnalysisResponse) GetPromptPolicy() *EnforcementAnalysisResponse_PromptPolicyResult {
+	if x != nil {
+		if x, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_PromptPolicy); ok {
+			return x.PromptPolicy
+		}
+	}
+	return nil
+}
+
+func (x *EnforcementAnalysisResponse) GetCustomRules() *EnforcementAnalysisResponse_CustomRulesResult {
+	if x != nil {
+		if x, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_CustomRules); ok {
+			return x.CustomRules
+		}
+	}
+	return nil
+}
+
 func (x *EnforcementAnalysisResponse) SetCorrelationId(v string) {
 	x.xxx_hidden_CorrelationId = &v
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 6)
@@ -151,6 +187,38 @@ func (x *EnforcementAnalysisResponse) SetPresidio(v *EnforcementAnalysisResponse
 		return
 	}
 	x.xxx_hidden_Result = &enforcementAnalysisResponse_Presidio{v}
+}
+
+func (x *EnforcementAnalysisResponse) SetGitleaks(v *EnforcementAnalysisResponse_GitleaksResult) {
+	if v == nil {
+		x.xxx_hidden_Result = nil
+		return
+	}
+	x.xxx_hidden_Result = &enforcementAnalysisResponse_Gitleaks{v}
+}
+
+func (x *EnforcementAnalysisResponse) SetPromptInjection(v *EnforcementAnalysisResponse_PromptInjectionResult) {
+	if v == nil {
+		x.xxx_hidden_Result = nil
+		return
+	}
+	x.xxx_hidden_Result = &enforcementAnalysisResponse_PromptInjection{v}
+}
+
+func (x *EnforcementAnalysisResponse) SetPromptPolicy(v *EnforcementAnalysisResponse_PromptPolicyResult) {
+	if v == nil {
+		x.xxx_hidden_Result = nil
+		return
+	}
+	x.xxx_hidden_Result = &enforcementAnalysisResponse_PromptPolicy{v}
+}
+
+func (x *EnforcementAnalysisResponse) SetCustomRules(v *EnforcementAnalysisResponse_CustomRulesResult) {
+	if v == nil {
+		x.xxx_hidden_Result = nil
+		return
+	}
+	x.xxx_hidden_Result = &enforcementAnalysisResponse_CustomRules{v}
 }
 
 func (x *EnforcementAnalysisResponse) HasCorrelationId() bool {
@@ -203,6 +271,38 @@ func (x *EnforcementAnalysisResponse) HasPresidio() bool {
 	return ok
 }
 
+func (x *EnforcementAnalysisResponse) HasGitleaks() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_Gitleaks)
+	return ok
+}
+
+func (x *EnforcementAnalysisResponse) HasPromptInjection() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_PromptInjection)
+	return ok
+}
+
+func (x *EnforcementAnalysisResponse) HasPromptPolicy() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_PromptPolicy)
+	return ok
+}
+
+func (x *EnforcementAnalysisResponse) HasCustomRules() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_CustomRules)
+	return ok
+}
+
 func (x *EnforcementAnalysisResponse) ClearCorrelationId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_CorrelationId = nil
@@ -238,8 +338,36 @@ func (x *EnforcementAnalysisResponse) ClearPresidio() {
 	}
 }
 
+func (x *EnforcementAnalysisResponse) ClearGitleaks() {
+	if _, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_Gitleaks); ok {
+		x.xxx_hidden_Result = nil
+	}
+}
+
+func (x *EnforcementAnalysisResponse) ClearPromptInjection() {
+	if _, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_PromptInjection); ok {
+		x.xxx_hidden_Result = nil
+	}
+}
+
+func (x *EnforcementAnalysisResponse) ClearPromptPolicy() {
+	if _, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_PromptPolicy); ok {
+		x.xxx_hidden_Result = nil
+	}
+}
+
+func (x *EnforcementAnalysisResponse) ClearCustomRules() {
+	if _, ok := x.xxx_hidden_Result.(*enforcementAnalysisResponse_CustomRules); ok {
+		x.xxx_hidden_Result = nil
+	}
+}
+
 const EnforcementAnalysisResponse_Result_not_set_case case_EnforcementAnalysisResponse_Result = 0
 const EnforcementAnalysisResponse_Presidio_case case_EnforcementAnalysisResponse_Result = 20
+const EnforcementAnalysisResponse_Gitleaks_case case_EnforcementAnalysisResponse_Result = 21
+const EnforcementAnalysisResponse_PromptInjection_case case_EnforcementAnalysisResponse_Result = 22
+const EnforcementAnalysisResponse_PromptPolicy_case case_EnforcementAnalysisResponse_Result = 23
+const EnforcementAnalysisResponse_CustomRules_case case_EnforcementAnalysisResponse_Result = 24
 
 func (x *EnforcementAnalysisResponse) WhichResult() case_EnforcementAnalysisResponse_Result {
 	if x == nil {
@@ -248,6 +376,14 @@ func (x *EnforcementAnalysisResponse) WhichResult() case_EnforcementAnalysisResp
 	switch x.xxx_hidden_Result.(type) {
 	case *enforcementAnalysisResponse_Presidio:
 		return EnforcementAnalysisResponse_Presidio_case
+	case *enforcementAnalysisResponse_Gitleaks:
+		return EnforcementAnalysisResponse_Gitleaks_case
+	case *enforcementAnalysisResponse_PromptInjection:
+		return EnforcementAnalysisResponse_PromptInjection_case
+	case *enforcementAnalysisResponse_PromptPolicy:
+		return EnforcementAnalysisResponse_PromptPolicy_case
+	case *enforcementAnalysisResponse_CustomRules:
+		return EnforcementAnalysisResponse_CustomRules_case
 	default:
 		return EnforcementAnalysisResponse_Result_not_set_case
 	}
@@ -261,7 +397,7 @@ type EnforcementAnalysisResponse_builder struct {
 	CreatedAt     *string
 	// Non-empty when the scan failed. Holds the failure class only (e.g. the
 	// exception type), never content. The requester maps any failure to the
-	// pii.dead_letter sentinel so blocking policies fail closed.
+	// dead-letter sentinel so blocking policies fail closed.
 	Error *string
 	// Wall-clock scan time on the consumer, for latency attribution separate
 	// from queueing and transport.
@@ -270,7 +406,11 @@ type EnforcementAnalysisResponse_builder struct {
 	// EnforcementAnalysisRequest.analyzer.
 	Analyzer *string
 	// Fields of oneof xxx_hidden_Result:
-	Presidio *EnforcementAnalysisResponse_PresidioResult
+	Presidio        *EnforcementAnalysisResponse_PresidioResult
+	Gitleaks        *EnforcementAnalysisResponse_GitleaksResult
+	PromptInjection *EnforcementAnalysisResponse_PromptInjectionResult
+	PromptPolicy    *EnforcementAnalysisResponse_PromptPolicyResult
+	CustomRules     *EnforcementAnalysisResponse_CustomRulesResult
 	// -- end of xxx_hidden_Result
 }
 
@@ -301,6 +441,18 @@ func (b0 EnforcementAnalysisResponse_builder) Build() *EnforcementAnalysisRespon
 	if b.Presidio != nil {
 		x.xxx_hidden_Result = &enforcementAnalysisResponse_Presidio{b.Presidio}
 	}
+	if b.Gitleaks != nil {
+		x.xxx_hidden_Result = &enforcementAnalysisResponse_Gitleaks{b.Gitleaks}
+	}
+	if b.PromptInjection != nil {
+		x.xxx_hidden_Result = &enforcementAnalysisResponse_PromptInjection{b.PromptInjection}
+	}
+	if b.PromptPolicy != nil {
+		x.xxx_hidden_Result = &enforcementAnalysisResponse_PromptPolicy{b.PromptPolicy}
+	}
+	if b.CustomRules != nil {
+		x.xxx_hidden_Result = &enforcementAnalysisResponse_CustomRules{b.CustomRules}
+	}
 	return m0
 }
 
@@ -322,18 +474,335 @@ type enforcementAnalysisResponse_Presidio struct {
 	Presidio *EnforcementAnalysisResponse_PresidioResult `protobuf:"bytes,20,opt,name=presidio,oneof"`
 }
 
+type enforcementAnalysisResponse_Gitleaks struct {
+	Gitleaks *EnforcementAnalysisResponse_GitleaksResult `protobuf:"bytes,21,opt,name=gitleaks,oneof"`
+}
+
+type enforcementAnalysisResponse_PromptInjection struct {
+	PromptInjection *EnforcementAnalysisResponse_PromptInjectionResult `protobuf:"bytes,22,opt,name=prompt_injection,json=promptInjection,oneof"`
+}
+
+type enforcementAnalysisResponse_PromptPolicy struct {
+	PromptPolicy *EnforcementAnalysisResponse_PromptPolicyResult `protobuf:"bytes,23,opt,name=prompt_policy,json=promptPolicy,oneof"`
+}
+
+type enforcementAnalysisResponse_CustomRules struct {
+	CustomRules *EnforcementAnalysisResponse_CustomRulesResult `protobuf:"bytes,24,opt,name=custom_rules,json=customRules,oneof"`
+}
+
 func (*enforcementAnalysisResponse_Presidio) isEnforcementAnalysisResponse_Result() {}
 
+func (*enforcementAnalysisResponse_Gitleaks) isEnforcementAnalysisResponse_Result() {}
+
+func (*enforcementAnalysisResponse_PromptInjection) isEnforcementAnalysisResponse_Result() {}
+
+func (*enforcementAnalysisResponse_PromptPolicy) isEnforcementAnalysisResponse_Result() {}
+
+func (*enforcementAnalysisResponse_CustomRules) isEnforcementAnalysisResponse_Result() {}
+
+// Finding is one detection match, shaped after the in-process
+// scanners.Finding the policy evaluator consumes (a strict subset of the
+// audit Finding topic message — no ids, policy refs, or reveal metadata;
+// the requester owns that context).
+type EnforcementAnalysisResponse_Finding struct {
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RuleId      *string                `protobuf:"bytes,1,opt,name=rule_id,json=ruleId"`
+	xxx_hidden_Entity      *string                `protobuf:"bytes,2,opt,name=entity"`
+	xxx_hidden_Description *string                `protobuf:"bytes,3,opt,name=description"`
+	xxx_hidden_Match       *string                `protobuf:"bytes,4,opt,name=match"`
+	xxx_hidden_StartPos    int32                  `protobuf:"varint,5,opt,name=start_pos,json=startPos"`
+	xxx_hidden_EndPos      int32                  `protobuf:"varint,6,opt,name=end_pos,json=endPos"`
+	xxx_hidden_Confidence  float64                `protobuf:"fixed64,7,opt,name=confidence"`
+	xxx_hidden_Tags        []string               `protobuf:"bytes,8,rep,name=tags"`
+	XXX_raceDetectHookData protoimpl.RaceDetectHookData
+	XXX_presence           [1]uint32
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *EnforcementAnalysisResponse_Finding) Reset() {
+	*x = EnforcementAnalysisResponse_Finding{}
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnforcementAnalysisResponse_Finding) ProtoMessage() {}
+
+func (x *EnforcementAnalysisResponse_Finding) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetRuleId() string {
+	if x != nil {
+		if x.xxx_hidden_RuleId != nil {
+			return *x.xxx_hidden_RuleId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetEntity() string {
+	if x != nil {
+		if x.xxx_hidden_Entity != nil {
+			return *x.xxx_hidden_Entity
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetDescription() string {
+	if x != nil {
+		if x.xxx_hidden_Description != nil {
+			return *x.xxx_hidden_Description
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetMatch() string {
+	if x != nil {
+		if x.xxx_hidden_Match != nil {
+			return *x.xxx_hidden_Match
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetStartPos() int32 {
+	if x != nil {
+		return x.xxx_hidden_StartPos
+	}
+	return 0
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetEndPos() int32 {
+	if x != nil {
+		return x.xxx_hidden_EndPos
+	}
+	return 0
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetConfidence() float64 {
+	if x != nil {
+		return x.xxx_hidden_Confidence
+	}
+	return 0
+}
+
+func (x *EnforcementAnalysisResponse_Finding) GetTags() []string {
+	if x != nil {
+		return x.xxx_hidden_Tags
+	}
+	return nil
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetRuleId(v string) {
+	x.xxx_hidden_RuleId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 8)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetEntity(v string) {
+	x.xxx_hidden_Entity = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 8)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetDescription(v string) {
+	x.xxx_hidden_Description = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 8)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetMatch(v string) {
+	x.xxx_hidden_Match = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 8)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetStartPos(v int32) {
+	x.xxx_hidden_StartPos = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 8)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetEndPos(v int32) {
+	x.xxx_hidden_EndPos = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 8)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetConfidence(v float64) {
+	x.xxx_hidden_Confidence = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 8)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) SetTags(v []string) {
+	x.xxx_hidden_Tags = v
+}
+
+func (x *EnforcementAnalysisResponse_Finding) HasRuleId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) HasEntity() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) HasDescription() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) HasMatch() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) HasStartPos() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) HasEndPos() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) HasConfidence() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+}
+
+func (x *EnforcementAnalysisResponse_Finding) ClearRuleId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_RuleId = nil
+}
+
+func (x *EnforcementAnalysisResponse_Finding) ClearEntity() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_Entity = nil
+}
+
+func (x *EnforcementAnalysisResponse_Finding) ClearDescription() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_Description = nil
+}
+
+func (x *EnforcementAnalysisResponse_Finding) ClearMatch() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_Match = nil
+}
+
+func (x *EnforcementAnalysisResponse_Finding) ClearStartPos() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_StartPos = 0
+}
+
+func (x *EnforcementAnalysisResponse_Finding) ClearEndPos() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_EndPos = 0
+}
+
+func (x *EnforcementAnalysisResponse_Finding) ClearConfidence() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
+	x.xxx_hidden_Confidence = 0
+}
+
+type EnforcementAnalysisResponse_Finding_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Detector rule identifier (e.g. "pii.email_address", a gitleaks rule id,
+	// or a custom rule id).
+	RuleId *string
+	// Detector-specific entity label, e.g. the Presidio entity type
+	// "EMAIL_ADDRESS". Empty when the detector has no entity concept.
+	Entity      *string
+	Description *string
+	// The matched text. Sensitive: used in-memory for policy evaluation and
+	// never persisted.
+	Match *string
+	// UTF-8 byte offsets into the scanned content.
+	StartPos *int32
+	EndPos   *int32
+	// Detector confidence in [0,1].
+	Confidence *float64
+	Tags       []string
+}
+
+func (b0 EnforcementAnalysisResponse_Finding_builder) Build() *EnforcementAnalysisResponse_Finding {
+	m0 := &EnforcementAnalysisResponse_Finding{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.RuleId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 8)
+		x.xxx_hidden_RuleId = b.RuleId
+	}
+	if b.Entity != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 8)
+		x.xxx_hidden_Entity = b.Entity
+	}
+	if b.Description != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 8)
+		x.xxx_hidden_Description = b.Description
+	}
+	if b.Match != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 8)
+		x.xxx_hidden_Match = b.Match
+	}
+	if b.StartPos != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 8)
+		x.xxx_hidden_StartPos = *b.StartPos
+	}
+	if b.EndPos != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 8)
+		x.xxx_hidden_EndPos = *b.EndPos
+	}
+	if b.Confidence != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 8)
+		x.xxx_hidden_Confidence = *b.Confidence
+	}
+	x.xxx_hidden_Tags = b.Tags
+	return m0
+}
+
 type EnforcementAnalysisResponse_PresidioResult struct {
-	state                 protoimpl.MessageState                    `protogen:"opaque.v1"`
-	xxx_hidden_Detections *[]*EnforcementAnalysisResponse_Detection `protobuf:"bytes,1,rep,name=detections"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Findings *[]*EnforcementAnalysisResponse_Finding `protobuf:"bytes,1,rep,name=findings"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *EnforcementAnalysisResponse_PresidioResult) Reset() {
 	*x = EnforcementAnalysisResponse_PresidioResult{}
-	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[1]
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -345,7 +814,7 @@ func (x *EnforcementAnalysisResponse_PresidioResult) String() string {
 func (*EnforcementAnalysisResponse_PresidioResult) ProtoMessage() {}
 
 func (x *EnforcementAnalysisResponse_PresidioResult) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[1]
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -356,61 +825,55 @@ func (x *EnforcementAnalysisResponse_PresidioResult) ProtoReflect() protoreflect
 	return mi.MessageOf(x)
 }
 
-func (x *EnforcementAnalysisResponse_PresidioResult) GetDetections() []*EnforcementAnalysisResponse_Detection {
+func (x *EnforcementAnalysisResponse_PresidioResult) GetFindings() []*EnforcementAnalysisResponse_Finding {
 	if x != nil {
-		if x.xxx_hidden_Detections != nil {
-			return *x.xxx_hidden_Detections
+		if x.xxx_hidden_Findings != nil {
+			return *x.xxx_hidden_Findings
 		}
 	}
 	return nil
 }
 
-func (x *EnforcementAnalysisResponse_PresidioResult) SetDetections(v []*EnforcementAnalysisResponse_Detection) {
-	x.xxx_hidden_Detections = &v
+func (x *EnforcementAnalysisResponse_PresidioResult) SetFindings(v []*EnforcementAnalysisResponse_Finding) {
+	x.xxx_hidden_Findings = &v
 }
 
 type EnforcementAnalysisResponse_PresidioResult_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	Detections []*EnforcementAnalysisResponse_Detection
+	Findings []*EnforcementAnalysisResponse_Finding
 }
 
 func (b0 EnforcementAnalysisResponse_PresidioResult_builder) Build() *EnforcementAnalysisResponse_PresidioResult {
 	m0 := &EnforcementAnalysisResponse_PresidioResult{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.xxx_hidden_Detections = &b.Detections
+	x.xxx_hidden_Findings = &b.Findings
 	return m0
 }
 
-type EnforcementAnalysisResponse_Detection struct {
-	state                  protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_EntityType  *string                `protobuf:"bytes,1,opt,name=entity_type,json=entityType"`
-	xxx_hidden_Match       *string                `protobuf:"bytes,2,opt,name=match"`
-	xxx_hidden_StartPos    int32                  `protobuf:"varint,3,opt,name=start_pos,json=startPos"`
-	xxx_hidden_EndPos      int32                  `protobuf:"varint,4,opt,name=end_pos,json=endPos"`
-	xxx_hidden_Confidence  float64                `protobuf:"fixed64,5,opt,name=confidence"`
-	XXX_raceDetectHookData protoimpl.RaceDetectHookData
-	XXX_presence           [1]uint32
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+type EnforcementAnalysisResponse_GitleaksResult struct {
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Findings *[]*EnforcementAnalysisResponse_Finding `protobuf:"bytes,1,rep,name=findings"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
-func (x *EnforcementAnalysisResponse_Detection) Reset() {
-	*x = EnforcementAnalysisResponse_Detection{}
-	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[2]
+func (x *EnforcementAnalysisResponse_GitleaksResult) Reset() {
+	*x = EnforcementAnalysisResponse_GitleaksResult{}
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EnforcementAnalysisResponse_Detection) String() string {
+func (x *EnforcementAnalysisResponse_GitleaksResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EnforcementAnalysisResponse_Detection) ProtoMessage() {}
+func (*EnforcementAnalysisResponse_GitleaksResult) ProtoMessage() {}
 
-func (x *EnforcementAnalysisResponse_Detection) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[2]
+func (x *EnforcementAnalysisResponse_GitleaksResult) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -421,171 +884,207 @@ func (x *EnforcementAnalysisResponse_Detection) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-func (x *EnforcementAnalysisResponse_Detection) GetEntityType() string {
+func (x *EnforcementAnalysisResponse_GitleaksResult) GetFindings() []*EnforcementAnalysisResponse_Finding {
 	if x != nil {
-		if x.xxx_hidden_EntityType != nil {
-			return *x.xxx_hidden_EntityType
+		if x.xxx_hidden_Findings != nil {
+			return *x.xxx_hidden_Findings
 		}
-		return ""
 	}
-	return ""
+	return nil
 }
 
-func (x *EnforcementAnalysisResponse_Detection) GetMatch() string {
-	if x != nil {
-		if x.xxx_hidden_Match != nil {
-			return *x.xxx_hidden_Match
-		}
-		return ""
-	}
-	return ""
+func (x *EnforcementAnalysisResponse_GitleaksResult) SetFindings(v []*EnforcementAnalysisResponse_Finding) {
+	x.xxx_hidden_Findings = &v
 }
 
-func (x *EnforcementAnalysisResponse_Detection) GetStartPos() int32 {
-	if x != nil {
-		return x.xxx_hidden_StartPos
-	}
-	return 0
-}
-
-func (x *EnforcementAnalysisResponse_Detection) GetEndPos() int32 {
-	if x != nil {
-		return x.xxx_hidden_EndPos
-	}
-	return 0
-}
-
-func (x *EnforcementAnalysisResponse_Detection) GetConfidence() float64 {
-	if x != nil {
-		return x.xxx_hidden_Confidence
-	}
-	return 0
-}
-
-func (x *EnforcementAnalysisResponse_Detection) SetEntityType(v string) {
-	x.xxx_hidden_EntityType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 5)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) SetMatch(v string) {
-	x.xxx_hidden_Match = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 5)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) SetStartPos(v int32) {
-	x.xxx_hidden_StartPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 5)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) SetEndPos(v int32) {
-	x.xxx_hidden_EndPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 5)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) SetConfidence(v float64) {
-	x.xxx_hidden_Confidence = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 5)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) HasEntityType() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) HasMatch() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) HasStartPos() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) HasEndPos() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) HasConfidence() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
-}
-
-func (x *EnforcementAnalysisResponse_Detection) ClearEntityType() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
-	x.xxx_hidden_EntityType = nil
-}
-
-func (x *EnforcementAnalysisResponse_Detection) ClearMatch() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
-	x.xxx_hidden_Match = nil
-}
-
-func (x *EnforcementAnalysisResponse_Detection) ClearStartPos() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
-	x.xxx_hidden_StartPos = 0
-}
-
-func (x *EnforcementAnalysisResponse_Detection) ClearEndPos() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
-	x.xxx_hidden_EndPos = 0
-}
-
-func (x *EnforcementAnalysisResponse_Detection) ClearConfidence() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
-	x.xxx_hidden_Confidence = 0
-}
-
-type EnforcementAnalysisResponse_Detection_builder struct {
+type EnforcementAnalysisResponse_GitleaksResult_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Presidio entity type, e.g. "EMAIL_ADDRESS".
-	EntityType *string
-	// The matched text. Sensitive: used in-memory for policy evaluation and
-	// never persisted.
-	Match *string
-	// UTF-8 byte offsets into the scanned content.
-	StartPos *int32
-	EndPos   *int32
-	// Recognizer confidence in [0,1].
-	Confidence *float64
+	Findings []*EnforcementAnalysisResponse_Finding
 }
 
-func (b0 EnforcementAnalysisResponse_Detection_builder) Build() *EnforcementAnalysisResponse_Detection {
-	m0 := &EnforcementAnalysisResponse_Detection{}
+func (b0 EnforcementAnalysisResponse_GitleaksResult_builder) Build() *EnforcementAnalysisResponse_GitleaksResult {
+	m0 := &EnforcementAnalysisResponse_GitleaksResult{}
 	b, x := &b0, m0
 	_, _ = b, x
-	if b.EntityType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 5)
-		x.xxx_hidden_EntityType = b.EntityType
+	x.xxx_hidden_Findings = &b.Findings
+	return m0
+}
+
+type EnforcementAnalysisResponse_PromptInjectionResult struct {
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Findings *[]*EnforcementAnalysisResponse_Finding `protobuf:"bytes,1,rep,name=findings"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *EnforcementAnalysisResponse_PromptInjectionResult) Reset() {
+	*x = EnforcementAnalysisResponse_PromptInjectionResult{}
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnforcementAnalysisResponse_PromptInjectionResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnforcementAnalysisResponse_PromptInjectionResult) ProtoMessage() {}
+
+func (x *EnforcementAnalysisResponse_PromptInjectionResult) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	if b.Match != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 5)
-		x.xxx_hidden_Match = b.Match
+	return mi.MessageOf(x)
+}
+
+func (x *EnforcementAnalysisResponse_PromptInjectionResult) GetFindings() []*EnforcementAnalysisResponse_Finding {
+	if x != nil {
+		if x.xxx_hidden_Findings != nil {
+			return *x.xxx_hidden_Findings
+		}
 	}
-	if b.StartPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 5)
-		x.xxx_hidden_StartPos = *b.StartPos
+	return nil
+}
+
+func (x *EnforcementAnalysisResponse_PromptInjectionResult) SetFindings(v []*EnforcementAnalysisResponse_Finding) {
+	x.xxx_hidden_Findings = &v
+}
+
+type EnforcementAnalysisResponse_PromptInjectionResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Findings []*EnforcementAnalysisResponse_Finding
+}
+
+func (b0 EnforcementAnalysisResponse_PromptInjectionResult_builder) Build() *EnforcementAnalysisResponse_PromptInjectionResult {
+	m0 := &EnforcementAnalysisResponse_PromptInjectionResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Findings = &b.Findings
+	return m0
+}
+
+type EnforcementAnalysisResponse_PromptPolicyResult struct {
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Findings *[]*EnforcementAnalysisResponse_Finding `protobuf:"bytes,1,rep,name=findings"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *EnforcementAnalysisResponse_PromptPolicyResult) Reset() {
+	*x = EnforcementAnalysisResponse_PromptPolicyResult{}
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnforcementAnalysisResponse_PromptPolicyResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnforcementAnalysisResponse_PromptPolicyResult) ProtoMessage() {}
+
+func (x *EnforcementAnalysisResponse_PromptPolicyResult) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	if b.EndPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 5)
-		x.xxx_hidden_EndPos = *b.EndPos
+	return mi.MessageOf(x)
+}
+
+func (x *EnforcementAnalysisResponse_PromptPolicyResult) GetFindings() []*EnforcementAnalysisResponse_Finding {
+	if x != nil {
+		if x.xxx_hidden_Findings != nil {
+			return *x.xxx_hidden_Findings
+		}
 	}
-	if b.Confidence != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 5)
-		x.xxx_hidden_Confidence = *b.Confidence
+	return nil
+}
+
+func (x *EnforcementAnalysisResponse_PromptPolicyResult) SetFindings(v []*EnforcementAnalysisResponse_Finding) {
+	x.xxx_hidden_Findings = &v
+}
+
+type EnforcementAnalysisResponse_PromptPolicyResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Findings []*EnforcementAnalysisResponse_Finding
+}
+
+func (b0 EnforcementAnalysisResponse_PromptPolicyResult_builder) Build() *EnforcementAnalysisResponse_PromptPolicyResult {
+	m0 := &EnforcementAnalysisResponse_PromptPolicyResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Findings = &b.Findings
+	return m0
+}
+
+type EnforcementAnalysisResponse_CustomRulesResult struct {
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Findings *[]*EnforcementAnalysisResponse_Finding `protobuf:"bytes,1,rep,name=findings"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *EnforcementAnalysisResponse_CustomRulesResult) Reset() {
+	*x = EnforcementAnalysisResponse_CustomRulesResult{}
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnforcementAnalysisResponse_CustomRulesResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnforcementAnalysisResponse_CustomRulesResult) ProtoMessage() {}
+
+func (x *EnforcementAnalysisResponse_CustomRulesResult) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
+	return mi.MessageOf(x)
+}
+
+func (x *EnforcementAnalysisResponse_CustomRulesResult) GetFindings() []*EnforcementAnalysisResponse_Finding {
+	if x != nil {
+		if x.xxx_hidden_Findings != nil {
+			return *x.xxx_hidden_Findings
+		}
+	}
+	return nil
+}
+
+func (x *EnforcementAnalysisResponse_CustomRulesResult) SetFindings(v []*EnforcementAnalysisResponse_Finding) {
+	x.xxx_hidden_Findings = &v
+}
+
+type EnforcementAnalysisResponse_CustomRulesResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Findings []*EnforcementAnalysisResponse_Finding
+}
+
+func (b0 EnforcementAnalysisResponse_CustomRulesResult_builder) Build() *EnforcementAnalysisResponse_CustomRulesResult {
+	m0 := &EnforcementAnalysisResponse_CustomRulesResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Findings = &b.Findings
 	return m0
 }
 
@@ -593,7 +1092,7 @@ var File_gram_risk_v1_enforcement_analysis_response_proto protoreflect.FileDescr
 
 const file_gram_risk_v1_enforcement_analysis_response_proto_rawDesc = "" +
 	"\n" +
-	"0gram/risk/v1/enforcement_analysis_response.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xae\x04\n" +
+	"0gram/risk/v1/enforcement_analysis_response.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x8b\v\n" +
 	"\x1bEnforcementAnalysisResponse\x12%\n" +
 	"\x0ecorrelation_id\x18\x01 \x01(\tR\rcorrelationId\x12\x1d\n" +
 	"\n" +
@@ -601,36 +1100,60 @@ const file_gram_risk_v1_enforcement_analysis_response_proto_rawDesc = "" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12(\n" +
 	"\x10scan_duration_ms\x18\x04 \x01(\x01R\x0escanDurationMs\x12\x1a\n" +
 	"\banalyzer\x18\x05 \x01(\tR\banalyzer\x12V\n" +
-	"\bpresidio\x18\x14 \x01(\v28.gram.risk.v1.EnforcementAnalysisResponse.PresidioResultH\x00R\bpresidio\x1ae\n" +
-	"\x0ePresidioResult\x12S\n" +
+	"\bpresidio\x18\x14 \x01(\v28.gram.risk.v1.EnforcementAnalysisResponse.PresidioResultH\x00R\bpresidio\x12V\n" +
+	"\bgitleaks\x18\x15 \x01(\v28.gram.risk.v1.EnforcementAnalysisResponse.GitleaksResultH\x00R\bgitleaks\x12l\n" +
+	"\x10prompt_injection\x18\x16 \x01(\v2?.gram.risk.v1.EnforcementAnalysisResponse.PromptInjectionResultH\x00R\x0fpromptInjection\x12c\n" +
+	"\rprompt_policy\x18\x17 \x01(\v2<.gram.risk.v1.EnforcementAnalysisResponse.PromptPolicyResultH\x00R\fpromptPolicy\x12`\n" +
+	"\fcustom_rules\x18\x18 \x01(\v2;.gram.risk.v1.EnforcementAnalysisResponse.CustomRulesResultH\x00R\vcustomRules\x1a\xdc\x01\n" +
+	"\aFinding\x12\x17\n" +
+	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x16\n" +
+	"\x06entity\x18\x02 \x01(\tR\x06entity\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x14\n" +
+	"\x05match\x18\x04 \x01(\tR\x05match\x12\x1b\n" +
+	"\tstart_pos\x18\x05 \x01(\x05R\bstartPos\x12\x17\n" +
+	"\aend_pos\x18\x06 \x01(\x05R\x06endPos\x12\x1e\n" +
 	"\n" +
-	"detections\x18\x01 \x03(\v23.gram.risk.v1.EnforcementAnalysisResponse.DetectionR\n" +
-	"detections\x1a\x98\x01\n" +
-	"\tDetection\x12\x1f\n" +
-	"\ventity_type\x18\x01 \x01(\tR\n" +
-	"entityType\x12\x14\n" +
-	"\x05match\x18\x02 \x01(\tR\x05match\x12\x1b\n" +
-	"\tstart_pos\x18\x03 \x01(\x05R\bstartPos\x12\x17\n" +
-	"\aend_pos\x18\x04 \x01(\x05R\x06endPos\x12\x1e\n" +
-	"\n" +
-	"confidence\x18\x05 \x01(\x01R\n" +
-	"confidence:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04B\b\n" +
+	"confidence\x18\a \x01(\x01R\n" +
+	"confidence\x12\x12\n" +
+	"\x04tags\x18\b \x03(\tR\x04tags\x1a_\n" +
+	"\x0ePresidioResult\x12M\n" +
+	"\bfindings\x18\x01 \x03(\v21.gram.risk.v1.EnforcementAnalysisResponse.FindingR\bfindings\x1a_\n" +
+	"\x0eGitleaksResult\x12M\n" +
+	"\bfindings\x18\x01 \x03(\v21.gram.risk.v1.EnforcementAnalysisResponse.FindingR\bfindings\x1af\n" +
+	"\x15PromptInjectionResult\x12M\n" +
+	"\bfindings\x18\x01 \x03(\v21.gram.risk.v1.EnforcementAnalysisResponse.FindingR\bfindings\x1ac\n" +
+	"\x12PromptPolicyResult\x12M\n" +
+	"\bfindings\x18\x01 \x03(\v21.gram.risk.v1.EnforcementAnalysisResponse.FindingR\bfindings\x1ab\n" +
+	"\x11CustomRulesResult\x12M\n" +
+	"\bfindings\x18\x01 \x03(\v21.gram.risk.v1.EnforcementAnalysisResponse.FindingR\bfindings:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04B\b\n" +
 	"\x06resultB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
-var file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_gram_risk_v1_enforcement_analysis_response_proto_goTypes = []any{
-	(*EnforcementAnalysisResponse)(nil),                // 0: gram.risk.v1.EnforcementAnalysisResponse
-	(*EnforcementAnalysisResponse_PresidioResult)(nil), // 1: gram.risk.v1.EnforcementAnalysisResponse.PresidioResult
-	(*EnforcementAnalysisResponse_Detection)(nil),      // 2: gram.risk.v1.EnforcementAnalysisResponse.Detection
+	(*EnforcementAnalysisResponse)(nil),                       // 0: gram.risk.v1.EnforcementAnalysisResponse
+	(*EnforcementAnalysisResponse_Finding)(nil),               // 1: gram.risk.v1.EnforcementAnalysisResponse.Finding
+	(*EnforcementAnalysisResponse_PresidioResult)(nil),        // 2: gram.risk.v1.EnforcementAnalysisResponse.PresidioResult
+	(*EnforcementAnalysisResponse_GitleaksResult)(nil),        // 3: gram.risk.v1.EnforcementAnalysisResponse.GitleaksResult
+	(*EnforcementAnalysisResponse_PromptInjectionResult)(nil), // 4: gram.risk.v1.EnforcementAnalysisResponse.PromptInjectionResult
+	(*EnforcementAnalysisResponse_PromptPolicyResult)(nil),    // 5: gram.risk.v1.EnforcementAnalysisResponse.PromptPolicyResult
+	(*EnforcementAnalysisResponse_CustomRulesResult)(nil),     // 6: gram.risk.v1.EnforcementAnalysisResponse.CustomRulesResult
 }
 var file_gram_risk_v1_enforcement_analysis_response_proto_depIdxs = []int32{
-	1, // 0: gram.risk.v1.EnforcementAnalysisResponse.presidio:type_name -> gram.risk.v1.EnforcementAnalysisResponse.PresidioResult
-	2, // 1: gram.risk.v1.EnforcementAnalysisResponse.PresidioResult.detections:type_name -> gram.risk.v1.EnforcementAnalysisResponse.Detection
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	2,  // 0: gram.risk.v1.EnforcementAnalysisResponse.presidio:type_name -> gram.risk.v1.EnforcementAnalysisResponse.PresidioResult
+	3,  // 1: gram.risk.v1.EnforcementAnalysisResponse.gitleaks:type_name -> gram.risk.v1.EnforcementAnalysisResponse.GitleaksResult
+	4,  // 2: gram.risk.v1.EnforcementAnalysisResponse.prompt_injection:type_name -> gram.risk.v1.EnforcementAnalysisResponse.PromptInjectionResult
+	5,  // 3: gram.risk.v1.EnforcementAnalysisResponse.prompt_policy:type_name -> gram.risk.v1.EnforcementAnalysisResponse.PromptPolicyResult
+	6,  // 4: gram.risk.v1.EnforcementAnalysisResponse.custom_rules:type_name -> gram.risk.v1.EnforcementAnalysisResponse.CustomRulesResult
+	1,  // 5: gram.risk.v1.EnforcementAnalysisResponse.PresidioResult.findings:type_name -> gram.risk.v1.EnforcementAnalysisResponse.Finding
+	1,  // 6: gram.risk.v1.EnforcementAnalysisResponse.GitleaksResult.findings:type_name -> gram.risk.v1.EnforcementAnalysisResponse.Finding
+	1,  // 7: gram.risk.v1.EnforcementAnalysisResponse.PromptInjectionResult.findings:type_name -> gram.risk.v1.EnforcementAnalysisResponse.Finding
+	1,  // 8: gram.risk.v1.EnforcementAnalysisResponse.PromptPolicyResult.findings:type_name -> gram.risk.v1.EnforcementAnalysisResponse.Finding
+	1,  // 9: gram.risk.v1.EnforcementAnalysisResponse.CustomRulesResult.findings:type_name -> gram.risk.v1.EnforcementAnalysisResponse.Finding
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_gram_risk_v1_enforcement_analysis_response_proto_init() }
@@ -640,6 +1163,10 @@ func file_gram_risk_v1_enforcement_analysis_response_proto_init() {
 	}
 	file_gram_risk_v1_enforcement_analysis_response_proto_msgTypes[0].OneofWrappers = []any{
 		(*enforcementAnalysisResponse_Presidio)(nil),
+		(*enforcementAnalysisResponse_Gitleaks)(nil),
+		(*enforcementAnalysisResponse_PromptInjection)(nil),
+		(*enforcementAnalysisResponse_PromptPolicy)(nil),
+		(*enforcementAnalysisResponse_CustomRules)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -647,7 +1174,7 @@ func file_gram_risk_v1_enforcement_analysis_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_risk_v1_enforcement_analysis_response_proto_rawDesc), len(file_gram_risk_v1_enforcement_analysis_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

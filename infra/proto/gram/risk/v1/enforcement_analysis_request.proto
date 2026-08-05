@@ -11,6 +11,12 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1
 // fire-and-forget audit analysis topics, a hook request is blocked waiting on
 // the paired EnforcementAnalysisResponse, so requests are useful for seconds
 // only: the consumer must honor deadline and drop expired work.
+//
+// One payload branch per analyzer; shapes mirror the corresponding audit
+// analysis messages (PresidioAnalysis, GitleaksAnalysis, ...) minus the
+// audit-pipeline fields (request_id, chat_message_id, content_part_id) that
+// have no meaning here — the requester holds all hook context and correlates
+// by correlation_id alone.
 message EnforcementAnalysisRequest {
   // Correlates this request with its EnforcementAnalysisResponse and keys the
   // server-side reply waiter. UUID minted per request.
@@ -25,11 +31,26 @@ message EnforcementAnalysisRequest {
   // Denormalized discriminator matching the populated payload branch. Lets
   // consumers and metrics label work without proto reflection, and is intended
   // to be mirrored into a message attribute for subscription filters once more
-  // than one analyzer consumes this topic.
+  // than one consumer serves this topic.
   string analyzer = 6;
+  // Policy the enforcement scan runs for. Informational on the consumer side
+  // (logging/metrics); the requester keeps authoritative policy state.
+  string risk_policy_id = 7;
+  int64 risk_policy_version = 8;
 
   oneof payload {
     PresidioPayload presidio = 20;
+    GitleaksPayload gitleaks = 21;
+    PromptInjectionPayload prompt_injection = 22;
+    PromptPolicyPayload prompt_policy = 23;
+    CustomRulesPayload custom_rules = 24;
+  }
+
+  // ToolCall is one recorded tool invocation surfaced from a message's tool
+  // calls. Shared by the payload branches that evaluate tool activity.
+  message ToolCall {
+    string name = 1;
+    string arguments = 2;
   }
 
   message PresidioPayload {
@@ -42,6 +63,39 @@ message EnforcementAnalysisRequest {
     // Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to
     // be emitted. Zero/unset means the consumer applies its default threshold.
     double score_threshold = 3;
+  }
+
+  message GitleaksPayload {
+    string content = 1;
+  }
+
+  message PromptInjectionPayload {
+    string content = 1;
+    string user_id = 2;
+    bool l1_enabled = 3;
+    string message_type = 4;
+    string body = 5;
+    string tool_name = 6;
+    repeated ToolCall tool_calls = 7;
+  }
+
+  message PromptPolicyPayload {
+    string content = 1;
+    string user_id = 2;
+    // The policy's judge prompt.
+    string prompt = 3;
+    bytes model_config = 4;
+    string message_type = 5;
+    string body = 6;
+    string tool_name = 7;
+    repeated ToolCall tool_calls = 8;
+  }
+
+  message CustomRulesPayload {
+    string content = 1;
+    string kind = 2; // The message.Type string (e.g. "user_message", "tool_request").
+    repeated ToolCall tool_calls = 3;
+    repeated string custom_rule_ids = 4; // The policy's selected detector rule ids.
   }
 
   option (gcp.pubsub.v1.topic) = {

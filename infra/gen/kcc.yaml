@@ -255,13 +255,51 @@ pubsub:
           string created_at = 4;
           string deadline = 5;
           string analyzer = 6;
+          string risk_policy_id = 7;
+          int64 risk_policy_version = 8;
           oneof payload {
             PresidioPayload presidio = 20;
+            GitleaksPayload gitleaks = 21;
+            PromptInjectionPayload prompt_injection = 22;
+            PromptPolicyPayload prompt_policy = 23;
+            CustomRulesPayload custom_rules = 24;
+          }
+          message ToolCall {
+            string name = 1;
+            string arguments = 2;
           }
           message PresidioPayload {
             string content = 1;
             repeated string entities = 2;
             double score_threshold = 3;
+          }
+          message GitleaksPayload {
+            string content = 1;
+          }
+          message PromptInjectionPayload {
+            string content = 1;
+            string user_id = 2;
+            bool l1_enabled = 3;
+            string message_type = 4;
+            string body = 5;
+            string tool_name = 6;
+            repeated ToolCall tool_calls = 7;
+          }
+          message PromptPolicyPayload {
+            string content = 1;
+            string user_id = 2;
+            string prompt = 3;
+            bytes model_config = 4;
+            string message_type = 5;
+            string body = 6;
+            string tool_name = 7;
+            repeated ToolCall tool_calls = 8;
+          }
+          message CustomRulesPayload {
+            string content = 1;
+            string kind = 2;
+            repeated ToolCall tool_calls = 3;
+            repeated string custom_rule_ids = 4;
           }
         }
       type: PROTOCOL_BUFFER
@@ -280,16 +318,35 @@ pubsub:
           string analyzer = 5;
           oneof result {
             PresidioResult presidio = 20;
+            GitleaksResult gitleaks = 21;
+            PromptInjectionResult prompt_injection = 22;
+            PromptPolicyResult prompt_policy = 23;
+            CustomRulesResult custom_rules = 24;
+          }
+          message Finding {
+            string rule_id = 1;
+            string entity = 2;
+            string description = 3;
+            string match = 4;
+            int32 start_pos = 5;
+            int32 end_pos = 6;
+            double confidence = 7;
+            repeated string tags = 8;
           }
           message PresidioResult {
-            repeated Detection detections = 1;
+            repeated Finding findings = 1;
           }
-          message Detection {
-            string entity_type = 1;
-            string match = 2;
-            int32 start_pos = 3;
-            int32 end_pos = 4;
-            double confidence = 5;
+          message GitleaksResult {
+            repeated Finding findings = 1;
+          }
+          message PromptInjectionResult {
+            repeated Finding findings = 1;
+          }
+          message PromptPolicyResult {
+            repeated Finding findings = 1;
+          }
+          message CustomRulesResult {
+            repeated Finding findings = 1;
           }
         }
       type: PROTOCOL_BUFFER
