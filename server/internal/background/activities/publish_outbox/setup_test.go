@@ -47,9 +47,16 @@ func TestMain(m *testing.M) {
 // per topic. It stands in for Pub/Sub so the relay's settlement logic can be
 // driven through every branch without a broker.
 type fakePublisher struct {
-	mu        sync.Mutex
+	mu sync.Mutex
+	// calls counts attempts, published records deliveries. They are separate
+	// because a failed broker call is an attempt that delivered nothing, and
+	// conflating them would let messages() report a message no subscriber
+	// could ever have seen.
+	calls     int
 	published []publishedMessage
-	// failWith is consulted per call; return nil to succeed.
+	// failWith is consulted per call; return nil to succeed. The call index
+	// counts every attempt, failed ones included, so a test can target the nth
+	// publish in a batch.
 	failWith func(topic protoreflect.FullName, call int) error
 }
 
@@ -69,16 +76,24 @@ func newFakePublisher() *fakePublisher {
 
 func (f *fakePublisher) PublishRaw(ctx context.Context, topic protoreflect.FullName, data []byte, attributes map[string]string) gcp.PublishResult {
 	f.mu.Lock()
-	call := len(f.published)
-	f.published = append(f.published, publishedMessage{Topic: topic, Data: data, Attributes: attributes})
+	call := f.calls
+	f.calls++
 	fail := f.failWith
 	f.mu.Unlock()
 
 	if fail != nil {
 		if err := fail(topic, call); err != nil {
+			// Deliberately recorded nowhere. The real publisher delivers
+			// nothing when the broker call fails — an unresolvable topic never
+			// reaches Pub/Sub at all — so a test asserting that a retried or
+			// dead-lettered row never went out has something truthful to read.
 			return failedPublishResult{err: err}
 		}
 	}
+
+	f.mu.Lock()
+	f.published = append(f.published, publishedMessage{Topic: topic, Data: data, Attributes: attributes})
+	f.mu.Unlock()
 
 	return gcp.NewSuccessPublishResult()
 }

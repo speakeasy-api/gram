@@ -73,6 +73,9 @@ func TestDrain_TransientFailureSchedulesRetry(t *testing.T) {
 	require.True(t, stored.RetryAfter.Valid, "a transient failure must schedule a retry")
 	require.False(t, stored.LockedUntil.Valid, "the lease must be released so the row is claimable again")
 	require.Contains(t, stored.LastError.String, "pubsub unavailable")
+
+	require.Empty(t, inst.pub.messages(),
+		"a row kept for retry must not also have been delivered, or the retry duplicates it")
 }
 
 func TestDrain_UnknownTopicDeadLetters(t *testing.T) {
@@ -98,6 +101,9 @@ func TestDrain_UnknownTopicDeadLetters(t *testing.T) {
 	require.Equal(t, "gram.nope.v1.Missing", dead.Topic)
 	require.Contains(t, dead.LastError, "unknown pubsub topic")
 	require.True(t, dead.EnqueuedAt.Valid, "the original enqueue time must survive the move")
+
+	require.Empty(t, inst.pub.messages(),
+		"an unresolvable topic never reaches Pub/Sub, so nothing was delivered")
 }
 
 func TestDrain_ExhaustedAttemptsDeadLetters(t *testing.T) {
@@ -158,6 +164,12 @@ func TestDrain_PartialBatchSettlesEachRowIndependently(t *testing.T) {
 		_, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), rows[idx].ID)
 		require.ErrorIs(t, err, pgx.ErrNoRows, "successfully published rows must be gone")
 	}
+
+	// Two deliveries for three attempts. The failed one still advanced the call
+	// index that selected it, so this also pins that attempts and deliveries
+	// are counted separately.
+	require.Len(t, inst.pub.messages(), 2,
+		"the retained row must not be recorded as delivered")
 }
 
 func TestDrain_SkipsRowsCoolingOff(t *testing.T) {
