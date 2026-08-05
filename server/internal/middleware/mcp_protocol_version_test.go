@@ -102,17 +102,23 @@ func routePathForSlug(t *testing.T, pattern, slug string) string {
 // so a route that moves out from under it would otherwise be served
 // uninstrumented with nothing to signal it.
 //
-// Covers the two MCP JSON-RPC endpoints that expose their pattern as a
-// constant. The hosted /mcp/{mcpSlug} route is registered as a bare literal, so
-// it has nothing to derive from and is asserted separately above.
+// Every MCP endpoint mounts all three Streamable HTTP verbs, and the protocol
+// version is carried on all of them: POST for JSON-RPC messages, GET for the
+// standalone SSE stream, DELETE for session termination. Asserting the full
+// cross-product keeps a verb-specific gap from hiding behind a passing POST.
 func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 	t.Parallel()
 
-	for _, pattern := range []string{mcp.PlatformToolsetRoute, xmcp.RuntimePath} {
+	patterns := []string{mcp.PublicServerRoute, mcp.PlatformToolsetRoute, xmcp.RuntimePath}
+	methods := []string{http.MethodPost, http.MethodGet, http.MethodDelete}
+
+	for _, pattern := range patterns {
 		path := routePathForSlug(t, pattern, "my-server")
-		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
-		require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
-			"route %q resolved to %q, which the middleware does not match", pattern, path)
+		for _, method := range methods {
+			got := recordSpanForRequest(t, method, path, mcpversions.Version20250618)
+			require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
+				"route %q resolved to %q, which the middleware does not match for %s", pattern, path, method)
+		}
 	}
 }
 
