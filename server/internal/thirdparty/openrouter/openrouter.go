@@ -434,8 +434,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if key.Disabled {
 		// Setting a limit on a disabled key does not bring it back upstream.
 		// UpdateOpenRouterKey clears the local flag.
-		enabled := false
-		patch.Disabled = &enabled
+		patch.Disabled = new(false)
 	}
 
 	keyResponse, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, patch)
@@ -482,11 +481,10 @@ func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType Ke
 		return fmt.Errorf("get openrouter key to disable: %w", err)
 	}
 
-	disabled := true
 	if _, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
 		Limit:      nil,
 		LimitReset: "",
-		Disabled:   &disabled,
+		Disabled:   new(true),
 	}); err != nil {
 		return fmt.Errorf("disable upstream openrouter key: %w", err)
 	}
