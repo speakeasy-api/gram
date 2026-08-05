@@ -400,6 +400,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
+	o11y.AttachHandler(mux, "DELETE", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.HandleDeleteServer).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
@@ -466,25 +467,102 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
-// HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
-// and delegating to metadata service, or returning method not allowed for others.
+// HandleGetServer handles GET requests to /mcp/{mcpSlug}. Browser requests
+// (HTML Accept header) get the install page. SSE requests (Accept:
+// text/event-stream) against a proxy-backed (remote/tunneled) mcp_server are
+// the Streamable HTTP standalone server->client stream (spec § Listening for
+// Messages from the Server) and dispatch through the unified endpoint
+// dispatcher so the proxy relays them upstream. Everything else — including
+// SSE requests against toolset-backed servers, which never send
+// server-initiated messages — keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
-	// Check if this is a browser request (HTML Accept header)
+	var wantsHTML, wantsSSE bool
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-			// Intentionally NOT gated by enforceCustomDomainLockdown: the
-			// install page must remain reachable on the platform host even
-			// when the org's custom domain has an IP allowlist (private MCP
-			// install pages rely on the platform-host session cookie). Only
-			// the runtime POST path (ServePublic) is locked down.
-			if err := metadataService.ServeInstallPage(w, r); err != nil {
-				return fmt.Errorf("failed to serve install page: %w", err)
-			}
-			return nil
+		mediatype, _, err := mime.ParseMediaType(mediaTypeFull)
+		if err != nil {
+			continue
+		}
+		switch mediatype {
+		case "text/html", "application/xhtml+xml":
+			wantsHTML = true
+		case "text/event-stream":
+			wantsSSE = true
+		}
+	}
+
+	if wantsHTML {
+		// Intentionally NOT gated by enforceCustomDomainLockdown: the
+		// install page must remain reachable on the platform host even
+		// when the org's custom domain has an IP allowlist (private MCP
+		// install pages rely on the platform-host session cookie). Only
+		// the runtime paths (ServePublic, serveProxyBackedEndpoint) are
+		// locked down.
+		if err := metadataService.ServeInstallPage(w, r); err != nil {
+			return fmt.Errorf("failed to serve install page: %w", err)
+		}
+		return nil
+	}
+
+	// The Streamable HTTP spec requires clients to send Accept:
+	// text/event-stream on this GET; gating on it keeps health checkers and
+	// other stray probes answering locally instead of generating upstream
+	// noise.
+	if wantsSSE {
+		if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+			return err
 		}
 	}
 
 	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+}
+
+// HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable
+// HTTP session termination (spec § Session Management). Proxy-backed servers
+// relay it upstream so the remote session is actually torn down;
+// toolset-backed servers hold no upstream session state, so the method stays
+// unsupported there.
+func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) error {
+	if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+		return err
+	}
+	return oops.E(oops.CodeMethodNotAllowed, nil, "session termination is not supported for this MCP server")
+}
+
+// serveProxyBackedEndpoint resolves {mcpSlug} and, when it maps to a
+// proxy-backed (remote or tunneled) mcp_server, dispatches the request
+// through the unified endpoint dispatcher — the same issuer gate + backend
+// switch the POST path uses. handled=true means an authoritative outcome was
+// reached (dispatched, or failed in a way the caller must propagate);
+// handled=false means the slug does not resolve or resolves to a non-proxy
+// backend, so callers fall back to their legacy behavior.
+func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Request) (handled bool, err error) {
+	ctx := r.Context()
+
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return false, nil
+	}
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		return false, nil
+	default:
+		return true, err
+	}
+
+	if !mcpServer.RemoteMcpServerID.Valid && !mcpServer.TunneledMcpServerID.Valid {
+		return false, nil
+	}
+
+	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+		return true, err
+	}
+
+	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
