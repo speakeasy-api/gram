@@ -412,9 +412,12 @@ func skillNameOf(input json.RawMessage) string {
 }
 
 func isEmptyData(d *components.HookIngestData) bool {
-	// McpInventoryCollected is meaningful on its own: a successful read that
-	// found no servers carries no entries, and dropping the block here would
-	// erase the very distinction it exists to make.
+	// McpInventoryCollected is checked defensively, not because it is set yet:
+	// this runs before attachMCPInventory, which rebuilds Data when needed, so
+	// the flag is always nil here today. It is listed so that moving the
+	// inventory attach earlier cannot silently drop a successful read that
+	// found no servers — the block would look empty, and the distinction the
+	// flag exists to carry would be erased.
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil &&
 		d.McpInventoryCollected == nil &&

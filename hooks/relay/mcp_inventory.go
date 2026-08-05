@@ -45,7 +45,9 @@ func collectClaudeMCPInventory(ctx context.Context, cwd string) ([]mcpInventoryE
 	if err != nil && len(out) == 0 {
 		return nil, false
 	}
-	return parseClaudeMCPInventory(string(out)), true
+	// Output from a failed run may be truncated, so the entries are still worth
+	// relaying but the listing cannot be called complete.
+	return parseClaudeMCPInventory(string(out)), err == nil
 }
 
 // parseClaudeMCPInventory parses `<name>: <target> (<transport>) - <status>`.
@@ -126,14 +128,18 @@ func collectCodexMCPInventory(ctx context.Context, cwd string) ([]mcpInventoryEn
 	if err != nil && len(out) == 0 {
 		return nil, false
 	}
-	return parseCodexMCPInventory(out), true
+	// A timed-out or malformed probe must not be reported as a session with no
+	// MCP servers: the guard treats a read-but-empty list as proof of absence
+	// and would deny legitimate calls on it.
+	entries, parsed := parseCodexMCPInventory(out)
+	return entries, err == nil && parsed
 }
 
 // parseCodexMCPInventory reads `codex mcp list --json`. The server parses the
 // same document (hooks.ParseCodexMCPList) for the legacy Codex endpoint, so
 // the two must agree on the shape: an array of servers, each with a transport
 // object holding either a url or a command plus args.
-func parseCodexMCPInventory(out []byte) []mcpInventoryEntry {
+func parseCodexMCPInventory(out []byte) ([]mcpInventoryEntry, bool) {
 	var servers []struct {
 		Name      string `json:"name"`
 		Enabled   *bool  `json:"enabled"`
@@ -144,7 +150,7 @@ func parseCodexMCPInventory(out []byte) []mcpInventoryEntry {
 		} `json:"transport"`
 	}
 	if json.Unmarshal(bytes.TrimSpace(out), &servers) != nil {
-		return nil
+		return nil, false
 	}
 
 	var entries []mcpInventoryEntry
@@ -169,7 +175,7 @@ func parseCodexMCPInventory(out []byte) []mcpInventoryEntry {
 		}
 		entries = append(entries, mcpInventoryEntry{Name: name, URL: url, Command: command})
 	}
-	return entries
+	return entries, true
 }
 
 func upperAlpha(s string) bool {
@@ -190,7 +196,7 @@ func upperAlpha(s string) bool {
 // an inventory — so without the flag a missing binary silently becomes "this
 // session has no servers" and blocks legitimate traffic (DNO-771).
 func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInventoryEntry, collected bool) {
-	if !collected {
+	if len(entries) == 0 && !collected {
 		return
 	}
 	if payload.Data == nil {
@@ -207,7 +213,12 @@ func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInve
 			Usage:             nil,
 		}
 	}
-	payload.Data.McpInventoryCollected = &collected
+	if collected {
+		payload.Data.McpInventoryCollected = &collected
+	}
+	if len(entries) == 0 {
+		return
+	}
 	payload.Data.McpInventory = make([]components.HookMCPData, 0, len(entries))
 	for _, entry := range entries {
 		redactedURL := ""

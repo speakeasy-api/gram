@@ -2158,3 +2158,42 @@ func TestIngest_ShadowMCPMetaToolGateDegradesWithoutAReadInventory(t *testing.T)
 		})
 	}
 }
+
+// TestIngest_ShadowMCPMetaToolGateReadsSessionState drives the real event
+// sequence rather than a hand-built payload: the sender reports whether it read
+// the MCP list on session.started, and the meta-tool call it gates arrives
+// later as its own tool.requested event carrying no such field. Reading the
+// flag off the gating event instead of the session would skip every meta-tool
+// call in production while a test that injects the flag into a tool.requested
+// payload still passed.
+func TestIngest_ShadowMCPMetaToolGateReadsSessionState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := "codex-session-state-gate"
+
+	// session.started: the sender read the list and found no servers.
+	start := canonicalIngestPayload("codex", "session.started", sessionID)
+	start.Data = &gen.HookIngestData{McpInventoryCollected: new(true)}
+	_, err := ti.service.Ingest(ctx, start)
+	require.NoError(t, err)
+
+	// tool.requested: a meta-tool call, with no inventory fields of its own.
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	call := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	call.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID: &callID, Name: &toolName,
+			Input: map[string]any{"server": "platform-logs"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, call)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision,
+		"the session reported a successful read, so the guard must enforce on its meta-tool calls")
+}

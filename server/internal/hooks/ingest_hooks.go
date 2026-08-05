@@ -250,7 +250,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
 	// including Gram-hosted targets, with no path to recover.
-	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload))
+	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload), canonicalMCPInventoryRead(payload))
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -803,15 +803,34 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry) {
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
 	if sessionID == "" {
 		return
+	}
+	// Record the read separately from the entries: the sender only reports it
+	// on session start, while the meta-tool calls it gates arrive later as
+	// their own events carrying nothing. Gating on the current event's field
+	// would therefore skip every one of them.
+	if inventoryRead {
+		if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), inventoryRead, sessionMCPListTTL); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
+				attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+		}
 	}
 	if len(entries) == 0 {
 		// Every other event in the session extends the snapshot's life, as the
 		// legacy endpoints do. Without this a session outliving the TTL loses
 		// its inventory and every later meta-tool call denies.
 		s.refreshMCPListTTL(ctx, sessionID)
+		if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPListTTL); err != nil {
+			s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+		}
 		return
 	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
@@ -836,7 +855,7 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 	if !isMetaTool {
 		return false
 	}
-	if !canonicalClientReportsMCPInventory(payload) {
+	if !s.canonicalClientReportsMCPInventory(ctx, payload) {
 		// Counts the un-upgraded population: once this stops firing, the
 		// capability check can go and the guard can apply unconditionally.
 		s.logger.InfoContext(ctx, "skipping codex meta-tool shadow-mcp guard: client cannot report MCP inventory",
@@ -864,7 +883,24 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 // including reads of Gram-hosted servers that work today — so they keep their
 // current behavior until they upgrade, rather than enforcement depending on a
 // server deploy and a hooks release landing in the right order.
-func canonicalClientReportsMCPInventory(payload *gen.IngestPayload) bool {
+func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
+	if canonicalMCPInventoryRead(payload) {
+		return true
+	}
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" {
+		return false
+	}
+	var read bool
+	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(sessionID), &read); err != nil {
+		return false
+	}
+	return read
+}
+
+// canonicalMCPInventoryRead reports the sender's own claim on this event, which
+// only session-start events carry.
+func canonicalMCPInventoryRead(payload *gen.IngestPayload) bool {
 	return payload != nil && payload.Data != nil && conv.PtrValOr(payload.Data.McpInventoryCollected, false)
 }
 

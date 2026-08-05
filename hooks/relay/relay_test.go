@@ -1572,7 +1572,7 @@ func TestParseCodexMCPInventory(t *testing.T) {
 	// Verbatim `codex mcp list --json` from the shipped 0.146 build (server
 	// names and the disabled entry are ours; every key, the null-heavy
 	// transport fields, and the auth_status values are as Codex emitted them).
-	entries := parseCodexMCPInventory([]byte(`[
+	entries, parsed := parseCodexMCPInventory([]byte(`[
 	  {
 	    "name": "everything",
 	    "enabled": true,
@@ -1615,6 +1615,7 @@ func TestParseCodexMCPInventory(t *testing.T) {
 	  }
 	]`))
 
+	require.True(t, parsed)
 	require.Len(t, entries, 2)
 	require.Equal(t, "everything", entries[0].Name)
 	require.Equal(t, "npx -y @modelcontextprotocol/server-everything", entries[0].Command)
@@ -1623,8 +1624,14 @@ func TestParseCodexMCPInventory(t *testing.T) {
 	require.Equal(t, "https://mcp.example.test/mcp", entries[1].URL)
 	require.Empty(t, entries[1].Command)
 
-	require.Empty(t, parseCodexMCPInventory([]byte("not json")))
-	require.Empty(t, parseCodexMCPInventory(nil))
+	// An unreadable document is not an empty one: reporting it as parsed would
+	// let the guard treat it as proof the session has no MCP servers.
+	unparseable, ok := parseCodexMCPInventory([]byte("not json"))
+	require.Empty(t, unparseable)
+	require.False(t, ok)
+	empty, ok := parseCodexMCPInventory(nil)
+	require.Empty(t, empty)
+	require.False(t, ok)
 }
 
 // TestEnvelopeReportsBinaryVersion: the server reads adapter_version's presence

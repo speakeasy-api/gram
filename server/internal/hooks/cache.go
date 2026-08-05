@@ -24,6 +24,15 @@ func sessionMCPListCacheKey(sessionID string) string {
 	return fmt.Sprintf("session:mcp-list:%s", sessionID)
 }
 
+// sessionMCPInventoryReadCacheKey returns the Redis key recording whether a
+// session's sender managed to read its MCP server list. It rides beside the
+// snapshot rather than inside it because an empty-but-read list has no entries
+// to carry the fact, and that is exactly the case the guard has to tell apart
+// from an unread one.
+func sessionMCPInventoryReadCacheKey(sessionID string) string {
+	return fmt.Sprintf("session:mcp-list-read:%s", sessionID)
+}
+
 // hookIdempotencyCacheKey returns the Redis key marking a hook invocation as
 // already persisted, keyed by the per-invocation idempotency token the sender
 // reuses across retries.
