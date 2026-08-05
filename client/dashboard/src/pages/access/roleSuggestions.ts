@@ -22,7 +22,7 @@ const SUB_SCOPES: Record<string, readonly string[]> = {
  * True when a grant of `grantScope` satisfies a check for `scope`, either
  * directly or via scope expansion (e.g. mcp:write covers mcp:connect).
  */
-export function grantScopeCovers(grantScope: string, scope: string): boolean {
+function grantScopeCovers(grantScope: string, scope: string): boolean {
   if (grantScope === scope) return true;
   return SUB_SCOPES[grantScope]?.includes(scope) ?? false;
 }
