@@ -1,4 +1,4 @@
-package adminmcp
+package platformmcp
 
 import (
 	"encoding/base64"
@@ -43,7 +43,7 @@ func TestCredentialCodec_RejectsOversizedCredential(t *testing.T) {
 	t.Parallel()
 
 	codec := newTestCredentialCodec(t)
-	_, err := codec.OrganizationID(accessJTICredential, strings.Repeat("a", maxAdminCredentialLength+1))
+	_, err := codec.OrganizationID(accessJTICredential, strings.Repeat("a", maxPlatformCredentialLength+1))
 	require.Error(t, err)
 }
 

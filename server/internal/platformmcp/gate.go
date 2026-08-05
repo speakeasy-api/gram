@@ -1,4 +1,4 @@
-package adminmcp
+package platformmcp
 
 import (
 	"context"
@@ -29,17 +29,17 @@ func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (
 		return false, ErrUnavailable
 	}
 
-	capable, err := g.capabilities.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureAdminMCP)
+	capable, err := g.capabilities.IsFeatureEnabled(ctx, organizationID, productfeatures.FeaturePlatformMCP)
 	if err != nil {
-		return false, fmt.Errorf("check admin mcp capability: %w", err)
+		return false, fmt.Errorf("check platform mcp capability: %w", err)
 	}
 	if !capable {
 		return false, nil
 	}
 
-	rolledOut, err := g.rollout.IsFlagEnabled(ctx, feature.FlagAdminMCPRollout, organizationID, nil)
+	rolledOut, err := g.rollout.IsFlagEnabled(ctx, feature.FlagPlatformMCPRollout, organizationID, nil)
 	if err != nil {
-		return false, fmt.Errorf("check admin mcp rollout: %w", err)
+		return false, fmt.Errorf("check platform mcp rollout: %w", err)
 	}
 	return rolledOut, nil
 }

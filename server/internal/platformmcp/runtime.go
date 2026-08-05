@@ -1,5 +1,5 @@
 //nolint:exhaustruct // MCP SDK options deliberately rely on documented zero-value defaults.
-package adminmcp
+package platformmcp
 
 import (
 	"context"
@@ -12,15 +12,15 @@ import (
 )
 
 const (
-	Path         = "/admin-mcp"
+	Path         = "/platform-mcp"
 	TokenType    = "Bearer"
 	MaxBodyBytes = 64 << 10
 )
 
 var (
-	ErrUnauthorized = errors.New("admin mcp unauthorized")
-	ErrForbidden    = errors.New("admin mcp forbidden")
-	ErrUnavailable  = errors.New("admin mcp unavailable")
+	ErrUnauthorized = errors.New("platform mcp unauthorized")
+	ErrForbidden    = errors.New("platform mcp forbidden")
+	ErrUnavailable  = errors.New("platform mcp unavailable")
 )
 
 type Principal struct {
@@ -120,7 +120,7 @@ func (r *Runtime) authenticate(req *http.Request) (Principal, error) {
 
 	principal, err := r.authenticator.Authenticate(req.Context(), token)
 	if err != nil {
-		return Principal{}, fmt.Errorf("authenticate admin token: %w", err)
+		return Principal{}, fmt.Errorf("authenticate platform MCP token: %w", err)
 	}
 	if principal.UserID == "" || principal.OrganizationID == "" || principal.ConnectionID == "" || principal.Generation == "" || principal.ClientID == "" {
 		return Principal{}, ErrUnauthorized

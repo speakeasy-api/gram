@@ -1,4 +1,4 @@
-package adminmcp
+package platformmcp
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type testCapabilityChecker struct {
 }
 
 func (c testCapabilityChecker) IsFeatureEnabled(_ context.Context, _ string, capability productfeatures.Feature) (bool, error) {
-	if capability != productfeatures.FeatureAdminMCP {
+	if capability != productfeatures.FeaturePlatformMCP {
 		return false, errors.New("unexpected capability")
 	}
 	return c.enabled, c.err
@@ -27,7 +27,7 @@ func TestOrganizationGateRequiresBothGates(t *testing.T) {
 	t.Parallel()
 
 	rollout := &feature.InMemory{}
-	rollout.SetFlag(feature.FlagAdminMCPRollout, "organization-1", true)
+	rollout.SetFlag(feature.FlagPlatformMCPRollout, "organization-1", true)
 
 	t.Run("allows both enabled", func(t *testing.T) {
 		t.Parallel()

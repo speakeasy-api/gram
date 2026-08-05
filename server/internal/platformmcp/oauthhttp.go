@@ -1,5 +1,5 @@
-//nolint:exhaustruct // OAuth handlers intentionally use zero values for non-wire Admin contract fields and third-party request structs.
-package adminmcp
+//nolint:exhaustruct // OAuth handlers intentionally use zero values for non-wire Platform MCP contract fields and third-party request structs.
+package platformmcp
 
 import (
 	"context"
@@ -19,20 +19,20 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	adminoauth "github.com/speakeasy-api/gram/server/internal/adminmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 const (
-	adminOAuthChallengePrefix = "adminMCPChallenge:"
-	adminOAuthCodeLifetime    = 10 * time.Minute
-	adminAccessTokenLifetime  = time.Hour
-	adminRefreshTokenLifetime = 24 * time.Hour
+	platformOAuthChallengePrefix = "platformMCPChallenge:"
+	platformOAuthCodeLifetime    = 10 * time.Minute
+	platformAccessTokenLifetime  = time.Hour
+	platformRefreshTokenLifetime = 24 * time.Hour
 )
 
 // BrowserIdentity resolves a real Gram user from the product identity provider.
@@ -63,19 +63,19 @@ type oauthChallenge struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-func (c oauthChallenge) CacheKey() string              { return adminOAuthChallengePrefix + c.ID }
+func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.ID }
 func (c oauthChallenge) AdditionalCacheKeys() []string { return []string{} }
-func (c oauthChallenge) TTL() time.Duration            { return adminOAuthCodeLifetime }
+func (c oauthChallenge) TTL() time.Duration            { return platformOAuthCodeLifetime }
 
 var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 
-// OAuthHTTP serves the Admin-owned authorization server. It deliberately does
+// OAuthHTTP serves the Platform MCP-owned authorization server. It deliberately does
 // not import hosted MCP runtime or persistence packages.
 type OAuthHTTP struct {
 	baseURL       *url.URL
 	environment   string
 	cache         cache.TypedCacheObject[oauthChallenge]
-	store         adminoauth.Store
+	store         platformoauth.Store
 	identity      BrowserIdentity
 	gate          Gate
 	authorizer    Authorizer
@@ -90,7 +90,7 @@ type OAuthHTTPConfig struct {
 	BaseURL       *url.URL
 	Environment   string
 	Cache         cache.Cache
-	Store         adminoauth.Store
+	Store         platformoauth.Store
 	Identity      BrowserIdentity
 	Gate          Gate
 	Authorizer    Authorizer
@@ -101,16 +101,16 @@ type OAuthHTTPConfig struct {
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
-		return nil, errors.New("admin oauth http configuration is incomplete")
+		return nil, errors.New("platform oauth http configuration is incomplete")
 	}
 	credentials, err := NewCredentialCodec(config.Encryption)
 	if err != nil {
 		return nil, err
 	}
 	baseURL := *config.BaseURL
-	issuer, err := url.JoinPath(baseURL.String(), "admin-mcp")
+	issuer, err := url.JoinPath(baseURL.String(), "platform-mcp")
 	if err != nil {
-		return nil, fmt.Errorf("build admin oauth issuer: %w", err)
+		return nil, fmt.Errorf("build platform oauth issuer: %w", err)
 	}
 	return &OAuthHTTP{
 		baseURL:       &baseURL,
@@ -131,17 +131,17 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 func (s *OAuthHTTP) Attach(mux interface {
 	Handle(string, string, http.HandlerFunc)
 }) {
-	mux.Handle("GET", "/.well-known/oauth-protected-resource/admin-mcp", handlerFunc(s.ProtectedResourceHandler()))
-	mux.Handle("GET", "/.well-known/oauth-authorization-server/admin-mcp", handlerFunc(s.AuthorizationServerHandler()))
-	mux.Handle("POST", "/admin-mcp/register", handlerFunc(s.RegisterHandler()))
-	mux.Handle("GET", "/admin-mcp/authorize", handlerFunc(s.AuthorizeHandler()))
-	mux.Handle("GET", "/admin-mcp/idp_callback", handlerFunc(s.IDPCallbackHandler()))
-	mux.Handle("GET", "/admin-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
-	mux.Handle("POST", "/admin-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
-	mux.Handle("GET", "/admin-mcp/connect", handlerFunc(s.ConnectHandler()))
-	mux.Handle("POST", "/admin-mcp/connect", handlerFunc(s.ConnectHandler()))
-	mux.Handle("POST", "/admin-mcp/token", handlerFunc(s.TokenHandler()))
-	mux.Handle("POST", "/admin-mcp/revoke", handlerFunc(s.RevokeHandler()))
+	mux.Handle("GET", "/.well-known/oauth-protected-resource/platform-mcp", handlerFunc(s.ProtectedResourceHandler()))
+	mux.Handle("GET", "/.well-known/oauth-authorization-server/platform-mcp", handlerFunc(s.AuthorizationServerHandler()))
+	mux.Handle("POST", "/platform-mcp/register", handlerFunc(s.RegisterHandler()))
+	mux.Handle("GET", "/platform-mcp/authorize", handlerFunc(s.AuthorizeHandler()))
+	mux.Handle("GET", "/platform-mcp/idp_callback", handlerFunc(s.IDPCallbackHandler()))
+	mux.Handle("GET", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
+	mux.Handle("POST", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
+	mux.Handle("GET", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
+	mux.Handle("POST", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
+	mux.Handle("POST", "/platform-mcp/token", handlerFunc(s.TokenHandler()))
+	mux.Handle("POST", "/platform-mcp/revoke", handlerFunc(s.RevokeHandler()))
 }
 
 func handlerFunc(handler http.Handler) http.HandlerFunc {
@@ -201,7 +201,7 @@ func (s *OAuthHTTP) RegisterHandler() http.Handler {
 			}
 			secretHash = string(hash)
 		}
-		if err := s.store.RegisterClient(r.Context(), adminoauth.Client{ID: clientID, SecretHash: secretHash, Name: request.ClientName, RedirectURIs: request.RedirectURIs, SecretExpiresAt: nil, RevokedAt: nil}); err != nil {
+		if err := s.store.RegisterClient(r.Context(), platformoauth.Client{ID: clientID, SecretHash: secretHash, Name: request.ClientName, RedirectURIs: request.RedirectURIs, SecretExpiresAt: nil, RevokedAt: nil}); err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
 			return
 		}
@@ -258,7 +258,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 
 func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		challenge, err := s.cache.GetAndDelete(r.Context(), adminOAuthChallengePrefix+r.URL.Query().Get("state"))
+		challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 		if err != nil {
 			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
 			return
@@ -307,7 +307,7 @@ func (s *OAuthHTTP) OrganizationSelectionHandler() http.Handler {
 }
 
 func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Request) {
-	challenge, err := s.cache.Get(r.Context(), adminOAuthChallengePrefix+r.URL.Query().Get("state"))
+	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
 		return
@@ -334,7 +334,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprint(w, `<!doctype html><title>Select Gram organization</title><form method="post"><p><strong>`+templateEscape(client.Name)+`</strong> requests Admin MCP access. After approval, Gram redirects to <code>`+templateEscape(challenge.RedirectURI)+`</code>.</p><p>Select the organization it will administer.</p><input type="hidden" name="state" value="`+templateEscape(challenge.ID)+`"><input type="hidden" name="csrf_token" value="`+templateEscape(challenge.CSRFToken)+`"><select name="organization_id">`)
+	_, _ = fmt.Fprint(w, `<!doctype html><title>Select Gram organization</title><form method="post"><p><strong>`+templateEscape(client.Name)+`</strong> requests Platform MCP access. After approval, Gram redirects to <code>`+templateEscape(challenge.RedirectURI)+`</code>.</p><p>Select the organization it will administer.</p><input type="hidden" name="state" value="`+templateEscape(challenge.ID)+`"><input type="hidden" name="csrf_token" value="`+templateEscape(challenge.CSRFToken)+`"><select name="organization_id">`)
 	for _, organization := range organizations {
 		_, _ = fmt.Fprint(w, `<option value="`+templateEscape(organization.ID)+`">`+templateEscape(organization.Name)+`</option>`)
 	}
@@ -347,7 +347,7 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse organization selection")
 		return
 	}
-	challenge, err := s.cache.GetAndDelete(r.Context(), adminOAuthChallengePrefix+r.PostForm.Get("state"))
+	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
 		return
@@ -388,7 +388,7 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 	}
 	organizations, err := s.organizations.EligibleOrganizations(ctx, subject.ID)
 	if err != nil {
-		return OrganizationOption{}, fmt.Errorf("list eligible admin organizations: %w", err)
+		return OrganizationOption{}, fmt.Errorf("list organizations eligible for Platform MCP: %w", err)
 	}
 	for _, organization := range organizations {
 		if organization.ID == challenge.OrganizationID {
@@ -413,7 +413,7 @@ func (s *OAuthHTTP) ConnectHandler() http.Handler {
 }
 
 func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
-	challenge, err := s.cache.Get(r.Context(), adminOAuthChallengePrefix+r.URL.Query().Get("state"))
+	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
 		return
@@ -430,7 +430,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprintf(w, `<!doctype html><title>Authorize Gram Admin</title><form method="post"><p><strong>%s</strong> will be able to administer <strong>%s</strong>.</p><p>After approval, Gram redirects to <code>%s</code>.</p><input type="hidden" name="state" value="%s"><input type="hidden" name="csrf_token" value="%s"><button name="action" value="approve">Approve</button><button name="action" value="deny">Cancel</button></form>`, templateEscape(client.Name), templateEscape(organization.Name), templateEscape(challenge.RedirectURI), templateEscape(challenge.ID), templateEscape(challenge.CSRFToken))
+	_, _ = fmt.Fprintf(w, `<!doctype html><title>Authorize Gram Platform MCP</title><form method="post"><p><strong>%s</strong> will be able to administer <strong>%s</strong>.</p><p>After approval, Gram redirects to <code>%s</code>.</p><input type="hidden" name="state" value="%s"><input type="hidden" name="csrf_token" value="%s"><button name="action" value="approve">Approve</button><button name="action" value="deny">Cancel</button></form>`, templateEscape(client.Name), templateEscape(organization.Name), templateEscape(challenge.RedirectURI), templateEscape(challenge.ID), templateEscape(challenge.CSRFToken))
 }
 
 func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
@@ -439,7 +439,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse authorization")
 		return
 	}
-	challenge, err := s.cache.GetAndDelete(r.Context(), adminOAuthChallengePrefix+r.PostForm.Get("state"))
+	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
 		return
@@ -467,8 +467,8 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
 	}
-	_, err = s.store.AuthorizeConnection(r.Context(), adminoauth.AuthorizeConnectionInput{
-		Connection: adminoauth.Connection{
+	_, err = s.store.AuthorizeConnection(r.Context(), platformoauth.AuthorizeConnectionInput{
+		Connection: platformoauth.Connection{
 			ID:             uuid.NewString(),
 			ClientID:       challenge.ClientID,
 			Subject:        challenge.Subject,
@@ -476,13 +476,13 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 			Generation:     uuid.NewString(),
 			RevokedAt:      nil,
 		},
-		Grant: adminoauth.Grant{
+		Grant: platformoauth.Grant{
 			Code:          code,
 			ClientID:      challenge.ClientID,
-			Connection:    adminoauth.Connection{},
+			Connection:    platformoauth.Connection{},
 			RedirectURI:   challenge.RedirectURI,
 			CodeChallenge: challenge.CodeChallenge,
-			ExpiresAt:     time.Now().Add(adminOAuthCodeLifetime),
+			ExpiresAt:     time.Now().Add(platformOAuthCodeLifetime),
 		},
 		Now: time.Now(),
 	})
@@ -518,7 +518,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
 				return
 			}
-			grant, err := s.store.ConsumeGrant(r.Context(), adminoauth.ConsumeGrantInput{OrganizationID: organizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: time.Now()})
+			grant, err := s.store.ConsumeGrant(r.Context(), platformoauth.ConsumeGrantInput{OrganizationID: organizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: time.Now()})
 			if err != nil {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
 				return
@@ -600,7 +600,7 @@ func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID strin
 	_, _ = s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, time.Now())
 }
 
-func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, connection adminoauth.Connection, clientID string) {
+func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, connection platformoauth.Connection, clientID string) {
 	subject, err := urn.ParseSessionSubject(connection.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
@@ -616,7 +616,7 @@ func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, conne
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: adminAccessTokenLifetime, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: platformAccessTokenLifetime, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -626,14 +626,14 @@ func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, conne
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	if err := s.store.CreateSession(r.Context(), adminoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: time.Now().Add(adminAccessTokenLifetime), RefreshExpiresAt: time.Now().Add(adminRefreshTokenLifetime), RevokedAt: nil}); err != nil {
+	if err := s.store.CreateSession(r.Context(), platformoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: time.Now().Add(platformAccessTokenLifetime), RefreshExpiresAt: time.Now().Add(platformRefreshTokenLifetime), RevokedAt: nil}); err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(adminAccessTokenLifetime.Seconds()), "refresh_token": refreshToken})
+	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(platformAccessTokenLifetime.Seconds()), "refresh_token": refreshToken})
 }
 
-func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Request, old adminoauth.Session, clientID string) {
+func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Request, old platformoauth.Session, clientID string) {
 	subject, err := urn.ParseSessionSubject(old.Connection.Subject)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
@@ -644,7 +644,7 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: adminAccessTokenLifetime, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: platformAccessTokenLifetime, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -655,33 +655,33 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 		return
 	}
 	now := time.Now()
-	replacement := adminoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: old.Connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(adminAccessTokenLifetime), RefreshExpiresAt: now.Add(adminRefreshTokenLifetime), RevokedAt: nil}
-	if _, err := s.store.RotateSession(r.Context(), adminoauth.RotateSessionInput{OrganizationID: old.Connection.OrganizationID, RefreshHash: old.RefreshHash, ClientID: clientID, Generation: old.Connection.Generation, Now: now, Replacement: replacement}); err != nil {
+	replacement := platformoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: old.Connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(platformAccessTokenLifetime), RefreshExpiresAt: now.Add(platformRefreshTokenLifetime), RevokedAt: nil}
+	if _, err := s.store.RotateSession(r.Context(), platformoauth.RotateSessionInput{OrganizationID: old.Connection.OrganizationID, RefreshHash: old.RefreshHash, ClientID: clientID, Generation: old.Connection.Generation, Now: now, Replacement: replacement}); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(adminAccessTokenLifetime.Seconds()), "refresh_token": refreshToken})
+	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(platformAccessTokenLifetime.Seconds()), "refresh_token": refreshToken})
 }
 
-func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret string) (adminoauth.Client, error) {
+func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret string) (platformoauth.Client, error) {
 	if clientID == "" {
-		return adminoauth.Client{}, adminoauth.ErrNotFound
+		return platformoauth.Client{}, platformoauth.ErrNotFound
 	}
 	client, err := s.store.GetClient(ctx, clientID)
 	if err != nil {
-		return adminoauth.Client{}, fmt.Errorf("get admin oauth client: %w", err)
+		return platformoauth.Client{}, fmt.Errorf("get platform oauth client: %w", err)
 	}
 	if client.SecretExpiresAt != nil && time.Now().After(*client.SecretExpiresAt) {
-		return adminoauth.Client{}, adminoauth.ErrExpired
+		return platformoauth.Client{}, platformoauth.ErrExpired
 	}
 	if client.SecretHash == "" {
 		if secret != "" {
-			return adminoauth.Client{}, adminoauth.ErrClientMismatch
+			return platformoauth.Client{}, platformoauth.ErrClientMismatch
 		}
 		return client, nil
 	}
 	if bcrypt.CompareHashAndPassword([]byte(client.SecretHash), []byte(secret)) != nil {
-		return adminoauth.Client{}, adminoauth.ErrClientMismatch
+		return platformoauth.Client{}, platformoauth.ErrClientMismatch
 	}
 	return client, nil
 }
@@ -689,7 +689,7 @@ func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret str
 func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) error {
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID)
 	if err != nil {
-		return fmt.Errorf("check admin mcp feature gate: %w: %w", ErrUnavailable, err)
+		return fmt.Errorf("check platform mcp feature gate: %w: %w", ErrUnavailable, err)
 	}
 	if !enabled {
 		return ErrForbidden
@@ -728,14 +728,14 @@ func (s *OAuthHTTP) Audience() string {
 }
 
 func (s *OAuthHTTP) ProtectedResourceURL() string {
-	return s.baseURL.JoinPath(".well-known", "oauth-protected-resource", "admin-mcp").String()
+	return s.baseURL.JoinPath(".well-known", "oauth-protected-resource", "platform-mcp").String()
 }
 
 func (s *OAuthHTTP) url(segment string) string {
 	return s.issuer + "/" + segment
 }
 
-func (s *OAuthHTTP) clientRedirectAllowed(client adminoauth.Client, redirectURI string) bool {
+func (s *OAuthHTTP) clientRedirectAllowed(client platformoauth.Client, redirectURI string) bool {
 	return slices.Contains(client.RedirectURIs, redirectURI)
 }
 

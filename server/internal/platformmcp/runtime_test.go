@@ -1,4 +1,4 @@
-package adminmcp
+package platformmcp
 
 import (
 	"context"
@@ -14,14 +14,14 @@ func TestRuntimeHandlerRejectsMissingBearerToken(t *testing.T) {
 	t.Parallel()
 
 	authenticator := &testAuthenticator{principal: testPrincipal()}
-	handler := NewRuntime(authenticator, testGate{enabled: true}, &testAuthorizer{}, "https://gram.example/.well-known/oauth-protected-resource/admin-mcp", nil).Handler()
+	handler := NewRuntime(authenticator, testGate{enabled: true}, &testAuthorizer{}, "https://gram.example/.well-known/oauth-protected-resource/platform-mcp", nil).Handler()
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	res := httptest.NewRecorder()
 
 	handler.ServeHTTP(res, req)
 
 	require.Equal(t, http.StatusUnauthorized, res.Code)
-	require.Equal(t, `Bearer resource_metadata="https://gram.example/.well-known/oauth-protected-resource/admin-mcp"`, res.Header().Get("WWW-Authenticate"))
+	require.Equal(t, `Bearer resource_metadata="https://gram.example/.well-known/oauth-protected-resource/platform-mcp"`, res.Header().Get("WWW-Authenticate"))
 	require.Zero(t, authenticator.calls)
 }
 
@@ -56,7 +56,7 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
-	authorizer := &testAuthorizer{err: errors.New("admin grant removed")}
+	authorizer := &testAuthorizer{err: errors.New("org:admin grant removed")}
 	handler := NewRuntime(&testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", nil).Handler()
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	req.Header.Set("Authorization", "Bearer access-token")
@@ -125,6 +125,20 @@ type testAuthorizer struct {
 func (a *testAuthorizer) RequireLiveOrgAdmin(_ context.Context, _ Principal) error {
 	a.calls++
 	return a.err
+}
+
+func TestBoundedRows(t *testing.T) {
+	t.Parallel()
+
+	rows := []int{1, 2, 3}
+
+	got, truncated := boundedRows(rows, 2)
+	require.Equal(t, []int{1, 2}, got)
+	require.True(t, truncated)
+
+	got, truncated = boundedRows(rows, 3)
+	require.Equal(t, rows, got)
+	require.False(t, truncated)
 }
 
 func TestPrincipalContext(t *testing.T) {

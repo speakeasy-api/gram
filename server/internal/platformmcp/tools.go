@@ -1,5 +1,5 @@
 //nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
-package adminmcp
+package platformmcp
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type Reader interface {
 	GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
 }
 
-type AdminContext struct {
+type PlatformContext struct {
 	OrganizationID string `json:"organization_id"`
 	ConnectionID   string `json:"connection_id"`
 	ReadOnly       bool   `json:"read_only"`
@@ -69,8 +69,8 @@ type featureUnavailableResult struct {
 
 func newServer(reader Reader) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "gram-admin",
-		Title:   "Gram Admin",
+		Name:    "gram-platform-mcp",
+		Title:   "Gram Platform MCP",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
 		Instructions: "Use this server to inspect the selected Gram organization. All mutations are unavailable during the read-only rollout.",
@@ -83,7 +83,7 @@ func newServer(reader Reader) *mcp.Server {
 }
 
 func registerReadTools(server *mcp.Server, reader Reader) {
-	registerGetAdminContextTool(server)
+	registerGetPlatformContextTool(server)
 	registerListProjectsTool(server, reader)
 	registerListProjectMCPsTool(server, reader)
 	registerGetMCPTool(server, reader)
@@ -118,7 +118,7 @@ func unavailableTool(feature string) mcp.ToolHandlerFor[map[string]any, featureU
 		result := featureUnavailableResult{
 			Code:    unavailableCode,
 			Feature: feature,
-			Message: "This Admin MCP capability is not enabled for the current rollout.",
+			Message: "This Platform MCP capability is not enabled for the current rollout.",
 		}
 		content, err := json.Marshal(result)
 		if err != nil {
