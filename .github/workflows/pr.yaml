@@ -417,6 +417,9 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
+    env:
+      RUNNER_TARGET: x86_64-unknown-linux-musl
+      RUNNER_BINARY_DIR: /tmp/runner-binary
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -430,6 +433,31 @@ jobs:
 
       - name: Prepare GitHub Actions environment
         run: mise run github
+
+      - name: Install musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          target: ${{ env.RUNNER_TARGET }}
+          rust-src-dir: agents/runner
+          # Release-artifact build; the action's -D warnings default would
+          # diverge from the in-image fallback build.
+          rustflags: ""
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build assistant runner
+        run: |
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${{ env.RUNNER_TARGET }}
+          mkdir -p ${{ env.RUNNER_BINARY_DIR }}
+          cp agents/runner/target/${{ env.RUNNER_TARGET }}/release/gram-assistant-runner ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner
+
+      - name: Smoke test assistant runner binary
+        run: |
+          ldd ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner 2>&1 | grep -Eq "not a dynamic executable|statically linked" \
+            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
+          ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner --help
 
       - name: Generate preview tag
         id: assistant-preview-tag
@@ -535,6 +563,11 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
+          # build-contexts and build-args travel together on all three pushes:
+          # the arg switches the Dockerfile to the prebuilt path, the context
+          # provides the host-built binary.
+          build-contexts: runner-binary=${{ env.RUNNER_BINARY_DIR }}
+          build-args: RUNNER_SOURCE=runner-binary
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
@@ -565,6 +598,8 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
+          build-contexts: runner-binary=${{ env.RUNNER_BINARY_DIR }}
+          build-args: RUNNER_SOURCE=runner-binary
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
@@ -595,6 +630,8 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
+          build-contexts: runner-binary=${{ env.RUNNER_BINARY_DIR }}
+          build-args: RUNNER_SOURCE=runner-binary
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
