@@ -29,8 +29,33 @@ var (
 // RegisterTopic makes msg's type resolvable by the relay. Call it from an init
 // function in the package that owns the topic, passing a zero value: only the
 // descriptor is read.
+//
+// It panics rather than returning an error, because the only callers are init
+// functions holding a compile-time literal — a bad argument there is a
+// programming mistake, not a runtime condition, and an error return would just
+// make every caller panic anyway.
+//
+// The guard matters because an unusable entry does not fail where it was made.
+// proto.MessageName(nil) is "", not an error, so a nil registration lands in the
+// map under the empty name and AssertResolvable then hands that nil to
+// PublisherForMessage, which dereferences it — a nil pointer panic inside the
+// Pub/Sub broker, several frames from the call that caused it.
 func RegisterTopic(msg proto.Message) {
+	if msg == nil {
+		panic("outbox.RegisterTopic: message is nil")
+	}
+	if !msg.ProtoReflect().IsValid() {
+		// A typed nil resolves its descriptor and so registers under the right
+		// name, but it is not the zero value this wants: Publish rejects one by
+		// the same test, so accepting it here would register a prototype that
+		// could never legally be published.
+		panic(fmt.Sprintf("outbox.RegisterTopic: %T is a typed nil, want a zero value", msg))
+	}
+
 	name := proto.MessageName(msg)
+	if name == "" {
+		panic(fmt.Sprintf("outbox.RegisterTopic: %T has no message name", msg))
+	}
 
 	topicsMu.Lock()
 	defer topicsMu.Unlock()
