@@ -84,12 +84,13 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 	// races its own chat. Drop whichever link the database rejects and keep
 	// the block rather than the other way round. Bounded by the number of
 	// optional links, since clearing one can reveal the next.
+	links := optionalBlockLinks(&params)
 	var err error
-	for attempt := 0; attempt <= blockEnrichmentLinkCount; attempt++ {
+	for attempt := 0; attempt <= len(links); attempt++ {
 		if err = s.repo.InsertToolCallBlock(ctx, params); err == nil {
 			return
 		}
-		dropped, ok := clearRejectedBlockLink(&params, err)
+		dropped, ok := clearRejectedBlockLink(links, err)
 		if !ok {
 			break
 		}
@@ -107,48 +108,52 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 	)
 }
 
-// blockEnrichmentLinkCount is the number of optional foreign keys on
-// tool_call_blocks, bounding the retry loop below.
-const blockEnrichmentLinkCount = 4
+// blockLink names one optional foreign key on tool_call_blocks and points at
+// the insert parameter holding it, so the constraint name and the field it
+// clears cannot drift apart.
+type blockLink struct {
+	constraint string
+	column     string
+	value      *uuid.NullUUID
+}
+
+// optionalBlockLinks enumerates the optional (nullable, ON DELETE SET NULL)
+// foreign keys on tool_call_blocks, and doubles as the bound on the salvage
+// retry loop. An optional FK missing from this list would be unsalvageable and
+// the block would be dropped — the failure DNO-769 is about — so
+// TestOptionalBlockLinksCoverSchema asserts the list against the live schema
+// and fails when a new one is added.
+func optionalBlockLinks(params *repo.InsertToolCallBlockParams) []blockLink {
+	return []blockLink{
+		{constraint: "tool_call_blocks_chat_id_fkey", column: "chat_id", value: &params.ChatID},
+		{constraint: "tool_call_blocks_chat_message_id_fkey", column: "chat_message_id", value: &params.ChatMessageID},
+		{constraint: "tool_call_blocks_risk_result_id_fkey", column: "risk_result_id", value: &params.RiskResultID},
+		{constraint: "tool_call_blocks_risk_policy_id_fkey", column: "risk_policy_id", value: &params.RiskPolicyID},
+	}
+}
 
 // clearRejectedBlockLink clears the one optional foreign key a
-// foreign-key-violation error names, reporting which. It returns false for any
-// other error, and for a violation naming a link that is already null or a
-// column that is not optional (organization_id, project_id) — those are real
-// failures with nothing to salvage.
-func clearRejectedBlockLink(params *repo.InsertToolCallBlockParams, err error) (string, bool) {
+// foreign-key-violation error names, reporting which column it cleared. It
+// returns false for any other error, and for a violation naming a link that is
+// already null or a column that is not optional (organization_id, project_id) —
+// those are real failures with nothing to salvage, and retrying them would only
+// repeat the same insert.
+func clearRejectedBlockLink(links []blockLink, err error) (string, bool) {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != pgForeignKeyViolation {
 		return "", false
 	}
-	switch pgErr.ConstraintName {
-	case "tool_call_blocks_chat_id_fkey":
-		if !params.ChatID.Valid {
+	for _, link := range links {
+		if link.constraint != pgErr.ConstraintName {
+			continue
+		}
+		if !link.value.Valid {
 			return "", false
 		}
-		params.ChatID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		return "chat_id", true
-	case "tool_call_blocks_chat_message_id_fkey":
-		if !params.ChatMessageID.Valid {
-			return "", false
-		}
-		params.ChatMessageID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		return "chat_message_id", true
-	case "tool_call_blocks_risk_result_id_fkey":
-		if !params.RiskResultID.Valid {
-			return "", false
-		}
-		params.RiskResultID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		return "risk_result_id", true
-	case "tool_call_blocks_risk_policy_id_fkey":
-		if !params.RiskPolicyID.Valid {
-			return "", false
-		}
-		params.RiskPolicyID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		return "risk_policy_id", true
-	default:
-		return "", false
+		*link.value = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		return link.column, true
 	}
+	return "", false
 }
 
 // recordToolCallBlockAsync mints a block id, persists the block row off the hot
