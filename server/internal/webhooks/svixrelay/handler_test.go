@@ -157,7 +157,7 @@ func TestHandle_AcksPermanentRejections(t *testing.T) {
 func TestHandle_NacksTransientFailures(t *testing.T) {
 	t.Parallel()
 
-	for _, status := range []int{429, 500, 502, 503} {
+	for _, status := range []int{408, 429, 500, 502, 503} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			t.Parallel()
 

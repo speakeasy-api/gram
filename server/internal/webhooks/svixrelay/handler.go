@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	svix "github.com/svix/svix-webhooks/go"
@@ -189,10 +190,20 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 		)
 		return nil
 
-	// Any other 4xx except rate limiting is a rejection of this specific
-	// message. Nacking would burn the whole delivery budget re-sending
-	// something Svix has already refused, so acknowledge and record it.
-	case status >= 400 && status < 500 && status != 429:
+	// Svix declining to answer now rather than refusing this message, so both
+	// belong with the 5xx retries below. Neither will have been retried by the
+	// SDK: its loop covers transport failures and 5xx only, so a 408 arrives
+	// here having been attempted exactly once.
+	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests:
+		return fmt.Errorf("svix message create: %w", err)
+
+	// Any other 4xx is a rejection of this specific message. Nacking would burn
+	// the whole delivery budget re-sending something Svix has already refused.
+	// Note what acking costs: this path has no dead letter, so the event is
+	// discarded outright. That is only defensible for a response that will be
+	// identical next time, which is why the transient codes are split out
+	// above rather than left to an exclusion list.
+	case status >= 400 && status < 500:
 		h.drop(ctx, dropReasonRejected)
 		h.logger.ErrorContext(ctx, "svix rejected webhook event",
 			attr.SlogWebhookDropReason(dropReasonRejected),
