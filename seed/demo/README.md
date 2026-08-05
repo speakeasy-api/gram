@@ -78,7 +78,9 @@ and the test asserts:
    `gram_project_id` columns).
 2. **Cleanup** — the planted stray demo rows are wiped by the rerun, so seed
    versions can always roll forward.
-3. **Idempotence** — per-table row counts are identical after every run.
+3. **Idempotence** — per-table row counts are identical after every run for
+   plain MergeTree tables; Summing/Aggregating MV targets collapse rows on
+   `now()`-bucketed keys, so they are checked for isolation only.
 
 What that means when extending the seed: scope every statement to the demo
 constants, pair every insert with a delete (or upsert), keep the
