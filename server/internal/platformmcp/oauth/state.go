@@ -1,4 +1,4 @@
-// Package oauth defines Admin MCP's organization-bound OAuth state contracts.
+// Package oauth defines Platform MCP's organization-bound OAuth state contracts.
 // It intentionally has no HTTP, hosted MCP, or database dependency.
 package oauth
 
@@ -13,14 +13,14 @@ import (
 )
 
 var (
-	ErrNotFound       = errors.New("admin oauth state not found")
-	ErrRevoked        = errors.New("admin oauth state revoked")
-	ErrExpired        = errors.New("admin oauth state expired")
-	ErrAlreadyUsed    = errors.New("admin oauth state already used")
-	ErrClientMismatch = errors.New("admin oauth client mismatch")
-	ErrGeneration     = errors.New("admin oauth connection generation mismatch")
-	ErrRedirectURI    = errors.New("admin oauth redirect URI mismatch")
-	ErrPKCE           = errors.New("admin oauth PKCE mismatch")
+	ErrNotFound       = errors.New("platform oauth state not found")
+	ErrRevoked        = errors.New("platform oauth state revoked")
+	ErrExpired        = errors.New("platform oauth state expired")
+	ErrAlreadyUsed    = errors.New("platform oauth state already used")
+	ErrClientMismatch = errors.New("platform oauth client mismatch")
+	ErrGeneration     = errors.New("platform oauth connection generation mismatch")
+	ErrRedirectURI    = errors.New("platform oauth redirect URI mismatch")
+	ErrPKCE           = errors.New("platform oauth PKCE mismatch")
 )
 
 type Client struct {
@@ -73,7 +73,7 @@ type RotateSessionInput struct {
 	Replacement Session
 }
 
-// Store defines the state transitions the Admin authorization server requires.
+// Store defines the state transitions the Platform authorization server requires.
 type Store interface {
 	RegisterClient(ctx context.Context, client Client) error
 	RevokeClient(ctx context.Context, clientID string, now time.Time) error
@@ -87,7 +87,7 @@ type Store interface {
 	RotateConnectionGeneration(ctx context.Context, connectionID, generation string, now time.Time) (Connection, error)
 }
 
-// InMemoryStore is a concurrency-safe contract implementation for Admin OAuth.
+// InMemoryStore is a concurrency-safe contract implementation for Platform OAuth.
 type InMemoryStore struct {
 	mu          sync.Mutex
 	clients     map[string]Client
@@ -359,7 +359,7 @@ func validPKCEVerifier(verifier string) bool {
 		return false
 	}
 	return strings.IndexFunc(verifier, func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || strings.ContainsRune("-._~", r))
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && !strings.ContainsRune("-._~", r)
 	}) == -1
 }
 
@@ -368,6 +368,6 @@ func validPKCES256Challenge(challenge string) bool {
 		return false
 	}
 	return strings.IndexFunc(challenge, func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_')
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_'
 	}) == -1
 }

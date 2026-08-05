@@ -358,6 +358,7 @@ func (s *Service) mintSessionAndRespond(
 		Issuer:   issuerURL,
 		Lifetime: accessTokenLifetime,
 		ClientID: clientRow.ClientID,
+		JTI:      "",
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)

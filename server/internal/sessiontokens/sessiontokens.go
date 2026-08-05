@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -48,12 +49,22 @@ type MintParams struct {
 	Issuer   string
 	Lifetime time.Duration
 	ClientID string
+	// JTI optionally supplies a unique high-entropy base64url credential. When
+	// empty, Mint generates a UUID. Callers must not use stable identifiers:
+	// revocation is keyed globally by JTI.
+	JTI string
 }
 
-// Mint produces an HS256-signed JWT and its JTI.
+// Mint produces an HS256-signed JWT and its JTI. A supplied JTI must be a
+// unique high-entropy base64url credential; otherwise Mint generates one.
 func (s *Signer) Mint(params MintParams) (token string, jti string, err error) {
 	now := time.Now()
-	jti = uuid.NewString()
+	jti = params.JTI
+	if jti == "" {
+		jti = uuid.NewString()
+	} else if !validSuppliedJTI(jti) {
+		return "", "", errors.New("mint session token: supplied jti is invalid")
+	}
 
 	claims := SessionClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -135,6 +146,12 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 		return ValidatedSession{}, fmt.Errorf("parse session subject: %w", err)
 	}
 	return ValidatedSession{Subject: subject, JTI: claims.ID, ClientID: claims.ClientID}, nil
+}
+
+func validSuppliedJTI(jti string) bool {
+	return len(jti) >= 43 && strings.IndexFunc(jti, func(r rune) bool {
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_'
+	}) == -1
 }
 
 // VerifiedJTI extracts a JTI after verifying the token's signature. It skips
