@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"cloud.google.com/go/pubsub/v2"
+	"github.com/speakeasy-api/gram/infra/internal/gcp"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -128,6 +129,14 @@ func (r *rawPublisher) publisherFor(ctx context.Context, topic protoreflect.Full
 		return nil, nil, fmt.Errorf("resolve topic %q: %w", topic, ErrUnknownTopic)
 	}
 
+	// Asked here rather than inferred from a broker failure. A message that
+	// declares no topic option is as unpublishable as one that does not exist,
+	// and this is the only way to say so without also condemning every other
+	// reason the broker might fail.
+	if _, ok := gcp.TopicOptionsFromMessage(prototype.ProtoReflect().Descriptor()); !ok {
+		return nil, nil, fmt.Errorf("resolve topic %q: %w: message declares no topic option", topic, ErrUnknownTopic)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -137,10 +146,13 @@ func (r *rawPublisher) publisherFor(ctx context.Context, topic protoreflect.Full
 
 	pub, err := r.broker.PublisherForMessage(ctx, prototype)
 	if err != nil {
-		// A message that declares no topic option is as unpublishable as one
-		// that does not exist, so both surface as ErrUnknownTopic and both
-		// dead-letter rather than retry.
-		return nil, nil, fmt.Errorf("get publisher for topic %q: %w: %w", topic, ErrUnknownTopic, err)
+		// Deliberately unmarked, so it stays retryable. Everything permanent is
+		// ruled out above, which leaves the broker failing to reach Pub/Sub:
+		// the emulator reconciles the topic over the network before handing one
+		// back, and a cancelled context surfaces here too. Marking those
+		// permanent would dead-letter a perfectly valid row over a blip or a
+		// shutdown.
+		return nil, nil, fmt.Errorf("get publisher for topic %q: %w", topic, err)
 	}
 	if r.settings != nil {
 		pub.PublishSettings = *r.settings

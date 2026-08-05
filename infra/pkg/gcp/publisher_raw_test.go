@@ -16,8 +16,6 @@ import (
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 )
 
-var errNoTopicOption = errors.New("declares no pubsub topic")
-
 // stubBroker hands back a publisher without contacting Pub/Sub, and counts how
 // often it was asked so caching can be observed.
 type stubBroker struct {
@@ -70,17 +68,40 @@ func TestRawPublisher_UnknownTopicIsPermanent(t *testing.T) {
 	require.Zero(t, broker.calls, "resolution must fail before the broker is consulted")
 }
 
-func TestRawPublisher_BrokerFailureIsPermanent(t *testing.T) {
+// TestRawPublisher_MessageWithoutTopicOptionIsPermanent covers the other half
+// of ErrUnknownTopic: the name resolves, but to a message that declares no
+// topic. pingv2.Processor is a subscription marker, so it is exactly that.
+func TestRawPublisher_MessageWithoutTopicOptionIsPermanent(t *testing.T) {
 	t.Parallel()
 
-	broker := &stubBroker{err: errNoTopicOption}
+	broker := &stubBroker{}
+	pub := NewRawPublisher(broker, resolveOnly(&pingv2.Processor{}))
+
+	_, err := pub.PublishRaw(t.Context(), proto.MessageName(&pingv2.Processor{}), []byte("x"), nil).Get(t.Context())
+
+	require.ErrorIs(t, err, ErrUnknownTopic,
+		"a message that declares no topic is as unpublishable as one that does not exist")
+	require.Zero(t, broker.calls,
+		"the topic option is checked directly, so this never reaches the broker")
+}
+
+// TestRawPublisher_BrokerFailureIsRetryable is the distinction that keeps a
+// valid row out of the dead letter table. Creating a publisher is not a pure
+// lookup — the emulator reconciles the topic over the network first, and a
+// cancelled context lands here too — so a failure at this point says nothing
+// about whether the topic exists.
+func TestRawPublisher_BrokerFailureIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	brokerDown := errors.New("reconcile topic: connection refused")
+	broker := &stubBroker{err: brokerDown}
 	pub := NewRawPublisher(broker, resolveOnly(&pingv2.Message{}))
 
 	_, err := pub.PublishRaw(t.Context(), proto.MessageName(&pingv2.Message{}), []byte("x"), nil).Get(t.Context())
 
-	require.ErrorIs(t, err, ErrUnknownTopic,
-		"a message that declares no topic is as unpublishable as one that does not exist")
-	require.ErrorIs(t, err, errNoTopicOption, "the underlying cause must stay inspectable")
+	require.ErrorIs(t, err, brokerDown, "the underlying cause must stay inspectable")
+	require.NotErrorIs(t, err, ErrUnknownTopic,
+		"the topic is registered and declares a topic option; the broker just could not be reached")
 }
 
 func TestRawPublisher_CachesPublisherPerTopic(t *testing.T) {
