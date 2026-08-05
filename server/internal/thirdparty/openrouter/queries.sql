@@ -34,6 +34,29 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: DisableOpenRouterAPIKey :exec
+-- Locks the key down without deleting it, so a reinstated organization keeps
+-- the same upstream key. Mirrors both halves of the upstream lockdown: the
+-- ceiling drops to 0 and the flag drops the key out of credit-usage polling.
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    monthly_credits = 0,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
+-- name: EnableOpenRouterAPIKey :exec
+-- Reverses DisableOpenRouterAPIKey. Reinstatement runs through
+-- RefreshAPIKeyLimit, which sets a fresh ceiling in the same call, so this
+-- only has to clear the flag.
+UPDATE openrouter_api_keys
+SET disabled = FALSE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
 -- name: UpdateOpenRouterKeyMonthlyCredits :exec
 -- Updates only monthly_credits for the given organization. Used by the
 -- metrics-collection reconciliation path when the upstream OpenRouter limit
