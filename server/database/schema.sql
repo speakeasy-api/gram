@@ -5542,11 +5542,11 @@ CREATE INDEX IF NOT EXISTS mdm_devices_user_id_idx
 ON mdm_devices (user_id)
 WHERE user_id IS NOT NULL;
 
--- Admin MCP is organization-scoped and intentionally separate from hosted
+-- Platform MCP is organization-scoped and intentionally separate from hosted
 -- project/issuer-bound user_session_* state. These tables persist only the
--- Admin OAuth lifecycle and typed onboarding evidence; registration, provider
+-- Platform OAuth lifecycle and typed onboarding evidence; registration, provider
 -- setup, readiness, and operation receipts are owned by later checkpoints.
-CREATE TABLE IF NOT EXISTS admin_mcp_oauth_clients (
+CREATE TABLE IF NOT EXISTS platform_mcp_oauth_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   client_id TEXT NOT NULL,
   client_secret_hash TEXT,
@@ -5559,26 +5559,26 @@ CREATE TABLE IF NOT EXISTS admin_mcp_oauth_clients (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT admin_mcp_oauth_clients_pkey PRIMARY KEY (id),
-  CONSTRAINT admin_mcp_oauth_clients_client_id_check CHECK (client_id <> ''),
-  CONSTRAINT admin_mcp_oauth_clients_client_name_check CHECK (client_name <> ''),
-  CONSTRAINT admin_mcp_oauth_clients_redirect_uris_check CHECK (
+  CONSTRAINT platform_mcp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_oauth_clients_client_id_check CHECK (client_id <> ''),
+  CONSTRAINT platform_mcp_oauth_clients_client_name_check CHECK (client_name <> ''),
+  CONSTRAINT platform_mcp_oauth_clients_redirect_uris_check CHECK (
     cardinality(redirect_uris) > 0
     AND array_position(redirect_uris, NULL) IS NULL
     AND array_position(redirect_uris, '') IS NULL
   )
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_oauth_clients_client_id_key
-ON admin_mcp_oauth_clients (client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_oauth_clients_client_id_key
+ON platform_mcp_oauth_clients (client_id);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_oauth_clients_client_secret_expires_at_idx
-ON admin_mcp_oauth_clients (client_secret_expires_at)
+CREATE INDEX IF NOT EXISTS platform_mcp_oauth_clients_client_secret_expires_at_idx
+ON platform_mcp_oauth_clients (client_secret_expires_at)
 WHERE client_secret_expires_at IS NOT NULL AND revoked_at IS NULL;
 
 -- A connection is the selected organization, authenticated subject, and client.
 -- It is not an authorization grant: the runtime rechecks live org:admin access.
-CREATE TABLE IF NOT EXISTS admin_mcp_connections (
+CREATE TABLE IF NOT EXISTS platform_mcp_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   subject_urn TEXT NOT NULL,
@@ -5591,32 +5591,32 @@ CREATE TABLE IF NOT EXISTS admin_mcp_connections (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT admin_mcp_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT admin_mcp_connections_subject_urn_check CHECK (subject_urn <> ''),
-  CONSTRAINT admin_mcp_connections_organization_id_fkey
+  CONSTRAINT platform_mcp_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_connections_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT platform_mcp_connections_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT admin_mcp_connections_oauth_client_id_fkey
-    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE CASCADE
+  CONSTRAINT platform_mcp_connections_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES platform_mcp_oauth_clients (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_live_organization_subject_client_key
-ON admin_mcp_connections (organization_id, subject_urn, oauth_client_id)
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_connections_live_organization_subject_client_key
+ON platform_mcp_connections (organization_id, subject_urn, oauth_client_id)
 WHERE revoked_at IS NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_id_key
-ON admin_mcp_connections (organization_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_connections_organization_id_id_key
+ON platform_mcp_connections (organization_id, id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_organization_id_id_oauth_client_id_key
-ON admin_mcp_connections (organization_id, id, oauth_client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_connections_organization_id_id_oauth_client_id_key
+ON platform_mcp_connections (organization_id, id, oauth_client_id);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_connections_oauth_client_id_idx
-ON admin_mcp_connections (oauth_client_id);
+CREATE INDEX IF NOT EXISTS platform_mcp_connections_oauth_client_id_idx
+ON platform_mcp_connections (oauth_client_id);
 
 -- Authorization codes are stored only as hashes and consumed atomically after
 -- client, redirect URI, PKCE, and current connection-generation validation.
 -- organization_id is copied from and tenant-pinned to the connection so every
 -- authorization-code transition has a direct tenant boundary.
-CREATE TABLE IF NOT EXISTS admin_mcp_authorization_grants (
+CREATE TABLE IF NOT EXISTS platform_mcp_authorization_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   authorization_code_hash TEXT NOT NULL,
@@ -5632,35 +5632,35 @@ CREATE TABLE IF NOT EXISTS admin_mcp_authorization_grants (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT admin_mcp_authorization_grants_pkey PRIMARY KEY (id),
-  CONSTRAINT admin_mcp_authorization_grants_authorization_code_hash_check CHECK (authorization_code_hash <> ''),
-  CONSTRAINT admin_mcp_authorization_grants_redirect_uri_check CHECK (redirect_uri <> ''),
-  CONSTRAINT admin_mcp_authorization_grants_code_challenge_check CHECK (code_challenge <> ''),
-  CONSTRAINT admin_mcp_authorization_grants_oauth_client_id_fkey
-    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE CASCADE,
-  CONSTRAINT admin_mcp_authorization_grants_org_connection_client_fkey
+  CONSTRAINT platform_mcp_authorization_grants_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_authorization_grants_authorization_code_hash_check CHECK (authorization_code_hash <> ''),
+  CONSTRAINT platform_mcp_authorization_grants_redirect_uri_check CHECK (redirect_uri <> ''),
+  CONSTRAINT platform_mcp_authorization_grants_code_challenge_check CHECK (code_challenge <> ''),
+  CONSTRAINT platform_mcp_authorization_grants_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES platform_mcp_oauth_clients (id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_authorization_grants_org_connection_client_fkey
     FOREIGN KEY (organization_id, connection_id, oauth_client_id)
-    REFERENCES admin_mcp_connections (organization_id, id, oauth_client_id)
+    REFERENCES platform_mcp_connections (organization_id, id, oauth_client_id)
     ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_authorization_grants_authorization_code_hash_key
-ON admin_mcp_authorization_grants (authorization_code_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_authorization_grants_authorization_code_hash_key
+ON platform_mcp_authorization_grants (authorization_code_hash);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_expires_at_idx
-ON admin_mcp_authorization_grants (expires_at);
+CREATE INDEX IF NOT EXISTS platform_mcp_authorization_grants_expires_at_idx
+ON platform_mcp_authorization_grants (expires_at);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_oauth_client_id_idx
-ON admin_mcp_authorization_grants (oauth_client_id);
+CREATE INDEX IF NOT EXISTS platform_mcp_authorization_grants_oauth_client_id_idx
+ON platform_mcp_authorization_grants (oauth_client_id);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_org_code_hash_idx
-ON admin_mcp_authorization_grants (organization_id, authorization_code_hash);
+CREATE INDEX IF NOT EXISTS platform_mcp_authorization_grants_org_code_hash_idx
+ON platform_mcp_authorization_grants (organization_id, authorization_code_hash);
 
--- A session stores Admin token identifiers and hashes, never raw bearer or
+-- A session stores Platform token identifiers and hashes, never raw bearer or
 -- refresh tokens. The replacement link preserves single-use refresh history.
 -- organization_id is copied from and tenant-pinned to the connection so every
 -- session transition has a direct tenant boundary.
-CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
+CREATE TABLE IF NOT EXISTS platform_mcp_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   connection_id uuid NOT NULL,
@@ -5677,45 +5677,45 @@ CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT admin_mcp_sessions_pkey PRIMARY KEY (id),
-  CONSTRAINT admin_mcp_sessions_id_lineage_key UNIQUE (id, connection_id, oauth_client_id, connection_generation),
-  CONSTRAINT admin_mcp_sessions_jti_check CHECK (jti <> ''),
-  CONSTRAINT admin_mcp_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
-  CONSTRAINT admin_mcp_sessions_organization_connection_client_fkey
+  CONSTRAINT platform_mcp_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_sessions_id_lineage_key UNIQUE (id, connection_id, oauth_client_id, connection_generation),
+  CONSTRAINT platform_mcp_sessions_jti_check CHECK (jti <> ''),
+  CONSTRAINT platform_mcp_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
+  CONSTRAINT platform_mcp_sessions_organization_connection_client_fkey
     FOREIGN KEY (organization_id, connection_id, oauth_client_id)
-    REFERENCES admin_mcp_connections (organization_id, id, oauth_client_id)
+    REFERENCES platform_mcp_connections (organization_id, id, oauth_client_id)
     ON DELETE CASCADE,
-  CONSTRAINT admin_mcp_sessions_replaced_by_session_lineage_fkey
+  CONSTRAINT platform_mcp_sessions_replaced_by_session_lineage_fkey
     FOREIGN KEY (replaced_by_session_id, connection_id, oauth_client_id, connection_generation)
-    REFERENCES admin_mcp_sessions (id, connection_id, oauth_client_id, connection_generation)
+    REFERENCES platform_mcp_sessions (id, connection_id, oauth_client_id, connection_generation)
     ON DELETE NO ACTION
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_jti_key
-ON admin_mcp_sessions (jti);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_sessions_jti_key
+ON platform_mcp_sessions (jti);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_sessions_organization_jti_idx
-ON admin_mcp_sessions (organization_id, jti);
+CREATE INDEX IF NOT EXISTS platform_mcp_sessions_organization_jti_idx
+ON platform_mcp_sessions (organization_id, jti);
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_refresh_token_hash_key
-ON admin_mcp_sessions (refresh_token_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_sessions_refresh_token_hash_key
+ON platform_mcp_sessions (refresh_token_hash);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_sessions_organization_refresh_token_hash_idx
-ON admin_mcp_sessions (organization_id, refresh_token_hash);
+CREATE INDEX IF NOT EXISTS platform_mcp_sessions_organization_refresh_token_hash_idx
+ON platform_mcp_sessions (organization_id, refresh_token_hash);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_sessions_organization_connection_generation_idx
-ON admin_mcp_sessions (organization_id, connection_id, connection_generation);
+CREATE INDEX IF NOT EXISTS platform_mcp_sessions_organization_connection_generation_idx
+ON platform_mcp_sessions (organization_id, connection_id, connection_generation);
 
-CREATE INDEX IF NOT EXISTS admin_mcp_sessions_refresh_expires_at_idx
-ON admin_mcp_sessions (refresh_expires_at);
+CREATE INDEX IF NOT EXISTS platform_mcp_sessions_refresh_expires_at_idx
+ON platform_mcp_sessions (refresh_expires_at);
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_replaced_by_session_id_key
-ON admin_mcp_sessions (replaced_by_session_id)
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_sessions_replaced_by_session_id_key
+ON platform_mcp_sessions (replaced_by_session_id)
 WHERE replaced_by_session_id IS NOT NULL;
 
 -- Typed milestone rows are durable product evidence. Event names and allowed
 -- target fields are validated by the owning application contract, not SQL enums.
-CREATE TABLE IF NOT EXISTS admin_mcp_onboarding_milestones (
+CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   milestone TEXT NOT NULL,
@@ -5728,18 +5728,18 @@ CREATE TABLE IF NOT EXISTS admin_mcp_onboarding_milestones (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT admin_mcp_onboarding_milestones_pkey PRIMARY KEY (id),
-  CONSTRAINT admin_mcp_onboarding_milestones_organization_id_fkey
+  CONSTRAINT platform_mcp_onboarding_milestones_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_onboarding_milestones_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT admin_mcp_onboarding_milestones_organization_connection_fkey
+  CONSTRAINT platform_mcp_onboarding_milestones_organization_connection_fkey
     FOREIGN KEY (organization_id, connection_id)
-    REFERENCES admin_mcp_connections (organization_id, id)
+    REFERENCES platform_mcp_connections (organization_id, id)
     ON DELETE NO ACTION,
-  CONSTRAINT admin_mcp_onboarding_milestones_organization_project_fkey
+  CONSTRAINT platform_mcp_onboarding_milestones_organization_project_fkey
     FOREIGN KEY (organization_id, project_id)
     REFERENCES projects (organization_id, id)
     ON DELETE NO ACTION,
-  CONSTRAINT admin_mcp_onboarding_milestones_connection_generation_check CHECK (
+  CONSTRAINT platform_mcp_onboarding_milestones_connection_generation_check CHECK (
     milestone NOT IN (
       'authorization_succeeded',
       'authorization_failed',
@@ -5750,20 +5750,20 @@ CREATE TABLE IF NOT EXISTS admin_mcp_onboarding_milestones (
     )
     OR (connection_id IS NOT NULL AND connection_generation IS NOT NULL)
   ),
-  CONSTRAINT admin_mcp_onboarding_milestones_first_value_target_check CHECK (
+  CONSTRAINT platform_mcp_onboarding_milestones_first_value_target_check CHECK (
     milestone <> 'first_value_achieved'
     OR (project_id IS NOT NULL AND mcp_key <> '')
   ),
-  CONSTRAINT admin_mcp_onboarding_milestones_repeat_day_check CHECK (
+  CONSTRAINT platform_mcp_onboarding_milestones_repeat_day_check CHECK (
     milestone <> 'repeat_day_value' OR product_day IS NOT NULL
   )
 );
 
 -- Authorization, connection, read/write, and cohort-block evidence are once per
--- Admin connection generation. Other milestone types use the target/attempt
+-- Platform connection generation. Other milestone types use the target/attempt
 -- grains below and are checked by their owning application contract.
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_onboarding_milestones_connection_generation_key
-ON admin_mcp_onboarding_milestones (milestone, connection_id, connection_generation)
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_connection_generation_key
+ON platform_mcp_onboarding_milestones (milestone, connection_id, connection_generation)
 WHERE connection_id IS NOT NULL
   AND connection_generation IS NOT NULL
   AND milestone IN (
@@ -5775,25 +5775,25 @@ WHERE connection_id IS NOT NULL
     'read_only_cohort'
   );
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_onboarding_milestones_attempt_target_key
-ON admin_mcp_onboarding_milestones (organization_id, milestone, project_id, mcp_key, attempt_id) NULLS NOT DISTINCT
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_attempt_target_key
+ON platform_mcp_onboarding_milestones (organization_id, milestone, project_id, mcp_key, attempt_id) NULLS NOT DISTINCT
 WHERE attempt_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_onboarding_milestones_first_value_key
-ON admin_mcp_onboarding_milestones (organization_id, project_id, mcp_key) NULLS NOT DISTINCT
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_first_value_key
+ON platform_mcp_onboarding_milestones (organization_id, project_id, mcp_key) NULLS NOT DISTINCT
 WHERE milestone = 'first_value_achieved';
 
-CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_onboarding_milestones_repeat_day_value_key
-ON admin_mcp_onboarding_milestones (organization_id, product_day) NULLS NOT DISTINCT
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_repeat_day_value_key
+ON platform_mcp_onboarding_milestones (organization_id, product_day) NULLS NOT DISTINCT
 WHERE milestone = 'repeat_day_value';
 
-CREATE INDEX IF NOT EXISTS admin_mcp_onboarding_milestones_connection_id_idx
-ON admin_mcp_onboarding_milestones (connection_id)
+CREATE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_connection_id_idx
+ON platform_mcp_onboarding_milestones (connection_id)
 WHERE connection_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS admin_mcp_onboarding_milestones_project_id_idx
-ON admin_mcp_onboarding_milestones (project_id)
+CREATE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_project_id_idx
+ON platform_mcp_onboarding_milestones (project_id)
 WHERE project_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS admin_mcp_onboarding_milestones_organization_created_at_idx
-ON admin_mcp_onboarding_milestones (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_organization_created_at_idx
+ON platform_mcp_onboarding_milestones (organization_id, created_at DESC);
