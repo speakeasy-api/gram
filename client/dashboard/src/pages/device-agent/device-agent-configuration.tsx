@@ -1,7 +1,7 @@
-import { DevBadge } from "@/components/dev-badge";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
 import {
   Field,
   FieldDescription,
@@ -143,6 +143,16 @@ function syncIntervalError(value: string): string | undefined {
     return `Enter a value from ${MIN_SYNC_INTERVAL_SECONDS} to ${MAX_SYNC_INTERVAL_SECONDS}.`;
   }
   return undefined;
+}
+
+// Marks fields only Speakeasy platform admins can see, matching the developer
+// toolbar's amber DEV badge.
+function DevOnlyBadge(): JSX.Element {
+  return (
+    <Badge size="sm" variant="warning" background>
+      <Badge.Text>Dev</Badge.Text>
+    </Badge>
+  );
 }
 
 export function DeviceAgentConfigurationTab(): JSX.Element {
@@ -387,7 +397,7 @@ function DeviceAgentConfigurationForm({
             <Field>
               <FieldLabel htmlFor="device-agent-update-channel">
                 Update channel
-                <DevBadge />
+                <DevOnlyBadge />
               </FieldLabel>
               <Input
                 id="device-agent-update-channel"
@@ -486,7 +496,7 @@ function DeviceAgentConfigurationForm({
           <Field>
             <FieldLabel htmlFor="device-agent-blocked-versions">
               Blocked versions
-              <DevBadge />
+              <DevOnlyBadge />
             </FieldLabel>
             <Input
               id="device-agent-blocked-versions"
