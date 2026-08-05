@@ -117,6 +117,9 @@ type InfoResult struct {
 type LoginPayload struct {
 	// Optional URL to redirect to after successful authentication
 	Redirect *string
+	// Optional organization name. When set, the organization is created for a new
+	// user during the auth callback.
+	OrgName *string
 }
 
 // LoginResult is the result type of the auth service login method.

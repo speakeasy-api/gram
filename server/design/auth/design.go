@@ -65,6 +65,7 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("redirect", String, "Optional URL to redirect to after successful authentication")
+			Attribute("org_name", String, "Optional organization name. When set, the organization is created for a new user during the auth callback.")
 		})
 
 		Result(func() {
@@ -75,6 +76,7 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.login")
 			Param("redirect")
+			Param("org_name")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {

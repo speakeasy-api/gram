@@ -301,6 +301,9 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if p.Redirect != nil {
 			values.Add("redirect", *p.Redirect)
 		}
+		if p.OrgName != nil {
+			values.Add("org_name", *p.OrgName)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

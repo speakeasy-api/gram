@@ -8764,6 +8764,13 @@ paths:
                   schema:
                     description: Optional URL to redirect to after successful authentication
                     type: string
+                - allowEmptyValue: true
+                  description: Optional organization name. When set, the organization is created for a new user during the auth callback.
+                  in: query
+                  name: org_name
+                  schema:
+                    description: Optional organization name. When set, the organization is created for a new user during the auth callback.
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
