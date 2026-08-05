@@ -106,7 +106,7 @@ export default function RequestAccess(): React.JSX.Element {
               >
                 {requestAccessMutation.isPending
                   ? "Sending..."
-                  : "Send Request to Admins"}
+                  : "Send request"}
               </Button>
             )}
 
