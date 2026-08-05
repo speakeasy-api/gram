@@ -1280,7 +1280,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
 	case "initialize":
-		return handleInitialize(ctx, s.logger, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.sessionClientInfo)
+		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.sessionClientInfo)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":

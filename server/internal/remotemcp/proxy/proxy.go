@@ -324,7 +324,7 @@ type Proxy struct {
 // Management).
 func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
-	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Delete", trace.WithAttributes(p.requestSpanAttributes(http.MethodDelete)...))
+	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Delete", trace.WithAttributes(p.requestSpanAttributes(r, http.MethodDelete)...))
 	defer span.End()
 	defer func() {
 		if err != nil {
@@ -380,7 +380,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 // runtime sees what upstream actually said.
 func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
-	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Get", trace.WithAttributes(p.requestSpanAttributes(http.MethodGet)...))
+	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Get", trace.WithAttributes(p.requestSpanAttributes(r, http.MethodGet)...))
 	defer span.End()
 	defer func() {
 		if err != nil {
@@ -421,7 +421,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil, nil)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -443,7 +443,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 // is a POST to the MCP endpoint (see spec § Sending Messages to the Server).
 func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
-	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Post", trace.WithAttributes(p.requestSpanAttributes(http.MethodPost)...))
+	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Post", trace.WithAttributes(p.requestSpanAttributes(r, http.MethodPost)...))
 	defer span.End()
 	defer func() {
 		if err != nil {
@@ -506,6 +506,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// a given request.
 	initializeReq, _ := initializeRequestFromUserRequest(userReq)
 	if initializeReq != nil {
+		recordRequestedProtocolVersion(span, initializeReq)
+
 		if err := p.runInitializeRequestInterceptors(ctx, initializeReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
@@ -582,7 +584,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// below is bypassed entirely for SSE responses because the body is
 	// not a single message to hand off — it's a stream of them.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -644,6 +646,10 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 		if err := p.runRemoteMessageInterceptors(ctx, remoteMsg); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+
+		if initializeReq != nil {
+			recordNegotiatedProtocolVersion(span, remoteMsg)
 		}
 
 		// Typed response dispatch runs after the generic chain, symmetric
@@ -854,6 +860,7 @@ func (p *Proxy) relaySSEStream(
 	userReq *http.Request,
 	remoteReq *http.Request,
 	upstreamResp *http.Response,
+	initializeReq *InitializeRequest,
 	toolsCallReq *ToolsCallRequest,
 	toolsListReq *ToolsListRequest,
 	resourcesReadReq *ResourcesReadRequest,
@@ -880,6 +887,11 @@ func (p *Proxy) relaySSEStream(
 	var terminalID jsonrpc.ID
 	var haveTerminalID bool
 	switch {
+	case initializeReq != nil && len(initializeReq.UserRequest.JSONRPCMessages) == 1:
+		if rpcReq, ok := initializeReq.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request); ok {
+			terminalID = rpcReq.ID
+			haveTerminalID = true
+		}
 	case toolsCallReq != nil && len(toolsCallReq.UserRequest.JSONRPCMessages) == 1:
 		if rpcReq, ok := toolsCallReq.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request); ok {
 			terminalID = rpcReq.ID
@@ -947,6 +959,11 @@ func (p *Proxy) relaySSEStream(
 			if rejectionErr == nil && haveTerminalID {
 				if resp, ok := msg.(*jsonrpc.Response); ok && jsonrpcIDsEqual(resp.ID, terminalID) {
 					switch {
+					case initializeReq != nil:
+						// ctx still carries the span opened for the inbound
+						// POST, so the version lands on the same span as the
+						// buffered path rather than on a stream-local one.
+						recordNegotiatedProtocolVersion(trace.SpanFromContext(ctx), remoteMsg)
 					case toolsCallReq != nil:
 						if typedResp, typedOK := toolsCallResponseFromRemoteMessage(toolsCallReq, remoteMsg); typedOK {
 							if err := p.runToolsCallResponseInterceptors(ctx, typedResp); err != nil {
@@ -1038,12 +1055,14 @@ func (p *Proxy) relaySSEStream(
 
 // requestSpanAttributes returns the attribute set applied to every span the proxy
 // emits for an inbound request. Both correlation ids are optional on Proxy and
-// are omitted when empty rather than emitted as empty-string labels.
-func (p *Proxy) requestSpanAttributes(method string) []attribute.KeyValue {
+// are omitted when empty rather than emitted as empty-string labels, as is the
+// protocol version when the request does not name one.
+func (p *Proxy) requestSpanAttributes(r *http.Request, method string) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPServerURL(p.RemoteURL),
 	}
+	attrs = appendNegotiatedProtocolVersion(attrs, r)
 	return p.Identity.AppendAttributes(attrs)
 }
 
