@@ -6,11 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -289,4 +293,121 @@ func TestDrain_ConcurrentDrainersClaimDisjointRows(t *testing.T) {
 	for data, count := range seen {
 		require.Equalf(t, 1, count, "message %q was published %d times", data, count)
 	}
+}
+
+// TestClaimStampsOneTokenAcrossTheBatch is what lets settlement carry a single
+// token rather than one per row. It holds because the caller supplies the
+// token; generating it in SQL with gen_random_uuid() would evaluate per row and
+// hand every row a different one, silently fencing only the first.
+func TestClaimStampsOneTokenAcrossTheBatch(t *testing.T) {
+	t.Parallel()
+
+	inst := newRelayTestInstance(t)
+	orgID := seedOrg(t, inst.conn)
+	for range 5 {
+		seedRow(t, inst.conn, orgID, seedOptions{})
+	}
+
+	token := uuid.New()
+	claimed, err := repo.New(inst.conn).ClaimPublishOutboxBatch(t.Context(), repo.ClaimPublishOutboxBatchParams{
+		Lease:      pgtype.Interval{Microseconds: time.Minute.Microseconds(), Days: 0, Months: 0, Valid: true},
+		LeaseToken: token,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Len(t, claimed, 5)
+
+	for _, row := range claimed {
+		stored, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), row.ID)
+		require.NoError(t, err)
+		require.True(t, stored.LeaseToken.Valid)
+		require.Equal(t, token, stored.LeaseToken.UUID,
+			"every row in one claim must carry the same token, or settlement fences only some of them")
+	}
+}
+
+// TestSettlementIgnoresRowsReclaimedAfterLeaseExpiry is the reason settlement
+// carries the lease it was granted rather than just the row id.
+//
+// A drain that outlives its own lease is not hypothetical: the publish timeout
+// alone is 30s of the 60s lease, and a stalled worker or a slow settle can push
+// past it. By then another drainer may hold the row, and settling on the id
+// would let the late result act on someone else's claim — clearing a live
+// lease so a third worker publishes the same event, or dead-lettering a row
+// that is about to be delivered perfectly well.
+//
+// The stale release is the worst of them: it decrements attempts, which is the
+// counter the dead-letter threshold acts on, so a row could be walked backwards
+// away from ever giving up.
+func TestSettlementIgnoresRowsReclaimedAfterLeaseExpiry(t *testing.T) {
+	t.Parallel()
+
+	inst := newRelayTestInstance(t)
+	orgID := seedOrg(t, inst.conn)
+	row := seedRow(t, inst.conn, orgID, seedOptions{})
+
+	q := repo.New(inst.conn)
+	ids := []int64{row.ID}
+
+	// A zero lease stands in for one that has already elapsed by the time this
+	// drain gets around to settling.
+	staleToken := uuid.New()
+	stale, err := q.ClaimPublishOutboxBatch(t.Context(), repo.ClaimPublishOutboxBatchParams{
+		Lease:      pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: true},
+		LeaseToken: staleToken,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+
+	// A second drainer finds the lease expired and takes the row over.
+	liveToken := uuid.New()
+	live, err := q.ClaimPublishOutboxBatch(t.Context(), repo.ClaimPublishOutboxBatchParams{
+		Lease:      pgtype.Interval{Microseconds: time.Minute.Microseconds(), Days: 0, Months: 0, Valid: true},
+		LeaseToken: liveToken,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	require.Equal(t, row.ID, live[0].ID)
+
+	// Every settlement the late drain could reach, all bearing its dead lease.
+	deleted, err := q.DeletePublishedOutboxRows(t.Context(), repo.DeletePublishedOutboxRowsParams{
+		Ids:        ids,
+		LeaseToken: staleToken,
+	})
+	require.NoError(t, err)
+	require.Zero(t, deleted)
+
+	deadLettered, err := q.DeadLetterPublishOutboxRows(t.Context(), repo.DeadLetterPublishOutboxRowsParams{
+		Ids:        ids,
+		LastError:  "stale",
+		LeaseToken: staleToken,
+	})
+	require.NoError(t, err)
+	require.Zero(t, deadLettered)
+
+	require.NoError(t, q.MarkPublishOutboxFailed(t.Context(), repo.MarkPublishOutboxFailedParams{
+		Ids:        ids,
+		LastError:  conv.ToPGTextEmpty("stale"),
+		RetryAfter: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		LeaseToken: staleToken,
+	}))
+
+	require.NoError(t, q.ReleasePublishOutboxRows(t.Context(), repo.ReleasePublishOutboxRowsParams{
+		Ids:        ids,
+		LeaseToken: staleToken,
+	}))
+
+	// The live claim is untouched: still leased, still pending, still counting
+	// the attempts it has actually made.
+	stored, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), row.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), countRows(t, inst.conn), "the row belongs to the live claim")
+	require.Equal(t, live[0].Attempts, stored.Attempts,
+		"a stale release must not walk back the attempt count the dead-letter threshold reads")
+	require.True(t, stored.LockedUntil.Valid, "a stale settle must not release a live lease")
+	require.Equal(t, liveToken, stored.LeaseToken.UUID, "the live claim still owns the row")
+	require.False(t, stored.RetryAfter.Valid, "a stale failure must not schedule a retry")
+	require.Empty(t, stored.LastError.String)
 }

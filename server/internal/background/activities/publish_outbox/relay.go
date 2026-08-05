@@ -30,6 +30,7 @@ import (
 	"math/rand/v2"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
@@ -164,10 +165,19 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 func (r *Relay) Drain(ctx context.Context) (DrainResult, error) {
 	q := repo.New(r.db)
 
+	// Identifies this claim for the rest of the drain. Every settlement carries
+	// it, so if the lease expires and another drainer takes the rows over, the
+	// statements below match nothing rather than acting on someone else's claim.
+	leaseToken, err := uuid.NewV7()
+	if err != nil {
+		return DrainResult{}, fmt.Errorf("generate publish outbox lease token: %w", err)
+	}
+
 	// Claim one extra row to detect whether more remain beyond this batch.
 	rows, err := q.ClaimPublishOutboxBatch(ctx, repo.ClaimPublishOutboxBatchParams{
-		Lease:     pgtype.Interval{Microseconds: claimLease.Microseconds(), Days: 0, Months: 0, Valid: true},
-		BatchSize: maxBatchSize + 1,
+		Lease:      pgtype.Interval{Microseconds: claimLease.Microseconds(), Days: 0, Months: 0, Valid: true},
+		LeaseToken: leaseToken,
+		BatchSize:  maxBatchSize + 1,
 	})
 	if err != nil {
 		return DrainResult{}, fmt.Errorf("claim publish outbox batch: %w", err)
@@ -180,7 +190,7 @@ func (r *Relay) Drain(ctx context.Context) (DrainResult, error) {
 		// immediately instead of waiting out the lease.
 		surplus := rows[maxBatchSize:]
 		rows = rows[:maxBatchSize]
-		if err := r.release(ctx, q, surplus); err != nil {
+		if err := r.release(ctx, q, surplus, leaseToken); err != nil {
 			return DrainResult{}, err
 		}
 	}
@@ -197,7 +207,7 @@ func (r *Relay) Drain(ctx context.Context) (DrainResult, error) {
 
 	results := r.publishAll(ctx, rows)
 
-	return r.settle(ctx, q, rows, results, hasMore)
+	return r.settle(ctx, q, rows, results, hasMore, leaseToken)
 }
 
 // publishAll issues every publish before waiting on any of them, so the Pub/Sub
@@ -236,7 +246,7 @@ func (r *Relay) publishAll(ctx context.Context, rows []repo.ClaimPublishOutboxBa
 
 // settle applies the outcome of a batch: published rows are deleted, permanent
 // failures move to the dead letter table, and the rest get a retry window.
-func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPublishOutboxBatchRow, failures []error, hasMore bool) (DrainResult, error) {
+func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPublishOutboxBatchRow, failures []error, hasMore bool, leaseToken uuid.UUID) (DrainResult, error) {
 	var published, deadLetter, retry []int64
 	// Retries share a single error message per batch because they are settled in
 	// one UPDATE. The per-row error is logged in full below.
@@ -277,7 +287,10 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 	}
 
 	if len(published) > 0 {
-		if _, err := q.DeletePublishedOutboxRows(ctx, published); err != nil {
+		if _, err := q.DeletePublishedOutboxRows(ctx, repo.DeletePublishedOutboxRowsParams{
+			Ids:        published,
+			LeaseToken: leaseToken,
+		}); err != nil {
 			return DrainResult{}, fmt.Errorf("delete published outbox rows: %w", err)
 		}
 		if r.publishedRows != nil {
@@ -287,8 +300,9 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 
 	if len(deadLetter) > 0 {
 		if _, err := q.DeadLetterPublishOutboxRows(ctx, repo.DeadLetterPublishOutboxRowsParams{
-			Ids:       deadLetter,
-			LastError: errString(lastDeadLetterErr),
+			Ids:        deadLetter,
+			LastError:  errString(lastDeadLetterErr),
+			LeaseToken: leaseToken,
 		}); err != nil {
 			return DrainResult{}, fmt.Errorf("dead letter publish outbox rows: %w", err)
 		}
@@ -302,6 +316,7 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 			Ids:        retry,
 			LastError:  conv.ToPGTextEmpty(errString(lastRetryErr)),
 			RetryAfter: calcRetryAfter(minRetryAttempts),
+			LeaseToken: leaseToken,
 		}); err != nil {
 			return DrainResult{}, fmt.Errorf("mark publish outbox rows failed: %w", err)
 		}
@@ -316,7 +331,7 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 }
 
 // release clears the lease on rows claimed but not acted upon.
-func (r *Relay) release(ctx context.Context, q *repo.Queries, rows []repo.ClaimPublishOutboxBatchRow) error {
+func (r *Relay) release(ctx context.Context, q *repo.Queries, rows []repo.ClaimPublishOutboxBatchRow, leaseToken uuid.UUID) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -326,7 +341,10 @@ func (r *Relay) release(ctx context.Context, q *repo.Queries, rows []repo.ClaimP
 		ids = append(ids, row.ID)
 	}
 
-	if err := q.ReleasePublishOutboxRows(ctx, ids); err != nil {
+	if err := q.ReleasePublishOutboxRows(ctx, repo.ReleasePublishOutboxRowsParams{
+		Ids:        ids,
+		LeaseToken: leaseToken,
+	}); err != nil {
 		return fmt.Errorf("release publish outbox rows: %w", err)
 	}
 

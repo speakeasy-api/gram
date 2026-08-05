@@ -245,8 +245,21 @@ ON CONFLICT (outbox_id) DO UPDATE SET
 -- dead-letter threshold acts on. The statement commits on its own — the caller
 -- must not hold a transaction open across the Pub/Sub round trip, or a stalled
 -- publish would pin an XID and block vacuum database-wide.
+--
+-- locked_until doubles as the claim's fencing token, which is why the
+-- settlement statements match on it. A row can only be re-claimed once its
+-- lease has elapsed, so each claim sets a value strictly greater than the last,
+-- and a drain that overran its lease finds no row to settle instead of
+-- overwriting the claim that replaced it.
+--
+-- lease_token identifies this claim, and the settlement statements match on it
+-- so a drain that overran its lease finds no row to settle instead of
+-- overwriting the claim that replaced it. The caller mints it: gen_random_uuid()
+-- is volatile and would evaluate per row, giving every row in one batch a
+-- different token and leaving settlement no single value to match.
 UPDATE publish_outbox SET
     locked_until = clock_timestamp() + @lease::interval,
+    lease_token = @lease_token::uuid,
     attempts = attempts + 1,
     updated_at = clock_timestamp()
 WHERE id IN (
@@ -263,8 +276,13 @@ RETURNING id, public_id, organization_id, topic, message, attributes, attempts, 
 -- name: DeletePublishedOutboxRows :execrows
 -- Removes rows whose publish was acknowledged by Pub/Sub. Deleting rather than
 -- marking is what keeps the table near-empty and its updates cheap.
+--
+-- Matched on the lease as well as the id, so a drain that outlived its own
+-- lease cannot settle a row another worker has since claimed. See
+-- ClaimPublishOutboxBatch for why locked_until identifies the claim.
 DELETE FROM publish_outbox
-WHERE id = ANY(@ids::bigint[]);
+WHERE id = ANY(@ids::bigint[])
+  AND lease_token = @lease_token::uuid;
 
 -- name: MarkPublishOutboxFailed :exec
 -- Records a transient publish failure and releases the lease so the row is
@@ -273,8 +291,10 @@ UPDATE publish_outbox SET
     last_error = @last_error,
     retry_after = @retry_after,
     locked_until = NULL,
+    lease_token = NULL,
     updated_at = clock_timestamp()
-WHERE id = ANY(@ids::bigint[]);
+WHERE id = ANY(@ids::bigint[])
+  AND lease_token = @lease_token::uuid;
 
 -- name: DeadLetterPublishOutboxRows :execrows
 -- Moves rows that can never publish out of the queue in one statement, so a
@@ -282,6 +302,7 @@ WHERE id = ANY(@ids::bigint[]);
 WITH moved AS (
   DELETE FROM publish_outbox
   WHERE id = ANY(@ids::bigint[])
+    AND lease_token = @lease_token::uuid
   RETURNING public_id, organization_id, topic, message, attributes, attempts,
             created_at AS row_enqueued_at
 )
@@ -314,6 +335,8 @@ SELECT COUNT(*) FROM publish_outbox;
 -- back because the claim incremented it for a delivery that never happened.
 UPDATE publish_outbox SET
     locked_until = NULL,
+    lease_token = NULL,
     attempts = GREATEST(attempts - 1, 0),
     updated_at = clock_timestamp()
-WHERE id = ANY(@ids::bigint[]);
+WHERE id = ANY(@ids::bigint[])
+  AND lease_token = @lease_token::uuid;

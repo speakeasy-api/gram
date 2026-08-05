@@ -369,7 +369,7 @@ func (q *Queries) GetPublishOutboxDeadLetter(ctx context.Context, publicID uuid.
 
 const getPublishOutboxRow = `-- name: GetPublishOutboxRow :one
 SELECT id, public_id, organization_id, topic, message, attributes,
-       attempts, last_error, retry_after, locked_until, created_at
+       attempts, last_error, retry_after, locked_until, lease_token, created_at
 FROM publish_outbox
 WHERE id = $1
 `
@@ -385,6 +385,7 @@ type GetPublishOutboxRowRow struct {
 	LastError      pgtype.Text
 	RetryAfter     pgtype.Timestamptz
 	LockedUntil    pgtype.Timestamptz
+	LeaseToken     uuid.NullUUID
 	CreatedAt      pgtype.Timestamptz
 }
 
@@ -402,6 +403,7 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LastError,
 		&i.RetryAfter,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 	)
 	return i, err

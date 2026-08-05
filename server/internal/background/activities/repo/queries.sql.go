@@ -42,6 +42,7 @@ func (q *Queries) BackfillClaudeUserMessagePromptID(ctx context.Context, arg Bac
 const claimPublishOutboxBatch = `-- name: ClaimPublishOutboxBatch :many
 UPDATE publish_outbox SET
     locked_until = clock_timestamp() + $1::interval,
+    lease_token = $2::uuid,
     attempts = attempts + 1,
     updated_at = clock_timestamp()
 WHERE id IN (
@@ -50,15 +51,16 @@ WHERE id IN (
   WHERE (o.retry_after IS NULL OR o.retry_after <= clock_timestamp())
     AND (o.locked_until IS NULL OR o.locked_until <= clock_timestamp())
   ORDER BY o.id ASC
-  LIMIT $2
+  LIMIT $3
   FOR UPDATE SKIP LOCKED
 )
 RETURNING id, public_id, organization_id, topic, message, attributes, attempts, created_at
 `
 
 type ClaimPublishOutboxBatchParams struct {
-	Lease     pgtype.Interval
-	BatchSize int32
+	Lease      pgtype.Interval
+	LeaseToken uuid.UUID
+	BatchSize  int32
 }
 
 type ClaimPublishOutboxBatchRow struct {
@@ -79,8 +81,20 @@ type ClaimPublishOutboxBatchRow struct {
 // dead-letter threshold acts on. The statement commits on its own — the caller
 // must not hold a transaction open across the Pub/Sub round trip, or a stalled
 // publish would pin an XID and block vacuum database-wide.
+//
+// locked_until doubles as the claim's fencing token, which is why the
+// settlement statements match on it. A row can only be re-claimed once its
+// lease has elapsed, so each claim sets a value strictly greater than the last,
+// and a drain that overran its lease finds no row to settle instead of
+// overwriting the claim that replaced it.
+//
+// lease_token identifies this claim, and the settlement statements match on it
+// so a drain that overran its lease finds no row to settle instead of
+// overwriting the claim that replaced it. The caller mints it: gen_random_uuid()
+// is volatile and would evaluate per row, giving every row in one batch a
+// different token and leaving settlement no single value to match.
 func (q *Queries) ClaimPublishOutboxBatch(ctx context.Context, arg ClaimPublishOutboxBatchParams) ([]ClaimPublishOutboxBatchRow, error) {
-	rows, err := q.db.Query(ctx, claimPublishOutboxBatch, arg.Lease, arg.BatchSize)
+	rows, err := q.db.Query(ctx, claimPublishOutboxBatch, arg.Lease, arg.LeaseToken, arg.BatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +139,7 @@ const deadLetterPublishOutboxRows = `-- name: DeadLetterPublishOutboxRows :execr
 WITH moved AS (
   DELETE FROM publish_outbox
   WHERE id = ANY($2::bigint[])
+    AND lease_token = $3::uuid
   RETURNING public_id, organization_id, topic, message, attributes, attempts,
             created_at AS row_enqueued_at
 )
@@ -137,14 +152,15 @@ FROM moved
 `
 
 type DeadLetterPublishOutboxRowsParams struct {
-	LastError string
-	Ids       []int64
+	LastError  string
+	Ids        []int64
+	LeaseToken uuid.UUID
 }
 
 // Moves rows that can never publish out of the queue in one statement, so a
 // crash cannot leave a row both dead-lettered and still pending.
 func (q *Queries) DeadLetterPublishOutboxRows(ctx context.Context, arg DeadLetterPublishOutboxRowsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deadLetterPublishOutboxRows, arg.LastError, arg.Ids)
+	result, err := q.db.Exec(ctx, deadLetterPublishOutboxRows, arg.LastError, arg.Ids, arg.LeaseToken)
 	if err != nil {
 		return 0, err
 	}
@@ -154,12 +170,22 @@ func (q *Queries) DeadLetterPublishOutboxRows(ctx context.Context, arg DeadLette
 const deletePublishedOutboxRows = `-- name: DeletePublishedOutboxRows :execrows
 DELETE FROM publish_outbox
 WHERE id = ANY($1::bigint[])
+  AND lease_token = $2::uuid
 `
+
+type DeletePublishedOutboxRowsParams struct {
+	Ids        []int64
+	LeaseToken uuid.UUID
+}
 
 // Removes rows whose publish was acknowledged by Pub/Sub. Deleting rather than
 // marking is what keeps the table near-empty and its updates cheap.
-func (q *Queries) DeletePublishedOutboxRows(ctx context.Context, ids []int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deletePublishedOutboxRows, ids)
+//
+// Matched on the lease as well as the id, so a drain that outlived its own
+// lease cannot settle a row another worker has since claimed. See
+// ClaimPublishOutboxBatch for why locked_until identifies the claim.
+func (q *Queries) DeletePublishedOutboxRows(ctx context.Context, arg DeletePublishedOutboxRowsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePublishedOutboxRows, arg.Ids, arg.LeaseToken)
 	if err != nil {
 		return 0, err
 	}
@@ -795,35 +821,50 @@ UPDATE publish_outbox SET
     last_error = $1,
     retry_after = $2,
     locked_until = NULL,
+    lease_token = NULL,
     updated_at = clock_timestamp()
 WHERE id = ANY($3::bigint[])
+  AND lease_token = $4::uuid
 `
 
 type MarkPublishOutboxFailedParams struct {
 	LastError  pgtype.Text
 	RetryAfter pgtype.Timestamptz
 	Ids        []int64
+	LeaseToken uuid.UUID
 }
 
 // Records a transient publish failure and releases the lease so the row is
 // eligible again once retry_after elapses.
 func (q *Queries) MarkPublishOutboxFailed(ctx context.Context, arg MarkPublishOutboxFailedParams) error {
-	_, err := q.db.Exec(ctx, markPublishOutboxFailed, arg.LastError, arg.RetryAfter, arg.Ids)
+	_, err := q.db.Exec(ctx, markPublishOutboxFailed,
+		arg.LastError,
+		arg.RetryAfter,
+		arg.Ids,
+		arg.LeaseToken,
+	)
 	return err
 }
 
 const releasePublishOutboxRows = `-- name: ReleasePublishOutboxRows :exec
 UPDATE publish_outbox SET
     locked_until = NULL,
+    lease_token = NULL,
     attempts = GREATEST(attempts - 1, 0),
     updated_at = clock_timestamp()
 WHERE id = ANY($1::bigint[])
+  AND lease_token = $2::uuid
 `
+
+type ReleasePublishOutboxRowsParams struct {
+	Ids        []int64
+	LeaseToken uuid.UUID
+}
 
 // Drops the lease on rows claimed but not acted upon, so the next drain sees
 // them immediately instead of waiting out the lease. attempts is decremented
 // back because the claim incremented it for a delivery that never happened.
-func (q *Queries) ReleasePublishOutboxRows(ctx context.Context, ids []int64) error {
-	_, err := q.db.Exec(ctx, releasePublishOutboxRows, ids)
+func (q *Queries) ReleasePublishOutboxRows(ctx context.Context, arg ReleasePublishOutboxRowsParams) error {
+	_, err := q.db.Exec(ctx, releasePublishOutboxRows, arg.Ids, arg.LeaseToken)
 	return err
 }
