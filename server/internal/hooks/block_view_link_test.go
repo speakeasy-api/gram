@@ -262,6 +262,12 @@ func TestOptionalBlockLinksCoverSchema(t *testing.T) {
 			// `DEFAULT coalesce(a, b) NOT NULL` as nullable.
 			definition := regexp.MustCompile(`(?m)^\s+` + regexp.QuoteMeta(column) + `\s+.*$`).FindString(body)
 			require.NotEmpty(t, definition, "column %s not found in the tool_call_blocks definition", column)
+			// Drop a trailing comment first: "bar_id uuid, -- NOT NULL once
+			// backfilled" is a nullable column, and reading the comment as the
+			// constraint would quietly excuse it from the salvage list.
+			if marker, _, found := strings.Cut(definition, "--"); found {
+				definition = marker
+			}
 			if !regexp.MustCompile(`(?i)NOT NULL`).MatchString(definition) {
 				nullable = true
 			}

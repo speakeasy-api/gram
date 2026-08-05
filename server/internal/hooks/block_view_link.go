@@ -101,10 +101,15 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 			attr.SlogValueAny(map[string]any{"block_id": blockID.String(), "dropped_link": dropped}),
 		)
 	}
+	// block_id is the whole point of this line: the user already holds
+	// /blocks/<id> and will find nothing there, so an operator handed that id
+	// needs to be able to grep for why the write was abandoned. Org and project
+	// alone are not selective on a busy tenant.
 	s.logger.WarnContext(ctx, "tool call block: failed to insert row",
 		attr.SlogError(err),
 		attr.SlogOrganizationID(p.OrganizationID),
 		attr.SlogProjectID(p.ProjectID.String()),
+		attr.SlogValueAny(map[string]any{"block_id": blockID.String()}),
 	)
 }
 
