@@ -1,5 +1,5 @@
 //nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
-package adminmcp
+package platformmcp
 
 import (
 	"context"
@@ -7,18 +7,18 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func registerGetAdminContextTool(server *mcp.Server) {
+func registerGetPlatformContextTool(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_admin_context",
-		Title:       "Get Admin Context",
-		Description: "Show the organization and connection bound to this Admin MCP session.",
+		Name:        "get_platform_context",
+		Title:       "Get Platform Context",
+		Description: "Show the organization and connection bound to this Platform MCP session.",
 		Annotations: readOnlyAnnotations(),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, AdminContext, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, PlatformContext, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
-			return nil, AdminContext{}, err
+			return nil, PlatformContext{}, err
 		}
-		return nil, AdminContext{
+		return nil, PlatformContext{
 			OrganizationID: principal.OrganizationID,
 			ConnectionID:   principal.ConnectionID,
 			ReadOnly:       true,

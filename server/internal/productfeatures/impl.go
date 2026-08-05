@@ -251,7 +251,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		SkillsEnabled:                     isEnabled(FeatureSkills),
 		SkillCaptureMetadataOnly:          isEnabled(FeatureSkillCaptureMetadataOnly),
 		AiPlatformPushIntegrationsEnabled: isEnabled(FeatureAIPlatformPushIntegrations),
-		AdminMcpEnabled:                   isEnabled(FeatureAdminMCP),
+		PlatformMcpEnabled:                isEnabled(FeaturePlatformMCP),
 		DeviceAgent:                       deviceAgent,
 	}, nil
 }

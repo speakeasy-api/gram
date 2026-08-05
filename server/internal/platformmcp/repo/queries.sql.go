@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const consumeAdminMCPAuthorizationGrant = `-- name: ConsumeAdminMCPAuthorizationGrant :one
-UPDATE admin_mcp_authorization_grants
+const consumePlatformMCPAuthorizationGrant = `-- name: ConsumePlatformMCPAuthorizationGrant :one
+UPDATE platform_mcp_authorization_grants
 SET consumed_at = $1,
     updated_at = $1
 WHERE id = $2
@@ -23,15 +23,15 @@ WHERE id = $2
 RETURNING id, organization_id, authorization_code_hash, oauth_client_id, connection_id, connection_generation, redirect_uri, code_challenge, expires_at, consumed_at, revoked_at, created_at, updated_at
 `
 
-type ConsumeAdminMCPAuthorizationGrantParams struct {
+type ConsumePlatformMCPAuthorizationGrantParams struct {
 	ConsumedAt     pgtype.Timestamptz
 	ID             uuid.UUID
 	OrganizationID string
 }
 
-func (q *Queries) ConsumeAdminMCPAuthorizationGrant(ctx context.Context, arg ConsumeAdminMCPAuthorizationGrantParams) (AdminMcpAuthorizationGrant, error) {
-	row := q.db.QueryRow(ctx, consumeAdminMCPAuthorizationGrant, arg.ConsumedAt, arg.ID, arg.OrganizationID)
-	var i AdminMcpAuthorizationGrant
+func (q *Queries) ConsumePlatformMCPAuthorizationGrant(ctx context.Context, arg ConsumePlatformMCPAuthorizationGrantParams) (PlatformMcpAuthorizationGrant, error) {
+	row := q.db.QueryRow(ctx, consumePlatformMCPAuthorizationGrant, arg.ConsumedAt, arg.ID, arg.OrganizationID)
+	var i PlatformMcpAuthorizationGrant
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -50,8 +50,8 @@ func (q *Queries) ConsumeAdminMCPAuthorizationGrant(ctx context.Context, arg Con
 	return i, err
 }
 
-const createAdminMCPAuthorizationGrant = `-- name: CreateAdminMCPAuthorizationGrant :one
-INSERT INTO admin_mcp_authorization_grants (
+const createPlatformMCPAuthorizationGrant = `-- name: CreatePlatformMCPAuthorizationGrant :one
+INSERT INTO platform_mcp_authorization_grants (
     organization_id,
     authorization_code_hash,
     oauth_client_id,
@@ -73,7 +73,7 @@ INSERT INTO admin_mcp_authorization_grants (
 RETURNING id, organization_id, authorization_code_hash, oauth_client_id, connection_id, connection_generation, redirect_uri, code_challenge, expires_at, consumed_at, revoked_at, created_at, updated_at
 `
 
-type CreateAdminMCPAuthorizationGrantParams struct {
+type CreatePlatformMCPAuthorizationGrantParams struct {
 	OrganizationID        string
 	AuthorizationCodeHash string
 	OauthClientID         uuid.UUID
@@ -84,8 +84,8 @@ type CreateAdminMCPAuthorizationGrantParams struct {
 	ExpiresAt             pgtype.Timestamptz
 }
 
-func (q *Queries) CreateAdminMCPAuthorizationGrant(ctx context.Context, arg CreateAdminMCPAuthorizationGrantParams) (AdminMcpAuthorizationGrant, error) {
-	row := q.db.QueryRow(ctx, createAdminMCPAuthorizationGrant,
+func (q *Queries) CreatePlatformMCPAuthorizationGrant(ctx context.Context, arg CreatePlatformMCPAuthorizationGrantParams) (PlatformMcpAuthorizationGrant, error) {
+	row := q.db.QueryRow(ctx, createPlatformMCPAuthorizationGrant,
 		arg.OrganizationID,
 		arg.AuthorizationCodeHash,
 		arg.OauthClientID,
@@ -95,7 +95,7 @@ func (q *Queries) CreateAdminMCPAuthorizationGrant(ctx context.Context, arg Crea
 		arg.CodeChallenge,
 		arg.ExpiresAt,
 	)
-	var i AdminMcpAuthorizationGrant
+	var i PlatformMcpAuthorizationGrant
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -114,8 +114,8 @@ func (q *Queries) CreateAdminMCPAuthorizationGrant(ctx context.Context, arg Crea
 	return i, err
 }
 
-const createAdminMCPConnection = `-- name: CreateAdminMCPConnection :one
-INSERT INTO admin_mcp_connections (
+const createPlatformMCPConnection = `-- name: CreatePlatformMCPConnection :one
+INSERT INTO platform_mcp_connections (
     id,
     organization_id,
     subject_urn,
@@ -131,7 +131,7 @@ INSERT INTO admin_mcp_connections (
 RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, revoked_at, created_at, updated_at
 `
 
-type CreateAdminMCPConnectionParams struct {
+type CreatePlatformMCPConnectionParams struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	SubjectUrn       string
@@ -139,15 +139,15 @@ type CreateAdminMCPConnectionParams struct {
 	ActiveGeneration uuid.UUID
 }
 
-func (q *Queries) CreateAdminMCPConnection(ctx context.Context, arg CreateAdminMCPConnectionParams) (AdminMcpConnection, error) {
-	row := q.db.QueryRow(ctx, createAdminMCPConnection,
+func (q *Queries) CreatePlatformMCPConnection(ctx context.Context, arg CreatePlatformMCPConnectionParams) (PlatformMcpConnection, error) {
+	row := q.db.QueryRow(ctx, createPlatformMCPConnection,
 		arg.ID,
 		arg.OrganizationID,
 		arg.SubjectUrn,
 		arg.OauthClientID,
 		arg.ActiveGeneration,
 	)
-	var i AdminMcpConnection
+	var i PlatformMcpConnection
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -163,9 +163,9 @@ func (q *Queries) CreateAdminMCPConnection(ctx context.Context, arg CreateAdminM
 	return i, err
 }
 
-const createAdminMCPOAuthClient = `-- name: CreateAdminMCPOAuthClient :one
+const createPlatformMCPOAuthClient = `-- name: CreatePlatformMCPOAuthClient :one
 
-INSERT INTO admin_mcp_oauth_clients (
+INSERT INTO platform_mcp_oauth_clients (
     client_id,
     client_secret_hash,
     client_name,
@@ -181,7 +181,7 @@ INSERT INTO admin_mcp_oauth_clients (
 RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
 `
 
-type CreateAdminMCPOAuthClientParams struct {
+type CreatePlatformMCPOAuthClientParams struct {
 	ClientID              string
 	ClientSecretHash      pgtype.Text
 	ClientName            string
@@ -190,17 +190,17 @@ type CreateAdminMCPOAuthClientParams struct {
 }
 
 // The OAuth client registry is global because dynamic registration happens before
-// browser authentication and organization selection. Every other Admin-owned
+// browser authentication and organization selection. Every other Platform MCP-owned
 // state transition below receives an explicit organization_id predicate.
-func (q *Queries) CreateAdminMCPOAuthClient(ctx context.Context, arg CreateAdminMCPOAuthClientParams) (AdminMcpOauthClient, error) {
-	row := q.db.QueryRow(ctx, createAdminMCPOAuthClient,
+func (q *Queries) CreatePlatformMCPOAuthClient(ctx context.Context, arg CreatePlatformMCPOAuthClientParams) (PlatformMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, createPlatformMCPOAuthClient,
 		arg.ClientID,
 		arg.ClientSecretHash,
 		arg.ClientName,
 		arg.RedirectUris,
 		arg.ClientSecretExpiresAt,
 	)
-	var i AdminMcpOauthClient
+	var i PlatformMcpOauthClient
 	err := row.Scan(
 		&i.ID,
 		&i.ClientID,
@@ -216,8 +216,8 @@ func (q *Queries) CreateAdminMCPOAuthClient(ctx context.Context, arg CreateAdmin
 	return i, err
 }
 
-const createAdminMCPSession = `-- name: CreateAdminMCPSession :one
-INSERT INTO admin_mcp_sessions (
+const createPlatformMCPSession = `-- name: CreatePlatformMCPSession :one
+INSERT INTO platform_mcp_sessions (
     id,
     organization_id,
     connection_id,
@@ -241,7 +241,7 @@ INSERT INTO admin_mcp_sessions (
 RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
-type CreateAdminMCPSessionParams struct {
+type CreatePlatformMCPSessionParams struct {
 	ID                   uuid.UUID
 	OrganizationID       string
 	ConnectionID         uuid.UUID
@@ -253,8 +253,8 @@ type CreateAdminMCPSessionParams struct {
 	RefreshExpiresAt     pgtype.Timestamptz
 }
 
-func (q *Queries) CreateAdminMCPSession(ctx context.Context, arg CreateAdminMCPSessionParams) (AdminMcpSession, error) {
-	row := q.db.QueryRow(ctx, createAdminMCPSession,
+func (q *Queries) CreatePlatformMCPSession(ctx context.Context, arg CreatePlatformMCPSessionParams) (PlatformMcpSession, error) {
+	row := q.db.QueryRow(ctx, createPlatformMCPSession,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ConnectionID,
@@ -265,7 +265,7 @@ func (q *Queries) CreateAdminMCPSession(ctx context.Context, arg CreateAdminMCPS
 		arg.ExpiresAt,
 		arg.RefreshExpiresAt,
 	)
-	var i AdminMcpSession
+	var i PlatformMcpSession
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -285,24 +285,24 @@ func (q *Queries) CreateAdminMCPSession(ctx context.Context, arg CreateAdminMCPS
 	return i, err
 }
 
-const getActiveAdminMCPConnection = `-- name: GetActiveAdminMCPConnection :one
+const getActivePlatformMCPConnection = `-- name: GetActivePlatformMCPConnection :one
 SELECT id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, revoked_at, created_at, updated_at
-FROM admin_mcp_connections
+FROM platform_mcp_connections
 WHERE organization_id = $1
   AND subject_urn = $2
   AND oauth_client_id = $3
   AND revoked_at IS NULL
 `
 
-type GetActiveAdminMCPConnectionParams struct {
+type GetActivePlatformMCPConnectionParams struct {
 	OrganizationID string
 	SubjectUrn     string
 	OauthClientID  uuid.UUID
 }
 
-func (q *Queries) GetActiveAdminMCPConnection(ctx context.Context, arg GetActiveAdminMCPConnectionParams) (AdminMcpConnection, error) {
-	row := q.db.QueryRow(ctx, getActiveAdminMCPConnection, arg.OrganizationID, arg.SubjectUrn, arg.OauthClientID)
-	var i AdminMcpConnection
+func (q *Queries) GetActivePlatformMCPConnection(ctx context.Context, arg GetActivePlatformMCPConnectionParams) (PlatformMcpConnection, error) {
+	row := q.db.QueryRow(ctx, getActivePlatformMCPConnection, arg.OrganizationID, arg.SubjectUrn, arg.OauthClientID)
+	var i PlatformMcpConnection
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -318,10 +318,10 @@ func (q *Queries) GetActiveAdminMCPConnection(ctx context.Context, arg GetActive
 	return i, err
 }
 
-const getActiveAdminMCPConnectionByID = `-- name: GetActiveAdminMCPConnectionByID :one
+const getActivePlatformMCPConnectionByID = `-- name: GetActivePlatformMCPConnectionByID :one
 SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id
-FROM admin_mcp_connections AS connection
-JOIN admin_mcp_oauth_clients AS client
+FROM platform_mcp_connections AS connection
+JOIN platform_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
 WHERE connection.id = $1
   AND connection.organization_id = $2
@@ -329,12 +329,12 @@ WHERE connection.id = $1
   AND client.revoked_at IS NULL
 `
 
-type GetActiveAdminMCPConnectionByIDParams struct {
+type GetActivePlatformMCPConnectionByIDParams struct {
 	ID             uuid.UUID
 	OrganizationID string
 }
 
-type GetActiveAdminMCPConnectionByIDRow struct {
+type GetActivePlatformMCPConnectionByIDRow struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	SubjectUrn       string
@@ -348,9 +348,9 @@ type GetActiveAdminMCPConnectionByIDRow struct {
 	ClientID         string
 }
 
-func (q *Queries) GetActiveAdminMCPConnectionByID(ctx context.Context, arg GetActiveAdminMCPConnectionByIDParams) (GetActiveAdminMCPConnectionByIDRow, error) {
-	row := q.db.QueryRow(ctx, getActiveAdminMCPConnectionByID, arg.ID, arg.OrganizationID)
-	var i GetActiveAdminMCPConnectionByIDRow
+func (q *Queries) GetActivePlatformMCPConnectionByID(ctx context.Context, arg GetActivePlatformMCPConnectionByIDParams) (GetActivePlatformMCPConnectionByIDRow, error) {
+	row := q.db.QueryRow(ctx, getActivePlatformMCPConnectionByID, arg.ID, arg.OrganizationID)
+	var i GetActivePlatformMCPConnectionByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -367,16 +367,16 @@ func (q *Queries) GetActiveAdminMCPConnectionByID(ctx context.Context, arg GetAc
 	return i, err
 }
 
-const getActiveAdminMCPOAuthClientByClientID = `-- name: GetActiveAdminMCPOAuthClientByClientID :one
+const getActivePlatformMCPOAuthClientByClientID = `-- name: GetActivePlatformMCPOAuthClientByClientID :one
 SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
-FROM admin_mcp_oauth_clients
+FROM platform_mcp_oauth_clients
 WHERE client_id = $1
   AND revoked_at IS NULL
 `
 
-func (q *Queries) GetActiveAdminMCPOAuthClientByClientID(ctx context.Context, clientID string) (AdminMcpOauthClient, error) {
-	row := q.db.QueryRow(ctx, getActiveAdminMCPOAuthClientByClientID, clientID)
-	var i AdminMcpOauthClient
+func (q *Queries) GetActivePlatformMCPOAuthClientByClientID(ctx context.Context, clientID string) (PlatformMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, getActivePlatformMCPOAuthClientByClientID, clientID)
+	var i PlatformMcpOauthClient
 	err := row.Scan(
 		&i.ID,
 		&i.ClientID,
@@ -392,7 +392,7 @@ func (q *Queries) GetActiveAdminMCPOAuthClientByClientID(ctx context.Context, cl
 	return i, err
 }
 
-const getActiveAdminMCPSessionByJTI = `-- name: GetActiveAdminMCPSessionByJTI :one
+const getActivePlatformMCPSessionByJTI = `-- name: GetActivePlatformMCPSessionByJTI :one
 SELECT
     session.connection_id,
     session.oauth_client_id,
@@ -401,12 +401,12 @@ SELECT
     connection.subject_urn,
     connection.active_generation,
     client.client_id
-FROM admin_mcp_sessions AS session
-JOIN admin_mcp_connections AS connection
+FROM platform_mcp_sessions AS session
+JOIN platform_mcp_connections AS connection
   ON connection.id = session.connection_id
   AND connection.organization_id = session.organization_id
   AND connection.oauth_client_id = session.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client
+JOIN platform_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
 WHERE session.organization_id = $1
   AND session.jti = $2
@@ -417,12 +417,12 @@ WHERE session.organization_id = $1
   AND client.revoked_at IS NULL
 `
 
-type GetActiveAdminMCPSessionByJTIParams struct {
+type GetActivePlatformMCPSessionByJTIParams struct {
 	OrganizationID string
 	Jti            string
 }
 
-type GetActiveAdminMCPSessionByJTIRow struct {
+type GetActivePlatformMCPSessionByJTIRow struct {
 	ConnectionID         uuid.UUID
 	OauthClientID        uuid.UUID
 	ConnectionGeneration uuid.UUID
@@ -432,9 +432,9 @@ type GetActiveAdminMCPSessionByJTIRow struct {
 	ClientID             string
 }
 
-func (q *Queries) GetActiveAdminMCPSessionByJTI(ctx context.Context, arg GetActiveAdminMCPSessionByJTIParams) (GetActiveAdminMCPSessionByJTIRow, error) {
-	row := q.db.QueryRow(ctx, getActiveAdminMCPSessionByJTI, arg.OrganizationID, arg.Jti)
-	var i GetActiveAdminMCPSessionByJTIRow
+func (q *Queries) GetActivePlatformMCPSessionByJTI(ctx context.Context, arg GetActivePlatformMCPSessionByJTIParams) (GetActivePlatformMCPSessionByJTIRow, error) {
+	row := q.db.QueryRow(ctx, getActivePlatformMCPSessionByJTI, arg.OrganizationID, arg.Jti)
+	var i GetActivePlatformMCPSessionByJTIRow
 	err := row.Scan(
 		&i.ConnectionID,
 		&i.OauthClientID,
@@ -447,14 +447,14 @@ func (q *Queries) GetActiveAdminMCPSessionByJTI(ctx context.Context, arg GetActi
 	return i, err
 }
 
-const getAdminMCPAuthorizationGrantForConsume = `-- name: GetAdminMCPAuthorizationGrantForConsume :one
+const getPlatformMCPAuthorizationGrantForConsume = `-- name: GetPlatformMCPAuthorizationGrantForConsume :one
 SELECT auth_grant.id, auth_grant.organization_id, auth_grant.authorization_code_hash, auth_grant.oauth_client_id, auth_grant.connection_id, auth_grant.connection_generation, auth_grant.redirect_uri, auth_grant.code_challenge, auth_grant.expires_at, auth_grant.consumed_at, auth_grant.revoked_at, auth_grant.created_at, auth_grant.updated_at, connection.subject_urn, connection.active_generation, client.client_id
-FROM admin_mcp_authorization_grants AS auth_grant
-JOIN admin_mcp_connections AS connection
+FROM platform_mcp_authorization_grants AS auth_grant
+JOIN platform_mcp_connections AS connection
   ON connection.id = auth_grant.connection_id
   AND connection.organization_id = auth_grant.organization_id
   AND connection.oauth_client_id = auth_grant.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client
+JOIN platform_mcp_oauth_clients AS client
   ON client.id = auth_grant.oauth_client_id
 WHERE auth_grant.organization_id = $1
   AND auth_grant.authorization_code_hash = $2
@@ -463,12 +463,12 @@ WHERE auth_grant.organization_id = $1
 FOR UPDATE OF auth_grant
 `
 
-type GetAdminMCPAuthorizationGrantForConsumeParams struct {
+type GetPlatformMCPAuthorizationGrantForConsumeParams struct {
 	OrganizationID        string
 	AuthorizationCodeHash string
 }
 
-type GetAdminMCPAuthorizationGrantForConsumeRow struct {
+type GetPlatformMCPAuthorizationGrantForConsumeRow struct {
 	ID                    uuid.UUID
 	OrganizationID        string
 	AuthorizationCodeHash string
@@ -487,9 +487,9 @@ type GetAdminMCPAuthorizationGrantForConsumeRow struct {
 	ClientID              string
 }
 
-func (q *Queries) GetAdminMCPAuthorizationGrantForConsume(ctx context.Context, arg GetAdminMCPAuthorizationGrantForConsumeParams) (GetAdminMCPAuthorizationGrantForConsumeRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPAuthorizationGrantForConsume, arg.OrganizationID, arg.AuthorizationCodeHash)
-	var i GetAdminMCPAuthorizationGrantForConsumeRow
+func (q *Queries) GetPlatformMCPAuthorizationGrantForConsume(ctx context.Context, arg GetPlatformMCPAuthorizationGrantForConsumeParams) (GetPlatformMCPAuthorizationGrantForConsumeRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPAuthorizationGrantForConsume, arg.OrganizationID, arg.AuthorizationCodeHash)
+	var i GetPlatformMCPAuthorizationGrantForConsumeRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -511,22 +511,22 @@ func (q *Queries) GetAdminMCPAuthorizationGrantForConsume(ctx context.Context, a
 	return i, err
 }
 
-const getAdminMCPConnectionForUpdate = `-- name: GetAdminMCPConnectionForUpdate :one
+const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
 SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id, client.revoked_at AS client_revoked_at
-FROM admin_mcp_connections AS connection
-JOIN admin_mcp_oauth_clients AS client
+FROM platform_mcp_connections AS connection
+JOIN platform_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
 WHERE connection.id = $1
   AND connection.organization_id = $2
 FOR UPDATE OF connection
 `
 
-type GetAdminMCPConnectionForUpdateParams struct {
+type GetPlatformMCPConnectionForUpdateParams struct {
 	ID             uuid.UUID
 	OrganizationID string
 }
 
-type GetAdminMCPConnectionForUpdateRow struct {
+type GetPlatformMCPConnectionForUpdateRow struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	SubjectUrn       string
@@ -541,9 +541,9 @@ type GetAdminMCPConnectionForUpdateRow struct {
 	ClientRevokedAt  pgtype.Timestamptz
 }
 
-func (q *Queries) GetAdminMCPConnectionForUpdate(ctx context.Context, arg GetAdminMCPConnectionForUpdateParams) (GetAdminMCPConnectionForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPConnectionForUpdate, arg.ID, arg.OrganizationID)
-	var i GetAdminMCPConnectionForUpdateRow
+func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg GetPlatformMCPConnectionForUpdateParams) (GetPlatformMCPConnectionForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPConnectionForUpdate, arg.ID, arg.OrganizationID)
+	var i GetPlatformMCPConnectionForUpdateRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -561,7 +561,7 @@ func (q *Queries) GetAdminMCPConnectionForUpdate(ctx context.Context, arg GetAdm
 	return i, err
 }
 
-const getAdminMCPServer = `-- name: GetAdminMCPServer :one
+const getPlatformMCPServer = `-- name: GetPlatformMCPServer :one
 SELECT server.id, server.project_id, server.name, server.slug, server.visibility
 FROM mcp_servers AS server
 JOIN projects
@@ -573,13 +573,13 @@ WHERE server.id = $1
   AND server.deleted IS FALSE
 `
 
-type GetAdminMCPServerParams struct {
+type GetPlatformMCPServerParams struct {
 	McpServerID    uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
 }
 
-type GetAdminMCPServerRow struct {
+type GetPlatformMCPServerRow struct {
 	ID         uuid.UUID
 	ProjectID  uuid.UUID
 	Name       pgtype.Text
@@ -587,9 +587,9 @@ type GetAdminMCPServerRow struct {
 	Visibility string
 }
 
-func (q *Queries) GetAdminMCPServer(ctx context.Context, arg GetAdminMCPServerParams) (GetAdminMCPServerRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPServer, arg.McpServerID, arg.ProjectID, arg.OrganizationID)
-	var i GetAdminMCPServerRow
+func (q *Queries) GetPlatformMCPServer(ctx context.Context, arg GetPlatformMCPServerParams) (GetPlatformMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServer, arg.McpServerID, arg.ProjectID, arg.OrganizationID)
+	var i GetPlatformMCPServerRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
@@ -600,26 +600,26 @@ func (q *Queries) GetAdminMCPServer(ctx context.Context, arg GetAdminMCPServerPa
 	return i, err
 }
 
-const getAdminMCPSessionForRefresh = `-- name: GetAdminMCPSessionForRefresh :one
+const getPlatformMCPSessionForRefresh = `-- name: GetPlatformMCPSessionForRefresh :one
 SELECT session.id, session.organization_id, session.connection_id, session.oauth_client_id, session.connection_generation, session.jti, session.refresh_token_hash, session.expires_at, session.refresh_expires_at, session.rotated_at, session.revoked_at, session.replaced_by_session_id, session.created_at, session.updated_at, connection.subject_urn, connection.active_generation, client.client_id
-FROM admin_mcp_sessions AS session
-JOIN admin_mcp_connections AS connection
+FROM platform_mcp_sessions AS session
+JOIN platform_mcp_connections AS connection
   ON connection.id = session.connection_id
   AND connection.organization_id = session.organization_id
   AND connection.oauth_client_id = session.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client
+JOIN platform_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
 WHERE session.organization_id = $1
   AND session.refresh_token_hash = $2
   AND client.revoked_at IS NULL
 `
 
-type GetAdminMCPSessionForRefreshParams struct {
+type GetPlatformMCPSessionForRefreshParams struct {
 	OrganizationID   string
 	RefreshTokenHash string
 }
 
-type GetAdminMCPSessionForRefreshRow struct {
+type GetPlatformMCPSessionForRefreshRow struct {
 	ID                   uuid.UUID
 	OrganizationID       string
 	ConnectionID         uuid.UUID
@@ -639,9 +639,9 @@ type GetAdminMCPSessionForRefreshRow struct {
 	ClientID             string
 }
 
-func (q *Queries) GetAdminMCPSessionForRefresh(ctx context.Context, arg GetAdminMCPSessionForRefreshParams) (GetAdminMCPSessionForRefreshRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPSessionForRefresh, arg.OrganizationID, arg.RefreshTokenHash)
-	var i GetAdminMCPSessionForRefreshRow
+func (q *Queries) GetPlatformMCPSessionForRefresh(ctx context.Context, arg GetPlatformMCPSessionForRefreshParams) (GetPlatformMCPSessionForRefreshRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPSessionForRefresh, arg.OrganizationID, arg.RefreshTokenHash)
+	var i GetPlatformMCPSessionForRefreshRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -664,14 +664,14 @@ func (q *Queries) GetAdminMCPSessionForRefresh(ctx context.Context, arg GetAdmin
 	return i, err
 }
 
-const getAdminMCPSessionForRefreshForUpdate = `-- name: GetAdminMCPSessionForRefreshForUpdate :one
+const getPlatformMCPSessionForRefreshForUpdate = `-- name: GetPlatformMCPSessionForRefreshForUpdate :one
 SELECT session.id, session.organization_id, session.connection_id, session.oauth_client_id, session.connection_generation, session.jti, session.refresh_token_hash, session.expires_at, session.refresh_expires_at, session.rotated_at, session.revoked_at, session.replaced_by_session_id, session.created_at, session.updated_at, connection.subject_urn, connection.active_generation, client.client_id
-FROM admin_mcp_sessions AS session
-JOIN admin_mcp_connections AS connection
+FROM platform_mcp_sessions AS session
+JOIN platform_mcp_connections AS connection
   ON connection.id = session.connection_id
   AND connection.organization_id = session.organization_id
   AND connection.oauth_client_id = session.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client
+JOIN platform_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
 WHERE session.organization_id = $1
   AND session.refresh_token_hash = $2
@@ -679,12 +679,12 @@ WHERE session.organization_id = $1
 FOR UPDATE OF session
 `
 
-type GetAdminMCPSessionForRefreshForUpdateParams struct {
+type GetPlatformMCPSessionForRefreshForUpdateParams struct {
 	OrganizationID   string
 	RefreshTokenHash string
 }
 
-type GetAdminMCPSessionForRefreshForUpdateRow struct {
+type GetPlatformMCPSessionForRefreshForUpdateRow struct {
 	ID                   uuid.UUID
 	OrganizationID       string
 	ConnectionID         uuid.UUID
@@ -704,9 +704,9 @@ type GetAdminMCPSessionForRefreshForUpdateRow struct {
 	ClientID             string
 }
 
-func (q *Queries) GetAdminMCPSessionForRefreshForUpdate(ctx context.Context, arg GetAdminMCPSessionForRefreshForUpdateParams) (GetAdminMCPSessionForRefreshForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPSessionForRefreshForUpdate, arg.OrganizationID, arg.RefreshTokenHash)
-	var i GetAdminMCPSessionForRefreshForUpdateRow
+func (q *Queries) GetPlatformMCPSessionForRefreshForUpdate(ctx context.Context, arg GetPlatformMCPSessionForRefreshForUpdateParams) (GetPlatformMCPSessionForRefreshForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPSessionForRefreshForUpdate, arg.OrganizationID, arg.RefreshTokenHash)
+	var i GetPlatformMCPSessionForRefreshForUpdateRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -729,7 +729,7 @@ func (q *Queries) GetAdminMCPSessionForRefreshForUpdate(ctx context.Context, arg
 	return i, err
 }
 
-const listAdminMCPProjects = `-- name: ListAdminMCPProjects :many
+const listPlatformMCPProjects = `-- name: ListPlatformMCPProjects :many
 SELECT id, name, slug
 FROM projects
 WHERE organization_id = $1
@@ -738,26 +738,26 @@ ORDER BY id ASC
 LIMIT $2
 `
 
-type ListAdminMCPProjectsParams struct {
+type ListPlatformMCPProjectsParams struct {
 	OrganizationID string
 	LimitValue     int32
 }
 
-type ListAdminMCPProjectsRow struct {
+type ListPlatformMCPProjectsRow struct {
 	ID   uuid.UUID
 	Name string
 	Slug string
 }
 
-func (q *Queries) ListAdminMCPProjects(ctx context.Context, arg ListAdminMCPProjectsParams) ([]ListAdminMCPProjectsRow, error) {
-	rows, err := q.db.Query(ctx, listAdminMCPProjects, arg.OrganizationID, arg.LimitValue)
+func (q *Queries) ListPlatformMCPProjects(ctx context.Context, arg ListPlatformMCPProjectsParams) ([]ListPlatformMCPProjectsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjects, arg.OrganizationID, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAdminMCPProjectsRow
+	var items []ListPlatformMCPProjectsRow
 	for rows.Next() {
-		var i ListAdminMCPProjectsRow
+		var i ListPlatformMCPProjectsRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
 			return nil, err
 		}
@@ -769,7 +769,7 @@ func (q *Queries) ListAdminMCPProjects(ctx context.Context, arg ListAdminMCPProj
 	return items, nil
 }
 
-const listAdminMCPServers = `-- name: ListAdminMCPServers :many
+const listPlatformMCPServers = `-- name: ListPlatformMCPServers :many
 SELECT server.id, server.project_id, server.name, server.slug, server.visibility
 FROM mcp_servers AS server
 JOIN projects
@@ -782,13 +782,13 @@ ORDER BY server.id ASC
 LIMIT $3
 `
 
-type ListAdminMCPServersParams struct {
+type ListPlatformMCPServersParams struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	LimitValue     int32
 }
 
-type ListAdminMCPServersRow struct {
+type ListPlatformMCPServersRow struct {
 	ID         uuid.UUID
 	ProjectID  uuid.UUID
 	Name       pgtype.Text
@@ -796,15 +796,15 @@ type ListAdminMCPServersRow struct {
 	Visibility string
 }
 
-func (q *Queries) ListAdminMCPServers(ctx context.Context, arg ListAdminMCPServersParams) ([]ListAdminMCPServersRow, error) {
-	rows, err := q.db.Query(ctx, listAdminMCPServers, arg.ProjectID, arg.OrganizationID, arg.LimitValue)
+func (q *Queries) ListPlatformMCPServers(ctx context.Context, arg ListPlatformMCPServersParams) ([]ListPlatformMCPServersRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPServers, arg.ProjectID, arg.OrganizationID, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAdminMCPServersRow
+	var items []ListPlatformMCPServersRow
 	for rows.Next() {
-		var i ListAdminMCPServersRow
+		var i ListPlatformMCPServersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -822,7 +822,7 @@ func (q *Queries) ListAdminMCPServers(ctx context.Context, arg ListAdminMCPServe
 	return items, nil
 }
 
-const lockAdminMCPConnectionAuthorization = `-- name: LockAdminMCPConnectionAuthorization :exec
+const lockPlatformMCPConnectionAuthorization = `-- name: LockPlatformMCPConnectionAuthorization :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
         format('%s:%s:%s', $1::text, $2::text, $3::text),
@@ -831,19 +831,19 @@ SELECT pg_advisory_xact_lock(
 )
 `
 
-type LockAdminMCPConnectionAuthorizationParams struct {
+type LockPlatformMCPConnectionAuthorizationParams struct {
 	OrganizationID string
 	SubjectUrn     string
 	OauthClientID  string
 }
 
-func (q *Queries) LockAdminMCPConnectionAuthorization(ctx context.Context, arg LockAdminMCPConnectionAuthorizationParams) error {
-	_, err := q.db.Exec(ctx, lockAdminMCPConnectionAuthorization, arg.OrganizationID, arg.SubjectUrn, arg.OauthClientID)
+func (q *Queries) LockPlatformMCPConnectionAuthorization(ctx context.Context, arg LockPlatformMCPConnectionAuthorizationParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPConnectionAuthorization, arg.OrganizationID, arg.SubjectUrn, arg.OauthClientID)
 	return err
 }
 
-const revokeAdminMCPConnection = `-- name: RevokeAdminMCPConnection :one
-UPDATE admin_mcp_connections
+const revokePlatformMCPConnection = `-- name: RevokePlatformMCPConnection :one
+UPDATE platform_mcp_connections
 SET revoked_at = $1,
     updated_at = $1
 WHERE id = $2
@@ -852,15 +852,15 @@ WHERE id = $2
 RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, revoked_at, created_at, updated_at
 `
 
-type RevokeAdminMCPConnectionParams struct {
+type RevokePlatformMCPConnectionParams struct {
 	RevokedAt      pgtype.Timestamptz
 	ID             uuid.UUID
 	OrganizationID string
 }
 
-func (q *Queries) RevokeAdminMCPConnection(ctx context.Context, arg RevokeAdminMCPConnectionParams) (AdminMcpConnection, error) {
-	row := q.db.QueryRow(ctx, revokeAdminMCPConnection, arg.RevokedAt, arg.ID, arg.OrganizationID)
-	var i AdminMcpConnection
+func (q *Queries) RevokePlatformMCPConnection(ctx context.Context, arg RevokePlatformMCPConnectionParams) (PlatformMcpConnection, error) {
+	row := q.db.QueryRow(ctx, revokePlatformMCPConnection, arg.RevokedAt, arg.ID, arg.OrganizationID)
+	var i PlatformMcpConnection
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -876,8 +876,8 @@ func (q *Queries) RevokeAdminMCPConnection(ctx context.Context, arg RevokeAdminM
 	return i, err
 }
 
-const revokeAdminMCPOAuthClient = `-- name: RevokeAdminMCPOAuthClient :one
-UPDATE admin_mcp_oauth_clients
+const revokePlatformMCPOAuthClient = `-- name: RevokePlatformMCPOAuthClient :one
+UPDATE platform_mcp_oauth_clients
 SET revoked_at = $1,
     updated_at = $1
 WHERE client_id = $2
@@ -885,20 +885,20 @@ WHERE client_id = $2
 RETURNING id
 `
 
-type RevokeAdminMCPOAuthClientParams struct {
+type RevokePlatformMCPOAuthClientParams struct {
 	RevokedAt pgtype.Timestamptz
 	ClientID  string
 }
 
-func (q *Queries) RevokeAdminMCPOAuthClient(ctx context.Context, arg RevokeAdminMCPOAuthClientParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, revokeAdminMCPOAuthClient, arg.RevokedAt, arg.ClientID)
+func (q *Queries) RevokePlatformMCPOAuthClient(ctx context.Context, arg RevokePlatformMCPOAuthClientParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, revokePlatformMCPOAuthClient, arg.RevokedAt, arg.ClientID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
 }
 
-const revokeAdminMCPSession = `-- name: RevokeAdminMCPSession :one
-UPDATE admin_mcp_sessions
+const revokePlatformMCPSession = `-- name: RevokePlatformMCPSession :one
+UPDATE platform_mcp_sessions
 SET revoked_at = $1,
     updated_at = $1
 WHERE id = $2
@@ -907,15 +907,15 @@ WHERE id = $2
 RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
-type RevokeAdminMCPSessionParams struct {
+type RevokePlatformMCPSessionParams struct {
 	RevokedAt      pgtype.Timestamptz
 	ID             uuid.UUID
 	OrganizationID string
 }
 
-func (q *Queries) RevokeAdminMCPSession(ctx context.Context, arg RevokeAdminMCPSessionParams) (AdminMcpSession, error) {
-	row := q.db.QueryRow(ctx, revokeAdminMCPSession, arg.RevokedAt, arg.ID, arg.OrganizationID)
-	var i AdminMcpSession
+func (q *Queries) RevokePlatformMCPSession(ctx context.Context, arg RevokePlatformMCPSessionParams) (PlatformMcpSession, error) {
+	row := q.db.QueryRow(ctx, revokePlatformMCPSession, arg.RevokedAt, arg.ID, arg.OrganizationID)
+	var i PlatformMcpSession
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -935,8 +935,8 @@ func (q *Queries) RevokeAdminMCPSession(ctx context.Context, arg RevokeAdminMCPS
 	return i, err
 }
 
-const revokeAdminMCPSessionByJTI = `-- name: RevokeAdminMCPSessionByJTI :one
-UPDATE admin_mcp_sessions
+const revokePlatformMCPSessionByJTI = `-- name: RevokePlatformMCPSessionByJTI :one
+UPDATE platform_mcp_sessions
 SET revoked_at = $1,
     updated_at = $1
 WHERE organization_id = $2
@@ -946,21 +946,21 @@ WHERE organization_id = $2
 RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
-type RevokeAdminMCPSessionByJTIParams struct {
+type RevokePlatformMCPSessionByJTIParams struct {
 	RevokedAt      pgtype.Timestamptz
 	OrganizationID string
 	Jti            string
 	OauthClientID  uuid.UUID
 }
 
-func (q *Queries) RevokeAdminMCPSessionByJTI(ctx context.Context, arg RevokeAdminMCPSessionByJTIParams) (AdminMcpSession, error) {
-	row := q.db.QueryRow(ctx, revokeAdminMCPSessionByJTI,
+func (q *Queries) RevokePlatformMCPSessionByJTI(ctx context.Context, arg RevokePlatformMCPSessionByJTIParams) (PlatformMcpSession, error) {
+	row := q.db.QueryRow(ctx, revokePlatformMCPSessionByJTI,
 		arg.RevokedAt,
 		arg.OrganizationID,
 		arg.Jti,
 		arg.OauthClientID,
 	)
-	var i AdminMcpSession
+	var i PlatformMcpSession
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -980,8 +980,8 @@ func (q *Queries) RevokeAdminMCPSessionByJTI(ctx context.Context, arg RevokeAdmi
 	return i, err
 }
 
-const revokeAdminMCPSessionFamily = `-- name: RevokeAdminMCPSessionFamily :exec
-UPDATE admin_mcp_sessions
+const revokePlatformMCPSessionFamily = `-- name: RevokePlatformMCPSessionFamily :exec
+UPDATE platform_mcp_sessions
 SET revoked_at = $1,
     updated_at = $1
 WHERE organization_id = $2
@@ -990,15 +990,15 @@ WHERE organization_id = $2
   AND revoked_at IS NULL
 `
 
-type RevokeAdminMCPSessionFamilyParams struct {
+type RevokePlatformMCPSessionFamilyParams struct {
 	RevokedAt            pgtype.Timestamptz
 	OrganizationID       string
 	ConnectionID         uuid.UUID
 	ConnectionGeneration uuid.UUID
 }
 
-func (q *Queries) RevokeAdminMCPSessionFamily(ctx context.Context, arg RevokeAdminMCPSessionFamilyParams) error {
-	_, err := q.db.Exec(ctx, revokeAdminMCPSessionFamily,
+func (q *Queries) RevokePlatformMCPSessionFamily(ctx context.Context, arg RevokePlatformMCPSessionFamilyParams) error {
+	_, err := q.db.Exec(ctx, revokePlatformMCPSessionFamily,
 		arg.RevokedAt,
 		arg.OrganizationID,
 		arg.ConnectionID,
@@ -1007,8 +1007,8 @@ func (q *Queries) RevokeAdminMCPSessionFamily(ctx context.Context, arg RevokeAdm
 	return err
 }
 
-const rotateAdminMCPConnectionGeneration = `-- name: RotateAdminMCPConnectionGeneration :one
-UPDATE admin_mcp_connections
+const rotatePlatformMCPConnectionGeneration = `-- name: RotatePlatformMCPConnectionGeneration :one
+UPDATE platform_mcp_connections
 SET active_generation = $1,
     reauthorized_at = $2,
     updated_at = $2
@@ -1018,21 +1018,21 @@ WHERE id = $3
 RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, revoked_at, created_at, updated_at
 `
 
-type RotateAdminMCPConnectionGenerationParams struct {
+type RotatePlatformMCPConnectionGenerationParams struct {
 	ActiveGeneration uuid.UUID
 	ReauthorizedAt   pgtype.Timestamptz
 	ConnectionID     uuid.UUID
 	OrganizationID   string
 }
 
-func (q *Queries) RotateAdminMCPConnectionGeneration(ctx context.Context, arg RotateAdminMCPConnectionGenerationParams) (AdminMcpConnection, error) {
-	row := q.db.QueryRow(ctx, rotateAdminMCPConnectionGeneration,
+func (q *Queries) RotatePlatformMCPConnectionGeneration(ctx context.Context, arg RotatePlatformMCPConnectionGenerationParams) (PlatformMcpConnection, error) {
+	row := q.db.QueryRow(ctx, rotatePlatformMCPConnectionGeneration,
 		arg.ActiveGeneration,
 		arg.ReauthorizedAt,
 		arg.ConnectionID,
 		arg.OrganizationID,
 	)
-	var i AdminMcpConnection
+	var i PlatformMcpConnection
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -1048,8 +1048,8 @@ func (q *Queries) RotateAdminMCPConnectionGeneration(ctx context.Context, arg Ro
 	return i, err
 }
 
-const rotateAdminMCPSession = `-- name: RotateAdminMCPSession :one
-UPDATE admin_mcp_sessions
+const rotatePlatformMCPSession = `-- name: RotatePlatformMCPSession :one
+UPDATE platform_mcp_sessions
 SET revoked_at = $1,
     rotated_at = $1,
     replaced_by_session_id = $2,
@@ -1060,21 +1060,21 @@ WHERE id = $3
 RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
-type RotateAdminMCPSessionParams struct {
+type RotatePlatformMCPSessionParams struct {
 	RotatedAt           pgtype.Timestamptz
 	ReplacedBySessionID uuid.NullUUID
 	ID                  uuid.UUID
 	OrganizationID      string
 }
 
-func (q *Queries) RotateAdminMCPSession(ctx context.Context, arg RotateAdminMCPSessionParams) (AdminMcpSession, error) {
-	row := q.db.QueryRow(ctx, rotateAdminMCPSession,
+func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatformMCPSessionParams) (PlatformMcpSession, error) {
+	row := q.db.QueryRow(ctx, rotatePlatformMCPSession,
 		arg.RotatedAt,
 		arg.ReplacedBySessionID,
 		arg.ID,
 		arg.OrganizationID,
 	)
-	var i AdminMcpSession
+	var i PlatformMcpSession
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,

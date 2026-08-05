@@ -1,4 +1,4 @@
-package adminmcp
+package platformmcp
 
 import (
 	"context"
@@ -10,18 +10,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	adminrepo "github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type JWTAuthenticator struct {
 	signer      *sessiontokens.Signer
-	store       *adminrepo.Queries
+	store       *platformrepo.Queries
 	credentials *CredentialCodec
 	issuer      string
 	audience    string
@@ -30,11 +30,11 @@ type JWTAuthenticator struct {
 func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encryptionClient *encryption.Client, issuer, audience string) (*JWTAuthenticator, error) {
 	credentials, err := NewCredentialCodec(encryptionClient)
 	if err != nil {
-		return nil, fmt.Errorf("create admin credential codec: %w", err)
+		return nil, fmt.Errorf("create platform MCP credential codec: %w", err)
 	}
 	return &JWTAuthenticator{
 		signer:      signer,
-		store:       adminrepo.New(db),
+		store:       platformrepo.New(db),
 		credentials: credentials,
 		issuer:      issuer,
 		audience:    audience,
@@ -59,7 +59,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 	if err != nil {
 		return Principal{}, ErrUnauthorized
 	}
-	session, err := a.store.GetActiveAdminMCPSessionByJTI(ctx, adminrepo.GetActiveAdminMCPSessionByJTIParams{
+	session, err := a.store.GetActivePlatformMCPSessionByJTI(ctx, platformrepo.GetActivePlatformMCPSessionByJTIParams{
 		OrganizationID: organizationID,
 		Jti:            claims.ID,
 	})
@@ -67,7 +67,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Principal{}, ErrUnauthorized
 		}
-		return Principal{}, fmt.Errorf("lookup active admin mcp session: %w", err)
+		return Principal{}, fmt.Errorf("lookup active platform mcp session: %w", err)
 	}
 	if session.SubjectUrn != subject.String() || session.ClientID != claims.ClientID || session.ConnectionGeneration != session.ActiveGeneration {
 		return Principal{}, ErrUnauthorized
@@ -92,7 +92,7 @@ func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgA
 }
 
 // LiveOrganizationSelector returns only organizations where the current user
-// holds the same live org:admin grant required to authorize Admin MCP.
+// holds the same live org:admin grant required to authorize Platform MCP.
 type LiveOrganizationSelector struct {
 	db         *pgxpool.Pool
 	authorizer Authorizer
@@ -108,7 +108,7 @@ func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, us
 	}
 	organizations, err := organizationsrepo.New(s.db).ListOrganizationsForUser(ctx, pgtype.Text{String: userID, Valid: true})
 	if err != nil {
-		return nil, fmt.Errorf("list organizations for admin selection: %w", err)
+		return nil, fmt.Errorf("list organizations for Platform MCP selection: %w", err)
 	}
 	options := make([]OrganizationOption, 0, len(organizations))
 	for _, organization := range organizations {
@@ -167,31 +167,29 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 }
 
 type PostgresReader struct {
-	store *adminrepo.Queries
+	store *platformrepo.Queries
 }
 
 func NewPostgresReader(db *pgxpool.Pool) *PostgresReader {
-	return &PostgresReader{store: adminrepo.New(db)}
+	return &PostgresReader{store: platformrepo.New(db)}
 }
 
 func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
 	if r.store == nil {
 		return ListProjectsOutput{}, ErrUnavailable
 	}
-	rows, err := r.store.ListAdminMCPProjects(ctx, adminrepo.ListAdminMCPProjectsParams{
+	limit := boundedLimit(input.Limit)
+	rows, err := r.store.ListPlatformMCPProjects(ctx, platformrepo.ListPlatformMCPProjectsParams{
 		OrganizationID: principal.OrganizationID,
-		LimitValue:     boundedLimitValue(input.Limit),
+		LimitValue:     int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
 	})
 	if err != nil {
-		return ListProjectsOutput{}, fmt.Errorf("list admin mcp projects: %w", err)
+		return ListProjectsOutput{}, fmt.Errorf("list platform mcp projects: %w", err)
 	}
 
-	output := ListProjectsOutput{Projects: make([]Project, 0, min(len(rows), input.Limit)), Truncated: false}
-	for i, row := range rows {
-		if i == input.Limit {
-			output.Truncated = true
-			break
-		}
+	rows, truncated := boundedRows(rows, limit)
+	output := ListProjectsOutput{Projects: make([]Project, 0, len(rows)), Truncated: truncated}
+	for _, row := range rows {
 		output.Projects = append(output.Projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
 	}
 	return output, nil
@@ -205,21 +203,19 @@ func (r *PostgresReader) ListProjectMCPs(ctx context.Context, principal Principa
 	if err != nil {
 		return ListProjectMCPsOutput{}, fmt.Errorf("parse project id: %w", err)
 	}
-	rows, err := r.store.ListAdminMCPServers(ctx, adminrepo.ListAdminMCPServersParams{
+	limit := boundedLimit(input.Limit)
+	rows, err := r.store.ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{
 		ProjectID:      projectID,
 		OrganizationID: principal.OrganizationID,
-		LimitValue:     boundedLimitValue(input.Limit),
+		LimitValue:     int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
 	})
 	if err != nil {
-		return ListProjectMCPsOutput{}, fmt.Errorf("list admin mcp servers: %w", err)
+		return ListProjectMCPsOutput{}, fmt.Errorf("list platform mcp servers: %w", err)
 	}
 
-	output := ListProjectMCPsOutput{MCPs: make([]MCP, 0, min(len(rows), input.Limit)), Truncated: false}
-	for i, row := range rows {
-		if i == input.Limit {
-			output.Truncated = true
-			break
-		}
+	rows, truncated := boundedRows(rows, limit)
+	output := ListProjectMCPsOutput{MCPs: make([]MCP, 0, len(rows)), Truncated: truncated}
+	for _, row := range rows {
 		output.MCPs = append(output.MCPs, mcpFromRow(row.ID, row.ProjectID, row.Name.String, row.Slug.String, row.Visibility))
 	}
 	return output, nil
@@ -237,7 +233,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	row, err := r.store.GetAdminMCPServer(ctx, adminrepo.GetAdminMCPServerParams{
+	row, err := r.store.GetPlatformMCPServer(ctx, platformrepo.GetPlatformMCPServerParams{
 		McpServerID:    mcpID,
 		ProjectID:      projectID,
 		OrganizationID: principal.OrganizationID,
@@ -246,13 +242,16 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return MCP{}, ErrForbidden
 		}
-		return MCP{}, fmt.Errorf("get admin mcp server: %w", err)
+		return MCP{}, fmt.Errorf("get platform mcp server: %w", err)
 	}
 	return mcpFromRow(row.ID, row.ProjectID, row.Name.String, row.Slug.String, row.Visibility), nil
 }
 
-func boundedLimitValue(limit int) int32 {
-	return int32(boundedLimit(limit) + 1) // #nosec G115 -- boundedLimit caps the value at 100.
+func boundedRows[T any](rows []T, limit int) ([]T, bool) {
+	if len(rows) <= limit {
+		return rows, false
+	}
+	return rows[:limit], true
 }
 
 func mcpFromRow(id, projectID uuid.UUID, name, slug, visibility string) MCP {

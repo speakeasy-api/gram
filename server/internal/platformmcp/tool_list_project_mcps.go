@@ -1,5 +1,5 @@
 //nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
-package adminmcp
+package platformmcp
 
 import (
 	"context"

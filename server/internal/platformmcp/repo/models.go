@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AdminMcpAuthorizationGrant struct {
+type PlatformMcpAuthorizationGrant struct {
 	ID                    uuid.UUID
 	OrganizationID        string
 	AuthorizationCodeHash string
@@ -25,7 +25,7 @@ type AdminMcpAuthorizationGrant struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
-type AdminMcpConnection struct {
+type PlatformMcpConnection struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	SubjectUrn       string
@@ -38,7 +38,7 @@ type AdminMcpConnection struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
-type AdminMcpOauthClient struct {
+type PlatformMcpOauthClient struct {
 	ID                    uuid.UUID
 	ClientID              string
 	ClientSecretHash      pgtype.Text
@@ -51,7 +51,7 @@ type AdminMcpOauthClient struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
-type AdminMcpSession struct {
+type PlatformMcpSession struct {
 	ID                   uuid.UUID
 	OrganizationID       string
 	ConnectionID         uuid.UUID

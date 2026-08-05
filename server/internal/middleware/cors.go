@@ -12,8 +12,8 @@ import (
 var mcpOpenAccessControlRoutes = []string{
 	"/.well-known/oauth-authorization-server/mcp",
 	"/.well-known/oauth-protected-resource/mcp",
-	"/.well-known/oauth-authorization-server/admin-mcp",
-	"/.well-known/oauth-protected-resource/admin-mcp",
+	"/.well-known/oauth-authorization-server/platform-mcp",
+	"/.well-known/oauth-protected-resource/platform-mcp",
 	"/openapi.yaml",
 }
 

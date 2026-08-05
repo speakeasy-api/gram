@@ -57737,9 +57737,6 @@ components:
         GetProductFeaturesResponseBody:
             type: object
             properties:
-                admin_mcp_enabled:
-                    type: boolean
-                    description: Whether the organization is eligible for the Gram Admin MCP capability
                 ai_platform_push_integrations_enabled:
                     type: boolean
                     description: Whether the organization can provision push integrations for AI platforms
@@ -57761,6 +57758,9 @@ components:
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
+                platform_mcp_enabled:
+                    type: boolean
+                    description: Whether the organization is eligible for the Gram Platform MCP capability
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
@@ -57796,7 +57796,7 @@ components:
                 - skills_enabled
                 - skill_capture_metadata_only
                 - ai_platform_push_integrations_enabled
-                - admin_mcp_enabled
+                - platform_mcp_enabled
                 - device_agent
         GetProjectForm:
             type: object
@@ -66635,7 +66635,7 @@ components:
                         - skills
                         - skill_capture_metadata_only
                         - ai_platform_push_integrations
-                        - admin_mcp
+                        - platform_mcp
                     maxLength: 60
             required:
                 - feature_name

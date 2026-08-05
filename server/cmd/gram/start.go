@@ -26,9 +26,9 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/adminmcp"
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -1269,36 +1269,36 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
-			adminGate := adminmcp.NewOrganizationGate(productFeatures, featureFlags)
-			adminAuthorizer := adminmcp.NewLiveOrgAdminAuthorizer(db, authzEngine)
-			adminOAuth, err := adminmcp.NewOAuthHTTP(adminmcp.OAuthHTTPConfig{
+			platformGate := platformmcp.NewOrganizationGate(productFeatures, featureFlags)
+			platformAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(db, authzEngine)
+			platformOAuth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
 				BaseURL:       serverURL,
 				Environment:   c.String("environment"),
 				Cache:         cache.NewRedisCacheAdapter(redisClient),
-				Store:         adminmcp.NewPostgresOAuthStore(db),
+				Store:         platformmcp.NewPostgresOAuthStore(db),
 				Identity:      identityResolver,
-				Gate:          adminGate,
-				Authorizer:    adminAuthorizer,
-				Organizations: adminmcp.NewLiveOrganizationSelector(db, adminAuthorizer),
+				Gate:          platformGate,
+				Authorizer:    platformAuthorizer,
+				Organizations: platformmcp.NewLiveOrganizationSelector(db, platformAuthorizer),
 				Signer:        sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 				Encryption:    encryptionClient,
 			})
 			if err != nil {
-				return fmt.Errorf("create admin mcp oauth service: %w", err)
+				return fmt.Errorf("create platform mcp oauth service: %w", err)
 			}
-			adminAuthenticator, err := adminmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, encryptionClient, adminOAuth.Issuer(), adminOAuth.Audience())
+			platformAuthenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, encryptionClient, platformOAuth.Issuer(), platformOAuth.Audience())
 			if err != nil {
-				return fmt.Errorf("create admin mcp authenticator: %w", err)
+				return fmt.Errorf("create platform mcp authenticator: %w", err)
 			}
-			adminRuntime := adminmcp.NewRuntime(
-				adminAuthenticator,
-				adminGate,
-				adminAuthorizer,
-				adminOAuth.ProtectedResourceURL(),
-				adminmcp.NewPostgresReader(db),
+			platformRuntime := platformmcp.NewRuntime(
+				platformAuthenticator,
+				platformGate,
+				platformAuthorizer,
+				platformOAuth.ProtectedResourceURL(),
+				platformmcp.NewPostgresReader(db),
 			)
-			adminOAuth.Attach(mux)
-			o11y.AttachHandler(mux, "POST", adminmcp.Path, adminRuntime.Handler().ServeHTTP)
+			platformOAuth.Attach(mux)
+			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
