@@ -31,8 +31,14 @@ export function ConfirmDialog({
   };
 }): JSX.Element {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && isPending) return;
+        onOpenChange(nextOpen);
+      }}
+    >
+      <Dialog.Content closeable={!isPending}>
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{description}</Dialog.Description>

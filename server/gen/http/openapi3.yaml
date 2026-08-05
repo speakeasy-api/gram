@@ -5068,9 +5068,90 @@ paths:
             x-speakeasy-name-override: updateGlobalIssuer
             x-speakeasy-react-hook:
                 name: UpdateGlobalRemoteSessionIssuer
+    /rpc/agent.getConfiguration:
+        get:
+            description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
+            operationId: getDeviceAgentConfiguration
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceAgentConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getConfiguration agent
+            tags:
+                - agent
+            x-speakeasy-name-override: getConfiguration
+            x-speakeasy-react-hook:
+                name: DeviceAgentConfiguration
     /rpc/agent.getPlugins:
         get:
-            description: 'Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool''s own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool''s syncer decides how to render it into that tool''s native configuration.'
+            description: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
             operationId: getAgentPlugins
             parameters:
                 - allowEmptyValue: true
@@ -5258,6 +5339,93 @@ paths:
             x-speakeasy-name-override: listSyncedUsers
             x-speakeasy-react-hook:
                 name: SyncedAgentUsers
+    /rpc/agent.updateConfiguration:
+        post:
+            description: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.
+            operationId: updateDeviceAgentConfiguration
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateConfigurationRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceAgentConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateConfiguration agent
+            tags:
+                - agent
+            x-speakeasy-name-override: updateConfiguration
+            x-speakeasy-react-hook:
+                name: UpdateDeviceAgentConfiguration
     /rpc/aiIntegrations.deleteConfig:
         post:
             description: Delete the org-wide AI integration config for a provider.
@@ -18704,6 +18872,101 @@ paths:
             x-speakeasy-name-override: validate
             x-speakeasy-react-hook:
                 name: ValidateAPIKey
+    /rpc/litellm.createInstance:
+        post:
+            description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
+            operationId: createLiteLLMInstance
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateInstanceRequestBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LitellmInstanceKeyResult'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createInstance litellm
+            tags:
+                - litellm
+            x-speakeasy-name-override: createInstance
+            x-speakeasy-react-hook:
+                name: CreateLiteLLMInstance
     /rpc/litellm.ingest/beta/litellm_basic_guardrail_api:
         post:
             description: Evaluates and captures a LiteLLM model request before it reaches the provider.
@@ -18799,6 +19062,282 @@ paths:
             x-speakeasy-name-override: ingestGuardrail
             x-speakeasy-react-hook:
                 disabled: true
+    /rpc/litellm.listInstances:
+        get:
+            description: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.
+            operationId: listLiteLLMInstances
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInstancesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listInstances litellm
+            tags:
+                - litellm
+            x-speakeasy-name-override: listInstances
+            x-speakeasy-react-hook:
+                name: LiteLLMInstances
+    /rpc/litellm.revokeInstance:
+        delete:
+            description: Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.
+            operationId: revokeLiteLLMInstance
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: revokeInstance litellm
+            tags:
+                - litellm
+            x-speakeasy-name-override: revokeInstance
+            x-speakeasy-react-hook:
+                name: RevokeLiteLLMInstance
+    /rpc/litellm.rotateInstanceKey:
+        post:
+            description: Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.
+            operationId: rotateLiteLLMInstanceKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LitellmInstanceKeyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: rotateInstanceKey litellm
+            tags:
+                - litellm
+            x-speakeasy-name-override: rotateInstanceKey
+            x-speakeasy-react-hook:
+                name: RotateLiteLLMInstanceKey
     /rpc/mcpEndpoints.checkSlugAvailability:
         get:
             description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -54582,6 +55121,19 @@ components:
             required:
                 - remote_session_issuer_id
                 - client_id
+        CreateInstanceRequestBody:
+            type: object
+            properties:
+                failure_posture:
+                    type: string
+                    enum:
+                        - fail_closed
+                        - fail_open
+                name:
+                    type: string
+                    maxLength: 255
+            required:
+                - name
         CreateIssuerRequestBody:
             type: object
             properties:
@@ -56184,6 +56736,34 @@ components:
             required:
                 - id
                 - user_session_issuer_id
+        DeviceAgentConfiguration:
+            type: object
+            properties:
+                config:
+                    type: object
+                    description: Forward-compatible non-secret settings document. Platform values use false, user, or managed enforcement layers.
+                    additionalProperties: true
+                etag:
+                    type: string
+                    description: Opaque revision identifier for this configuration.
+                is_configured:
+                    type: boolean
+                    description: Whether an administrator has saved a remote configuration. False means agents should not add a remote resolver layer.
+                schema_version:
+                    type: integer
+                    description: Schema version for this remote configuration envelope.
+                    format: int64
+                    minimum: 1
+                updated_at:
+                    type: string
+                    description: When this remote configuration was last saved. Absent when is_configured is false.
+                    format: date-time
+            description: Versioned organization-wide settings delivered to enrolled device agents. Agents must ignore unknown config keys. Remote settings override the shareable local/MDM settings after a successful fetch; per-device identity and secrets always remain local.
+            required:
+                - schema_version
+                - config
+                - is_configured
+                - etag
         DeviceIntegrationConfig:
             type: object
             properties:
@@ -58107,9 +58687,11 @@ components:
         GetPluginsResult:
             type: object
             properties:
+                configuration:
+                    $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
@@ -58127,6 +58709,9 @@ components:
         GetProductFeaturesResponseBody:
             type: object
             properties:
+                ai_platform_push_integrations_enabled:
+                    type: boolean
+                    description: Whether the organization can provision push integrations for AI platforms
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
@@ -58179,6 +58764,7 @@ components:
                 - custom_model_keys_enabled
                 - skills_enabled
                 - skill_capture_metadata_only
+                - ai_platform_push_integrations_enabled
                 - device_agent
         GetProjectForm:
             type: object
@@ -60032,6 +60618,15 @@ components:
             description: Result of listing hook traces
             required:
                 - traces
+        ListInstancesResponseBody:
+            type: object
+            properties:
+                instances:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LiteLLMInstance'
+            required:
+                - instances
         ListIntegrationsForm:
             type: object
             properties:
@@ -61113,6 +61708,98 @@ components:
             required:
                 - package
                 - versions
+        LiteLLMInstance:
+            type: object
+            properties:
+                active:
+                    type: boolean
+                created_at:
+                    type: string
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                diagnostics:
+                    $ref: '#/components/schemas/LiteLLMInstanceDiagnostics'
+                failure_posture:
+                    type: string
+                    description: How LiteLLM behaves when Gram cannot evaluate a request.
+                    enum:
+                        - fail_closed
+                        - fail_open
+                id:
+                    type: string
+                    format: uuid
+                key_prefix:
+                    type: string
+                last_used_at:
+                    type: string
+                    format: date-time
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                project:
+                    $ref: '#/components/schemas/ProjectEntry'
+                updated_at:
+                    type: string
+                    format: date-time
+            description: A provisioned LiteLLM integration and its project-bound ingestion credential metadata.
+            required:
+                - id
+                - organization_id
+                - project
+                - name
+                - failure_posture
+                - key_prefix
+                - created_by_user_id
+                - created_at
+                - updated_at
+                - active
+                - diagnostics
+        LiteLLMInstanceDiagnostics:
+            type: object
+            properties:
+                last_error_at:
+                    type: string
+                    format: date-time
+                last_error_kind:
+                    type: string
+                    description: Safe category for the latest observed ingest error.
+                    enum:
+                        - auth_failure
+                        - decode_failure
+                        - limit_exceeded
+                last_guardrail_event_at:
+                    type: string
+                    format: date-time
+                last_otel_event_at:
+                    type: string
+                    format: date-time
+                platform_user_pct_24h:
+                    type: number
+                    description: Percentage of model requests in the last 24 hours that resolved to a Gram user.
+                    format: double
+                    minimum: 0
+                    maximum: 100
+                reported_litellm_version:
+                    type: string
+                    maxLength: 128
+                status:
+                    type: string
+                    description: Derived health of a LiteLLM integration's latest ingest activity.
+                    enum:
+                        - pending
+                        - success
+                        - failed
+                virtual_key_email_pct_24h:
+                    type: number
+                    description: Percentage of model requests in the last 24 hours that supplied a virtual-key email.
+                    format: double
+                    minimum: 0
+                    maximum: 100
+            description: Health and identity-attribution diagnostics for a LiteLLM integration. No prompt, credential, or identity values are returned.
+            required:
+                - status
         LiteLLMRequestData:
             type: object
             properties:
@@ -61173,6 +61860,17 @@ components:
             description: LiteLLM Generic Guardrail decision.
             required:
                 - action
+        LitellmInstanceKeyResult:
+            type: object
+            properties:
+                instance:
+                    $ref: '#/components/schemas/LiteLLMInstance'
+                key:
+                    type: string
+            description: A LiteLLM instance and its newly minted plaintext key. The key is shown only once.
+            required:
+                - instance
+                - key
         LogFilter:
             type: object
             properties:
@@ -67008,6 +67706,7 @@ components:
                         - custom_model_keys
                         - skills
                         - skill_capture_metadata_only
+                        - ai_platform_push_integrations
                     maxLength: 60
             required:
                 - feature_name
@@ -67335,11 +68034,26 @@ components:
                 observed_use_count:
                     type: integer
                     format: int64
+                sources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ShadowMCPInventoryUserSource'
                 user_key:
                     type: string
             required:
                 - user_key
                 - last_called
+                - observed_use_count
+        ShadowMCPInventoryUserSource:
+            type: object
+            properties:
+                observed_use_count:
+                    type: integer
+                    format: int64
+                source:
+                    type: string
+            required:
+                - source
                 - observed_use_count
         ShareSkillRequestBody:
             type: object
@@ -71298,6 +72012,15 @@ components:
                 - external_credential_id
                 - algorithm
                 - name
+        UpdateConfigurationRequestBody:
+            type: object
+            properties:
+                config:
+                    type: object
+                    description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, and sync_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.
+                    additionalProperties: true
+            required:
+                - config
         UpdateCustomDetectionRuleRequestBody:
             type: object
             properties:

@@ -95,7 +95,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|block-shadow-mcp-inventory-server|unblock-shadow-mcp-inventory-server|resolve-shadow-mcp-inventory-request|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
-		"agent (get-plugins|list-synced-users)",
+		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -120,7 +120,7 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
-		"litellm (ingest|traces|metrics)",
+		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces|metrics)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
@@ -372,6 +372,13 @@ func ParseEndpoint(
 
 		agentListSyncedUsersFlags            = flag.NewFlagSet("list-synced-users", flag.ExitOnError)
 		agentListSyncedUsersSessionTokenFlag = agentListSyncedUsersFlags.String("session-token", "", "")
+
+		agentGetConfigurationFlags            = flag.NewFlagSet("get-configuration", flag.ExitOnError)
+		agentGetConfigurationSessionTokenFlag = agentGetConfigurationFlags.String("session-token", "", "")
+
+		agentUpdateConfigurationFlags            = flag.NewFlagSet("update-configuration", flag.ExitOnError)
+		agentUpdateConfigurationBodyFlag         = agentUpdateConfigurationFlags.String("body", "REQUIRED", "")
+		agentUpdateConfigurationSessionTokenFlag = agentUpdateConfigurationFlags.String("session-token", "", "")
 
 		aiIntegrationsFlags = flag.NewFlagSet("ai-integrations", flag.ContinueOnError)
 
@@ -1170,6 +1177,25 @@ func ParseEndpoint(
 		keysVerifyKeyApikeyTokenFlag = keysVerifyKeyFlags.String("apikey-token", "", "")
 
 		litellmFlags = flag.NewFlagSet("litellm", flag.ContinueOnError)
+
+		litellmCreateInstanceFlags                = flag.NewFlagSet("create-instance", flag.ExitOnError)
+		litellmCreateInstanceBodyFlag             = litellmCreateInstanceFlags.String("body", "REQUIRED", "")
+		litellmCreateInstanceSessionTokenFlag     = litellmCreateInstanceFlags.String("session-token", "", "")
+		litellmCreateInstanceProjectSlugInputFlag = litellmCreateInstanceFlags.String("project-slug-input", "", "")
+
+		litellmListInstancesFlags                = flag.NewFlagSet("list-instances", flag.ExitOnError)
+		litellmListInstancesSessionTokenFlag     = litellmListInstancesFlags.String("session-token", "", "")
+		litellmListInstancesProjectSlugInputFlag = litellmListInstancesFlags.String("project-slug-input", "", "")
+
+		litellmRotateInstanceKeyFlags                = flag.NewFlagSet("rotate-instance-key", flag.ExitOnError)
+		litellmRotateInstanceKeyBodyFlag             = litellmRotateInstanceKeyFlags.String("body", "REQUIRED", "")
+		litellmRotateInstanceKeySessionTokenFlag     = litellmRotateInstanceKeyFlags.String("session-token", "", "")
+		litellmRotateInstanceKeyProjectSlugInputFlag = litellmRotateInstanceKeyFlags.String("project-slug-input", "", "")
+
+		litellmRevokeInstanceFlags                = flag.NewFlagSet("revoke-instance", flag.ExitOnError)
+		litellmRevokeInstanceIDFlag               = litellmRevokeInstanceFlags.String("id", "REQUIRED", "")
+		litellmRevokeInstanceSessionTokenFlag     = litellmRevokeInstanceFlags.String("session-token", "", "")
+		litellmRevokeInstanceProjectSlugInputFlag = litellmRevokeInstanceFlags.String("project-slug-input", "", "")
 
 		litellmIngestFlags                = flag.NewFlagSet("ingest", flag.ExitOnError)
 		litellmIngestBodyFlag             = litellmIngestFlags.String("body", "REQUIRED", "")
@@ -3200,6 +3226,8 @@ func ParseEndpoint(
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
 	agentListSyncedUsersFlags.Usage = agentListSyncedUsersUsage
+	agentGetConfigurationFlags.Usage = agentGetConfigurationUsage
+	agentUpdateConfigurationFlags.Usage = agentUpdateConfigurationUsage
 
 	aiIntegrationsFlags.Usage = aiIntegrationsUsage
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
@@ -3394,6 +3422,10 @@ func ParseEndpoint(
 	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
 
 	litellmFlags.Usage = litellmUsage
+	litellmCreateInstanceFlags.Usage = litellmCreateInstanceUsage
+	litellmListInstancesFlags.Usage = litellmListInstancesUsage
+	litellmRotateInstanceKeyFlags.Usage = litellmRotateInstanceKeyUsage
+	litellmRevokeInstanceFlags.Usage = litellmRevokeInstanceUsage
 	litellmIngestFlags.Usage = litellmIngestUsage
 	litellmTracesFlags.Usage = litellmTracesUsage
 	litellmMetricsFlags.Usage = litellmMetricsUsage
@@ -4106,6 +4138,12 @@ func ParseEndpoint(
 			case "list-synced-users":
 				epf = agentListSyncedUsersFlags
 
+			case "get-configuration":
+				epf = agentGetConfigurationFlags
+
+			case "update-configuration":
+				epf = agentUpdateConfigurationFlags
+
 			}
 
 		case "ai-integrations":
@@ -4638,6 +4676,18 @@ func ParseEndpoint(
 
 		case "litellm":
 			switch epn {
+			case "create-instance":
+				epf = litellmCreateInstanceFlags
+
+			case "list-instances":
+				epf = litellmListInstancesFlags
+
+			case "rotate-instance-key":
+				epf = litellmRotateInstanceKeyFlags
+
+			case "revoke-instance":
+				epf = litellmRevokeInstanceFlags
+
 			case "ingest":
 				epf = litellmIngestFlags
 
@@ -5956,6 +6006,12 @@ func ParseEndpoint(
 			case "list-synced-users":
 				endpoint = c.ListSyncedUsers()
 				data, err = agentc.BuildListSyncedUsersPayload(*agentListSyncedUsersSessionTokenFlag)
+			case "get-configuration":
+				endpoint = c.GetConfiguration()
+				data, err = agentc.BuildGetConfigurationPayload(*agentGetConfigurationSessionTokenFlag)
+			case "update-configuration":
+				endpoint = c.UpdateConfiguration()
+				data, err = agentc.BuildUpdateConfigurationPayload(*agentUpdateConfigurationBodyFlag, *agentUpdateConfigurationSessionTokenFlag)
 			}
 		case "ai-integrations":
 			c := aiintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6500,6 +6556,18 @@ func ParseEndpoint(
 		case "litellm":
 			c := litellmc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "create-instance":
+				endpoint = c.CreateInstance()
+				data, err = litellmc.BuildCreateInstancePayload(*litellmCreateInstanceBodyFlag, *litellmCreateInstanceSessionTokenFlag, *litellmCreateInstanceProjectSlugInputFlag)
+			case "list-instances":
+				endpoint = c.ListInstances()
+				data, err = litellmc.BuildListInstancesPayload(*litellmListInstancesSessionTokenFlag, *litellmListInstancesProjectSlugInputFlag)
+			case "rotate-instance-key":
+				endpoint = c.RotateInstanceKey()
+				data, err = litellmc.BuildRotateInstanceKeyPayload(*litellmRotateInstanceKeyBodyFlag, *litellmRotateInstanceKeySessionTokenFlag, *litellmRotateInstanceKeyProjectSlugInputFlag)
+			case "revoke-instance":
+				endpoint = c.RevokeInstance()
+				data, err = litellmc.BuildRevokeInstancePayload(*litellmRevokeInstanceIDFlag, *litellmRevokeInstanceSessionTokenFlag, *litellmRevokeInstanceProjectSlugInputFlag)
 			case "ingest":
 				endpoint = c.Ingest()
 				data, err = litellmc.BuildIngestPayload(*litellmIngestBodyFlag, *litellmIngestApikeyTokenFlag, *litellmIngestProjectSlugInputFlag)
@@ -8511,8 +8579,10 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agent COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.`)
+	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
+	fmt.Fprintln(os.Stderr, `    get-configuration: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
+	fmt.Fprintln(os.Stderr, `    update-configuration: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s agent COMMAND --help\n", os.Args[0])
@@ -8528,7 +8598,7 @@ func agentGetPluginsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.`)
+	fmt.Fprintln(os.Stderr, `Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)
@@ -8557,6 +8627,44 @@ func agentListSyncedUsersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent list-synced-users --session-token \"abc123\"")
+}
+
+func agentGetConfigurationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent get-configuration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-configuration --session-token \"abc123\"")
+}
+
+func agentUpdateConfigurationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent update-configuration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent update-configuration --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 // aiIntegrationsUsage displays the usage of the ai-integrations command and
@@ -12165,6 +12273,10 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, `Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] litellm COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-instance: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-instances: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    rotate-instance-key: Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke-instance: Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    ingest: Evaluates and captures a LiteLLM model request before it reaches the provider.`)
 	fmt.Fprintln(os.Stderr, `    traces: Accepts LiteLLM OTLP trace exports. Send the standard OTLP JSON ExportTraceServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON ExportMetricsServiceRequest shape shown here with application/json, or the binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest with application/x-protobuf or application/protobuf. Content-Encoding may be gzip. The canonical endpoint is /rpc/hooks.otel/v1/metrics, shared with harness telemetry and dispatched by key provenance; the litellm.otel route below is the internally registered fallback.`)
@@ -12172,6 +12284,92 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s litellm COMMAND --help\n", os.Args[0])
 }
+func litellmCreateInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm create-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm create-instance --body '{\n      \"failure_posture\": \"fail_open\",\n      \"name\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmListInstancesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm list-instances", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm list-instances --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmRotateInstanceKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm rotate-instance-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm rotate-instance-key --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmRevokeInstanceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm revoke-instance", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm revoke-instance --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func litellmIngestUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] litellm ingest", os.Args[0])

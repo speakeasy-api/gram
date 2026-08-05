@@ -1027,17 +1027,23 @@ type JsonWebKeySet struct {
 }
 
 type LitellmInstance struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	ApiKeyID        uuid.UUID
-	CreatedByUserID string
-	Name            string
-	FailurePosture  string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID                       uuid.UUID
+	OrganizationID           string
+	ProjectID                uuid.UUID
+	ApiKeyID                 uuid.UUID
+	CreatedByUserID          string
+	Name                     string
+	FailurePosture           string
+	LastGuardrailEventAt     pgtype.Timestamptz
+	LastOtelEventAt          pgtype.Timestamptz
+	LastErrorAt              pgtype.Timestamptz
+	LastErrorKind            pgtype.Text
+	ReportedLitellmVersion   pgtype.Text
+	ReportedLitellmVersionAt pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	Deleted                  bool
 }
 
 type McpEndpoint struct {
@@ -1415,6 +1421,78 @@ type PackageVersion struct {
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
 	Deleted      bool
+}
+
+type PlatformMcpAuthorizationGrant struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	AuthorizationCodeHash string
+	OauthClientID         uuid.UUID
+	ConnectionID          uuid.UUID
+	ConnectionGeneration  uuid.UUID
+	RedirectUri           string
+	CodeChallenge         string
+	ExpiresAt             pgtype.Timestamptz
+	ConsumedAt            pgtype.Timestamptz
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type PlatformMcpConnection struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SubjectUrn       string
+	OauthClientID    uuid.UUID
+	ActiveGeneration uuid.UUID
+	AuthorizedAt     pgtype.Timestamptz
+	ReauthorizedAt   pgtype.Timestamptz
+	RevokedAt        pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type PlatformMcpOauthClient struct {
+	ID                    uuid.UUID
+	ClientID              string
+	ClientSecretHash      pgtype.Text
+	ClientName            string
+	RedirectUris          []string
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type PlatformMcpOnboardingMilestone struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	Milestone            string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	ProjectID            uuid.NullUUID
+	McpKey               string
+	AttemptID            uuid.NullUUID
+	ProductDay           pgtype.Date
+	CreatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpSession struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ConnectionID         uuid.UUID
+	OauthClientID        uuid.UUID
+	ConnectionGeneration uuid.UUID
+	Jti                  string
+	RefreshTokenHash     string
+	ExpiresAt            pgtype.Timestamptz
+	RefreshExpiresAt     pgtype.Timestamptz
+	RotatedAt            pgtype.Timestamptz
+	RevokedAt            pgtype.Timestamptz
+	ReplacedBySessionID  uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type Plugin struct {

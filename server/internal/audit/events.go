@@ -28,6 +28,7 @@ const (
 	subjectTypeEnvironment           subjectType = "environment"
 	subjectTypeGcpIamCredential      subjectType = "gcp_iam_credential"
 	subjectTypeGcpKmsKey             subjectType = "gcp_kms_key"
+	subjectTypeLiteLLMInstance       subjectType = "litellm_instance"
 	subjectTypeMcpCollection         subjectType = "mcp_collection"
 	subjectTypeMcpEndpoint           subjectType = "mcp_endpoint"
 	subjectTypeMcpServer             subjectType = "mcp_server"

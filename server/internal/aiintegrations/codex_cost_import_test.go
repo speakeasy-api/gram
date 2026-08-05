@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +48,11 @@ func TestBuildCodexCostLogParamsVerifiesSHAAndMapsTelemetry(t *testing.T) {
 	require.Equal(t, "api", attrs[attr.EventSourceKey])
 	require.Equal(t, "codex", attrs[attr.HookSourceKey])
 	require.Equal(t, "openai", attrs[attr.ProviderKey])
+	// Compliance rows come from the org's own enterprise feed, so they are
+	// team by construction; billing mode only rides when the config declares
+	// one (this fixture doesn't).
+	require.Equal(t, complianceAccountTypeTeam, attrs[attr.AccountTypeKey])
+	require.NotContains(t, attrs, attr.BillingModeKey)
 	require.Equal(t, cfg.ID.String(), attrs[attr.AIIntegrationConfigIDKey])
 	require.Equal(t, "event_1", attrs[attr.CodexComplianceEventIDKey])
 	require.Equal(t, "90eb39010cad917b66d5b9d7ce27fe9b7217b93b02760406e55aee41eb5433c3", attrs[attr.CodexComplianceEventHashKey])
@@ -59,14 +65,13 @@ func TestBuildCodexCostLogParamsVerifiesSHAAndMapsTelemetry(t *testing.T) {
 	require.Equal(t, "GPT-5.5 - Output,GPT-5.5 - Input,GPT-5.5 - Cached Input", attrs[attr.CodexComplianceBillingSKUsKey])
 	require.Equal(t, "org-openai", attrs[attr.ExternalOrgIDKey])
 	require.Equal(t, "gpt-5.5", attrs[attr.GenAIResponseModelKey])
-	// Codex rows meter cost only: gen_ai.usage token counts would double
-	// count metering against the Codex OTEL stream, the token source of
-	// truth. The raw counts are preserved under codex.compliance.* keys,
-	// which nothing sums.
-	require.NotContains(t, attrs, attr.GenAIUsageInputTokensKey)
-	require.NotContains(t, attrs, attr.GenAIUsageCacheReadInputTokensKey)
-	require.NotContains(t, attrs, attr.GenAIUsageOutputTokensKey)
-	require.NotContains(t, attrs, attr.GenAIUsageTotalTokensKey)
+	// client=github is a cloud surface OTEL never sees, so this row promotes
+	// its token counts to gen_ai.usage.* and meters from the compliance feed
+	// (DNO-751); the raw codex.compliance.* copies still ride along.
+	require.Equal(t, int64(75348), attrs[attr.GenAIUsageInputTokensKey])
+	require.Equal(t, int64(879616), attrs[attr.GenAIUsageCacheReadInputTokensKey])
+	require.Equal(t, int64(4858), attrs[attr.GenAIUsageOutputTokensKey])
+	require.Equal(t, int64(959822), attrs[attr.GenAIUsageTotalTokensKey])
 	require.Equal(t, int64(75348), attrs[attr.CodexComplianceInputTokensKey])
 	require.Equal(t, int64(879616), attrs[attr.CodexComplianceCachedInputTokensKey])
 	require.Equal(t, int64(4858), attrs[attr.CodexComplianceOutputTokensKey])
@@ -312,4 +317,99 @@ type captureWatermarkStore struct {
 func (s *captureWatermarkStore) AdvanceWatermark(_ context.Context, _ uuid.UUID, checkpoint timewindowpoller.PollCheckpoint) error {
 	s.checkpoints = append(s.checkpoints, checkpoint)
 	return nil
+}
+
+// TestBuildCodexCostLogParamsStampsConfigBillingMode: the admin-declared
+// billing mode on the codex_compliance config rides on Codex rows only — the
+// org-level tier of the billing-mode cascade, keyed directly since compliance
+// rows have no session to attribute through (DNO-734). ChatGPT/Work rows stay
+// unlabeled: the single declaration cannot describe both surfaces, and
+// labeling seat usage with a metered Codex declaration would render
+// token-priced estimates as confident real cost.
+func TestBuildCodexCostLogParamsStampsConfigBillingMode(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(
+		`{"event_id":"event_billing","type":"COSTS","timestamp":"2026-07-19T15:59:59Z","payload":{"identity":{"user_id":"user_1","email":"dev@example.com"},"product":"codex","measures":{"usage":{"text_input_tokens":10},"billing":[]}}}` + "\n" +
+			`{"event_id":"event_billing_chat","type":"COSTS","timestamp":"2026-07-19T16:59:59Z","payload":{"identity":{"user_id":"user_2","email":"dev2@example.com"},"product":"ChatGPT","measures":{"usage":{"text_input_tokens":20},"billing":[]}}}` + "\n",
+	)
+
+	cfg := codexCostConfig()
+	cfg.BillingMode = "flat_rate"
+	file := codexapi.LogFile{
+		ID:         "eclf_billing",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 19, 16, 0, 0, 0, time.UTC),
+		FileName:   "COSTS_2026-07-19T16:00:00.000000+00:00.jsonl",
+		FileSize:   int64(len(body)),
+		FileSHA256: "",
+	}
+
+	logParams, err := buildCodexCostLogParams(cfg, file, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 2)
+
+	codexRow := logParams[0]
+	require.Equal(t, complianceAccountTypeTeam, codexRow.Attributes[attr.AccountTypeKey])
+	require.Equal(t, "flat_rate", codexRow.Attributes[attr.BillingModeKey])
+
+	chatgptRow := logParams[1]
+	require.Equal(t, complianceAccountTypeTeam, chatgptRow.Attributes[attr.AccountTypeKey])
+	require.NotContains(t, chatgptRow.Attributes, attr.BillingModeKey)
+}
+
+// TestBuildCodexCostLogParamsPartitionsMeteringByClient pins the DNO-751
+// surface partition: cloud clients (github, web) promote token counts to
+// gen_ai.usage.* and meter from the compliance feed; device clients (cli,
+// exec) meter via OTEL so their rows stay cost-only, and ambiguous clients
+// (desktop_app, unknown, absent) default to un-metered — the allowlist means
+// a new surface can never silently double count.
+func TestBuildCodexCostLogParamsPartitionsMeteringByClient(t *testing.T) {
+	t.Parallel()
+
+	cfg := codexCostConfig()
+
+	// Pin the production allowlist itself: expectations below are hand-declared
+	// on purpose (deriving them from codexCloudMeteredClients would make the
+	// assertions tautological), so this equality check is what forces anyone
+	// adding a surface to consciously extend the client list and expectations.
+	require.Equal(t, map[string]bool{"github": true, "web": true}, codexCloudMeteredClients)
+
+	promoted := map[string]bool{"github": true, "web": true, "GitHub": true}
+	for _, client := range []string{"github", "web", "GitHub", "cli", "exec", "desktop_app", "unknown", ""} {
+		clientField := ""
+		if client != "" {
+			clientField = `"client":"` + client + `",`
+		}
+		body := []byte(`{"event_id":"event_` + strings.ToLower(strings.TrimSpace(client)) + `_partition","type":"COSTS","timestamp":"2026-07-19T15:59:59Z","payload":{"identity":{"user_id":"user_1","email":"dev@example.com"},"product":"codex",` + clientField + `"measures":{"usage":{"text_input_tokens":100,"text_cached_input_tokens":40,"text_output_tokens":10},"billing":[]}}}` + "\n")
+		file := codexapi.LogFile{
+			ID:         "eclf_partition",
+			EventType:  codexComplianceCostsEventType,
+			EndTime:    time.Date(2026, 7, 19, 16, 0, 0, 0, time.UTC),
+			FileName:   "COSTS_2026-07-19T16:00:00.000000+00:00.jsonl",
+			FileSize:   int64(len(body)),
+			FileSHA256: "",
+		}
+
+		logParams, err := buildCodexCostLogParams(cfg, file, body)
+		require.NoError(t, err, client)
+		require.Len(t, logParams, 1, client)
+		attrs := logParams[0].Attributes
+
+		// Raw copies ride on every codex row regardless of promotion.
+		require.Equal(t, int64(100), attrs[attr.CodexComplianceInputTokensKey], client)
+		require.Equal(t, int64(150), attrs[attr.CodexComplianceTotalTokensKey], client)
+
+		if promoted[client] {
+			require.Equal(t, int64(100), attrs[attr.GenAIUsageInputTokensKey], client)
+			require.Equal(t, int64(40), attrs[attr.GenAIUsageCacheReadInputTokensKey], client)
+			require.Equal(t, int64(10), attrs[attr.GenAIUsageOutputTokensKey], client)
+			require.Equal(t, int64(150), attrs[attr.GenAIUsageTotalTokensKey], client)
+		} else {
+			require.NotContains(t, attrs, attr.GenAIUsageInputTokensKey, client)
+			require.NotContains(t, attrs, attr.GenAIUsageCacheReadInputTokensKey, client)
+			require.NotContains(t, attrs, attr.GenAIUsageOutputTokensKey, client)
+			require.NotContains(t, attrs, attr.GenAIUsageTotalTokensKey, client)
+		}
+	}
 }

@@ -334,6 +334,7 @@ const (
 	AuditSubjectKey                   = attribute.Key("gram.audit.subject")
 	AuditSubjectIDKey                 = attribute.Key("gram.audit.subject_id")
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
+	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	RiskPolicyCountKey                = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                   = attribute.Key("gram.risk.policy_id")
@@ -419,6 +420,7 @@ const (
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
 	HookBlockReasonKey       = attribute.Key("gram.hook.block_reason")
+	LiteLLMInstanceIDKey     = attribute.Key("gram.litellm.instance_id")
 	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
 	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
 	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
@@ -545,6 +547,10 @@ const (
 	// events whose timestamps failed RFC3339 parsing in one log file and
 	// fell back to import time — a canary for upstream format changes.
 	ChatGPTComplianceTimestampFallbacksKey = attribute.Key("chatgpt.compliance.timestamp_fallbacks")
+	// CodexCloudTimestampFallbacksKey is the CODEX_LOG transcript import's
+	// counterpart, kept as its own key so a Codex cloud feed regression is
+	// never mis-attributed to the ChatGPT conversation import.
+	CodexCloudTimestampFallbacksKey = attribute.Key("codex.cloud.timestamp_fallbacks")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
@@ -723,6 +729,10 @@ func SlogTelemetryPublishFailedCount(v int) slog.Attr {
 
 func SlogChatGPTComplianceTimestampFallbacks(v int) slog.Attr {
 	return slog.Int(string(ChatGPTComplianceTimestampFallbacksKey), v)
+}
+
+func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
+	return slog.Int(string(CodexCloudTimestampFallbacksKey), v)
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
@@ -1469,6 +1479,11 @@ func SlogAuditSubjectID(v string) slog.Attr      { return slog.String(string(Aud
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
+}
+
+func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }
+func SlogUserSessionClientID(v string) slog.Attr {
+	return slog.String(string(UserSessionClientIDKey), v)
 }
 
 func UserSessionClientMigratedCount(v int64) attribute.KeyValue {

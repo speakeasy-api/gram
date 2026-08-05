@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { DotCard } from "@/components/ui/DotCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import {
@@ -241,7 +242,7 @@ export default function PluginDetail(): JSX.Element | null {
         action: {
           label: "Open",
           onClick: () => {
-            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+            openSafeExternalUrl(data.repoUrl);
           },
         },
       });

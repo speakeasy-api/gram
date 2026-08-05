@@ -15,7 +15,6 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[3]
 OUTPUT = ROOT / "server/internal/litellm/fixtures/litellm-v1.94.0"
 IMAGE = "ghcr.io/berriai/litellm:v1.94.0@sha256:65d84a2282137b4dc73bbe184650a7c807177c533e4223b3bfbc87963fe3fabe"
@@ -262,7 +261,7 @@ def wait_ready(base_url):
             _, status = request(base_url, "/health/liveliness", key=None)
             if status == 200:
                 return
-        except Exception:
+        except Exception:  # noqa: BLE001 - any failure means not ready yet
             time.sleep(1)
     raise RuntimeError("LiteLLM did not become ready")
 

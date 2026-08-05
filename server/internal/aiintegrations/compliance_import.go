@@ -421,6 +421,8 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 		Title:     pgtype.Text{String: "", Valid: false},
 		CreatedAt: conv.ToPGTimestamptz(createdAt),
 		UpdatedAt: conv.ToPGTimestamptz(createdAt),
+		// Feed titles are authoritative: newest non-null title wins.
+		PreferStoredTitle: false,
 	})
 	if err != nil {
 		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat")
@@ -511,6 +513,8 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		Title:          conv.ToPGText(page.Name),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(updatedAt),
+		// Feed titles are authoritative: newest non-null title wins.
+		PreferStoredTitle: false,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat metadata")

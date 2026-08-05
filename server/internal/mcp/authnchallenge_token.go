@@ -23,6 +23,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -351,12 +352,13 @@ func (s *Service) mintSessionAndRespond(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
-	access, jti, err := s.userSessionSigner.Mint(usersessions.MintParams{
+	access, jti, err := s.userSessionSigner.Mint(sessiontokens.MintParams{
 		Subject:  subject,
 		Audience: endpoint.AudienceURN,
 		Issuer:   issuerURL,
 		Lifetime: accessTokenLifetime,
 		ClientID: clientRow.ClientID,
+		JTI:      "",
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)

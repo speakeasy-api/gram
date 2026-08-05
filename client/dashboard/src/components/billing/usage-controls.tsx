@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@/components/ui/Button";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { useCallback, useState } from "react";
 
@@ -18,7 +19,7 @@ export const TopUpCTA = (): JSX.Element => {
         telemetry.capture("topup_checkout_error", { error: "empty link" });
         return;
       }
-      window.open(link, "_blank");
+      openSafeExternalUrl(link);
     } catch (err) {
       telemetry.capture("topup_checkout_error", {
         error: err instanceof Error ? err.message : "unknown",

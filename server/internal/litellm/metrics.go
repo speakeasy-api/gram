@@ -8,10 +8,12 @@ import (
 	"maps"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/codes"
 	collectorv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -64,6 +66,10 @@ func (s *Service) serveMetricsHTTP(w http.ResponseWriter, r *http.Request) (retE
 	if err != nil {
 		return err
 	}
+	version := ""
+	defer func() {
+		s.health.Record(ctx, healthSignalOTEL, version, retErr)
+	}()
 	mediaType, body, err := readOTLPRequest(r)
 	if err != nil {
 		return err
@@ -72,11 +78,41 @@ func (s *Service) serveMetricsHTTP(w http.ResponseWriter, r *http.Request) (retE
 	if err != nil {
 		return metricExportError(err)
 	}
+	version = metricReportedVersion(request)
 	if err := s.ingestMetricExport(ctx, request); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusAccepted)
 	return nil
+}
+
+func metricReportedVersion(request *collectorv1.ExportMetricsServiceRequest) string {
+	if request == nil {
+		return ""
+	}
+	for _, resourceMetrics := range request.GetResourceMetrics() {
+		name := protoStringAttribute(resourceMetrics.GetResource().GetAttributes(), "service.name")
+		version := protoStringAttribute(resourceMetrics.GetResource().GetAttributes(), "service.version")
+		if version != "" && strings.EqualFold(name, "litellm") {
+			return version
+		}
+		for _, scopeMetrics := range resourceMetrics.GetScopeMetrics() {
+			scope := scopeMetrics.GetScope()
+			if scope != nil && strings.Contains(strings.ToLower(scope.GetName()), "litellm") && strings.TrimSpace(scope.GetVersion()) != "" {
+				return scope.GetVersion()
+			}
+		}
+	}
+	return ""
+}
+
+func protoStringAttribute(values []*commonv1.KeyValue, key string) string {
+	for _, value := range values {
+		if value.GetKey() == key {
+			return strings.TrimSpace(value.GetValue().GetStringValue())
+		}
+	}
+	return ""
 }
 
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
@@ -129,9 +165,11 @@ func (s *Service) ingestMetricExport(ctx context.Context, request *collectorv1.E
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 	params := s.metricLogParams(ctx, request, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
-	if len(params) > 0 {
-		s.metrics.Enqueue(ctx, params)
+	if len(params) == 0 {
+		return nil
 	}
+	enrichAcceptedTelemetryAttribution(ctx, s.instances, authCtx, params)
+	s.metrics.Enqueue(ctx, params)
 	return nil
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAssistantsGetManaged } from "@gram/client/react-query/assistantsGetManaged.js";
 import { useEnsureManagedAssistantMutation } from "@gram/client/react-query/ensureManagedAssistant.js";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { isNotFoundError } from "@/lib/route-errors";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
@@ -55,6 +55,11 @@ export function useServerAssistantTransport(
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
   const organization = useOrganization();
+  const { session } = useSession();
+  // The transport outlives any single session value, so it reads through a ref
+  // instead of closing over one.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const { hasScope, isLoading: rbacLoading } = useRBAC();
 
   // The hook can be called with a projectSlug that differs from the URL-active
@@ -151,6 +156,8 @@ export function useServerAssistantTransport(
       projectSlug,
       getSkillIds: options.getSkillIds,
       onSkillIdsSent: options.onSkillIdsSent,
+      // The turn stream authenticates from headers, not cookies.
+      getSessionToken: () => sessionRef.current,
     });
   }, [
     ready,

@@ -31,6 +31,64 @@ var GuardrailAction = Type("LiteLLMGuardrailAction", String, func() {
 	Meta("openapi:extension:x-speakeasy-name-override", "LiteLLMGuardrailAction")
 })
 
+var FailurePosture = Type("LiteLLMFailurePosture", String, func() {
+	Description("How LiteLLM behaves when Gram cannot evaluate a request.")
+	Enum("fail_closed", "fail_open")
+})
+
+var InstanceHealthStatus = Type("LiteLLMInstanceHealthStatus", String, func() {
+	Description("Derived health of a LiteLLM integration's latest ingest activity.")
+	Enum("pending", "success", "failed")
+})
+
+var InstanceErrorKind = Type("LiteLLMInstanceErrorKind", String, func() {
+	Description("Safe category for the latest observed ingest error.")
+	Enum("auth_failure", "decode_failure", "limit_exceeded")
+})
+
+var InstanceDiagnostics = Type("LiteLLMInstanceDiagnostics", func() {
+	Description("Health and identity-attribution diagnostics for a LiteLLM integration. No prompt, credential, or identity values are returned.")
+	Attribute("status", InstanceHealthStatus)
+	Attribute("last_guardrail_event_at", String, func() { Format(FormatDateTime) })
+	Attribute("last_otel_event_at", String, func() { Format(FormatDateTime) })
+	Attribute("last_error_at", String, func() { Format(FormatDateTime) })
+	Attribute("last_error_kind", InstanceErrorKind)
+	Attribute("reported_litellm_version", String, func() { MaxLength(128) })
+	Attribute("virtual_key_email_pct_24h", Float64, "Percentage of model requests in the last 24 hours that supplied a virtual-key email.", func() {
+		Minimum(0)
+		Maximum(100)
+	})
+	Attribute("platform_user_pct_24h", Float64, "Percentage of model requests in the last 24 hours that resolved to a Gram user.", func() {
+		Minimum(0)
+		Maximum(100)
+	})
+	Required("status")
+})
+
+var Instance = Type("LiteLLMInstance", func() {
+	Description("A provisioned LiteLLM integration and its project-bound ingestion credential metadata.")
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("organization_id", String)
+	Attribute("project", shared.ProjectEntry)
+	Attribute("name", String)
+	Attribute("failure_posture", FailurePosture)
+	Attribute("key_prefix", String)
+	Attribute("created_by_user_id", String)
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, func() { Format(FormatDateTime) })
+	Attribute("last_used_at", String, func() { Format(FormatDateTime) })
+	Attribute("active", Boolean)
+	Attribute("diagnostics", InstanceDiagnostics)
+	Required("id", "organization_id", "project", "name", "failure_posture", "key_prefix", "created_by_user_id", "created_at", "updated_at", "active", "diagnostics")
+})
+
+var InstanceKeyResult = ResultType("application/vnd.litellm.instance-key-result", func() {
+	Description("A LiteLLM instance and its newly minted plaintext key. The key is shown only once.")
+	Attribute("instance", Instance)
+	Attribute("key", String)
+	Required("instance", "key")
+})
+
 var IngestResult = ResultType("application/vnd.litellm.ingest-result", func() {
 	Description("LiteLLM Generic Guardrail decision.")
 	Attribute("action", GuardrailAction)
@@ -45,6 +103,93 @@ var IngestResult = ResultType("application/vnd.litellm.ingest-result", func() {
 var _ = Service("litellm", func() {
 	Description("Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.")
 	shared.DeclareErrorResponses()
+
+	Method("createInstance", func() {
+		Description("Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("name", String, func() { MaxLength(255) })
+			Attribute("failure_posture", FailurePosture, func() { Default("fail_closed") })
+			Required("name")
+		})
+		Result(InstanceKeyResult)
+		HTTP(func() {
+			POST("/rpc/litellm.createInstance")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusCreated)
+		})
+		Meta("openapi:operationId", "createLiteLLMInstance")
+		Meta("openapi:extension:x-speakeasy-name-override", "createInstance")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateLiteLLMInstance"}`)
+	})
+
+	Method("listInstances", func() {
+		Description("List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(func() {
+			Attribute("instances", ArrayOf(Instance))
+			Required("instances")
+		})
+		HTTP(func() {
+			GET("/rpc/litellm.listInstances")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listLiteLLMInstances")
+		Meta("openapi:extension:x-speakeasy-name-override", "listInstances")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LiteLLMInstances"}`)
+	})
+
+	Method("rotateInstanceKey", func() {
+		Description("Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, func() { Format(FormatUUID) })
+			Required("id")
+		})
+		Result(InstanceKeyResult)
+		HTTP(func() {
+			POST("/rpc/litellm.rotateInstanceKey")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "rotateLiteLLMInstanceKey")
+		Meta("openapi:extension:x-speakeasy-name-override", "rotateInstanceKey")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateLiteLLMInstanceKey"}`)
+	})
+
+	Method("revokeInstance", func() {
+		Description("Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, func() { Format(FormatUUID) })
+			Required("id")
+		})
+		Result(Empty)
+		HTTP(func() {
+			DELETE("/rpc/litellm.revokeInstance")
+			Param("id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+		Meta("openapi:operationId", "revokeLiteLLMInstance")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeInstance")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeLiteLLMInstance"}`)
+	})
 
 	Method("ingest", func() {
 		Description("Evaluates and captures a LiteLLM model request before it reaches the provider.")

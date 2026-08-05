@@ -10,6 +10,7 @@ import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { ProductTier, useProductTier } from "@/hooks/useProductTier";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { getServerURL } from "@/lib/utils";
 import { TierLimits } from "@gram/client/models/components/tierlimits.js";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
@@ -284,7 +285,7 @@ const UsageTiers = () => {
                 });
                 return;
               }
-              window.open(link, "_blank");
+              openSafeExternalUrl(link);
             } catch (error) {
               console.error("Error creating customer session:", error);
               telemetry.capture("customer_session_error", {

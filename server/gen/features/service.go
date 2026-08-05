@@ -80,6 +80,8 @@ type GetProductFeaturesResult struct {
 	// Whether skill capture stores activation metadata without requesting manifest
 	// content
 	SkillCaptureMetadataOnly bool
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.

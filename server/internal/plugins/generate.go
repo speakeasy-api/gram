@@ -362,7 +362,7 @@ const mcpGeneratorVersion = "10"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "26"
+const hooksGeneratorVersion = "27"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -1695,10 +1695,15 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
   fi
   local codex_home="${CODEX_HOME:-$HOME/.codex}"
   local candidate
+  # ChatGPT.app is the unified desktop app (Chat + Work + Codex modes) OpenAI
+  # merged the standalone Codex app into on 2026-07-09; it embeds the same
+  # codex CLI and still reads ~/.codex/config.toml. It is probed before the
+  # legacy Codex.app bundle, which is frozen post-merge.
   for candidate in \
     "${codex_home}/packages/standalone/current/bin/codex" \
     "${HOME}/.local/bin/codex" \
     /usr/local/bin/codex \
+    "/Applications/ChatGPT.app/Contents/Resources/codex" \
     "/Applications/Codex.app/Contents/Resources/codex"; do
     if [ -f "${candidate}" ] && [ -x "${candidate}" ]; then
       printf '%s\n' "${candidate}"

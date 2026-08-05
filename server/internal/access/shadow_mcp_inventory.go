@@ -1117,12 +1117,21 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 }
 
 func buildShadowMCPInventoryUser(row telemetryrepo.ShadowMCPInventoryUserRow) *gen.ShadowMCPInventoryUser {
+	sources := make([]*gen.ShadowMCPInventoryUserSource, 0, len(row.Sources))
+	for _, source := range row.Sources {
+		sources = append(sources, &gen.ShadowMCPInventoryUserSource{
+			Source:           source.Source,
+			ObservedUseCount: shadowMCPInventoryCount(source.CallCount),
+		})
+	}
+
 	return &gen.ShadowMCPInventoryUser{
 		UserKey:          row.UserKey,
 		Name:             nil,
 		Email:            conv.PtrEmpty(row.UserEmail),
 		LastCalled:       formatTimeValue(row.LastCalled),
 		ObservedUseCount: shadowMCPInventoryCount(row.CallCount),
+		Sources:          sources,
 	}
 }
 

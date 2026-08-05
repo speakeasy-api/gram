@@ -21,7 +21,8 @@ import {
 } from "@gram/client/react-query/skills.js";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
-import { type Column, Table } from "@/components/ui/Table";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
@@ -35,8 +36,7 @@ import {
   SKILL_CLASSIFICATION_OPTIONS,
   SKILL_SOURCE_OPTIONS,
 } from "./skill-badge-options";
-import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
-import { type SkillSort, sortSkills } from "./skills-list-helpers";
+import { SkillSourceBadge } from "./skill-badges";
 import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 import { useOpenSkillSuggestions } from "./use-open-skill-suggestions";
@@ -78,12 +78,11 @@ function ColumnHeaderTooltip({
 const RESULT_PAGE_SIZE = 50;
 const METRIC_SORT_BATCH_SIZE = 200;
 const EMPTY_SKILLS: Skill[] = [];
-const INSIGHT_SORT_OPTIONS = [
-  { value: "updated", label: "Recently updated" },
-  { value: "activations", label: "Most activated" },
-  { value: "efficacy", label: "Highest efficacy" },
-  { value: "estimated_savings", label: "Most estimated savings" },
-];
+const METRIC_SORT_IDS = [
+  "activations",
+  "efficacy",
+  "estimatedSavings",
+] as const;
 
 function formatEfficacy(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
@@ -105,7 +104,7 @@ export default function SkillsList(): JSX.Element {
   const navigate = useNavigate();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SkillSort>("updated");
+  const [sort, setSort] = useState<SortDescriptor | null>(null);
   const deferredSearch = useDeferredValue(search);
   const [dialogOpen, setDialogOpen] = useState(false);
   // Legacy deep links opened the skill as a sheet via ?skill=<id>; redirect
@@ -115,7 +114,11 @@ export default function SkillsList(): JSX.Element {
   const [pageCursors, setPageCursors] = useState<(string | undefined)[]>([
     undefined,
   ]);
-  const metricSort = sort !== "updated";
+  const metricSort =
+    sort &&
+    METRIC_SORT_IDS.includes(sort.id as (typeof METRIC_SORT_IDS)[number])
+      ? sort
+      : null;
   const searchQuery = deferredSearch.trim() || undefined;
   const sourceKinds = filters.values.sourceKind as SourceKinds[];
   const classifications = filters.values.classification as Classifications[];
@@ -141,7 +144,7 @@ export default function SkillsList(): JSX.Element {
     undefined,
     {
       throwOnError: false,
-      enabled: metricSort,
+      enabled: metricSort !== null,
     },
   );
   const metricSkills = useMemo(
@@ -177,25 +180,180 @@ export default function SkillsList(): JSX.Element {
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0;
   const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
-  const effectiveMetricSort = metricSort && !insightsUnavailable;
-  const effectiveSort = insightsUnavailable ? "updated" : sort;
+  const effectiveMetricSort = metricSort !== null && !insightsUnavailable;
+  const effectiveSort = insightsUnavailable && metricSort ? null : sort;
   const skills = effectiveMetricSort
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
-  const visibleSkills = useMemo(
-    () =>
-      effectiveMetricSort
-        ? sortSkills(skills, metricsBySkill, effectiveSort)
-        : skills,
-    [effectiveMetricSort, effectiveSort, metricsBySkill, skills],
-  );
+
+  const columns: Column<Skill>[] = [
+    {
+      key: "name",
+      header: "Skill",
+      width: "2fr",
+      sortable: true,
+      sortValue: (skill) => skill.displayName.toLocaleLowerCase(),
+      render: (skill) => (
+        <div className="min-w-0">
+          <Link
+            to={routes.skills.detail.href(skill.id)}
+            className="font-medium hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {skill.displayName}
+          </Link>
+          {openSuggestions.skillIds.has(skill.id) && (
+            <Badge variant="information" className="ml-2">
+              Suggested edit
+            </Badge>
+          )}
+          <Text small muted className="truncate font-mono">
+            {skill.name}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      key: "source",
+      header: (
+        <ColumnHeaderTooltip
+          label="Source"
+          tooltip="How the skill entered the registry: added manually, or captured from agent use."
+        />
+      ),
+      width: "0.8fr",
+      sortable: true,
+      sortLabel: "Source",
+      sortValue: (skill) =>
+        SKILL_SOURCE_OPTIONS.find((option) => option.value === skill.sourceKind)
+          ?.label ?? skill.sourceKind,
+      render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
+    },
+    {
+      key: "activations",
+      header: "Activations (30d)",
+      width: "0.8fr",
+      sortable: true,
+      sortValue: (skill) => metricsBySkill.get(skill.id)?.activations ?? 0,
+      render: (skill) => (
+        <Text small className="tabular-nums">
+          {metricsBySkill.get(skill.id)?.activations.toLocaleString() ??
+            (insightsQuery.data ? "0" : "-")}
+        </Text>
+      ),
+    },
+    {
+      key: "efficacy",
+      header: (
+        <ColumnHeaderTooltip
+          label="Efficacy"
+          tooltip="Average usefulness score from sampled sessions that used this skill."
+        />
+      ),
+      width: "0.8fr",
+      sortable: true,
+      sortLabel: "Efficacy",
+      sortValue: (skill) =>
+        metricsBySkill.get(skill.id)?.efficacy?.averageScore,
+      render: (skill) => {
+        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
+        return (
+          <Text
+            small
+            className="tabular-nums"
+            title={
+              efficacy
+                ? `${efficacy.scoredSessions.toLocaleString()} sampled sessions`
+                : "No sampled scores"
+            }
+          >
+            {efficacy ? formatEfficacy(efficacy.averageScore) : "-"}
+          </Text>
+        );
+      },
+    },
+    {
+      key: "estimatedSavings",
+      header: (
+        <ColumnHeaderTooltip
+          label="Estimated savings"
+          tooltip="Estimated time saved across scored sessions that used this skill."
+        />
+      ),
+      width: "0.8fr",
+      sortable: true,
+      sortLabel: "Estimated savings",
+      sortValue: (skill) =>
+        metricsBySkill.get(skill.id)?.efficacy?.estimatedMinutesSavedTotal,
+      render: (skill) => {
+        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
+        return (
+          <Text small className="tabular-nums">
+            {efficacy
+              ? formatSavings(efficacy.estimatedMinutesSavedTotal)
+              : "-"}
+          </Text>
+        );
+      },
+    },
+    {
+      key: "updated",
+      header: "Updated",
+      width: "0.8fr",
+      sortable: true,
+      sortValue: (skill) => skill.updatedAt,
+      render: (skill) => (
+        <Text
+          small
+          muted
+          title={dateTimeFormatters.full.format(skill.updatedAt)}
+        >
+          <HumanizeDateTime date={skill.updatedAt} />
+        </Text>
+      ),
+    },
+    {
+      key: "share",
+      header: "",
+      width: "48px",
+      render: (skill) =>
+        skill.shareToken ? (
+          <CopyButton
+            size="sm"
+            text={skillShareUrl(skill.shareToken)}
+            tooltip="Copy public link"
+            onCopy={() => {
+              toast.success("Public link copied");
+            }}
+          />
+        ) : null,
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "48px",
+      render: () => (
+        <Icon
+          name="arrow-right"
+          className="text-muted-foreground h-4 w-4"
+          aria-hidden
+        />
+      ),
+    },
+  ];
+
+  const visibleSkills = sortTableData(
+    skills,
+    columns,
+    effectiveSort,
+  ) as Skill[];
 
   useEffect(() => {
-    if (!insightsUnavailable || sort === "updated") return;
-    setSort("updated");
+    if (!insightsUnavailable || !metricSort) return;
+    setSort(null);
     setPage(0);
     setPageCursors([undefined]);
-  }, [insightsUnavailable, sort]);
+  }, [insightsUnavailable, metricSort]);
 
   useDrainSkillPages({
     active: effectiveMetricSort,
@@ -240,172 +398,6 @@ export default function SkillsList(): JSX.Element {
     setPageCursors((current) => [...current.slice(0, page + 1), nextCursor]);
     setPage((current) => current + 1);
   };
-
-  const columns: Column<Skill>[] = [
-    {
-      key: "name",
-      header: "Skill",
-      width: "1.5fr",
-      render: (skill) => (
-        <div className="min-w-0">
-          <Link
-            to={routes.skills.detail.href(skill.id)}
-            className="font-medium hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {skill.displayName}
-          </Link>
-          {openSuggestions.skillIds.has(skill.id) && (
-            <Badge variant="information" className="ml-2">
-              Suggested edit
-            </Badge>
-          )}
-          <Text small muted className="truncate font-mono">
-            {skill.name}
-          </Text>
-        </div>
-      ),
-    },
-    {
-      key: "summary",
-      header: "Summary",
-      width: "2fr",
-      render: (skill) => (
-        <Text small muted className="line-clamp-2">
-          {skill.summary || "No summary"}
-        </Text>
-      ),
-    },
-    {
-      key: "source",
-      header: (
-        <ColumnHeaderTooltip
-          label="Source"
-          tooltip="How the skill entered the registry: added manually, or captured from agent use."
-        />
-      ),
-      width: "120px",
-      render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
-    },
-    {
-      key: "classification",
-      header: (
-        <ColumnHeaderTooltip
-          label="Classification"
-          tooltip="Custom skills belong to your organization; built-in skills come from plugins or platform defaults."
-        />
-      ),
-      width: "130px",
-      render: (skill) => (
-        <SkillClassificationBadge value={skill.classification} />
-      ),
-    },
-    {
-      key: "versions",
-      header: "Versions",
-      width: "90px",
-      render: (skill) => <Text small>{skill.versionCount}</Text>,
-    },
-    {
-      key: "activations",
-      header: "Activations (30d)",
-      width: "130px",
-      render: (skill) => (
-        <Text small className="tabular-nums">
-          {metricsBySkill.get(skill.id)?.activations.toLocaleString() ??
-            (insightsQuery.data ? "0" : "-")}
-        </Text>
-      ),
-    },
-    {
-      key: "efficacy",
-      header: (
-        <ColumnHeaderTooltip
-          label="Efficacy"
-          tooltip="Average usefulness score from sampled sessions that used this skill."
-        />
-      ),
-      width: "110px",
-      render: (skill) => {
-        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
-        return (
-          <Text
-            small
-            className="tabular-nums"
-            title={
-              efficacy
-                ? `${efficacy.scoredSessions.toLocaleString()} sampled sessions`
-                : "No sampled scores"
-            }
-          >
-            {efficacy ? formatEfficacy(efficacy.averageScore) : "-"}
-          </Text>
-        );
-      },
-    },
-    {
-      key: "estimatedSavings",
-      header: (
-        <ColumnHeaderTooltip
-          label="Estimated savings"
-          tooltip="Estimated time saved across scored sessions that used this skill."
-        />
-      ),
-      width: "150px",
-      render: (skill) => {
-        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
-        return (
-          <Text small className="tabular-nums">
-            {efficacy
-              ? formatSavings(efficacy.estimatedMinutesSavedTotal)
-              : "-"}
-          </Text>
-        );
-      },
-    },
-    {
-      key: "updated",
-      header: "Updated",
-      width: "150px",
-      render: (skill) => (
-        <Text
-          small
-          muted
-          title={dateTimeFormatters.full.format(skill.updatedAt)}
-        >
-          <HumanizeDateTime date={skill.updatedAt} />
-        </Text>
-      ),
-    },
-    {
-      key: "share",
-      header: "",
-      width: "48px",
-      render: (skill) =>
-        skill.shareToken ? (
-          <CopyButton
-            size="sm"
-            text={skillShareUrl(skill.shareToken)}
-            tooltip="Copy public link"
-            onCopy={() => {
-              toast.success("Public link copied");
-            }}
-          />
-        ) : null,
-    },
-    {
-      key: "open",
-      header: "",
-      width: "48px",
-      render: () => (
-        <Icon
-          name="arrow-right"
-          className="text-muted-foreground h-4 w-4"
-          aria-hidden
-        />
-      ),
-    },
-  ];
 
   const countLabel = `${totalCount} skill${totalCount === 1 ? "" : "s"}`;
 
@@ -463,14 +455,6 @@ export default function SkillsList(): JSX.Element {
                     }}
                   />
                   <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
-                  <Page.Toolbar.SortBy
-                    value={effectiveSort}
-                    onChange={(value) => {
-                      setSort(value as SkillSort);
-                      resetPage();
-                    }}
-                    options={INSIGHT_SORT_OPTIONS}
-                  />
                   <Page.Toolbar.Actions>
                     <ApproveAllSkillSuggestions
                       suggestions={openSuggestions.suggestions}
@@ -562,6 +546,11 @@ export default function SkillsList(): JSX.Element {
                     columns={columns}
                     data={displayedSkills}
                     rowKey={(skill) => skill.id}
+                    sort={effectiveSort}
+                    onSortChange={(nextSort) => {
+                      setSort(nextSort);
+                      resetPage();
+                    }}
                     onRowClick={(skill) =>
                       void navigate(routes.skills.detail.href(skill.id))
                     }
@@ -584,8 +573,8 @@ export default function SkillsList(): JSX.Element {
                 <div className="flex items-center justify-between border-t px-4 py-3">
                   <Text small muted>
                     {page * RESULT_PAGE_SIZE + 1}-
-                    {Math.min((page + 1) * RESULT_PAGE_SIZE, totalCount)} of{" "}
-                    {totalCount}
+                    {Math.min((page + 1) * RESULT_PAGE_SIZE, paginationCount)}{" "}
+                    of {paginationCount}
                   </Text>
                   <div className="flex items-center gap-2">
                     <Button

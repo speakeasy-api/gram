@@ -705,6 +705,7 @@ func newStartCommand() *cli.Command {
 				litellmTraceProcessor   *litellm.TraceProcessor
 				litellmMetricProcessor  *litellm.MetricProcessor
 				litellmService          *litellm.Service
+				litellmHealthProcessor  *litellm.HealthProcessor
 				telemetryLoggerShutdown func(context.Context) error
 				publishersShutdown      func(context.Context) error
 				pubsubShutdown          func(context.Context) error
@@ -719,6 +720,11 @@ func newStartCommand() *cli.Command {
 				if litellmMetricProcessor != nil {
 					if err := litellmMetricProcessor.Shutdown(ctx); err != nil {
 						errs = append(errs, fmt.Errorf("shutdown LiteLLM metric processor: %w", err))
+					}
+				}
+				if litellmHealthProcessor != nil {
+					if err := litellmHealthProcessor.Shutdown(ctx); err != nil {
+						errs = append(errs, fmt.Errorf("shutdown LiteLLM health processor: %w", err))
 					}
 				}
 				if telemetryLoggerShutdown != nil {
@@ -758,7 +764,12 @@ func newStartCommand() *cli.Command {
 				hooksCache = hooks.NewLocalSessionCache(hooksCache, db)
 			}
 
+			// Turn frames are published from the writer, the one place every
+			// row of a turn is persisted, so dashboard subscribers can render
+			// a turn without polling for it.
+			turnStream := chat.NewTurnStream(redisClient)
 			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
+			chatWriter = chatWriter.WithTurnStream(turnStream)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
 			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
@@ -946,7 +957,8 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger)
+			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
+				WithTurnStream(turnStream)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
@@ -966,8 +978,13 @@ func newStartCommand() *cli.Command {
 			litellmCalls := callcache.New(cache.NewRedisCacheAdapter(redisClient))
 			litellmTraceProcessor = litellm.NewTraceProcessor(logger, meterProvider, telemLogger, litellmCalls)
 			litellmMetricProcessor = litellm.NewMetricProcessor(logger, meterProvider, telemLogger)
+			litellmHealthProcessor = litellm.NewHealthProcessor(logger, db)
+			litellmInstanceResolver := litellm.NewInstanceResolver(logger, db)
+			litellmTraceProcessor.SetInstanceResolver(litellmInstanceResolver)
+			litellmMetricProcessor.SetInstanceResolver(litellmInstanceResolver)
 			litellmTraceProcessor.Start(ctx)
 			litellmMetricProcessor.Start(ctx)
+			litellmHealthProcessor.Start(ctx)
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
 			if shutdown != nil {
@@ -1122,7 +1139,7 @@ func newStartCommand() *cli.Command {
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger))
-			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, serverURL.String()))
+			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL.String()))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,
@@ -1165,7 +1182,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellmService = litellm.NewService(logger, tracerProvider, db, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor)
+			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, productFeatures, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
@@ -1313,6 +1330,7 @@ func newStartCommand() *cli.Command {
 				},
 				riskchrepo.New(chDB),
 				publishers.RiskFindings,
+				assetStorage,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

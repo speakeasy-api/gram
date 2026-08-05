@@ -222,7 +222,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           # The retag action only needs yq; skip the rest of the toolset and
@@ -262,7 +262,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -359,7 +359,7 @@ jobs:
 
   docker-build-pystreams:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, pystreams-build-lint]
+    needs: [changes]
     if: needs.changes.outputs.pystreams == 'true'
     steps:
       - name: Checkout
@@ -422,7 +422,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -481,10 +481,10 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -532,7 +532,7 @@ jobs:
             type=sha,format=long
 
       - name: Build and push assistant runtime image to GCR
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: ./agents/runtime-image/Dockerfile
@@ -562,7 +562,7 @@ jobs:
             type=sha,format=long
 
       - name: "[DEV] Build and push assistant runtime image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: ./agents/runtime-image/Dockerfile
@@ -592,7 +592,7 @@ jobs:
             type=sha,format=long
 
       - name: "[PROD] Build and push assistant runtime image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: ./agents/runtime-image/Dockerfile
@@ -610,7 +610,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -644,10 +644,10 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -669,7 +669,7 @@ jobs:
             type=sha,format=long
 
       - name: "[DEV] Build and push collector image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./otel-collector
           platforms: linux/amd64
@@ -706,7 +706,7 @@ jobs:
             type=sha,format=long
 
       - name: "[PROD] Build and push collector image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./otel-collector
           platforms: linux/amd64
@@ -751,7 +751,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -783,7 +783,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -850,14 +850,14 @@ jobs:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
           env: false
 
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@v1.15.6
+        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -868,7 +868,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@v1.15.6
+        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -969,7 +969,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1.15.6
+        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -977,7 +977,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1.15.6
+        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -997,7 +997,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1059,7 +1059,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1155,7 +1155,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1221,7 +1221,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1276,7 +1276,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1330,7 +1330,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1373,7 +1373,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1437,7 +1437,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1463,13 +1463,55 @@ jobs:
       - name: Test
         run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+  # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
+  # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
+  # idempotent across runs. The test is build-tagged (demoseed_safety) so the
+  # sharded server-test job skips it; this job is its only runner and reports
+  # as its own required check so a failure is immediately attributable.
+  demo-seed-safety:
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    env:
+      GOMAXPROCS: 8
+      TESTCONTAINERS_RYUK_DISABLED: true
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Install Go deps
+        run: mise run install:go
+
+      - name: Test
+        run: mise run test:server -count=1 -tags=demoseed_safety ./internal/demoseed/...
+
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     # Build dashboard docker image when server OR client changes exist (needed for preview environments)
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -1478,7 +1520,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1625,17 +1667,16 @@ jobs:
 
   client-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1679,17 +1720,16 @@ jobs:
 
   client-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1731,7 +1771,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1776,7 +1816,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1876,7 +1916,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1954,10 +1994,10 @@ jobs:
 
       - name: Set up Docker Buildx
         if: github.event.pull_request.user.login != 'dependabot[bot]'
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -2022,7 +2062,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -2081,7 +2121,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -2120,6 +2160,7 @@ jobs:
       - format-check
       - server-build-lint
       - server-test
+      - demo-seed-safety
       - docker-build-server
       - docker-build-client
       - upload-dashboard-assets
@@ -2238,9 +2279,9 @@ jobs:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Build image (no push)
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: tunnel/Dockerfile

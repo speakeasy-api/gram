@@ -878,8 +878,8 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		// Surface-specificity merge: the OTEL path caches "cowork" from the
 		// resource service.name, which must survive this event's re-cache —
 		// cowork ships the same "claude-code-desktop" adapter slug as Claude
-		// Code Desktop, so the adapter alone can never downgrade it. The
-		// adapter in turn beats a cached ambiguous "claude-code".
+		// Code Desktop, so the adapter alone can never downgrade it. See
+		// claudeServiceNameSpecificity for the full ranking.
 		metadata.ServiceName = preferClaudeServiceName(metadata.ServiceName, cached.ServiceName)
 		metadata.Provider = cached.Provider
 		metadata.ExternalOrgID = cached.ExternalOrgID
@@ -903,6 +903,64 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 			}
 			if metadata.UserID == "" {
 				metadata.UserID = cached.UserID
+			}
+		}
+	}
+
+	// Codex sessions delivered only through the relay never pass the legacy
+	// hook or OTEL paths that normally attribute the account, so classify here
+	// when no cached attribution exists or when this event's actor email is
+	// not the one the cached classification was computed from (the same
+	// identity rule the legacy-hook and OTEL paths apply). A fresh result is
+	// written back so later events on any path adopt it instead of
+	// re-classifying. Claude adapters are untouched: their attribution belongs
+	// to the OTEL path, which carries the account identity this payload lacks.
+	if strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
+		metadata.Provider = providerOpenAI
+		identityChanged := !sameCodexIdentity(metadata.ObservedUserEmail, metadata.UserEmail)
+		if metadata.AccountType == "" || identityChanged {
+			if identityChanged {
+				// The identity fallback above fills UserID from the cache
+				// independently of the email, so on an identity change it can
+				// still hold the PRIOR actor's resolved id — and
+				// classifyAccount reads UserID as the resolution of the email
+				// being classified, which would label a new unresolved email
+				// team (and unlock the team-gated billing mode) off the old
+				// actor. Restore the resolved actor's own id: an identity
+				// change means UserEmail is the actor's email, whose
+				// resolution resolveCanonicalActor already computed.
+				metadata.UserID = actor.UserID
+			}
+			metadata.ObservedUserEmail = metadata.UserEmail
+			if err := s.attributeSession(ctx, &metadata); err != nil {
+				s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
+					attr.SlogEvent("account_attribution_failed"),
+					attr.SlogError(err),
+					attr.SlogGenAIConversationID(metadata.SessionID),
+				)
+				// Leave the session unclassified rather than half-attributed:
+				// attributeSession stamps AccountType before the step that
+				// failed, and both this branch's gate and recordCanonicalHook's
+				// session.started cache write key on AccountType alone —
+				// keeping the half state would freeze an empty billing mode
+				// for the cache lifetime.
+				metadata.AccountType = ""
+				metadata.BillingMode = ""
+			} else if metadata.SessionID != "" && metadata.AccountType != "" &&
+				!strings.EqualFold(strings.TrimSpace(payload.Event.Type), "session.started") {
+				// session.started is excluded: recordCanonicalHook already
+				// persists this metadata (attribution included) for that
+				// event; this write-back exists for sessions whose started
+				// event was never seen.
+				cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
+				err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+				cancel()
+				if err != nil {
+					s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+						attr.SlogError(err),
+						attr.SlogGenAIConversationID(metadata.SessionID),
+					)
+				}
 			}
 		}
 	}

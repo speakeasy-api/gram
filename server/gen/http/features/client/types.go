@@ -51,6 +51,8 @@ type GetProductFeaturesResponseBody struct {
 	// Whether skill capture stores activation metadata without requesting manifest
 	// content
 	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -444,19 +446,20 @@ func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetP
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
 func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *features.GetProductFeaturesResult {
 	v := &features.GetProductFeaturesResult{
-		LogsEnabled:                  *body.LogsEnabled,
-		ToolIoLogsEnabled:            *body.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        *body.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: *body.AuthzChallengeLoggingEnabled,
-		Webhooks:                     *body.Webhooks,
-		SsoEnabled:                   *body.SsoEnabled,
-		ScimEnabled:                  *body.ScimEnabled,
-		HooksBrowserLoginEnabled:     *body.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:         *body.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:       *body.CustomModelKeysEnabled,
-		SkillsEnabled:                *body.SkillsEnabled,
-		SkillCaptureMetadataOnly:     *body.SkillCaptureMetadataOnly,
-		DeviceAgent:                  *body.DeviceAgent,
+		LogsEnabled:                       *body.LogsEnabled,
+		ToolIoLogsEnabled:                 *body.ToolIoLogsEnabled,
+		SessionCaptureEnabled:             *body.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:      *body.AuthzChallengeLoggingEnabled,
+		Webhooks:                          *body.Webhooks,
+		SsoEnabled:                        *body.SsoEnabled,
+		ScimEnabled:                       *body.ScimEnabled,
+		HooksBrowserLoginEnabled:          *body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:              *body.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:            *body.CustomModelKeysEnabled,
+		SkillsEnabled:                     *body.SkillsEnabled,
+		SkillCaptureMetadataOnly:          *body.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled: *body.AiPlatformPushIntegrationsEnabled,
+		DeviceAgent:                       *body.DeviceAgent,
 	}
 
 	return v
@@ -800,6 +803,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.SkillCaptureMetadataOnly == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skill_capture_metadata_only", "body"))
+	}
+	if body.AiPlatformPushIntegrationsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))
