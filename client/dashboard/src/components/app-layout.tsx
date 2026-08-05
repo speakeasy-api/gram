@@ -79,6 +79,10 @@ function getAdminOverrideCookie(): string | null {
 // so demo detection keys off the active org slug, not the cookie.
 export const DEMO_ORG_SLUG = "acme-demo";
 
+// Set by the /explore-demo page before switching, so Exit demo can return a
+// multi-org user to the org they actually came from.
+export const PRE_DEMO_ORG_KEY = "gram:pre-demo-org";
+
 /** Banner shows for admin cookie-impersonation or any session in the demo org. */
 const useShowsImpersonationBanner = (): boolean => {
   const isAdmin = useIsPlatformAdmin();
@@ -96,13 +100,17 @@ const ImpersonationBanner = () => {
   const exit = () => {
     void (async () => {
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
-      // Exiting the demo switches back to the user's own org when they have
-      // one — no logout round-trip. Falls through to logout otherwise (e.g.
-      // admin cookie-impersonation, or a user with no other org).
-      const ownOrg = session.organizations.find(
-        (org) => org.slug !== DEMO_ORG_SLUG,
-      );
+      // Exiting the demo switches back to the org the user came from (stashed
+      // by /explore-demo), or their first real org — no logout round-trip.
+      // Falls through to logout otherwise (e.g. admin cookie-impersonation,
+      // or a user with no other org).
+      const preDemoOrgId = localStorage.getItem(PRE_DEMO_ORG_KEY);
+      const ownOrg =
+        session.organizations.find(
+          (org) => org.id === preDemoOrgId && org.slug !== DEMO_ORG_SLUG,
+        ) ?? session.organizations.find((org) => org.slug !== DEMO_ORG_SLUG);
       if (isDemo && ownOrg) {
+        localStorage.removeItem(PRE_DEMO_ORG_KEY);
         await client.auth.switchScopes({ organizationId: ownOrg.id });
         window.location.replace("/");
         return;

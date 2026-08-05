@@ -588,8 +588,11 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 	}
 
 	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "demo organization is not available").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
 	}
 	if orgMetadata.DisabledAt.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "demo organization is not available")
@@ -646,18 +649,22 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	// Sessions in the shared demo org: append the demo org alongside real
 	// memberships (there is no membership row for it), so the dashboard can
 	// resolve the active org AND still offer the user's own orgs to exit to.
+	// A failed lookup is an error, not a silent omission — without the entry
+	// the dashboard cannot resolve the active org or offer an exit.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
-		if orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID); err == nil {
-			userInfo.Organizations = append(userInfo.Organizations, sessions.Organization{
-				ID:                 orgMeta.ID,
-				Name:               orgMeta.Name,
-				Slug:               orgMeta.Slug,
-				WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
-				UserWorkspaceSlugs: nil,
-				SSOEnabled:         orgMeta.SsoEnabled.Bool,
-				SCIMEnabled:        orgMeta.ScimEnabled.Bool,
-			})
+		orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
 		}
+		userInfo.Organizations = append(userInfo.Organizations, sessions.Organization{
+			ID:                 orgMeta.ID,
+			Name:               orgMeta.Name,
+			Slug:               orgMeta.Slug,
+			WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
+			UserWorkspaceSlugs: nil,
+			SSOEnabled:         orgMeta.SsoEnabled.Bool,
+			SCIMEnabled:        orgMeta.ScimEnabled.Bool,
+		})
 	} else if userInfo.Admin {
 		// For admins overriding into a foreign org (one not in their own membership list),
 		// return only that org to avoid overloaded returns. When admins are in one of their

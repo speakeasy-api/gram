@@ -1,4 +1,4 @@
-import { DEMO_ORG_SLUG } from "@/components/app-layout";
+import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/components/app-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -17,7 +17,23 @@ export default function ExploreDemo(): JSX.Element {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    client.auth.enterDemo().then(
+    void (async () => {
+      // Remember where the user came from so Exit demo can return them to
+      // the same org. Best-effort: a failed info call just skips the stash.
+      try {
+        const info = await client.auth.info();
+        const activeOrgID = info?.result.activeOrganizationId;
+        const activeOrg = info?.result.organizations.find(
+          (org) => org.id === activeOrgID,
+        );
+        if (activeOrg && activeOrg.slug !== DEMO_ORG_SLUG) {
+          localStorage.setItem(PRE_DEMO_ORG_KEY, activeOrg.id);
+        }
+      } catch {
+        // ignore — exit falls back to the first non-demo org
+      }
+      return client.auth.enterDemo();
+    })().then(
       // Land directly on the demo org route: a bare "/" gets reconciled
       // against the last-visited org, which would switch the session back.
       () => window.location.replace(`/${DEMO_ORG_SLUG}`),

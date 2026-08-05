@@ -61,6 +61,8 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	authCtx.IsAdmin = true
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	ctx = contextvalues.SetAdminOverrideInContext(ctx, "acme-demo")
+	// An admin scope override must not widen the demo org back to writes.
+	ctx = contextvalues.SetRBACScopeOverride(ctx, "project:write")
 
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)

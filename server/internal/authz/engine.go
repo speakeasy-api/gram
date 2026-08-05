@@ -98,16 +98,17 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	if overrides, ok := e.GetScopeOverrides(ctx); ok {
-		return GrantsToContext(ctx, GrantsFromOverrides(overrides)), nil
-	}
-
 	// Sessions in the shared demo org (which has no membership rows) get a
 	// fixed read-only grant set — for everyone, including platform admins, so
-	// the demo org is uniformly read-only. Must precede the admin-override
-	// branch below.
+	// the demo org is uniformly read-only. Must precede BOTH the scope
+	// override and admin-override branches: either could otherwise widen a
+	// demo session back to write grants.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
 		return GrantsToContext(ctx, DemoScopeGrants()), nil
+	}
+
+	if overrides, ok := e.GetScopeOverrides(ctx); ok {
+		return GrantsToContext(ctx, GrantsFromOverrides(overrides)), nil
 	}
 
 	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
