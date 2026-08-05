@@ -694,6 +694,15 @@ type DirectoryUserGroupMembership struct {
 	WorkosCreatedAt        pgtype.Timestamptz
 }
 
+type EnterpriseTrial struct {
+	OrganizationID string
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
