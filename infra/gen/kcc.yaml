@@ -401,6 +401,21 @@ pubsub:
           string gram_chat_id = 16;
         }
       type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-webhooks-v1-event
+    name: gram-webhooks-v1-event
+    spec:
+      definition: |
+        edition = "2024";
+        message Event {
+          string event_id = 1;
+          string organization_id = 2;
+          string event_type = 3;
+          bytes payload = 4;
+          string created_at = 5;
+        }
+      type: PROTOCOL_BUFFER
   subscriptions:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -536,6 +551,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-webhooks-v1-svix-relay
+      topic_proto_message: gram-webhooks-v1-event
+    name: gram-webhooks-v1-svix-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-webhooks-v1-svix-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-webhooks-v1-event
   topics:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -649,3 +682,19 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-webhooks-v1-event
+    name: gram-webhooks-v1-event
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-webhooks-v1-event
+  - labels:
+      dlq_for: gram-webhooks-v1-svix-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-webhooks-v1-svix-relay
+    name: gram-webhooks-v1-svix-relay-dlq
+    spec: {}
