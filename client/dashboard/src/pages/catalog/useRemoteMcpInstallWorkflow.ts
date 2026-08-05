@@ -10,9 +10,11 @@ import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
   collectibleHeaders,
   getRemoteDisplayInfo,
+  isFigmaCatalogServer,
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
 import { autoConfigureRemoteMcpAuth } from "@/pages/sources/remote-mcp/autoConfigureAuth";
+import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
@@ -181,6 +183,73 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
       return value ? [{ header, value }] : [];
     }),
   }));
+}
+
+/**
+ * Installs one target as an unproxied MCP server instead of a Gram-proxied
+ * remote one: creates the unproxied_mcp_servers row, links an mcp_servers
+ * wrapper (rolling back the former on failure, mirroring installTarget's own
+ * remote-server path), and returns the same shape installTarget does. There
+ * is no OAuth to auto-configure and no Gram endpoint to pre-stage — the
+ * customer connects straight to the vendor.
+ */
+async function installUnproxiedTarget(
+  client: Gram,
+  target: InstallTarget,
+  reqOpts: RequestOptions | undefined,
+): Promise<{
+  mcpServer: McpServer;
+  mcpEndpointUrl?: string;
+  authConfigured: boolean;
+}> {
+  const unproxiedMcpServer = await client.unproxiedMcp.createServer(
+    {
+      createUnproxiedMcpServerForm: {
+        name: target.name,
+        url: target.remote.url,
+      },
+    },
+    undefined,
+    reqOpts,
+  );
+
+  let mcpServer: McpServer;
+  try {
+    mcpServer = await client.mcpServers.create(
+      {
+        createMcpServerForm: {
+          name: target.name,
+          unproxiedMcpServerId: unproxiedMcpServer.id,
+          // Unproxied servers have no Gram-hosted endpoint, so
+          // disabled/private/public gates nothing Gram actually serves.
+          visibility: "public",
+        },
+      },
+      undefined,
+      reqOpts,
+    );
+  } catch (linkError) {
+    try {
+      await client.unproxiedMcp.deleteServer(
+        { id: unproxiedMcpServer.id },
+        undefined,
+        reqOpts,
+      );
+    } catch (rollbackError) {
+      const linkMsg =
+        linkError instanceof Error ? linkError.message : String(linkError);
+      const rollbackMsg =
+        rollbackError instanceof Error
+          ? rollbackError.message
+          : String(rollbackError);
+      throw new Error(
+        `Created unproxied MCP server ${unproxiedMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
+      );
+    }
+    throw linkError instanceof Error ? linkError : new Error(String(linkError));
+  }
+
+  return { mcpServer, mcpEndpointUrl: undefined, authConfigured: false };
 }
 
 /**
@@ -405,6 +474,10 @@ export function useRemoteMcpInstallWorkflow({
       mcpEndpointUrl?: string;
       authConfigured: boolean;
     }> => {
+      if (isFigmaCatalogServer(target.server)) {
+        return installUnproxiedTarget(client, target, reqOpts);
+      }
+
       const remoteMcpServer = await client.remoteMcp.createServer(
         {
           createServerForm: {
