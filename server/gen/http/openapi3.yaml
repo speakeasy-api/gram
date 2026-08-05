@@ -4622,7 +4622,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/RemoteSessionIssuer'
+                                $ref: '#/components/schemas/GlobalRemoteSessionIssuer'
                     description: OK response.
                 "400":
                     content:
@@ -4831,7 +4831,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListRemoteSessionIssuersResult'
+                                $ref: '#/components/schemas/ListGlobalRemoteSessionIssuersResult'
                     description: OK response.
                 "400":
                     content:
@@ -59543,6 +59543,24 @@ components:
             description: Result of user metrics summary query
             required:
                 - metrics
+        GlobalRemoteSessionIssuer:
+            type: object
+            properties:
+                global_client_count:
+                    type: integer
+                    description: Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
+                    format: int64
+                issuer:
+                    $ref: '#/components/schemas/RemoteSessionIssuer'
+                tenant_client_count:
+                    type: integer
+                    description: Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
+                    format: int64
+            description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.'
+            required:
+                - issuer
+                - global_client_count
+                - tenant_client_count
         HTTPToolDefinition:
             type: object
             properties:
@@ -60848,6 +60866,19 @@ components:
             description: Result of listing filter options
             required:
                 - options
+        ListGlobalRemoteSessionIssuersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GlobalRemoteSessionIssuer'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for the platform-administrator global issuer listing.
+            required:
+                - items
         ListHooksTracesPayload:
             type: object
             properties:

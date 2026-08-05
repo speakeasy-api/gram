@@ -1,12 +1,10 @@
-import { RequireScope } from "@/components/require-scope";
-import { useRBAC } from "@/hooks/useRBAC";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
-import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
-import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
+import { invalidateAllGlobalRemoteSessionIssuer } from "@gram/client/react-query/globalRemoteSessionIssuer.js";
+import { invalidateAllGlobalRemoteSessionIssuers } from "@gram/client/react-query/globalRemoteSessionIssuers.js";
+import { useRefreshGlobalRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshGlobalRemoteSessionIssuerMetadata.js";
+import { useUpdateGlobalRemoteSessionIssuerMutation } from "@gram/client/react-query/updateGlobalRemoteSessionIssuer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,17 +13,28 @@ import { toast } from "sonner";
 import {
   EndpointsFields,
   IssuerUrlField,
-} from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
-import { useIssuerDiscovery } from "../../../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
-import { DeleteIssuerDialog } from "../../RemoteIdentityProviders";
-import { issuerDisplayName } from "../../issuerDisplay";
-import { SettingsField, SettingsSection } from "../../issuerSettingsFields";
-import { buildUpdateIssuerForm } from "../../issuerSettingsForm";
+} from "../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
+import { useIssuerDiscovery } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { issuerDisplayName } from "../remote-identity-providers/issuerDisplay";
+import {
+  SettingsField,
+  SettingsSection,
+} from "../remote-identity-providers/issuerSettingsFields";
+import { buildUpdateIssuerForm } from "../remote-identity-providers/issuerSettingsForm";
+import { DeletePlatformIssuerDialog } from "./DeletePlatformIssuerDialog";
 
-export function SettingsTab({
+// PlatformSettingsTab is the catalog's edit surface. It mirrors the tenant
+// issuer Settings tab but talks to the adminRemoteSessions endpoints
+// throughout, so no component here has to decide at runtime which tier it is
+// operating on.
+export function PlatformSettingsTab({
   issuer,
+  globalClientCount,
+  tenantClientCount,
 }: {
   issuer: RemoteSessionIssuer;
+  globalClientCount: number;
+  tenantClientCount: number;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -34,11 +43,7 @@ export function SettingsTab({
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
   const [showDelete, setShowDelete] = useState(false);
-  const { hasAnyScope } = useRBAC();
-  const hasOrgAdminScope = hasAnyScope(["org:admin"]);
 
-  // Issuer URL + endpoints + RFC 8414 discovery live in the shared hook, seeded
-  // from the saved issuer so Discover/Reset work against the current values.
   const {
     issuerUrl,
     setIssuerUrl,
@@ -78,80 +83,77 @@ export function SettingsTab({
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",
     },
-    // Seed the saved values into the fields but not a discovery snapshot, so the
-    // Discover control is available against the existing issuer URL. This tab
-    // edits organization-level issuers too, which have no project to authorize
-    // against, so metadata is fetched through the org-scoped endpoint.
-    { seedSnapshot: false, scope: "organization" },
+    // Seed the saved values into the fields but not a discovery snapshot, so
+    // Discover stays available against the existing issuer URL.
+    { seedSnapshot: false, scope: "platform" },
   );
 
-  const update = useUpdateOrganizationRemoteSessionIssuerMutation({
+  const update = useUpdateGlobalRemoteSessionIssuerMutation({
     onSuccess: async () => {
-      await invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
-        refetchType: "all",
-      });
-      toast.success("Provider updated");
+      await Promise.all([
+        invalidateAllGlobalRemoteSessionIssuer(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllGlobalRemoteSessionIssuers(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
+      toast.success("Platform provider updated");
     },
     onError: (error) => {
-      console.error("Update remote identity provider failed", error);
+      console.error("Update platform identity provider failed", error);
     },
   });
 
-  // Which of the two rediscovery controls applies comes down to which URL would
-  // be discovered against. Refresh sends the issuer id and the server reads the
-  // stored URL; Discover sends whatever is currently typed. So while the field
-  // still matches what is saved they would do the same thing, and Refresh is
-  // the better of the two: one click, only RFC 8414-derived columns, audited,
-  // and it refuses a document that names a different authorization server.
-  //
-  // Once the field diverges, Refresh is not merely worse but wrong — it would
-  // discover the old URL, and the server would abort on the mismatch anyway.
-  // Repointing a provider is exactly what Discover-then-Save is for, so the two
-  // swap rather than sit side by side.
+  // Same split as the tenant tab: while the URL field still matches what is
+  // saved, Refresh is the better of the two (one click, only RFC 8414-derived
+  // columns, and it refuses a document naming a different authorization
+  // server). Once the field diverges Refresh would rediscover the old URL and
+  // the server would abort on the mismatch, so Discover-then-Save takes over.
   const issuerUrlMatchesSaved = issuerUrl.trim() === issuer.issuer;
 
-  const refreshMetadata =
-    useRefreshOrganizationRemoteSessionIssuerMetadataMutation({
-      onSuccess: async (result) => {
-        // The tab is keyed on the issuer id, which never changes, and the
-        // discovery hook seeds its fields on mount only. Invalidating alone
-        // would refresh the cache while leaving these inputs showing the old
-        // endpoints, so the discovered values are pushed in directly. Only
-        // these four are touched, leaving unsaved name/slug edits intact.
-        setAuthorizationEndpoint(result.issuer.authorizationEndpoint ?? "");
-        setTokenEndpoint(result.issuer.tokenEndpoint ?? "");
-        setRegistrationEndpoint(result.issuer.registrationEndpoint ?? "");
-        setJwksUri(result.issuer.jwksUri ?? "");
+  const refreshMetadata = useRefreshGlobalRemoteSessionIssuerMetadataMutation({
+    onSuccess: async (result) => {
+      // The tab is keyed on the issuer id and the discovery hook seeds its
+      // fields on mount only, so invalidating alone would leave these inputs
+      // showing the pre-refresh endpoints. Push the discovered values in
+      // directly, leaving unsaved name/slug edits intact.
+      setAuthorizationEndpoint(result.issuer.authorizationEndpoint ?? "");
+      setTokenEndpoint(result.issuer.tokenEndpoint ?? "");
+      setRegistrationEndpoint(result.issuer.registrationEndpoint ?? "");
+      setJwksUri(result.issuer.jwksUri ?? "");
 
-        await Promise.all([
-          invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
-            refetchType: "all",
-          }),
-          invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
-            refetchType: "all",
-          }),
-        ]);
+      await Promise.all([
+        invalidateAllGlobalRemoteSessionIssuer(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllGlobalRemoteSessionIssuers(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
 
-        if (result.discoveryWarnings.length > 0) {
-          toast.warning("Refreshed with warnings", {
-            description: result.discoveryWarnings.join(" "),
-          });
-          return;
-        }
-        toast.success("Discoverable metadata refreshed");
-      },
-      onError: (error) => {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to refresh metadata",
-        );
-      },
-    });
+      if (result.discoveryWarnings.length > 0) {
+        toast.warning("Refreshed with warnings", {
+          description: result.discoveryWarnings.join(" "),
+        });
+        return;
+      }
+      toast.success("Discoverable metadata refreshed");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh metadata",
+      );
+    },
+  });
 
   const saveError = update.error
     ? update.error instanceof Error && update.error.message
       ? update.error.message
       : "An unexpected error occurred. Please try again."
     : null;
+
+  const adoptedByTenants = tenantClientCount > 0;
 
   const handleSave = () => {
     update.mutate({
@@ -174,9 +176,24 @@ export function SettingsTab({
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
+      {/* Editing a tenant-adopted issuer repoints live OAuth configuration for
+          organizations that never asked for the change, and the endpoints are
+          the part that breaks their flows rather than merely relabelling them.
+          There is no server-side guard on this, so say so plainly here. */}
+      {adoptedByTenants && (
+        <Alert variant="warning" dismissible={false}>
+          {tenantClientCount}{" "}
+          {tenantClientCount === 1
+            ? "tenant-owned client is"
+            : "tenant-owned clients are"}{" "}
+          registered with this provider. Changing the issuer URL or endpoints
+          affects those organizations immediately.
+        </Alert>
+      )}
+
       <SettingsSection
         title="Provider"
-        description="How this identity provider is labelled in the dashboard."
+        description="How this identity provider is labelled in every organization's dashboard."
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
         <SettingsField label="Slug" value={slug} onChange={setSlug} />
@@ -211,16 +228,9 @@ export function SettingsTab({
           endpointWarnings={endpointWarnings}
           discoverPending={discoverPending}
           discoverError={discoverError}
-          // Two gates. Discovery here goes through the org-scoped endpoint,
-          // which requires org:admin, but this page admits org:read — hide the
-          // control rather than leave a button that can only produce a
-          // permission error, matching how Save and Delete below are gated.
-          // And Discover only earns its place once the URL has been edited;
-          // until then Refresh Discoverable Metadata below does the same job
-          // better.
-          showDiscoverControls={
-            showDiscoverControls && hasOrgAdminScope && !issuerUrlMatchesSaved
-          }
+          // Discover only earns its place once the URL has been edited; until
+          // then Refresh Discoverable Metadata below does the same job better.
+          showDiscoverControls={showDiscoverControls && !issuerUrlMatchesSaved}
           showResetControls={showResetControls}
           onAuthorizationEndpointChange={setAuthorizationEndpoint}
           onTokenEndpointChange={setTokenEndpoint}
@@ -231,7 +241,7 @@ export function SettingsTab({
           }}
           onResetEndpoints={handleResetEndpoints}
         />
-        {hasOrgAdminScope && issuerUrlMatchesSaved && (
+        {issuerUrlMatchesSaved && (
           <div className="flex flex-col gap-1.5">
             <div>
               <Button
@@ -263,7 +273,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Client setup"
-        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
+        description="Documentation linked from the New Client sheet so operators in every organization can set up an OAuth client with this provider themselves."
       >
         <SettingsField
           label="Client setup documentation URL"
@@ -279,42 +289,40 @@ export function SettingsTab({
       )}
 
       <div>
-        <RequireScope scope="org:admin" level="component">
-          <Button
-            onClick={handleSave}
-            disabled={update.isPending || refreshMetadata.isPending}
-          >
-            <Button.Text>
-              {update.isPending ? "Saving…" : "Save changes"}
-            </Button.Text>
-          </Button>
-        </RequireScope>
+        <Button
+          onClick={handleSave}
+          disabled={update.isPending || refreshMetadata.isPending}
+        >
+          <Button.Text>
+            {update.isPending ? "Saving…" : "Save changes"}
+          </Button.Text>
+        </Button>
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
         <Text className="font-medium">Danger Zone</Text>
         <Text small muted>
-          Deleting this provider is permanent. All clients must be deleted
-          first.
+          Removes this provider from the platform catalog for every
+          organization. Refused while any client is still registered with it.
         </Text>
         <div>
-          <RequireScope scope="org:admin" level="component">
-            <Button
-              variant="destructive-primary"
-              onClick={() => setShowDelete(true)}
-            >
-              <Button.Text>Delete provider</Button.Text>
-            </Button>
-          </RequireScope>
+          <Button
+            variant="destructive-primary"
+            onClick={() => setShowDelete(true)}
+          >
+            <Button.Text>Delete provider</Button.Text>
+          </Button>
         </div>
       </div>
 
       {showDelete && (
-        <DeleteIssuerDialog
+        <DeletePlatformIssuerDialog
           issuerId={issuer.id}
           issuerLabel={issuerDisplayName(issuer)}
+          globalClientCount={globalClientCount}
+          tenantClientCount={tenantClientCount}
           onClose={() => setShowDelete(false)}
-          onDeleted={() => orgRoutes.remoteIdentityProviders.goTo()}
+          onDeleted={() => orgRoutes.platformRemoteIdentityProviders.goTo()}
         />
       )}
     </div>

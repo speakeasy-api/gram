@@ -1,13 +1,6 @@
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
-import {
   Sheet,
   SheetContent,
   SheetFooter,
@@ -15,11 +8,9 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
-import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
-import { useListProjects } from "@gram/client/react-query/listProjects.js";
-import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { useCreateGlobalRemoteSessionIssuerMutation } from "@gram/client/react-query/createGlobalRemoteSessionIssuer.js";
+import { invalidateAllGlobalRemoteSessionIssuers } from "@gram/client/react-query/globalRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
@@ -35,22 +26,15 @@ import {
   deriveSlugFromUrl,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { useIssuerDiscovery } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
-import { buildCreateIssuerForm } from "./issuerSettingsForm";
+import { buildCreateIssuerForm } from "../remote-identity-providers/issuerSettingsForm";
 
-// Sentinel for the "no project" (organizational) selection. Radix Select treats
-// the empty string specially, so we use an explicit value and map it back to an
-// omitted projectId on submit.
-const ORGANIZATIONAL = "organizational";
-
-// CreateRemoteIdentityProviderSheet is a pared-down sibling of the MCP
-// Authentication tab's AttachRemoteIdentityProviderSheet: it configures only the
-// upstream issuer (URL, slug, display name, endpoints + RFC 8414 discovery) and
-// creates a remote_session_issuer via the org-admin createIssuer endpoint.
-// No project selection creates an organizational issuer (project_id NULL,
-// inherited everywhere); selecting a project creates a project-specific one. It
-// does not register a client or touch an MCP server — client management lives on
-// the issuer detail page. On success it routes to the new issuer's detail page.
-export function CreateRemoteIdentityProviderSheet({
+// CreatePlatformIssuerSheet is the catalog's counterpart to the tenant
+// CreateRemoteIdentityProviderSheet. It has no scope selector: everything
+// created here is global by construction, which is also why the tenant sheet
+// gained no "Platform" option — a platform tier sitting one click away in a
+// dropdown a customer admin uses daily is a mis-click that publishes their
+// issuer to every organization.
+export function CreatePlatformIssuerSheet({
   open,
   onOpenChange,
 }: {
@@ -59,14 +43,6 @@ export function CreateRemoteIdentityProviderSheet({
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
-  const organization = useOrganization();
-
-  const { data: projectsData } = useListProjects({
-    organizationId: organization.id,
-  });
-  const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
-
-  const [projectId, setProjectId] = useState<string>(ORGANIZATIONAL);
 
   // Display name + slug auto-derive from the Issuer URL hostname until the
   // operator edits them, after which the *Dirty flags lock in their value.
@@ -98,24 +74,22 @@ export function CreateRemoteIdentityProviderSheet({
     showDiscoverControls,
     showResetControls,
     endpointWarnings,
-    // This sheet can create an organization-level issuer, which has no project
-    // to authorize against, so it fetches metadata through the org-scoped
-    // endpoint rather than borrowing the active project's scope.
-  } = useIssuerDiscovery(null, { scope: "organization" });
+    // A global issuer belongs to no organization and no project, so discovery
+    // goes through the platform-admin endpoint rather than authorizing against
+    // whichever tenant the admin happens to be viewing.
+  } = useIssuerDiscovery(null, { scope: "platform" });
 
-  const createMutation = useCreateOrganizationRemoteSessionIssuerMutation({
+  const createMutation = useCreateGlobalRemoteSessionIssuerMutation({
     onSuccess: async (created) => {
-      await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
+      await invalidateAllGlobalRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Remote identity provider created");
+      toast.success("Platform identity provider created");
       onOpenChange(false);
-      orgRoutes.remoteIdentityProviders.issuerDetail.goTo(created.id);
+      orgRoutes.platformRemoteIdentityProviders.issuerDetail.goTo(created.id);
     },
     onError: (error) => {
-      // useMutation surfaces error.message via createMutation.error (shown in
-      // the inline Alert); a console line keeps the stack for debugging.
-      console.error("Create remote identity provider failed", error);
+      console.error("Create platform identity provider failed", error);
     },
   });
 
@@ -131,7 +105,6 @@ export function CreateRemoteIdentityProviderSheet({
   // leaks into a new creation.
   useEffect(() => {
     if (!open) return;
-    setProjectId(ORGANIZATIONAL);
     setName("");
     setNameDirty(false);
     setSlug("");
@@ -158,20 +131,17 @@ export function CreateRemoteIdentityProviderSheet({
     if (!submittable || submitting) return;
     createMutation.mutate({
       request: {
-        createIssuerRequestBody: {
-          projectId: projectId === ORGANIZATIONAL ? undefined : projectId,
-          ...buildCreateIssuerForm({
-            name,
-            slug,
-            clientSetupDocumentationUrl,
-            issuerUrl,
-            authorizationEndpoint,
-            tokenEndpoint,
-            registrationEndpoint,
-            jwksUri,
-            discoveredSnapshot,
-          }),
-        },
+        createRemoteSessionIssuerForm: buildCreateIssuerForm({
+          name,
+          slug,
+          clientSetupDocumentationUrl,
+          issuerUrl,
+          authorizationEndpoint,
+          tokenEndpoint,
+          registrationEndpoint,
+          jwksUri,
+          discoveredSnapshot,
+        }),
       },
     });
   };
@@ -184,34 +154,16 @@ export function CreateRemoteIdentityProviderSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            New Remote Identity Provider
+            New Platform Remote Identity Provider
           </SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
           <Stack gap={4}>
-            <Stack gap={2}>
-              <Label className="text-muted-foreground text-xs">Scope</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ORGANIZATIONAL}>
-                    Organizational (all projects)
-                  </SelectItem>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Text muted small>
-                Organizational providers are inherited by every project. Choose
-                a project to scope the provider to it.
-              </Text>
-            </Stack>
+            <Alert variant="info" dismissible={false}>
+              This provider will be visible to every organization on the
+              platform.
+            </Alert>
 
             <IssuerUrlField
               issuerUrl={issuerUrl}
@@ -266,9 +218,8 @@ export function CreateRemoteIdentityProviderSheet({
                 placeholder="My Identity Provider"
               />
               <Text muted small>
-                Friendly label shown in the dashboard. Auto-derived from the
-                Issuer URL until you edit it; falls back to the Issuer URL when
-                left blank.
+                Friendly label shown in every organization's dashboard. Falls
+                back to the Issuer URL when left blank.
               </Text>
             </Stack>
 
@@ -282,8 +233,9 @@ export function CreateRemoteIdentityProviderSheet({
                 placeholder="https://docs.example.com/oauth/apps"
               />
               <Text muted small>
-                Linked from the New Client sheet so operators can set up an
-                OAuth client with this provider themselves.
+                Linked from the New Client sheet so operators in every
+                organization can set up an OAuth client with this provider
+                themselves.
               </Text>
             </Stack>
 
