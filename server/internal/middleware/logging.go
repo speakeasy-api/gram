@@ -21,21 +21,33 @@ import (
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
+	// wroteHeader tracks whether the response headers have been sent (via
+	// WriteHeader, first body Write, or Flush). Once sent, net/http
+	// ignores further WriteHeader calls, so the recorded statusCode must
+	// not change either — a late error-path WriteHeader would otherwise
+	// relabel an already-sent response in access logs.
+	wroteHeader bool
 }
 
 func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{
 		ResponseWriter: w,
 		statusCode:     http.StatusOK,
+		wroteHeader:    false,
 	}
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
+	if rw.wroteHeader {
+		return
+	}
+	rw.wroteHeader = true
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
 }
 
 func (rw *responseWriter) Write(b []byte) (int, error) {
+	rw.wroteHeader = true
 	n, err := rw.ResponseWriter.Write(b)
 	if err != nil {
 		return n, fmt.Errorf("responseWriter.Write: %w", err)
@@ -50,8 +62,12 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 // until it fills) for every handler behind this middleware.
 func (rw *responseWriter) Flush() {
 	// ResponseController finds flush support through FlushError and Unwrap
-	// chains that a direct http.Flusher assert would miss.
-	_ = http.NewResponseController(rw.ResponseWriter).Flush()
+	// chains that a direct http.Flusher assert would miss. A successful
+	// flush commits the response headers on the wire; an unsupported or
+	// failed flush commits nothing, so a later WriteHeader must still count.
+	if err := http.NewResponseController(rw.ResponseWriter).Flush(); err == nil {
+		rw.wroteHeader = true
+	}
 }
 
 // Unwrap lets http.ResponseController reach controls of the underlying
