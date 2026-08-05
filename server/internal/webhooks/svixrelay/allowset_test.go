@@ -20,7 +20,7 @@ import (
 func TestAllowSet_ResolvesOrgsIndependently(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 	ineligible := seedOrg(t, inst.conn, "app_123", false)
 	eligible := seedOrg(t, inst.conn, "app_456", true)
 
@@ -54,7 +54,7 @@ func TestAllowSet_ResolvesOrgsIndependently(t *testing.T) {
 func TestAllowSet_CachesIneligibleOrg(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 	orgID := seedOrg(t, inst.conn, "app_123", false)
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})

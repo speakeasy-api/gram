@@ -45,7 +45,7 @@ type handlerTestInstance struct {
 	svixSrv *svixtest.MockServer
 }
 
-func newHandlerTestInstance(t *testing.T, dispatch bool) *handlerTestInstance {
+func newHandlerTestInstance(t *testing.T) *handlerTestInstance {
 	t.Helper()
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")

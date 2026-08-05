@@ -18,7 +18,7 @@ const validPayload = `{"id":"a","action":"asset.create"}`
 func TestHandle_DeliversForEligibleOrg(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 	orgID := seedOrg(t, inst.conn, "app_123", true)
 	eventID := uuid.NewString()
 
@@ -42,10 +42,38 @@ func TestHandle_DeliversForEligibleOrg(t *testing.T) {
 	require.Equal(t, "asset.create", captured.Payload["action"])
 }
 
+func TestHandle_DropsEventMissingIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no organization id", func(t *testing.T) {
+		t.Parallel()
+
+		inst := newHandlerTestInstance(t)
+
+		err := inst.handler.Handle(t.Context(), newEvent("", uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
+		require.NoError(t, err, "no organization can be resolved on a later attempt either")
+		inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+	})
+
+	t.Run("no event id", func(t *testing.T) {
+		t.Parallel()
+
+		// Eligible org, so reaching Svix would mean the guard did not fire —
+		// and delivering without an idempotency key makes each redelivery a
+		// duplicate webhook instead of a 409.
+		inst := newHandlerTestInstance(t)
+		orgID := seedOrg(t, inst.conn, "app_123", true)
+
+		err := inst.handler.Handle(t.Context(), newEvent(orgID, "", []byte(validPayload)), gcp.MessageMetadata{})
+		require.NoError(t, err)
+		inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+	})
+}
+
 func TestHandle_DropsWhenOrgHasNoSvixApp(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 	orgID := seedOrg(t, inst.conn, "", true)
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
@@ -56,7 +84,7 @@ func TestHandle_DropsWhenOrgHasNoSvixApp(t *testing.T) {
 func TestHandle_DropsWhenWebhooksDisabled(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 	orgID := seedOrg(t, inst.conn, "app_123", false)
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
@@ -67,7 +95,7 @@ func TestHandle_DropsWhenWebhooksDisabled(t *testing.T) {
 func TestHandle_DropsUnknownOrg(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 
 	err := inst.handler.Handle(t.Context(), newEvent(uuid.NewString(), uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
@@ -77,7 +105,7 @@ func TestHandle_DropsUnknownOrg(t *testing.T) {
 func TestHandle_DropsUnreadablePayload(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 	orgID := seedOrg(t, inst.conn, "app_123", true)
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte("not json")), gcp.MessageMetadata{})
@@ -93,7 +121,7 @@ func TestHandle_DropsUnreadablePayload(t *testing.T) {
 func TestHandle_AcksDuplicate(t *testing.T) {
 	t.Parallel()
 
-	inst := newHandlerTestInstance(t, true)
+	inst := newHandlerTestInstance(t)
 	orgID := seedOrg(t, inst.conn, "app_123", true)
 
 	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
@@ -110,7 +138,7 @@ func TestHandle_AcksPermanentRejections(t *testing.T) {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			t.Parallel()
 
-			inst := newHandlerTestInstance(t, true)
+			inst := newHandlerTestInstance(t)
 			orgID := seedOrg(t, inst.conn, "app_123", true)
 
 			inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
@@ -130,7 +158,7 @@ func TestHandle_NacksTransientFailures(t *testing.T) {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			t.Parallel()
 
-			inst := newHandlerTestInstance(t, true)
+			inst := newHandlerTestInstance(t)
 			orgID := seedOrg(t, inst.conn, "app_123", true)
 
 			inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
@@ -141,18 +169,4 @@ func TestHandle_NacksTransientFailures(t *testing.T) {
 				"returning the error nacks the message so the subscription's retry policy takes over")
 		})
 	}
-}
-
-// TestHandle_DispatchDisabledAcksWithoutCalling covers the dark launch: the
-// subscription can be deployed and verified against real traffic before it
-// starts delivering anything.
-func TestHandle_DispatchDisabledAcksWithoutCalling(t *testing.T) {
-	t.Parallel()
-
-	inst := newHandlerTestInstance(t, false)
-	orgID := seedOrg(t, inst.conn, "app_123", true)
-
-	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
-	require.NoError(t, err)
-	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
 }

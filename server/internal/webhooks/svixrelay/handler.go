@@ -39,6 +39,7 @@ const (
 // organization id belongs on the log and the span, never on a metric label.
 const (
 	dropReasonNotEligible    = "not_eligible"
+	dropReasonInvalidEvent   = "invalid_event"
 	dropReasonInvalidPayload = "invalid_payload"
 	dropReasonRejected       = "rejected"
 	dropReasonDuplicate      = "duplicate"
@@ -53,11 +54,6 @@ type Handler struct {
 }
 
 // NewHandler builds the subscriber.
-//
-// dispatch gates the actual Svix call. Deploying with it false lets the
-// subscription, its permissions and its decoding be verified against real
-// traffic before anything is delivered; the reverse order — delivering before
-// the wiring is proven — has no safe rollback.
 func NewHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
@@ -96,6 +92,21 @@ func NewHandler(
 func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.MessageMetadata) error {
 	orgID := ev.GetOrganizationId()
 	eventID := ev.GetEventId()
+
+	// Neither field can be filled in by a later attempt, so this is a drop
+	// rather than a nack. Without an organization there is no Svix application
+	// to resolve; without an event id there is no idempotency key, and sending
+	// anyway would make every redelivery a duplicate webhook rather than a 409.
+	// The producer sets both, so arriving here means a message reached the topic
+	// by some other route.
+	if orgID == "" || eventID == "" {
+		h.drop(ctx, dropReasonInvalidEvent)
+		h.logger.ErrorContext(ctx, "dropping webhook event with missing identifiers",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogOutboxPublicID(eventID),
+		)
+		return nil
+	}
 
 	// A gate failure is not a "no". Returning the error nacks the message so it
 	// is retried, because dropping an event during a database outage would lose
