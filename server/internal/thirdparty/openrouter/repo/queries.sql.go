@@ -58,9 +58,10 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	return i, err
 }
 
-const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :execrows
+const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :exec
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
+    monthly_credits = 0,
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND key_type = $2
@@ -72,15 +73,34 @@ type DisableOpenRouterAPIKeyParams struct {
 	KeyType        string
 }
 
-// Marks the key disabled without deleting it, so a reinstated organization
-// keeps the same upstream key. Reports the affected row count: an organization
-// that never made a completion has no key row and nothing to disable.
-func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) (int64, error) {
-	result, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Locks the key down without deleting it, so a reinstated organization keeps
+// the same upstream key. Mirrors both halves of the upstream lockdown: the
+// ceiling drops to 0 and the flag drops the key out of credit-usage polling.
+func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const enableOpenRouterAPIKey = `-- name: EnableOpenRouterAPIKey :exec
+UPDATE openrouter_api_keys
+SET disabled = FALSE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type EnableOpenRouterAPIKeyParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Reverses DisableOpenRouterAPIKey. Reinstatement runs through
+// RefreshAPIKeyLimit, which sets a fresh ceiling in the same call, so this
+// only has to clear the flag.
+func (q *Queries) EnableOpenRouterAPIKey(ctx context.Context, arg EnableOpenRouterAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, enableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
+	return err
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
