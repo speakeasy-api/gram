@@ -742,6 +742,13 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 			s.resolveEvidenceFromSessionInventory(ctx, &evidence, canonicalSessionID(payload))
 		}
 	}
+	// A claude.ai connector appears in no local config file, so the device
+	// reports its tool calls with a name but no transport. The inventory is the
+	// only place that URL exists, and without it the guard denies a hosted
+	// server for lack of evidence.
+	if evidence.FullURL == "" {
+		applyMCPEntryToEvidence(&evidence, s.canonicalMCPEntry(ctx, canonicalSessionID(payload), rawToolName))
+	}
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
@@ -797,6 +804,35 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 		return
 	}
 	applyMCPEntryToEvidence(evidence, matchCodexCachedMCPServerEntry(entries, evidence.ServerIdentity))
+}
+
+// canonicalMCPEntry resolves the server behind an mcp__<server>__<tool> call
+// against the cached session inventory. Nil when the name is not mcp__-shaped,
+// the cache is empty, or the prefix is ambiguous.
+//
+// mcp__ only: Cursor's "MCP:<tool>" puts the tool where this form puts the
+// server, and OpenCode ships bare names. Neither needs this — both resolve on
+// the device.
+func (s *Service) canonicalMCPEntry(ctx context.Context, sessionID string, rawToolName string) *MCPServerEntry {
+	if sessionID == "" || !strings.HasPrefix(rawToolName, "mcp__") || !toolref.IsMCPToolName(rawToolName) {
+		return nil
+	}
+	entries, err := s.getCachedMCPList(ctx, sessionID)
+	if err != nil {
+		return nil
+	}
+	prefix := toolref.MCPServerOf(rawToolName)
+	if matched := matchCachedMCPEntry(entries, prefix); matched != nil {
+		return matched
+	}
+	// ponytail: the relay strips "claude.ai " from connector names, so no
+	// derived prefix carries the qualifier the tool name does. Retry without
+	// it; ties still resolve to nil. Drop once the relay sends the real prefix
+	// as server_identity.
+	if bare, ok := strings.CutPrefix(prefix, "claude_ai_"); ok {
+		return matchCachedMCPEntry(entries, bare)
+	}
+	return nil
 }
 
 // cacheCanonicalMCPList stores a session's MCP inventory under the same key
@@ -1143,6 +1179,16 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 			attrs[attr.MCPMatchKey] = url
 		} else if command := strings.TrimSpace(conv.PtrValOr(mcp.Command, "")); command != "" {
 			attrs[attr.MCPMatchKey] = command
+		}
+	}
+	// Fall back to the session inventory: a row with no server URL classifies
+	// as shadow MCP no matter where the call actually went.
+	if _, resolved := attrs[attr.MCPServerURLKey]; !resolved {
+		if matched := s.canonicalMCPEntry(ctx, canonicalSessionID(payload), toolName); matched != nil {
+			if match := resolvedMCPMatch(matched, toolref.MCPServerOf(toolName)); match != "" {
+				attrs[attr.MCPMatchKey] = match
+			}
+			applyMCPInventoryAttrs(attrs, matched)
 		}
 	}
 	skill := canonicalSkillName(payload)
