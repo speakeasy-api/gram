@@ -26,10 +26,15 @@ guardrails:
         Gram-Project: os.environ/GRAM_PROJECT_SLUG
       default_on: true
       streaming_end_of_stream_only: true
-      extra_headers: [x-gram-session-id]
+      extra_headers:
+        - x-gram-session-id
+        - x-claude-code-session-id
+        - session-id
+        - thread-id
+        - x-session-id
 ```
 
-`extra_headers` is required to forward the session value rather than LiteLLM's `[present]` placeholder.
+`extra_headers` is required to forward Gram's explicit session header and native session headers from supported agent clients rather than LiteLLM's `[present]` placeholder.
 
 ## Coverage
 
@@ -62,6 +67,7 @@ The suite starts the exact image in `manifest.json` and uses a synthetic local i
 The test clones the canonical stanza with `default_on: false` only so each normal and outage posture can be selected independently; customer configuration keeps the documented `default_on: true`.
 
 - Safe non-streaming requests return the fixture completion and capture exactly one user and one assistant message in the explicit session.
+- Native Claude Code, Codex, and OpenCode session headers each correlate two turns into one ordered four-message conversation.
 - A synthetic-secret policy violation returns the configured block message before a provider call, captures one blocked user message, and produces a durable gitleaks finding tied to that message.
 - Safe streaming returns valid SSE and captures the user and assistant messages; a blocked stream is rejected before the provider and captures only the user message.
 - A 503 guardrail outage fails closed before provider execution and captures nothing.

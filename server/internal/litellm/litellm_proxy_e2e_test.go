@@ -278,6 +278,7 @@ type proxyResponse struct {
 func TestLiteLLMProxyE2E(t *testing.T) { //nolint:paralleltest // Scenarios intentionally share one proxy container.
 	test := newProxyHarness(t)
 	test.safeNonStreaming()
+	test.nativeSessionHeaders()
 	test.blockedNonStreaming()
 	test.safeStreaming()
 	test.blockedStreaming()
@@ -478,7 +479,13 @@ func buildProxyConfig(t *testing.T, providerURL, timeoutProviderURL, gramURL, fa
 	require.Equal(t, true, guardrail.Params["streaming_end_of_stream_only"])
 	require.NotEmpty(t, guardrail.Params["api_base"])
 	require.ElementsMatch(t, []any{"pre_call", "post_call"}, guardrail.Params["mode"])
-	require.Equal(t, []any{"x-gram-session-id"}, guardrail.Params["extra_headers"])
+	require.Equal(t, []any{
+		"x-gram-session-id",
+		"x-claude-code-session-id",
+		"session-id",
+		"thread-id",
+		"x-session-id",
+	}, guardrail.Params["extra_headers"])
 	headers, ok := guardrail.Params["headers"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "os.environ/GRAM_LITELLM_INGEST_KEY", headers["Gram-Key"])
@@ -538,7 +545,7 @@ func serverPort(t *testing.T, rawURL string) int {
 	return value
 }
 
-func (h *proxyHarness) request(scenario, sessionID, callID, guardrail, text string, stream bool) proxyResponse {
+func (h *proxyHarness) request(scenario, sessionHeader, sessionID, callID, guardrail, text string, stream bool) proxyResponse {
 	h.t.Helper()
 	prompt := h.prompt(scenario, sessionID, callID, text)
 	model := "fixture-openai"
@@ -554,7 +561,7 @@ func (h *proxyHarness) request(scenario, sessionID, callID, guardrail, text stri
 	require.NoError(h.t, err)
 	req.Header.Set("Authorization", "Bearer "+proxyMasterKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-gram-session-id", sessionID)
+	req.Header.Set(sessionHeader, sessionID)
 	req.Header.Set("x-litellm-call-id", callID)
 	response, err := h.httpClient.Do(req)
 	require.NoError(h.t, err)
@@ -656,16 +663,43 @@ func (h *proxyHarness) requireSSE(body []byte) {
 
 func (h *proxyHarness) safeNonStreaming() {
 	scenario, sessionID, callID := "safe", "e2e-safe-session", "e2e-safe-call"
-	response := h.request(scenario, sessionID, callID, "gram-e2e", "safe prompt", false)
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "safe prompt", false)
 	require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
 	h.requireCompletion(response.Body)
 	require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
 	h.requireConversation(h.messages(sessionID, 2), h.prompt(scenario, sessionID, callID, "safe prompt"))
 }
 
+func (h *proxyHarness) nativeSessionHeaders() {
+	for _, header := range []string{"x-claude-code-session-id", "session-id", "thread-id", "x-session-id"} {
+		scenario := "native-" + header
+		sessionID := "e2e-" + header + "-session"
+		for turn := 1; turn <= 2; turn++ {
+			callID := fmt.Sprintf("e2e-%s-call-%d", header, turn)
+			text := fmt.Sprintf("turn %d", turn)
+			response := h.request(scenario, header, sessionID, callID, "gram-e2e", text, false)
+			require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
+			h.requireCompletion(response.Body)
+			require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
+		}
+
+		messages := h.messages(sessionID, 4)
+		require.Equal(h.t, []string{"user", "assistant", "user", "assistant"}, []string{
+			messages[0].Role,
+			messages[1].Role,
+			messages[2].Role,
+			messages[3].Role,
+		})
+		require.Equal(h.t, h.prompt(scenario, sessionID, "e2e-"+header+"-call-1", "turn 1"), messages[0].Content)
+		require.Equal(h.t, fixtureAnswer, messages[1].Content)
+		require.Equal(h.t, h.prompt(scenario, sessionID, "e2e-"+header+"-call-2", "turn 2"), messages[2].Content)
+		require.Equal(h.t, fixtureAnswer, messages[3].Content)
+	}
+}
+
 func (h *proxyHarness) blockedNonStreaming() {
 	scenario, sessionID, callID := "blocked", "e2e-blocked-session", "e2e-blocked-call"
-	response := h.request(scenario, sessionID, callID, "gram-e2e", "token="+syntheticSecret, false)
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "token="+syntheticSecret, false)
 	require.Equal(h.t, http.StatusBadRequest, response.Status, string(response.Body))
 	h.requireBlocked(response.Body)
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
@@ -678,7 +712,7 @@ func (h *proxyHarness) blockedNonStreaming() {
 
 func (h *proxyHarness) safeStreaming() {
 	scenario, sessionID, callID := "stream-safe", "e2e-stream-safe-session", "e2e-stream-safe-call"
-	response := h.request(scenario, sessionID, callID, "gram-e2e", "safe streaming prompt", true)
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "safe streaming prompt", true)
 	require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
 	require.Contains(h.t, response.Header.Get("Content-Type"), "text/event-stream")
 	h.requireSSE(response.Body)
@@ -688,7 +722,7 @@ func (h *proxyHarness) safeStreaming() {
 
 func (h *proxyHarness) blockedStreaming() {
 	scenario, sessionID, callID := "stream-blocked", "e2e-stream-blocked-session", "e2e-stream-blocked-call"
-	response := h.request(scenario, sessionID, callID, "gram-e2e", "token="+syntheticSecret, true)
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "token="+syntheticSecret, true)
 	require.Equal(h.t, http.StatusBadRequest, response.Status, string(response.Body))
 	h.requireBlocked(response.Body)
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
@@ -700,7 +734,7 @@ func (h *proxyHarness) blockedStreaming() {
 
 func (h *proxyHarness) failClosed() {
 	scenario, sessionID, callID := "fail-closed", "e2e-fail-closed-session", "e2e-fail-closed-call"
-	response := h.request(scenario, sessionID, callID, "gram-e2e-fail-closed", "outage prompt", false)
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-fail-closed", "outage prompt", false)
 	require.NotContains(h.t, []int{http.StatusOK, http.StatusCreated, http.StatusNoContent}, response.Status, string(response.Body))
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
 	h.noMessages(sessionID)
@@ -708,7 +742,7 @@ func (h *proxyHarness) failClosed() {
 
 func (h *proxyHarness) failOpen() {
 	scenario, sessionID, callID := "fail-open", "e2e-fail-open-session", "e2e-fail-open-call"
-	response := h.request(scenario, sessionID, callID, "gram-e2e-fail-open", "outage prompt", false)
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-fail-open", "outage prompt", false)
 	require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
 	require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
 	h.noMessages(sessionID)
@@ -718,7 +752,7 @@ func (h *proxyHarness) timeoutAndResend() {
 	// LiteLLM 1.94.0 does not retry a timed-out guardrail callback. A gateway may
 	// safely resend with the same call ID; an ordinary retry with a new call ID is distinct.
 	scenario, sessionID, callID := "timeout", "e2e-timeout-session", "e2e-timeout-call"
-	first := h.request(scenario, sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
+	first := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
 	require.NotEqual(h.t, http.StatusOK, first.Status, string(first.Body))
 	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
 	require.Equal(h.t, "user", h.messages(sessionID, 1)[0].Role)
@@ -729,7 +763,7 @@ func (h *proxyHarness) timeoutAndResend() {
 	require.Never(h.t, func() bool {
 		return h.provider.count(h.key(scenario, sessionID, callID)) > 0
 	}, 3*time.Second, 10*time.Millisecond)
-	second := h.request(scenario, sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
+	second := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e-timeout", "timeout prompt", false)
 	require.Equal(h.t, http.StatusOK, second.Status, string(second.Body))
 	require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
 	h.requireConversation(h.messages(sessionID, 2), h.prompt(scenario, sessionID, callID, "timeout prompt"))

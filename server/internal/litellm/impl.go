@@ -415,8 +415,17 @@ func joinedTexts(texts []string) string {
 }
 
 func sessionHeader(headers map[string]string) string {
-	for key, value := range headers {
-		if strings.EqualFold(strings.TrimSpace(key), "x-gram-session-id") {
+	for _, header := range []string{
+		"x-gram-session-id",
+		"x-claude-code-session-id",
+		"session-id",
+		"thread-id",
+		"x-session-id",
+	} {
+		for key, value := range headers {
+			if !strings.EqualFold(strings.TrimSpace(key), header) {
+				continue
+			}
 			value = strings.TrimSpace(value)
 			if value != "" && !strings.EqualFold(value, "[present]") {
 				return value
