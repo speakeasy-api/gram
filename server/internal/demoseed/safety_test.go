@@ -45,11 +45,6 @@ func asOtherTenant(t *testing.T, script string) string {
 	return script
 }
 
-// legacyDemoProjectID is the retired second demo project (…0002) that survives
-// in the seed only as a delete scope; it is part of the demo isolation
-// boundary in ClickHouse.
-const legacyDemoProjectID = "dec0de00-0000-4000-a000-000000000002"
-
 // TestDemoSeedSafety is the generic cross-table guard for the demo seed. With
 // a second tenant provisioned from a transformed copy of the seed itself, it
 // verifies that running the real seed:
@@ -91,7 +86,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, demoseedtest.ExecPostgresScript(ctx, db, asOtherTenant(t, postgresSQL)))
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
 
-	demoProjects := []string{demoProjectID, legacyDemoProjectID}
+	demoProjects := []string{demoProjectID}
 
 	pgBefore, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -153,11 +148,19 @@ func TestDemoSeedSafety(t *testing.T) {
 	// asserted (above), not exact demo-scope counts.
 	for table, s1 := range chAfter1 {
 		s2 := chAfter2[table]
-		if s1.Engine == "MergeTree" {
+		if isPlainMergeTree(s1.Engine) {
 			require.Equal(t, s1.DemoCount, s2.DemoCount,
 				"clickhouse table %s: demo row count changed between seed runs — reseed is not cleaning up or not idempotent", table)
 		}
 	}
+}
+
+// isPlainMergeTree reports whether the engine stores rows verbatim (including
+// the Replicated variant), as opposed to the Summing/Aggregating/Replacing/
+// Collapsing family members that merge same-key rows and so cannot promise
+// stable row counts.
+func isPlainMergeTree(engine string) bool {
+	return engine == "MergeTree" || engine == "ReplicatedMergeTree"
 }
 
 func requirePostgresRowsPreserved(t *testing.T, before, after demoseedtest.PostgresSnapshot) {

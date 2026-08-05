@@ -198,6 +198,11 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 		if len(demoPreds) > 0 {
 			demoPred = strings.Join(demoPreds, " OR ")
 		}
+		// cityHash64 needs at least one argument; a table whose every column
+		// is excluded above still gets counted, just with a constant hash.
+		if len(hashParts) == 0 {
+			hashParts = []string{"''"}
+		}
 
 		q := fmt.Sprintf(`
 			SELECT

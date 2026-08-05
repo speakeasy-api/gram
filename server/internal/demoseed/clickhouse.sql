@@ -49,23 +49,23 @@ SET mutations_sync = 1;
 
 -- Scoped deletes: telemetry source + every MV target + the org-keyed tables.
 ALTER TABLE telemetry_logs DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE trace_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE metrics_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE spend_rule_usage_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE attribute_keys DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE shadow_mcp_inventory_urls DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE authz_challenges DELETE WHERE organization_id = 'org_gram_demo_workspace';
 ALTER TABLE risk_findings DELETE WHERE organization_id = 'org_gram_demo_workspace';
 ALTER TABLE skill_session_versions DELETE WHERE organization_id = 'org_gram_demo_workspace';
@@ -791,19 +791,19 @@ FROM (
 -- exit for the runner) when violated.
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
-     (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) < 400,
   'demo seed postflight: expected >= 400 demo telemetry rows');
 
 SELECT throwIf(
   (SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id IN
-     (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) < 60,
   'demo seed postflight: chat_session_summaries_mv missing sessions');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN
-     (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
      AND department_name != ''
    ) = 0,
   'demo seed postflight: attribute_metrics_summaries has no identity dimensions');
@@ -828,7 +828,7 @@ SELECT throwIf(
   (SELECT count() FROM telemetry_logs
    WHERE toString(resource_attributes.gram.deployment.id) = 'demo-seed'
      AND gram_project_id NOT IN
-       (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+       (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) > 0,
   'demo seed postflight: demo-seed rows leaked outside demo projects');
 
@@ -838,7 +838,7 @@ SELECT throwIf(
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs
    WHERE gram_project_id IN
-       (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+       (toUUID('dec0de00-0000-4000-a000-000000000001'))
      AND toString(resource_attributes.gram.deployment.id) != 'demo-seed'
    ) > 0,
   'demo seed postflight: demo-project telemetry rows missing the demo-seed marker');
