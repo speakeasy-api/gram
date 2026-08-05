@@ -97,6 +97,31 @@ jobs:
               - "!server/internal/**/repo/**"
               - "!server/internal/testenv/testrepo/**"
 
+      - name: Block changes to deprecated paths
+        if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.deprecated-paths == 'true' }}
+        shell: bash
+        env:
+          DEPRECATED_FILES: ${{ steps.filter.outputs.deprecated-paths_files }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'skip-deprecated-path-check') }}
+        run: |
+          set -e
+          if [[ "$PR_BODY" == *"[skip deprecated path check]"* || "$HAS_SKIP_LABEL" == "true" ]]; then
+            echo "Deprecated path check skipped via explicit directive."
+            exit 0
+          fi
+
+          echo "❌ This PR touches paths that were moved or retired:"
+          echo "$DEPRECATED_FILES" | jq -r '.[]' | sed 's/^/  - /'
+          echo ""
+          echo "These locations are deprecated (see the deprecated-paths filter in"
+          echo ".github/filters.yaml for where each one went). Changes here usually mean"
+          echo "a stale generator target or an old branch resurrecting a moved directory."
+          echo "Make the change in the path's new home instead."
+          echo "To explicitly allow this exception, add '[skip deprecated path check]'"
+          echo "to the PR body or apply the 'skip-deprecated-path-check' label."
+          exit 1
+
       - name: "Require mig: prefix for migration PRs"
         if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.db-migrations == 'true' }}
         shell: bash
