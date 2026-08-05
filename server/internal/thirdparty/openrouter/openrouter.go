@@ -449,10 +449,9 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 // the reinstatement path, because sales can raise the limit again on a key
 // that reads 0.
 func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
+	// RefreshAPIKeyLimit validates below. Normalise here anyway, because the
+	// row lookup has to match the same key type it does.
 	keyType = keyType.OrDefault()
-	if err := keyType.Validate(); err != nil {
-		return fmt.Errorf("disable openrouter key: %w", err)
-	}
 
 	rows, err := o.repo.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
 		OrganizationID: orgID,

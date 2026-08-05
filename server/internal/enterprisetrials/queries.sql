@@ -1,10 +1,9 @@
--- name: CreateEnterpriseTrial :one
+-- name: CreateEnterpriseTrial :exec
 -- Arms a trial on an organization the signup transaction just created. One row
 -- per organization forever: a trial is extended by moving ends_at forward, not
 -- by inserting a second row.
 INSERT INTO enterprise_trials (organization_id, ends_at)
-VALUES (@organization_id, @ends_at)
-RETURNING *;
+VALUES (@organization_id, @ends_at);
 
 -- name: ListExpiredEnterpriseTrials :many
 -- Trials past their end date that neither converted nor were already demoted.
@@ -18,15 +17,15 @@ WHERE ends_at < clock_timestamp()
   AND demoted_at IS NULL
 ORDER BY ends_at;
 
--- name: MarkEnterpriseTrialConverted :one
+-- name: MarkEnterpriseTrialConverted :execrows
 -- Records that the trial became a signed contract. The first conversion wins,
--- and a converted trial is out of the sweeper's reach for good.
+-- and a converted trial is out of the sweeper's reach for good. Zero rows means
+-- the trial already converted.
 UPDATE enterprise_trials
 SET converted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND converted_at IS NULL
-RETURNING *;
+  AND converted_at IS NULL;
 
 -- name: GetEnterpriseTrial :one
 SELECT *

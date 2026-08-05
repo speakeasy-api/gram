@@ -106,10 +106,5 @@ func (d *DemoteExpiredEnterpriseTrials) Demote(ctx context.Context, args DemoteE
 		return fmt.Errorf("commit enterprise trial demotion: %w", err)
 	}
 
-	d.logger.InfoContext(ctx, "demoted expired enterprise trial",
-		attr.SlogOrganizationID(args.OrganizationID),
-		attr.SlogOrganizationSlug(organization.Slug),
-	)
-
 	return nil
 }

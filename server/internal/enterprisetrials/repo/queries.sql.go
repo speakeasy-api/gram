@@ -11,10 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createEnterpriseTrial = `-- name: CreateEnterpriseTrial :one
+const createEnterpriseTrial = `-- name: CreateEnterpriseTrial :exec
 INSERT INTO enterprise_trials (organization_id, ends_at)
 VALUES ($1, $2)
-RETURNING organization_id, ends_at, converted_at, demoted_at, created_at, updated_at
 `
 
 type CreateEnterpriseTrialParams struct {
@@ -25,18 +24,9 @@ type CreateEnterpriseTrialParams struct {
 // Arms a trial on an organization the signup transaction just created. One row
 // per organization forever: a trial is extended by moving ends_at forward, not
 // by inserting a second row.
-func (q *Queries) CreateEnterpriseTrial(ctx context.Context, arg CreateEnterpriseTrialParams) (EnterpriseTrial, error) {
-	row := q.db.QueryRow(ctx, createEnterpriseTrial, arg.OrganizationID, arg.EndsAt)
-	var i EnterpriseTrial
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.EndsAt,
-		&i.ConvertedAt,
-		&i.DemotedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) CreateEnterpriseTrial(ctx context.Context, arg CreateEnterpriseTrialParams) error {
+	_, err := q.db.Exec(ctx, createEnterpriseTrial, arg.OrganizationID, arg.EndsAt)
+	return err
 }
 
 const demoteOrganizationToFree = `-- name: DemoteOrganizationToFree :one
@@ -123,29 +113,23 @@ func (q *Queries) ListExpiredEnterpriseTrials(ctx context.Context) ([]string, er
 	return items, nil
 }
 
-const markEnterpriseTrialConverted = `-- name: MarkEnterpriseTrialConverted :one
+const markEnterpriseTrialConverted = `-- name: MarkEnterpriseTrialConverted :execrows
 UPDATE enterprise_trials
 SET converted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND converted_at IS NULL
-RETURNING organization_id, ends_at, converted_at, demoted_at, created_at, updated_at
 `
 
 // Records that the trial became a signed contract. The first conversion wins,
-// and a converted trial is out of the sweeper's reach for good.
-func (q *Queries) MarkEnterpriseTrialConverted(ctx context.Context, organizationID string) (EnterpriseTrial, error) {
-	row := q.db.QueryRow(ctx, markEnterpriseTrialConverted, organizationID)
-	var i EnterpriseTrial
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.EndsAt,
-		&i.ConvertedAt,
-		&i.DemotedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+// and a converted trial is out of the sweeper's reach for good. Zero rows means
+// the trial already converted.
+func (q *Queries) MarkEnterpriseTrialConverted(ctx context.Context, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, markEnterpriseTrialConverted, organizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markEnterpriseTrialDemoted = `-- name: MarkEnterpriseTrialDemoted :one

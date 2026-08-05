@@ -3,7 +3,6 @@ package activities_test
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,7 +24,8 @@ import (
 // can be made to fail, which is the only openrouter.Provisioner behaviour the
 // sweeper depends on.
 type trialProvisioner struct {
-	mu       sync.Mutex
+	*openrouter.Development
+
 	disabled []string
 	failWith error
 }
@@ -33,46 +33,12 @@ type trialProvisioner struct {
 var _ openrouter.Provisioner = (*trialProvisioner)(nil)
 
 func (p *trialProvisioner) DisableAPIKey(_ context.Context, orgID string, keyType openrouter.KeyType) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if p.failWith != nil {
 		return p.failWith
 	}
 	p.disabled = append(p.disabled, orgID+":"+string(keyType))
 
 	return nil
-}
-
-func (p *trialProvisioner) disabledKeys() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	return append([]string(nil), p.disabled...)
-}
-
-func (p *trialProvisioner) ProvisionAPIKey(context.Context, string, openrouter.KeyType) (string, error) {
-	return "", errors.New("not implemented")
-}
-
-func (p *trialProvisioner) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, errors.New("not implemented")
-}
-
-func (p *trialProvisioner) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
-	return 0, 0, errors.New("not implemented")
-}
-
-func (p *trialProvisioner) GetKeyUsage(context.Context, string) (float64, *int64, error) {
-	return 0, nil, errors.New("not implemented")
-}
-
-func (p *trialProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ *int64) (int64, error) {
-	return currentLimit, nil
-}
-
-func (p *trialProvisioner) GetModelUsage(context.Context, string, string, openrouter.KeyType) (*openrouter.ModelUsage, error) {
-	return nil, errors.New("not implemented")
 }
 
 type trialTestInstance struct {
@@ -91,7 +57,7 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 	conn, err := infra.CloneTestDatabase(t, "enterprisetrialdemotion")
 	require.NoError(t, err)
 
-	provisioner := &trialProvisioner{mu: sync.Mutex{}, disabled: nil, failWith: nil}
+	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), disabled: nil, failWith: nil}
 
 	return ctx, &trialTestInstance{
 		conn:        conn,
@@ -128,7 +94,7 @@ func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsA
 		GramAccountType: "enterprise",
 	}))
 
-	_, err = ti.trials.CreateEnterpriseTrial(ctx, trialsrepo.CreateEnterpriseTrialParams{
+	err = ti.trials.CreateEnterpriseTrial(ctx, trialsrepo.CreateEnterpriseTrialParams{
 		OrganizationID: orgID,
 		EndsAt:         pgtype.Timestamptz{Time: endsAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
@@ -162,7 +128,7 @@ func TestDemoteExpiredEnterpriseTrials_LocksOutExpiredTrial(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, trial.DemotedAt.Valid)
 
-	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabledKeys())
+	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabled)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
