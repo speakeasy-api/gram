@@ -28,6 +28,10 @@ import {
 } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import {
+  invalidateAllUnproxiedMcpServers,
+  useUnproxiedMcpServers,
+} from "@gram/client/react-query/unproxiedMcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -207,6 +211,7 @@ async function installUnproxiedTarget(
       createUnproxiedMcpServerForm: {
         name: target.name,
         url: target.remote.url,
+        description: target.server.description || undefined,
       },
     },
     undefined,
@@ -271,18 +276,27 @@ export function useRemoteMcpInstallWorkflow({
   const { orgSlug } = useSlugs();
 
   // Informational "already installed" signal: a remote MCP server with a
-  // matching URL already exists in the target project.
+  // matching URL already exists in the target project. Unproxied servers
+  // (e.g. Figma, installed via installUnproxiedTarget) live in a separate
+  // resource entirely, so their URLs are checked alongside the remote ones.
   const { data: remoteServersData } = useRemoteMcpServers(
+    projectSlug ? { gramProject: projectSlug } : undefined,
+  );
+  const { data: unproxiedServersData } = useUnproxiedMcpServers(
     projectSlug ? { gramProject: projectSlug } : undefined,
   );
   const installedUrls = useMemo(
     () =>
       new Set(
-        (remoteServersData?.remoteMcpServers ?? []).map((server) =>
-          normalizeRemoteUrl(server.url),
-        ),
+        [
+          ...(remoteServersData?.remoteMcpServers ?? []),
+          ...(unproxiedServersData?.unproxiedMcpServers ?? []),
+        ].map((server) => normalizeRemoteUrl(server.url)),
       ),
-    [remoteServersData?.remoteMcpServers],
+    [
+      remoteServersData?.remoteMcpServers,
+      unproxiedServersData?.unproxiedMcpServers,
+    ],
   );
   const isServerAlreadyInstalled = useCallback(
     (server: PulseMCPServer) =>
@@ -643,11 +657,13 @@ export function useRemoteMcpInstallWorkflow({
     };
 
     let anyAuthConfigured = false;
+    let anyUnproxiedInstalled = false;
     for (const [index, target] of targets.entries()) {
       setStatusAt(index, { status: "creating" });
       try {
         const result = await installTarget(target, reqOpts);
         anyAuthConfigured ||= result.authConfigured;
+        anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
         setStatusAt(index, {
           status: "completed",
           mcpServerId: result.mcpServer.id,
@@ -678,6 +694,14 @@ export function useRemoteMcpInstallWorkflow({
       invalidations.push(
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+      );
+    }
+    // Unproxied installs (e.g. Figma) don't touch any of the remote-server
+    // caches above, so the Sources page's unproxied listing needs its own
+    // invalidation.
+    if (anyUnproxiedInstalled) {
+      invalidations.push(
+        invalidateAllUnproxiedMcpServers(queryClient, { refetchType: "all" }),
       );
     }
     await Promise.all(invalidations);
