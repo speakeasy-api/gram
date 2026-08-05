@@ -89,6 +89,10 @@ type Client struct {
 	// requests to the resolveShadowMCPInventoryRequest endpoint.
 	ResolveShadowMCPInventoryRequestDoer goahttp.Doer
 
+	// RequestAccess Doer is the HTTP client used to make requests to the
+	// requestAccess endpoint.
+	RequestAccessDoer goahttp.Doer
+
 	// ListChallenges Doer is the HTTP client used to make requests to the
 	// listChallenges endpoint.
 	ListChallengesDoer goahttp.Doer
@@ -139,6 +143,7 @@ func NewClient(
 		BlockShadowMCPInventoryServerDoer:        doer,
 		UnblockShadowMCPInventoryServerDoer:      doer,
 		ResolveShadowMCPInventoryRequestDoer:     doer,
+		RequestAccessDoer:                        doer,
 		ListChallengesDoer:                       doer,
 		ListChallengeBucketsDoer:                 doer,
 		ResolveChallengeDoer:                     doer,
@@ -577,6 +582,30 @@ func (c *Client) ResolveShadowMCPInventoryRequest() goa.Endpoint {
 		resp, err := c.ResolveShadowMCPInventoryRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "resolveShadowMCPInventoryRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RequestAccess returns an endpoint that makes HTTP requests to the access
+// service requestAccess server.
+func (c *Client) RequestAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRequestAccessRequest(c.encoder)
+		decodeResponse = DecodeRequestAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRequestAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RequestAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "requestAccess", err)
 		}
 		return decodeResponse(resp)
 	}

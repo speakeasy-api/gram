@@ -49,6 +49,7 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
+  "/explore-demo",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
@@ -111,7 +112,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
-  if (session.activeOrganizationId && !session.whitelisted) {
+  // /explore-demo stays reachable: it's the gate page's own escape hatch into
+  // the shared demo org (which is whitelisted). Exact match only — a prefix
+  // match would let deeper paths (e.g. /explore-demo/projects/x) through the
+  // gate.
+  if (
+    session.activeOrganizationId &&
+    !session.whitelisted &&
+    location.pathname !== "/explore-demo" &&
+    location.pathname !== "/explore-demo/"
+  ) {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }

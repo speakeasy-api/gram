@@ -558,6 +558,24 @@ func allScopeGrants() []Grant {
 	return grants
 }
 
+// DemoScopeGrants returns the fixed read-only grant set for sessions pointed
+// at the shared demo organization. Deliberately excludes environment:read
+// (secrets-adjacent) and every write scope.
+func DemoScopeGrants() []Grant {
+	scopes := []Scope{
+		ScopeOrgRead,
+		ScopeProjectRead,
+		ScopeMCPRead,
+		ScopeSkillRead,
+		ScopeChatRead,
+	}
+	grants := make([]Grant, 0, len(scopes))
+	for _, s := range scopes {
+		grants = append(grants, NewGrant(s, WildcardResource))
+	}
+	return grants
+}
+
 func roleGrantsForScopes(scopes []Scope) []*RoleGrant {
 	grants := make([]*RoleGrant, 0, len(scopes))
 	for _, scope := range scopes {

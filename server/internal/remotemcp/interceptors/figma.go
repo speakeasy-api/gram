@@ -26,8 +26,12 @@ var figmaAllowedUserAgents = []string{
 	"claude-code/",
 	"cursor/",
 	"visual studio code/",
-	"copilot/",      // GitHub Copilot CLI
-	"codex_cli_rs/", // Codex CLI
+	"copilot/", // GitHub Copilot CLI
+	// Codex renamed its MCP client User-Agent: 0.144 sent codex_cli_rs/…,
+	// the 0.146 unified-app build sends codex-mcp-client/… . Both are listed
+	// so neither the deployed older clients nor current ones are rejected.
+	"codex_cli_rs/",
+	"codex-mcp-client/",
 	"openai-mcp/",   // ChatGPT and OpenAI Agent Builder
 	"chatgpt-user/", // ChatGPT server-side fetches
 	"zed/",

@@ -53,6 +53,9 @@ type GetProductFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled *bool `form:"customer_managed_encryption_keys_enabled,omitempty" json:"customer_managed_encryption_keys_enabled,omitempty" xml:"customer_managed_encryption_keys_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -446,20 +449,21 @@ func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetP
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
 func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *features.GetProductFeaturesResult {
 	v := &features.GetProductFeaturesResult{
-		LogsEnabled:                       *body.LogsEnabled,
-		ToolIoLogsEnabled:                 *body.ToolIoLogsEnabled,
-		SessionCaptureEnabled:             *body.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled:      *body.AuthzChallengeLoggingEnabled,
-		Webhooks:                          *body.Webhooks,
-		SsoEnabled:                        *body.SsoEnabled,
-		ScimEnabled:                       *body.ScimEnabled,
-		HooksBrowserLoginEnabled:          *body.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:              *body.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:            *body.CustomModelKeysEnabled,
-		SkillsEnabled:                     *body.SkillsEnabled,
-		SkillCaptureMetadataOnly:          *body.SkillCaptureMetadataOnly,
-		AiPlatformPushIntegrationsEnabled: *body.AiPlatformPushIntegrationsEnabled,
-		DeviceAgent:                       *body.DeviceAgent,
+		LogsEnabled:                          *body.LogsEnabled,
+		ToolIoLogsEnabled:                    *body.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                *body.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:         *body.AuthzChallengeLoggingEnabled,
+		Webhooks:                             *body.Webhooks,
+		SsoEnabled:                           *body.SsoEnabled,
+		ScimEnabled:                          *body.ScimEnabled,
+		HooksBrowserLoginEnabled:             *body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                 *body.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:               *body.CustomModelKeysEnabled,
+		SkillsEnabled:                        *body.SkillsEnabled,
+		SkillCaptureMetadataOnly:             *body.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:    *body.AiPlatformPushIntegrationsEnabled,
+		CustomerManagedEncryptionKeysEnabled: *body.CustomerManagedEncryptionKeysEnabled,
+		DeviceAgent:                          *body.DeviceAgent,
 	}
 
 	return v
@@ -806,6 +810,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.AiPlatformPushIntegrationsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
+	}
+	if body.CustomerManagedEncryptionKeysEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("customer_managed_encryption_keys_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

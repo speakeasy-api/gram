@@ -732,7 +732,7 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "endpoint-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
 
 	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
@@ -747,8 +747,15 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	requestAccessURL := mcpaccess.AuthorizationChallengesURL(ti.siteURL, authCtx.OrganizationSlug)
-	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n"+requestAccessURL, oopsErr.Error())
+	// Assert the literal URL invariants rather than round-tripping through
+	// mcpaccess.RequestAccessURL — these params are the integration contract
+	// with the dashboard's /request-access page.
+	message := oopsErr.Error()
+	require.Contains(t, message, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n")
+	require.Contains(t, message, "/"+authCtx.OrganizationSlug+"/request-access?")
+	require.Contains(t, message, "scope=mcp%3Aconnect")
+	require.Contains(t, message, "resource_id="+mcpServer.ID.String())
+	require.Contains(t, message, "resource_name=test+mcp+server")
 
 	select {
 	case <-upstreamHit:

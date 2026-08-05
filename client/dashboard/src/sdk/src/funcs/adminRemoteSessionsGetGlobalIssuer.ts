@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  RemoteSessionIssuer,
-  RemoteSessionIssuer$inboundSchema,
-} from "../models/components/remotesessionissuer.js";
+  GlobalRemoteSessionIssuer,
+  GlobalRemoteSessionIssuer$inboundSchema,
+} from "../models/components/globalremotesessionissuer.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -51,7 +51,7 @@ export function adminRemoteSessionsGetGlobalIssuer(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    RemoteSessionIssuer,
+    GlobalRemoteSessionIssuer,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -79,7 +79,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      RemoteSessionIssuer,
+      GlobalRemoteSessionIssuer,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -177,7 +177,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    RemoteSessionIssuer,
+    GlobalRemoteSessionIssuer,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -188,7 +188,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, RemoteSessionIssuer$inboundSchema),
+    M.json(200, GlobalRemoteSessionIssuer$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

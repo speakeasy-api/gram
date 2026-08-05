@@ -75,6 +75,16 @@ func NewUnifiedClient(
 	}
 }
 
+// ResolveKey exposes key resolution so callers can scope rate-limit buckets to
+// the key a completion would spend.
+func (c *ChatClient) ResolveKey(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType KeyType) (ResolvedKey, error) {
+	resolved, err := c.keyResolver.ResolveKey(ctx, orgID, projectID, slot, keyType.OrDefault())
+	if err != nil {
+		return ResolvedKey{}, fmt.Errorf("resolve OpenRouter key: %w", err)
+	}
+	return resolved, nil
+}
+
 type initializeRequestResult struct {
 	apiKey         string
 	customerKey    bool

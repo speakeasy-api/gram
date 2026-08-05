@@ -472,6 +472,8 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		Title:          conv.ToPGTextEmpty(state.title),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(createdAt),
+		// Feed titles are authoritative: newest non-null title wins.
+		PreferStoredTitle: false,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert chatgpt compliance chat")

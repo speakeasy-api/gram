@@ -2252,6 +2252,15 @@ WHERE project_id = @project_id
   AND state = 'reserved'
   AND claim_token IS NULL;
 
+-- name: BackdateReservedSkillEfficacyEvaluationsFixture :execrows
+-- Test-only fixture: age a project's reserved rows past a recovery lease so a
+-- test can make staleness deterministic instead of retrying a sweep that
+-- recovers rows cumulatively.
+UPDATE skill_efficacy_evaluations
+SET updated_at = updated_at - @backdate_by::interval
+WHERE project_id = @project_id
+  AND state = 'reserved';
+
 -- name: ClearSkillEfficacyClaimTokenFixture :execrows
 -- Test-only fixture for a reservation written before claim_token existed.
 UPDATE skill_efficacy_evaluations

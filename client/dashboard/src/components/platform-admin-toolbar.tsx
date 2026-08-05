@@ -10,6 +10,7 @@ import {
   PlatformAdminInfoPanel,
   PlatformAdminOnboardingPanel,
 } from "./platform-admin-panel";
+import { DevBadge } from "@/components/dev-badge";
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -596,9 +597,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
             className="flex flex-1 cursor-grab items-center gap-2.5 active:cursor-grabbing"
           >
             <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              DEV
-            </span>
+            <DevBadge />
             <span className="text-muted-foreground text-xs font-semibold">
               Developer Toolkit
             </span>

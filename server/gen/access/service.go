@@ -60,6 +60,9 @@ type Service interface {
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
+	// Request access to a scope by sending an email notification to organization
+	// administrators.
+	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
 	ListChallenges(context.Context, *ListChallengesPayload) (res *ListChallengesResult, err error)
@@ -92,7 +95,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [22]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -449,6 +452,29 @@ type ListUserGrantsResult struct {
 	Grants []*ListRoleGrant
 }
 
+// RequestAccessPayload is the payload type of the access service requestAccess
+// method.
+type RequestAccessPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The scope being requested.
+	Scope string
+	// Optional resource ID the scope applies to.
+	ResourceID *string
+	// Optional human-readable name for the resource (e.g. project name, MCP server
+	// name).
+	ResourceName *string
+	// Optional message from the requester explaining why they need access.
+	Message *string
+}
+
+// RequestAccessResult is the result type of the access service requestAccess
+// method.
+type RequestAccessResult struct {
+	// Number of administrators who were notified.
+	SentToCount int
+}
+
 // ResolveChallengePayload is the payload type of the access service
 // resolveChallenge method.
 type ResolveChallengePayload struct {
@@ -598,6 +624,12 @@ type ShadowMCPInventoryUser struct {
 	Name             *string
 	Email            *string
 	LastCalled       string
+	ObservedUseCount int
+	Sources          []*ShadowMCPInventoryUserSource
+}
+
+type ShadowMCPInventoryUserSource struct {
+	Source           string
 	ObservedUseCount int
 }
 

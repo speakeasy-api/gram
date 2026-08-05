@@ -34,8 +34,9 @@ stack = "mise run git:workboot"
 # Runs inside the worktree before deletion — nuke needs this worktree's
 # COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right
 # compose stack. post-remove would run in the primary worktree instead.
+# --keep-shared leaves the shared Presidio stack up for the other worktrees.
 [[pre-remove]]
-nuke = "mise run nuke"
+nuke = "mise run nuke --keep-shared"
 
 # Dashboard URL in the `wt list` URL column, dimmed when the port isn't
 # listening — so it doubles as a "is this worktree's stack up?" indicator.
@@ -49,8 +50,12 @@ url = "https://localhost:{{ vars.siteport | default('5173') }}"
 # `wt status` — one line per worktree: is its stack up, and where. The built-in
 # table can't express this: liveness is only in `url_active` in the JSON, not
 # in any column template.
+# `wt status` — interactive TUI: live-updating stack states, per-worktree boot
+# logs (enter), multi-select remove (space + d). Without a TTY (pipes, agents)
+# it prints a single plain-text frame instead, so scripting keeps working.
+# The old one-shot table remains at `mise run git:workstatus` / `gwst`.
 [aliases]
-status = "mise run git:workstatus"
+status = "mise run git:worktui"
 
 #
 # ## Dev server URL

@@ -56,6 +56,15 @@ func logFileSourceCases() []logFileSourceCase {
 				return newChatGPTTestSource(cfg, client)
 			},
 		},
+		{
+			name:      "codex_cloud_sessions",
+			eventType: codexCloudEventType,
+			lookback:  chatgptComplianceInitialLookback,
+			newConfig: chatgptConversationConfig,
+			newSource: func(cfg Config, client codexComplianceClient) logFilePager {
+				return newCodexCloudTestSource(cfg, client)
+			},
+		},
 	}
 }
 

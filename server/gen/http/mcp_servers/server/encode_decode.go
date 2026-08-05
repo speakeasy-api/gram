@@ -511,13 +511,14 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*mcpservers.ListMcpServersPayload, error) {
 		var payload *mcpservers.ListMcpServersPayload
 		var (
-			remoteMcpServerID   *string
-			tunneledMcpServerID *string
-			toolsetID           *string
-			sessionToken        *string
-			apikeyToken         *string
-			projectSlugInput    *string
-			err                 error
+			remoteMcpServerID    *string
+			tunneledMcpServerID  *string
+			toolsetID            *string
+			unproxiedMcpServerID *string
+			sessionToken         *string
+			apikeyToken          *string
+			projectSlugInput     *string
+			err                  error
 		)
 		qp := r.URL.Query()
 		remoteMcpServerIDRaw := qp.Get("remote_mcp_server_id")
@@ -541,6 +542,13 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if toolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
 		}
+		unproxiedMcpServerIDRaw := qp.Get("unproxied_mcp_server_id")
+		if unproxiedMcpServerIDRaw != "" {
+			unproxiedMcpServerID = &unproxiedMcpServerIDRaw
+		}
+		if unproxiedMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("unproxied_mcp_server_id", *unproxiedMcpServerID, goa.FormatUUID))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -556,7 +564,7 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListMcpServersPayload(remoteMcpServerID, tunneledMcpServerID, toolsetID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListMcpServersPayload(remoteMcpServerID, tunneledMcpServerID, toolsetID, unproxiedMcpServerID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2821,6 +2829,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		RemoteMcpServerID:     v.RemoteMcpServerID,
 		TunneledMcpServerID:   v.TunneledMcpServerID,
 		ToolsetID:             v.ToolsetID,
+		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            string(v.Visibility),
 		CreatedAt:             v.CreatedAt,

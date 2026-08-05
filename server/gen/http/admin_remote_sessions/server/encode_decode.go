@@ -238,7 +238,7 @@ func EncodeCreateGlobalIssuerError(encoder func(context.Context, http.ResponseWr
 // the adminRemoteSessions listGlobalIssuers endpoint.
 func EncodeListGlobalIssuersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*adminremotesessions.ListRemoteSessionIssuersResult)
+		res, _ := v.(*adminremotesessions.ListGlobalRemoteSessionIssuersResult)
 		enc := encoder(ctx, w)
 		body := NewListGlobalIssuersResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -453,7 +453,7 @@ func EncodeListGlobalIssuersError(encoder func(context.Context, http.ResponseWri
 // the adminRemoteSessions getGlobalIssuer endpoint.
 func EncodeGetGlobalIssuerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*types.RemoteSessionIssuer)
+		res, _ := v.(*adminremotesessions.GlobalRemoteSessionIssuer)
 		enc := encoder(ctx, w)
 		body := NewGetGlobalIssuerResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -2539,6 +2539,21 @@ func EncodeDeleteGlobalClientError(encoder func(context.Context, http.ResponseWr
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody
+// builds a value of type *GlobalRemoteSessionIssuerResponseBody from a value
+// of type *adminremotesessions.GlobalRemoteSessionIssuer.
+func marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody(v *adminremotesessions.GlobalRemoteSessionIssuer) *GlobalRemoteSessionIssuerResponseBody {
+	res := &GlobalRemoteSessionIssuerResponseBody{
+		GlobalClientCount: v.GlobalClientCount,
+		TenantClientCount: v.TenantClientCount,
+	}
+	if v.Issuer != nil {
+		res.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v.Issuer)
+	}
+
+	return res
 }
 
 // marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody builds a

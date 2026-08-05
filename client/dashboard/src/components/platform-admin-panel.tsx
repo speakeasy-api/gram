@@ -20,6 +20,7 @@ import {
   BarChart3,
   BookOpen,
   Building2,
+  Cloud,
   FileSearch,
   FolderSync,
   Key,
@@ -232,6 +233,24 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.Webhooks
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Customer-Managed Encryption Keys"
+        description="Unlocks encryption key management for an organization, enabling external service credential, external encryption key, and asymmetric signing functionality."
+        icon={Cloud}
+        featureName={FeatureName.CustomerManagedEncryptionKeys}
+        enabled={features.customerManagedEncryptionKeysEnabled}
+        isPending={
+          isPending &&
+          pendingFeature === FeatureName.CustomerManagedEncryptionKeys
+        }
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.CustomerManagedEncryptionKeys
             ? mutError?.message
             : undefined
         }

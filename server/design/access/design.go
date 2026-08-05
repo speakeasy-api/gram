@@ -512,6 +512,33 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
 	})
 
+	Method("requestAccess", func() {
+		Description("Request access to a scope by sending an email notification to organization administrators.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(RequestAccessForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(RequestAccessResult)
+
+		HTTP(func() {
+			POST("/rpc/access.requestAccess")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "requestAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "requestAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RequestAccess", "type": "mutation"}`)
+	})
+
 	Method("listChallenges", func() {
 		Description("List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.")
 		Security(security.ByKey, func() {
@@ -869,6 +896,12 @@ var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
+var ShadowMCPInventoryUserSourceModel = Type("ShadowMCPInventoryUserSource", func() {
+	Required("source", "observed_use_count")
+	Attribute("source", String)
+	Attribute("observed_use_count", Int)
+})
+
 var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
 	Required("user_key", "last_called", "observed_use_count")
 
@@ -879,6 +912,7 @@ var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
+	Attribute("sources", ArrayOf(ShadowMCPInventoryUserSourceModel))
 })
 
 var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult", func() {
@@ -1090,4 +1124,25 @@ var ChallengeResolutionModel = Type("ChallengeResolution", func() {
 var ResolveChallengesResult = Type("ResolveChallengesResult", func() {
 	Required("resolutions")
 	Attribute("resolutions", ArrayOf(ChallengeResolutionModel), "The created resolution records.")
+})
+
+var RequestAccessForm = Type("RequestAccessForm", func() {
+	Description("Form for requesting access to a scope.")
+	Required("scope")
+
+	Attribute("scope", String, func() {
+		Description("The scope being requested.")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
+	})
+	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
+	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")
+	Attribute("message", String, func() {
+		Description("Optional message from the requester explaining why they need access.")
+		MaxLength(1000)
+	})
+})
+
+var RequestAccessResult = Type("RequestAccessResult", func() {
+	Required("sent_to_count")
+	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
 })

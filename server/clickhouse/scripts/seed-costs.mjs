@@ -625,6 +625,12 @@ for (const p of people) {
           chatgptProduct === "Work" ? "chatgpt-work" : "chatgpt",
         "gram.provider": "openai",
         "gram.resource.urn": "chatgpt:usage:metrics",
+        // Compliance rows come from the org's own enterprise feed, so the
+        // importer stamps them team; billing mode mirrors an admin-declared
+        // codex_compliance config (DNO-734). Constant across rows because it
+        // is an org-level declaration, not a per-row signal.
+        "gram.account_type": "team",
+        "gram.billing_mode": "flat_rate",
         "codex.compliance.product": chatgptProduct,
         "gen_ai.response.model": rnd() < 0.6 ? "gpt-5.6" : "gpt-5.4-mini",
         "gen_ai.usage.input_tokens": inputTokens,

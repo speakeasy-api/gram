@@ -1822,3 +1822,133 @@ func (r *recordingRiskFindingInserter) InsertRiskFindings(_ context.Context, row
 	r.rows = rows
 	return nil
 }
+
+// TestCanonicalSessionMetadata_AttributesCodexAdapter: a Codex session
+// delivered only through the relay (Ingest is its sole path) is attributed at
+// ingest — provider openai, email-based classification, and the org-level
+// billing mode from the codex_compliance config for team sessions (DNO-734).
+func TestCanonicalSessionMetadata_AttributesCodexAdapter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-ingest-attribution")
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "user-123", Email: "dev@example.com"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	require.Equal(t, "flat_rate", metadata.BillingMode)
+}
+
+// TestCanonicalSessionMetadata_CodexAdapterUnresolvedActorIsPersonal: an actor
+// whose email did not resolve to an org member classifies personal and does
+// not inherit the company's billing mode. Claude adapters remain untouched —
+// their attribution belongs to the OTEL path.
+func TestCanonicalSessionMetadata_CodexAdapterUnresolvedActorIsPersonal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	payload := canonicalIngestPayload("Codex", "prompt.submitted", "codex-ingest-personal")
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: "someone@personal.example"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+
+	claudeMetadata := ti.service.canonicalSessionMetadata(ctx, canonicalIngestPayload("claude-code", "prompt.submitted", "claude-ingest-untouched"), authCtx, canonicalActor{UserID: "", Email: ""})
+	require.Empty(t, claudeMetadata.Provider)
+	require.Empty(t, claudeMetadata.AccountType)
+}
+
+// TestCanonicalSessionMetadata_CodexReattributesOnNewActorEmail: a cached
+// classification is only adopted when this event's actor email is the one it
+// was computed from — the same identity rule the legacy-hook and OTEL paths
+// apply — so a different resolved actor on the same session re-classifies
+// instead of inheriting the prior attribution. Re-attribution is observable
+// through the billing mode: the cache carries flat_rate, but no config exists
+// in this test, so a fresh resolution must come back empty.
+func TestCanonicalSessionMetadata_CodexReattributesOnNewActorEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	newActorID := "codex-ingest-new-actor"
+	newActorEmail := "new-actor@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, newActorID, newActorEmail)
+
+	sessionID := "codex-ingest-actor-change"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:         sessionID,
+		ServiceName:       "codex",
+		UserEmail:         "teammate@example.com",
+		UserID:            "teammate-user-id",
+		Provider:          providerOpenAI,
+		AccountType:       accountTypeTeam,
+		BillingMode:       "flat_rate",
+		ObservedUserEmail: "teammate@example.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+	}, 0))
+
+	payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: newActorID, Email: newActorEmail})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	// The cached flat_rate must NOT survive: a fresh resolution ran and found
+	// no config declaration.
+	require.Empty(t, metadata.BillingMode)
+	require.Equal(t, newActorEmail, metadata.ObservedUserEmail)
+}
+
+// TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID: when
+// the actor email changes to one that resolves to no org member, the
+// re-classification must not run with the PRIOR actor's UserID (the session
+// identity fallback fills UserID from the cache independently of the email).
+// A stale id would classify the unresolved email team and unlock the
+// team-gated org billing mode; the fresh actor must come back personal with
+// no billing mode even though a flat_rate declaration exists.
+func TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	sessionID := "codex-ingest-stale-user-id"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:         sessionID,
+		ServiceName:       "codex",
+		UserEmail:         "teammate@example.com",
+		UserID:            "teammate-user-id",
+		Provider:          providerOpenAI,
+		AccountType:       accountTypeTeam,
+		BillingMode:       "flat_rate",
+		ObservedUserEmail: "teammate@example.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+	}, 0))
+
+	payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: "stranger@personal.example"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Empty(t, metadata.UserID, "cached teammate id must not survive the identity change")
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+	require.Equal(t, "stranger@personal.example", metadata.ObservedUserEmail)
+}

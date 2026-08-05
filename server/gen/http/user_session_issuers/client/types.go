@@ -35,6 +35,13 @@ type UpdateUserSessionIssuerRequestBody struct {
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
+	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
+	// 'open' admits any spec-valid document; 'disabled' admits none and stops
+	// advertising CIMD support. Omit to leave unchanged. Once set, the issuer can
+	// never return to the unset state — it can only be moved between explicit
+	// modes.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 }
 
 // MigrateLegacyGramRegistrationsRequestBody is the type of the
@@ -59,9 +66,17 @@ type CreateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -76,9 +91,17 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -101,9 +124,17 @@ type GetUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // MigrateLegacyGramRegistrationsResponseBody is the type of the
@@ -1267,9 +1298,17 @@ type UserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateUserSessionIssuerRequestBody builds the HTTP request body from the
@@ -1289,10 +1328,11 @@ func NewCreateUserSessionIssuerRequestBody(p *usersessionissuers.CreateUserSessi
 // "userSessionIssuers" service.
 func NewUpdateUserSessionIssuerRequestBody(p *usersessionissuers.UpdateUserSessionIssuerPayload) *UpdateUserSessionIssuerRequestBody {
 	body := &UpdateUserSessionIssuerRequestBody{
-		ID:                   p.ID,
-		Slug:                 p.Slug,
-		AuthnChallengeMode:   p.AuthnChallengeMode,
-		SessionDurationHours: p.SessionDurationHours,
+		ID:                            p.ID,
+		Slug:                          p.Slug,
+		AuthnChallengeMode:            p.AuthnChallengeMode,
+		SessionDurationHours:          p.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: p.ClientIDMetadataAdmissionMode,
 	}
 	return body
 }
@@ -1312,13 +1352,14 @@ func NewMigrateLegacyGramRegistrationsRequestBody(p *usersessionissuers.MigrateL
 // service "createUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                   *body.ID,
-		ProjectID:            *body.ProjectID,
-		Slug:                 *body.Slug,
-		AuthnChallengeMode:   *body.AuthnChallengeMode,
-		SessionDurationHours: *body.SessionDurationHours,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                            *body.ID,
+		ProjectID:                     *body.ProjectID,
+		Slug:                          *body.Slug,
+		AuthnChallengeMode:            *body.AuthnChallengeMode,
+		SessionDurationHours:          *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     *body.CreatedAt,
+		UpdatedAt:                     *body.UpdatedAt,
 	}
 
 	return v
@@ -1478,13 +1519,14 @@ func NewCreateUserSessionIssuerGatewayError(body *CreateUserSessionIssuerGateway
 // service "updateUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                   *body.ID,
-		ProjectID:            *body.ProjectID,
-		Slug:                 *body.Slug,
-		AuthnChallengeMode:   *body.AuthnChallengeMode,
-		SessionDurationHours: *body.SessionDurationHours,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                            *body.ID,
+		ProjectID:                     *body.ProjectID,
+		Slug:                          *body.Slug,
+		AuthnChallengeMode:            *body.AuthnChallengeMode,
+		SessionDurationHours:          *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     *body.CreatedAt,
+		UpdatedAt:                     *body.UpdatedAt,
 	}
 
 	return v
@@ -1812,13 +1854,14 @@ func NewListUserSessionIssuersGatewayError(body *ListUserSessionIssuersGatewayEr
 // service "getUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                   *body.ID,
-		ProjectID:            *body.ProjectID,
-		Slug:                 *body.Slug,
-		AuthnChallengeMode:   *body.AuthnChallengeMode,
-		SessionDurationHours: *body.SessionDurationHours,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                            *body.ID,
+		ProjectID:                     *body.ProjectID,
+		Slug:                          *body.Slug,
+		AuthnChallengeMode:            *body.AuthnChallengeMode,
+		SessionDurationHours:          *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     *body.CreatedAt,
+		UpdatedAt:                     *body.UpdatedAt,
 	}
 
 	return v
@@ -2305,6 +2348,9 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2316,6 +2362,11 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2344,6 +2395,9 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2355,6 +2409,11 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2399,6 +2458,9 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2410,6 +2472,11 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3900,6 +3967,9 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3911,6 +3981,11 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

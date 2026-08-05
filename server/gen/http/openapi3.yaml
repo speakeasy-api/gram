@@ -2227,6 +2227,102 @@ paths:
             x-speakeasy-name-override: listShadowMCPInventoryUsers
             x-speakeasy-react-hook:
                 name: ShadowMCPInventoryUsers
+    /rpc/access.requestAccess:
+        post:
+            description: Request access to a scope by sending an email notification to organization administrators.
+            operationId: requestAccess
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RequestAccessForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RequestAccessResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: requestAccess access
+            tags:
+                - access
+            x-speakeasy-name-override: requestAccess
+            x-speakeasy-react-hook:
+                name: RequestAccess
+                type: mutation
     /rpc/access.resolveChallenge:
         post:
             description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
@@ -3227,7 +3323,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreateGcpIamCredentialForm'
+                            $ref: '#/components/schemas/CreatePlatformGcpIamCredentialForm'
                 required: true
             responses:
                 "200":
@@ -3581,7 +3677,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateGcpIamCredentialRequestBody'
+                            $ref: '#/components/schemas/UpdateGcpIamPlatformCredentialRequestBody'
                 required: true
             responses:
                 "200":
@@ -4291,7 +4387,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/RemoteSessionIssuer'
+                                $ref: '#/components/schemas/GlobalRemoteSessionIssuer'
                     description: OK response.
                 "400":
                     content:
@@ -4500,7 +4596,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListRemoteSessionIssuersResult'
+                                $ref: '#/components/schemas/ListGlobalRemoteSessionIssuersResult'
                     description: OK response.
                 "400":
                     content:
@@ -8476,6 +8572,94 @@ paths:
             x-speakeasy-name-override: callback
             x-speakeasy-react-hook:
                 disabled: true
+    /rpc/auth.enterDemo:
+        post:
+            description: Switches the current session into the shared read-only demo organization.
+            operationId: enterDemo
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    headers:
+                        Gram-Session:
+                            description: Session header
+                            schema:
+                                description: Session header
+                                type: string
+                        Set-Cookie:
+                            description: The authentication session
+                            schema:
+                                description: The authentication session
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: enterDemo auth
+            tags:
+                - auth
+            x-speakeasy-name-override: enterDemo
+            x-speakeasy-react-hook:
+                name: EnterDemo
     /rpc/auth.info:
         get:
             description: Provides information about the current authentication status.
@@ -15536,6 +15720,87 @@ paths:
             x-speakeasy-name-override: getGcpIam
             x-speakeasy-react-hook:
                 name: GetGcpIamCredential
+    /rpc/externalCredentials.getGcpSetupInfo:
+        get:
+            description: Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+            operationId: getGcpSetupInfo
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpSetupInfo'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getGcpSetupInfo externalCredentials
+            tags:
+                - externalCredentials
+            x-speakeasy-name-override: getGcpSetupInfo
+            x-speakeasy-react-hook:
+                name: GcpSetupInfo
     /rpc/externalCredentials.list:
         get:
             description: List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
@@ -15963,6 +16228,96 @@ paths:
             x-speakeasy-name-override: updateGcpIam
             x-speakeasy-react-hook:
                 name: UpdateGcpIamCredential
+    /rpc/externalCredentials.verifyGcpIam:
+        post:
+            description: 'Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
+            operationId: verifyGcpIamCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to verify.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to verify.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyCredentialResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: verifyGcpIamCredential externalCredentials
+            tags:
+                - externalCredentials
+            x-speakeasy-name-override: verifyGcpIam
+            x-speakeasy-react-hook:
+                name: VerifyGcpIamCredential
     /rpc/externalKeys.createAwsKms:
         post:
             description: Create an AWS KMS external key. Requires org:admin.
@@ -21165,7 +21520,7 @@ paths:
                 name: GetMcpServer
     /rpc/mcpServers.list:
         get:
-            description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+            description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
             operationId: listMcpServers
             parameters:
                 - allowEmptyValue: true
@@ -21190,6 +21545,14 @@ paths:
                   name: toolset_id
                   schema:
                     description: Filter to MCP servers backed by this toolset
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to MCP servers backed by this unproxied MCP server
+                  in: query
+                  name: unproxied_mcp_server_id
+                  schema:
+                    description: Filter to MCP servers backed by this unproxied MCP server
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -42924,6 +43287,426 @@ paths:
             x-speakeasy-react-hook:
                 name: GetToolUsageUsersByTarget
                 type: query
+    /rpc/telemetry.getUnproxiedMcpServerClientUsage:
+        post:
+            description: Best-effort per-client (hook source, e.g. claude-code, cursor, codex) call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.
+            operationId: getUnproxiedMcpServerClientUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnproxiedMcpServerUsageBreakdownPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUnproxiedMcpServerClientUsageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnproxiedMcpServerClientUsage telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUnproxiedMcpServerClientUsage
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServerClientUsage
+                type: query
+    /rpc/telemetry.getUnproxiedMcpServerToolUsage:
+        post:
+            description: Best-effort per-tool call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.
+            operationId: getUnproxiedMcpServerToolUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnproxiedMcpServerUsageBreakdownPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUnproxiedMcpServerToolUsageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnproxiedMcpServerToolUsage telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUnproxiedMcpServerToolUsage
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServerToolUsage
+                type: query
+    /rpc/telemetry.getUnproxiedMcpServerUsage:
+        post:
+            description: 'Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP''s hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.'
+            operationId: getUnproxiedMcpServerUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetUnproxiedMcpServerUsageRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUnproxiedMcpServerUsageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnproxiedMcpServerUsage telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUnproxiedMcpServerUsage
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServerUsage
+                type: query
+    /rpc/telemetry.getUnproxiedMcpServerUserUsage:
+        post:
+            description: Best-effort per-user call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.
+            operationId: getUnproxiedMcpServerUserUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnproxiedMcpServerUsageBreakdownPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetUnproxiedMcpServerUserUsageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getUnproxiedMcpServerUserUsage telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getUnproxiedMcpServerUserUsage
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServerUserUsage
+                type: query
     /rpc/telemetry.getUserMetricsSummary:
         post:
             description: Get aggregated metrics summary grouped by user
@@ -48198,6 +48981,530 @@ paths:
             x-speakeasy-name-override: updateServer
             x-speakeasy-react-hook:
                 name: UpdateTunneledMcpServer
+    /rpc/unproxiedMcp.createServer:
+        post:
+            description: Create a new unproxied MCP server. Restricted to callers whose email is on the speakeasy.com or speakeasyapi.dev domain.
+            operationId: createUnproxiedMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUnproxiedMcpServerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UnproxiedMcpServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createServer unproxiedMcp
+            tags:
+                - unproxiedMcp
+            x-speakeasy-name-override: createServer
+            x-speakeasy-react-hook:
+                name: CreateUnproxiedMcpServer
+    /rpc/unproxiedMcp.deleteServer:
+        delete:
+            description: Delete an unproxied MCP server
+            operationId: deleteUnproxiedMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the unproxied MCP server to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the unproxied MCP server to delete
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteServer unproxiedMcp
+            tags:
+                - unproxiedMcp
+            x-speakeasy-name-override: deleteServer
+            x-speakeasy-react-hook:
+                name: DeleteUnproxiedMcpServer
+    /rpc/unproxiedMcp.getServer:
+        get:
+            description: Get an unproxied MCP server by ID or slug. Exactly one of id or slug must be provided.
+            operationId: getUnproxiedMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the unproxied MCP server. Mutually exclusive with slug.
+                  in: query
+                  name: id
+                  schema:
+                    description: The ID of the unproxied MCP server. Mutually exclusive with slug.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The slug of the unproxied MCP server. Mutually exclusive with id.
+                  in: query
+                  name: slug
+                  schema:
+                    description: The slug of the unproxied MCP server. Mutually exclusive with id.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UnproxiedMcpServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServer unproxiedMcp
+            tags:
+                - unproxiedMcp
+            x-speakeasy-name-override: getServer
+            x-speakeasy-react-hook:
+                name: GetUnproxiedMcpServer
+    /rpc/unproxiedMcp.listServers:
+        get:
+            description: List all unproxied MCP servers for a project
+            operationId: listUnproxiedMcpServers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUnproxiedMcpServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listServers unproxiedMcp
+            tags:
+                - unproxiedMcp
+            x-speakeasy-name-override: listServers
+            x-speakeasy-react-hook:
+                name: UnproxiedMcpServers
+    /rpc/unproxiedMcp.listTools:
+        get:
+            description: Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.
+            operationId: listUnproxiedMcpServerTools
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the unproxied MCP server
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the unproxied MCP server
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUnproxiedMcpServerToolsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listTools unproxiedMcp
+            tags:
+                - unproxiedMcp
+            x-speakeasy-name-override: listTools
+            x-speakeasy-react-hook:
+                name: UnproxiedMcpServerTools
     /rpc/usage.createCheckout:
         post:
             description: Create a checkout link for upgrading to the business plan
@@ -49999,6 +51306,549 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateUserSessionIssuer
+    /rpc/userSessionIssuersCimdClients.create:
+        post:
+            description: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.
+            operationId: createUserSessionIssuerCimdClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserSessionIssuerCimdClientForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateUserSessionIssuerCimdClientResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createUserSessionIssuerCimdClient userSessionIssuersCimdClients
+            tags:
+                - userSessionIssuersCimdClients
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateUserSessionIssuerCimdClient
+    /rpc/userSessionIssuersCimdClients.delete:
+        delete:
+            description: Remove a custom CIMD document URL from a user_session_issuer. New authorization requests from that client are denied immediately; sessions already issued to it are unaffected and continue until they expire.
+            operationId: deleteUserSessionIssuerCimdClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer_cimd_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer_cimd_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteUserSessionIssuerCimdClient userSessionIssuersCimdClients
+            tags:
+                - userSessionIssuersCimdClients
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteUserSessionIssuerCimdClient
+    /rpc/userSessionIssuersCimdClients.get:
+        get:
+            description: Get a single custom CIMD document URL entry by id.
+            operationId: getUserSessionIssuerCimdClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer_cimd_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer_cimd_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuerCimdClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getUserSessionIssuerCimdClient userSessionIssuersCimdClients
+            tags:
+                - userSessionIssuersCimdClients
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: UserSessionIssuerCimdClient
+    /rpc/userSessionIssuersCimdClients.list:
+        get:
+            description: List the custom CIMD document URLs configured on a user_session_issuer. Does not include the preset catalog — call listPresets for that.
+            operationId: listUserSessionIssuerCimdClients
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer whose custom CIMD clients are listed.
+                  in: query
+                  name: user_session_issuer_id
+                  required: true
+                  schema:
+                    description: The user_session_issuer whose custom CIMD clients are listed.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  in: query
+                  name: cursor
+                  schema:
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionIssuerCimdClientsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listUserSessionIssuerCimdClients userSessionIssuersCimdClients
+            tags:
+                - userSessionIssuersCimdClients
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: UserSessionIssuerCimdClients
+    /rpc/userSessionIssuersCimdClients.listPresets:
+        get:
+            description: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.
+            operationId: listCimdClientPresets
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCimdClientPresetsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listPresets userSessionIssuersCimdClients
+            tags:
+                - userSessionIssuersCimdClients
+            x-speakeasy-name-override: listPresets
+            x-speakeasy-react-hook:
+                name: CimdClientPresets
     /rpc/userSessions.list:
         get:
             description: List issued user_sessions in the caller's project. refresh_token_hash is never returned.
@@ -53184,6 +55034,31 @@ components:
                 - tool_calls
                 - tool_results
                 - risk_only
+        CimdClientPreset:
+            type: object
+            properties:
+                client_id_metadata_uri:
+                    type: string
+                    description: The https URL this client presents as its client_id. Usually exact; when is_pattern is true this is a wildcard pattern rather than a literal URL.
+                display_name:
+                    type: string
+                    description: Human-readable client name.
+                enabled:
+                    type: boolean
+                    description: Whether presets-mode issuers currently admit this entry. Disabled entries are listed so operators can see that Gram knows about the vendor.
+                is_pattern:
+                    type: boolean
+                    description: True when client_id_metadata_uri contains a `*` wildcard, matching a whole namespace of client_ids rather than one URL. Used for vendors that mint a separate metadata document per connector or install, so their client_ids cannot be enumerated. A `*` stands for exactly one path segment and never widens the host.
+                vendor_key:
+                    type: string
+                    description: Stable identifier for the publishing vendor. Not unique — a vendor may publish several client documents.
+            description: An entry in Gram's curated CIMD preset catalog.
+            required:
+                - vendor_key
+                - display_name
+                - client_id_metadata_uri
+                - is_pattern
+                - enabled
         ClaudeAgentUsage:
             type: object
             properties:
@@ -53856,21 +55731,13 @@ components:
             properties:
                 impersonate_service_account:
                     type: string
-                    description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+                    description: The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
                 name:
                     type: string
                     description: A human-readable name for the credential.
-                wif_pool_id:
-                    type: string
-                    description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
-                wif_project_number:
-                    type: string
-                    description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
-                wif_provider_id:
-                    type: string
-                    description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
             required:
                 - name
+                - impersonate_service_account
         CreateGcpKmsKeyForm:
             type: object
             properties:
@@ -54084,6 +55951,10 @@ components:
                     type: string
                     description: The ID of the tunneled MCP server to use as the backend
                     format: uuid
+                unproxied_mcp_server_id:
+                    type: string
+                    description: The ID of the unproxied MCP server to use as the backend
+                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -54091,7 +55962,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
+            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided.
             required:
                 - name
                 - visibility
@@ -54180,6 +56051,26 @@ components:
                     $ref: '#/components/schemas/Package'
             required:
                 - package
+        CreatePlatformGcpIamCredentialForm:
+            type: object
+            properties:
+                impersonate_service_account:
+                    type: string
+                    description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+                name:
+                    type: string
+                    description: A human-readable name for the credential.
+                wif_pool_id:
+                    type: string
+                    description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
+                wif_project_number:
+                    type: string
+                    description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
+                wif_provider_id:
+                    type: string
+                    description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
+            required:
+                - name
         CreatePluginForm:
             type: object
             properties:
@@ -54960,6 +56851,47 @@ components:
             required:
                 - server
                 - tunnel_key
+        CreateUnproxiedMcpServerForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Optional description shown alongside the server.
+                name:
+                    type: string
+                    description: Optional human-readable name for the unproxied MCP server. Empty values are stored as null.
+                url:
+                    type: string
+                    description: The URL of the vendor's MCP server. Speakeasy never proxies tool calls through it; the only outbound requests Speakeasy ever makes to it are fetching a favicon and, on request, a live tool listing.
+                    format: uri
+            description: Form for creating a new unproxied MCP server
+            required:
+                - url
+        CreateUserSessionIssuerCimdClientForm:
+            type: object
+            properties:
+                client_id_metadata_uri:
+                    type: string
+                    description: The exact https URL the client presents as its client_id. Matched byte for byte at authorization time — the spec forbids normalization, so this must be the vendor's published URL exactly.
+                user_session_issuer_id:
+                    type: string
+                    description: The user_session_issuer the URL is allowed on.
+                    format: uuid
+            description: Form for allowing an additional CIMD document URL on a user_session_issuer.
+            required:
+                - user_session_issuer_id
+                - client_id_metadata_uri
+        CreateUserSessionIssuerCimdClientResult:
+            type: object
+            properties:
+                client:
+                    $ref: '#/components/schemas/UserSessionIssuerCimdClient'
+                probe_warning:
+                    type: string
+                    description: Set when Gram could not fetch or validate the document at this URL. The entry was still saved; the URL will be admitted, but a client presenting it will fail at authorization time until the document is reachable and valid.
+            description: Result of allowing a CIMD document URL, including any non-fatal probe warning.
+            required:
+                - client
         CreateUserSessionIssuerForm:
             type: object
             properties:
@@ -56930,6 +58862,18 @@ components:
                 - name
                 - created_at
                 - updated_at
+        GcpSetupInfo:
+            type: object
+            properties:
+                required_role:
+                    type: string
+                    description: The IAM role to grant Gram's service account on the target service account.
+                service_account_email:
+                    type: string
+                    description: Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Gram to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
+            description: What the customer must grant in their own GCP project before Gram can impersonate a service account there.
+            required:
+                - required_role
         GenerateTitleRequestBody:
             type: object
             properties:
@@ -57511,6 +59455,9 @@ components:
                 custom_model_keys_enabled:
                     type: boolean
                     description: Whether the organization can supply its own model provider API keys (BYOK)
+                customer_managed_encryption_keys_enabled:
+                    type: boolean
+                    description: Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption
                 device_agent:
                     type: boolean
                     description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
@@ -57558,6 +59505,7 @@ components:
                 - skills_enabled
                 - skill_capture_metadata_only
                 - ai_platform_push_integrations_enabled
+                - customer_managed_encryption_keys_enabled
                 - device_agent
         GetProjectForm:
             type: object
@@ -57930,6 +59878,74 @@ components:
             description: Top MCP and tool usage user identities for the selected filters and time range
             required:
                 - users
+        GetUnproxiedMcpServerClientUsageResult:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerClientUsageRow'
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+            description: Result of a Shadow-MCP-backed per-client usage lookup for an unproxied MCP server
+            required:
+                - clients
+        GetUnproxiedMcpServerToolUsageResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerToolUsageRow'
+            description: Result of a Shadow-MCP-backed per-tool usage lookup for an unproxied MCP server
+            required:
+                - tools
+        GetUnproxiedMcpServerUsageRequestBody:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    format: date-time
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    format: date-time
+                url:
+                    type: string
+                    description: The unproxied MCP server's vendor URL
+                    format: uri
+            required:
+                - url
+                - from
+                - to
+        GetUnproxiedMcpServerUsageResult:
+            type: object
+            properties:
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerUsageBucket'
+            description: Result of a Shadow-MCP-backed usage lookup for an unproxied MCP server
+            required:
+                - buckets
+        GetUnproxiedMcpServerUserUsageResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerUserUsageRow'
+            description: Result of a Shadow-MCP-backed per-user usage lookup for an unproxied MCP server
+            required:
+                - users
         GetUserMetricsSummaryPayload:
             type: object
             properties:
@@ -57973,6 +59989,24 @@ components:
             description: Result of user metrics summary query
             required:
                 - metrics
+        GlobalRemoteSessionIssuer:
+            type: object
+            properties:
+                global_client_count:
+                    type: integer
+                    description: Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
+                    format: int64
+                issuer:
+                    $ref: '#/components/schemas/RemoteSessionIssuer'
+                tenant_client_count:
+                    type: integer
+                    description: Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
+                    format: int64
+            description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.'
+            required:
+                - issuer
+                - global_client_count
+                - tenant_client_count
         HTTPToolDefinition:
             type: object
             properties:
@@ -59129,6 +61163,16 @@ components:
             required:
                 - chats
                 - total
+        ListCimdClientPresetsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CimdClientPreset'
+            description: Result type for listing the CIMD preset catalog.
+            required:
+                - items
         ListCustomDetectionRulesResult:
             type: object
             properties:
@@ -59278,6 +61322,19 @@ components:
             description: Result of listing filter options
             required:
                 - options
+        ListGlobalRemoteSessionIssuersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GlobalRemoteSessionIssuer'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for the platform-administrator global issuer listing.
+            required:
+                - items
         ListHooksTracesPayload:
             type: object
             properties:
@@ -60278,6 +62335,38 @@ components:
             description: A page of terminal skill activations without exact version attribution.
             required:
                 - activations
+        ListUnproxiedMcpServerToolsResult:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Human-readable detail, present for non-success statuses
+                status:
+                    type: string
+                    description: Outcome of the discovery attempt
+                    enum:
+                        - success
+                        - auth_required
+                        - unreachable
+                        - error
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServerTool'
+            description: Result of a live tool-discovery probe against an unproxied MCP server
+            required:
+                - status
+                - tools
+        ListUnproxiedMcpServersResult:
+            type: object
+            properties:
+                unproxied_mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnproxiedMcpServer'
+            description: Result type for listing unproxied MCP servers
+            required:
+                - unproxied_mcp_servers
         ListUserGrantsResult:
             type: object
             properties:
@@ -60336,6 +62425,19 @@ components:
                 - clients
                 - users
                 - servers
+        ListUserSessionIssuerCimdClientsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerCimdClient'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for listing an issuer's custom CIMD document URLs.
+            required:
+                - items
         ListUserSessionIssuersResult:
             type: object
             properties:
@@ -61083,6 +63185,10 @@ components:
                 tunneled_mcp_server_id:
                     type: string
                     description: The ID of the tunneled MCP server used as the backend
+                    format: uuid
+                unproxied_mcp_server_id:
+                    type: string
+                    description: The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.
                     format: uuid
                 updated_at:
                     type: string
@@ -63986,6 +66092,49 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        RequestAccessForm:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Optional message from the requester explaining why they need access.
+                    maxLength: 1000
+                resource_id:
+                    type: string
+                    description: Optional resource ID the scope applies to.
+                resource_name:
+                    type: string
+                    description: Optional human-readable name for the resource (e.g. project name, MCP server name).
+                scope:
+                    type: string
+                    description: The scope being requested.
+                    enum:
+                        - org:read
+                        - org:admin
+                        - project:read
+                        - project:write
+                        - mcp:read
+                        - mcp:write
+                        - mcp:connect
+                        - environment:read
+                        - environment:write
+                        - skill:read
+                        - skill:write
+                        - risk_policy:evaluate
+                        - risk_policy:bypass
+                        - chat:read
+            description: Form for requesting access to a scope.
+            required:
+                - scope
+        RequestAccessResult:
+            type: object
+            properties:
+                sent_to_count:
+                    type: integer
+                    description: Number of administrators who were notified.
+                    format: int64
+            required:
+                - sent_to_count
         ResolveChallengeForm:
             type: object
             properties:
@@ -66388,6 +68537,7 @@ components:
                         - skills
                         - skill_capture_metadata_only
                         - ai_platform_push_integrations
+                        - customer_managed_encryption_keys
                     maxLength: 60
             required:
                 - feature_name
@@ -66715,11 +68865,26 @@ components:
                 observed_use_count:
                     type: integer
                     format: int64
+                sources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ShadowMCPInventoryUserSource'
                 user_key:
                     type: string
             required:
                 - user_key
                 - last_called
+                - observed_use_count
+        ShadowMCPInventoryUserSource:
+            type: object
+            properties:
+                observed_use_count:
+                    type: integer
+                    format: int64
+                source:
+                    type: string
+            required:
+                - source
                 - observed_use_count
         ShareSkillRequestBody:
             type: object
@@ -70423,6 +72588,153 @@ components:
                     maxItems: 500
             required:
                 - result_ids
+        UnproxiedMcpServer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the unproxied MCP server was created
+                    format: date-time
+                description:
+                    type: string
+                    description: Optional description shown alongside the server.
+                id:
+                    type: string
+                    description: The ID of the unproxied MCP server
+                    format: uuid
+                name:
+                    type: string
+                    description: Optional human-readable name for the unproxied MCP server
+                project_id:
+                    type: string
+                    description: The project ID this unproxied MCP server belongs to
+                    format: uuid
+                slug:
+                    type: string
+                    description: URL-friendly slug derived from the URL and ID.
+                updated_at:
+                    type: string
+                    description: When the unproxied MCP server was last updated
+                    format: date-time
+                url:
+                    type: string
+                    description: The URL of the vendor's MCP server
+                    format: uri
+            description: An unproxied MCP server configuration
+            required:
+                - id
+                - project_id
+                - url
+                - created_at
+                - updated_at
+        UnproxiedMcpServerClientUsageRow:
+            type: object
+            properties:
+                call_count:
+                    type: integer
+                    description: Number of observed calls from this client
+                    format: int64
+                client:
+                    type: string
+                    description: The hook-reported client/agent surface
+            description: Call activity for a single client/agent surface (e.g. claude-code, cursor, codex) calling an unproxied MCP server
+            required:
+                - client
+                - call_count
+        UnproxiedMcpServerTool:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Tool description
+                name:
+                    type: string
+                    description: Tool name
+            description: A tool discovered on the vendor's MCP server
+            required:
+                - name
+        UnproxiedMcpServerToolUsageRow:
+            type: object
+            properties:
+                call_count:
+                    type: integer
+                    description: Number of observed calls to this tool
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of observed calls that errored
+                    format: int64
+                tool_name:
+                    type: string
+                    description: The tool's name
+            description: Call activity for a single tool on an unproxied MCP server
+            required:
+                - tool_name
+                - call_count
+                - failure_count
+        UnproxiedMcpServerUsageBreakdownPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    format: date-time
+                limit:
+                    type: integer
+                    description: Number of items to return (1-500)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 500
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    format: date-time
+                url:
+                    type: string
+                    description: The unproxied MCP server's vendor URL
+                    format: uri
+            description: Shared payload shape for the unproxied MCP server tool/user/client usage breakdowns
+            required:
+                - url
+                - from
+                - to
+        UnproxiedMcpServerUsageBucket:
+            type: object
+            properties:
+                call_count:
+                    type: integer
+                    description: Number of observed tool calls in this bucket
+                    format: int64
+                date:
+                    type: string
+                    description: Bucket date (YYYY-MM-DD, UTC)
+            description: A single day's Shadow-MCP-observed call count for an unproxied MCP server
+            required:
+                - date
+                - call_count
+        UnproxiedMcpServerUserUsageRow:
+            type: object
+            properties:
+                call_count:
+                    type: integer
+                    description: Number of observed calls from this user
+                    format: int64
+                last_called_at:
+                    type: string
+                    description: Time of the user's most recent observed call, ISO 8601
+                    format: date-time
+                user_email:
+                    type: string
+                    description: The calling user's email, when Shadow MCP could resolve one
+            description: Call activity for a single user of an unproxied MCP server
+            required:
+                - user_email
+                - call_count
+                - last_called_at
         UnshareSkillRequestBody:
             type: object
             properties:
@@ -70643,6 +72955,23 @@ components:
                     format: uuid
                 impersonate_service_account:
                     type: string
+                    description: The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
+                name:
+                    type: string
+                    description: A human-readable name for the credential.
+            required:
+                - id
+                - name
+                - impersonate_service_account
+        UpdateGcpIamPlatformCredentialRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the credential to update.
+                    format: uuid
+                impersonate_service_account:
+                    type: string
                     description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
                 name:
                     type: string
@@ -70778,6 +73107,10 @@ components:
                     type: string
                     description: The ID of the tunneled MCP server to use as the backend
                     format: uuid
+                unproxied_mcp_server_id:
+                    type: string
+                    description: The ID of the unproxied MCP server to use as the backend
+                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -70785,7 +73118,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
             required:
                 - id
                 - visibility
@@ -71608,6 +73941,13 @@ components:
                     enum:
                         - chain
                         - interactive
+                client_id_metadata_admission_mode:
+                    type: string
+                    description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged. Once set, the issuer can never return to the unset state — it can only be moved between explicit modes.
+                    enum:
+                        - disabled
+                        - presets
+                        - open
                 id:
                     type: string
                     description: The user_session_issuer id.
@@ -72180,6 +74520,14 @@ components:
                 authn_challenge_mode:
                     type: string
                     description: chain | interactive.
+                client_id_metadata_admission_mode:
+                    type: string
+                    description: 'The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note ''reporting'' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what ''presets'' would have refused. It exists so the platform can measure before switching the default to ''presets''. Set an explicit mode to opt out of it.'
+                    enum:
+                        - disabled
+                        - presets
+                        - reporting
+                        - open
                 created_at:
                     type: string
                     format: date-time
@@ -72208,6 +74556,39 @@ components:
                 - slug
                 - authn_challenge_mode
                 - session_duration_hours
+                - client_id_metadata_admission_mode
+                - created_at
+                - updated_at
+        UserSessionIssuerCimdClient:
+            type: object
+            properties:
+                client_id_metadata_uri:
+                    type: string
+                    description: The exact https URL admitted as a client_id.
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: The user_session_issuer_cimd_client id.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The owning project id.
+                    format: uuid
+                updated_at:
+                    type: string
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The user_session_issuer this URL is allowed on.
+                    format: uuid
+            description: A CIMD document URL explicitly allowed on a user_session_issuer, additive to the preset catalog.
+            required:
+                - id
+                - project_id
+                - user_session_issuer_id
+                - client_id_metadata_uri
                 - created_at
                 - updated_at
         UserSummary:
@@ -72364,6 +74745,21 @@ components:
                 - organization
                 - projects
                 - scopes
+        VerifyCredentialResult:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Human-readable detail about the probe outcome, including the failure reason when it did not verify.
+                principal:
+                    type: string
+                    description: The principal the credential resolves to — the impersonated service account.
+                verified:
+                    type: boolean
+                    description: Whether Gram could assume the credential's identity.
+            description: Result of a live probe that Gram can assume the identity the credential names.
+            required:
+                - verified
         VerifyOnboardingHooksSetupResult:
             type: object
             properties:
@@ -72664,6 +75060,8 @@ tags:
       description: Manage project trigger instances and static trigger definitions.
     - name: tunneledMcp
       description: Managing customer-hosted tunneled MCP servers.
+    - name: unproxiedMcp
+      description: Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved.
     - name: usage
       description: Read usage for gram.
     - name: userSessionClients
@@ -72672,6 +75070,8 @@ tags:
       description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
     - name: userSessionIssuers
       description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+    - name: userSessionIssuersCimdClients
+      description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
     - name: userSessions
       description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
     - name: variations

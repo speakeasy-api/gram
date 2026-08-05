@@ -44,6 +44,22 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return n, nil
 }
 
+// Flush must be forwarded explicitly: embedding the http.ResponseWriter
+// interface hides the underlying writer's Flush from type asserts, which
+// silently disables streaming (SSE events sit in the server's write buffer
+// until it fills) for every handler behind this middleware.
+func (rw *responseWriter) Flush() {
+	// ResponseController finds flush support through FlushError and Unwrap
+	// chains that a direct http.Flusher assert would miss.
+	_ = http.NewResponseController(rw.ResponseWriter).Flush()
+}
+
+// Unwrap lets http.ResponseController reach controls of the underlying
+// writer that this wrapper does not forward.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 // logSafeURL renders a request URL for logs and observability context with
 // secret-bearing parts redacted. Several public capability-URL endpoints
 // carry a live credential in a "token" query parameter (e.g. skills.getShared,

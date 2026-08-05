@@ -51,6 +51,24 @@ const (
 	codexCreditValueUSD         = 0.04
 )
 
+// codexCloudMeteredClients are the payload.client values whose Codex usage
+// executes in OpenAI's cloud and is therefore invisible to the OTEL stream —
+// the compliance feed is their only token source, so those rows are metered
+// here. Deliberately an allowlist: an unrecognized client defaults to
+// un-metered, because under-counting a new surface beats double counting a
+// device one. Every device client meters via OTEL and so must stay out of this
+// map: cli, exec, and — settled under DNO-737 — desktop_app, which is Codex
+// mode in the unified ChatGPT app and reports OTEL under the service name
+// codex-app-server. Adding a device client here would double count it.
+var codexCloudMeteredClients = map[string]bool{
+	"github": true,
+	"web":    true,
+}
+
+func codexCloudMeteredClient(client string) bool {
+	return codexCloudMeteredClients[strings.ToLower(strings.TrimSpace(client))]
+}
+
 type codexComplianceClient interface {
 	ListLogs(ctx context.Context, params codexapi.ListLogsParams) (*codexapi.LogsPage, error)
 	DownloadLog(ctx context.Context, logID string) ([]byte, error)
@@ -353,6 +371,17 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		attr.ProviderKey:              codexProviderOpenAI,
 		attr.GenAIProviderNameKey:     codexProviderOpenAI,
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
+		attr.AccountTypeKey:           complianceAccountTypeTeam,
+	}
+	// The config's admin-declared billing mode is stamped on Codex rows only —
+	// the org-level tier of the billing-mode cascade, keyed here directly
+	// since compliance rows have no session. ChatGPT/Work rows stay unlabeled
+	// (estimate treatment): the single declaration cannot describe both
+	// surfaces, and Codex credits vs ChatGPT seats routinely bill differently,
+	// so labeling seat usage with a "metered" Codex declaration would render
+	// token-priced estimates as confident real cost downstream.
+	if isCodex {
+		addStringAttr(attrs, attr.BillingModeKey, cfg.BillingMode)
 	}
 	addStringAttr(attrs, attr.CodexComplianceEventIDKey, eventID)
 	addStringAttr(attrs, attr.CodexComplianceEventHashKey, generateCodexCostEventHash(eventID))
@@ -369,15 +398,17 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	if cfg.ExternalOrganizationID != nil {
 		addStringAttr(attrs, attr.ExternalOrgIDKey, *cfg.ExternalOrganizationID)
 	}
-	// Codex rows meter cost only: the codex:usage URN is admitted by the
-	// ClickHouse agent-usage predicates, so gen_ai.usage token counts here
-	// would double count metering for orgs that also export the Codex OTEL
-	// stream — the token source of truth for Codex. The raw counts are still
-	// preserved under codex.compliance.* keys (which nothing sums) because the
-	// feed also covers surfaces OTEL never sees (cloud-delegated tasks, GitHub
-	// code review); a later surface-partitioned metering pass can promote
-	// them. Parked non-Codex rows keep gen_ai.usage token counts because the
-	// compliance feed is ChatGPT/Work's only usage source.
+	// Codex token metering is surface-partitioned (DNO-736/DNO-751). Device
+	// surfaces (cli, exec) meter through the Codex OTEL stream — the token
+	// source of truth — so their compliance rows stay cost-only: gen_ai.usage
+	// counts here would double count for orgs that also export OTEL. Cloud
+	// surfaces OTEL never sees (GitHub code review, web tasks) have tokens
+	// ONLY in this feed, so their rows promote the counts to gen_ai.usage.*
+	// and meter (and bill TUM) from here. The raw codex.compliance.* copies
+	// (which nothing sums) ride on every Codex row regardless, so un-promoted
+	// surfaces stay inspectable. Parked non-Codex rows keep gen_ai.usage
+	// token counts because the compliance feed is ChatGPT/Work's only usage
+	// source.
 	if isCodex {
 		if usage.TextInputTokens > 0 {
 			attrs[attr.CodexComplianceInputTokensKey] = usage.TextInputTokens
@@ -391,7 +422,8 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		if totalTokens > 0 {
 			attrs[attr.CodexComplianceTotalTokensKey] = totalTokens
 		}
-	} else {
+	}
+	if !isCodex || codexCloudMeteredClient(event.Payload.Client) {
 		if usage.TextInputTokens > 0 {
 			attrs[attr.GenAIUsageInputTokensKey] = usage.TextInputTokens
 		}

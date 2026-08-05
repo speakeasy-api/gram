@@ -23,6 +23,11 @@ const (
 	FeatureSkills                     Feature = "skills"
 	FeatureSkillCaptureMetadataOnly   Feature = "skill_capture_metadata_only"
 	FeatureAIPlatformPushIntegrations Feature = "ai_platform_push_integrations"
+	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
+	// own cloud KMS keys: the external credentials Gram uses to reach them and,
+	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
+	// covers model provider API keys.
+	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
 )
 
 type FeatureCache struct {
