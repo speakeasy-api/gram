@@ -28,8 +28,8 @@ export function FullScreenPage({
           {children}
         </Stack>
       </div>
-      <Stack gap={3} align="center" className="mt-auto pt-8">
-        <SpeakeasyWordmark className="text-muted-foreground h-auto w-24" />
+      <Stack gap={3} align="center" className="mt-auto mb-10 pt-8">
+        <SpeakeasyWordmark className="text-muted-foreground h-auto w-32" />
         <a
           href="/"
           className="text-muted-foreground hover:text-foreground text-xs transition-colors"
