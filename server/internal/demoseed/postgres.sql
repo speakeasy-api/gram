@@ -18,8 +18,8 @@
 --   chat ids     demo.det_uuid('gram-demo-chat-' || n) — md5 with RFC nibbles
 --   message ids  demo.det_uuid('gram-demo-msg-' || n || '-' || m)
 --   users        user_demo_* / *@demo.getgram.ai (parallel arrays below; the
---                per-chat owner index formula 1 + (n % 6) is mirrored in the
---                ClickHouse seed's arrayElement calls)
+--                per-chat owner comes from demo.chat_owner_idx(n), mirrored
+--                in the ClickHouse seed's arrayElement calls)
 
 CREATE SCHEMA IF NOT EXISTS demo;
 
@@ -31,6 +31,49 @@ CREATE SCHEMA IF NOT EXISTS demo;
 CREATE OR REPLACE FUNCTION demo.det_uuid(name text) RETURNS uuid
 LANGUAGE sql IMMUTABLE
 RETURN (overlay(overlay(md5(name) placing '5' from 13) placing '8' from 17))::uuid;
+
+-- Humanized chat schedule. Bytes of md5('gram-demo-chat-' || n) pick a
+-- weighted day offset (busy days, quiet days, dead days), a work-hours-biased
+-- hour, and a minute — replacing the old uniform every-5-hours drumbeat that
+-- made every usage chart a flat repeating pattern. Deterministic per n, but
+-- relative to now() so the window keeps trailing. The ClickHouse seed
+-- reproduces this arithmetic exactly (see clickhouse.sql).
+CREATE OR REPLACE FUNCTION demo.chat_ts(n int) RETURNS timestamptz
+LANGUAGE plpgsql STABLE
+AS $fn$
+DECLARE
+  h text := md5('gram-demo-chat-' || n);
+  hour_offs CONSTANT int[] := ARRAY[8,9,9,10,10,11,11,13,14,14,15,16,16,17,18,20];
+  ts timestamptz;
+BEGIN
+  ts := date_trunc('day', now())
+    - make_interval(days => demo.chat_day_off(n))
+    + make_interval(
+        hours => hour_offs[1 + get_byte(decode(substring(h, 3, 2), 'hex'), 0) % 16],
+        mins => get_byte(decode(substring(h, 5, 2), 'hex'), 0) % 60);
+  -- A day-0 chat placed later than "now" slides back a day so the seed never
+  -- writes future timestamps.
+  IF ts > now() - interval '30 minutes' THEN
+    ts := ts - interval '1 day';
+  END IF;
+  RETURN ts;
+END;
+$fn$;
+
+-- Weighted chat owner (index into the parallel demo user arrays): priya and
+-- amara dominate, hana and lucas are occasional users — replacing the old
+-- perfect 1 + (n % 6) rotation. Mirrored in the ClickHouse seed.
+-- The day offset (0 = today) a chat lands on; also used to key "recent"
+-- behavior like the runbook v2 rollout split.
+CREATE OR REPLACE FUNCTION demo.chat_day_off(n int) RETURNS int
+LANGUAGE sql IMMUTABLE
+RETURN (ARRAY[0,0,1,1,1,2,3,3,3,3,4,5,5,7,8,11])
+  [1 + get_byte(decode(substring(md5('gram-demo-chat-' || n), 1, 2), 'hex'), 0) % 16];
+
+CREATE OR REPLACE FUNCTION demo.chat_owner_idx(n int) RETURNS int
+LANGUAGE sql IMMUTABLE
+RETURN (ARRAY[3,3,3,3,3,1,1,1,1,4,4,4,2,2,5,6])
+  [1 + get_byte(decode(substring(md5('gram-demo-chat-' || n), 13, 2), 'hex'), 0) % 16];
 
 CREATE OR REPLACE FUNCTION demo.ensure_demo_org() RETURNS void
 LANGUAGE plpgsql
@@ -48,7 +91,7 @@ DECLARE
   rule_monthly CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000e001';
   rule_weekly  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000e002';
 
-  bulk_chats CONSTANT int := 60;
+  bulk_chats CONSTANT int := 180;
 
   titles CONSTANT text[] := ARRAY[
     'Incident triage: payment 401s', 'Refund request for order 4823',
@@ -503,13 +546,15 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- Same skill-per-chat formula as the ClickHouse Skill hook rows and the
     -- efficacy mappings: skill_pos = 1 + (((i-1)/2) % 3).
     skill_pos := 1 + (((i - 1) / 2) % 3);
-    -- Runbook activations within the last ~5 days (i <= 24) are on v2: the
-    -- activation timeline shows the version rollout, and the drift split
-    -- below stays consistent with it.
-    version_id := CASE WHEN skill_pos = 3 AND i <= 24
+    -- Runbook activations within the last ~5 days (demo.chat_day_off(i) <= 4)
+    -- are on v2: the activation timeline shows the version rollout, and the
+    -- drift split below stays consistent with it. Mirrored in the ClickHouse
+    -- efficacy inserts (day_off <= 4).
+    version_id := CASE WHEN skill_pos = 3 AND demo.chat_day_off(i) <= 4
                        THEN 'dec0de00-0000-4000-a000-0000000052b3'::uuid
                        ELSE demo_skill_versions[skill_pos] END;
-    chat_ts := now() - (interval '5 hours' * i) - (interval '13 minutes' * (i % 7));
+    chat_ts := demo.chat_ts(i);
+    owner_idx := demo.chat_owner_idx(i);
     FOR m IN 1 .. 1 + (i % 3) LOOP
       INSERT INTO skill_observations (id, project_id, idempotency_key, provider,
         user_id, user_email, hostname, session_id, skill_name, source,
@@ -517,8 +562,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
         skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at)
       VALUES (demo.det_uuid('gram-demo-skillobs-' || i || '-' || m), proj_a,
         'demo-skillobs-' || i || '-' || m, 'claude-code',
-        demo_user_ids[1 + (i % 6)], demo_user_emails[1 + (i % 6)],
-        demo_hostnames[1 + (i % 6)],
+        demo_user_ids[owner_idx], demo_user_emails[owner_idx],
+        demo_hostnames[owner_idx],
         demo.det_uuid('gram-demo-chat-' || i)::text,
         demo_skill_names[skill_pos], 'plugin', 'project',
         '.claude/skills/' || demo_skill_names[skill_pos] || '/SKILL.md',
@@ -586,10 +631,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     chat_id := demo.det_uuid('gram-demo-chat-' || i);
     chat_proj := proj_a;
     chat_policy := policy_a;
-    owner_idx := 1 + (i % array_length(demo_user_ids, 1));
-    -- 5h spacing = ~12.5 days for 60 chats: inside the session/cost MV date
-    -- cutoffs and the 90-day TTLs; matches the ClickHouse formula exactly.
-    chat_ts := now() - (interval '5 hours' * i) - (interval '13 minutes' * (i % 7));
+    owner_idx := demo.chat_owner_idx(i);
+    -- Hash-picked slot inside the trailing ~12 days: inside the session/cost
+    -- MV date cutoffs and the 90-day TTLs; matches the ClickHouse formula
+    -- exactly (both derive from md5('gram-demo-chat-' || i)).
+    chat_ts := demo.chat_ts(i);
 
     INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id,
                        title, created_at, updated_at)
@@ -737,8 +783,9 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END LOOP;
 
   ------------------------------------------------------------------
-  -- Spend rules calibrated to the seeded ClickHouse usage (~$0.37 top monthly
-  -- spender) so the rules page shows one breach and one warning per rule.
+  -- Spend rules calibrated to the seeded ClickHouse usage (top spenders in
+  -- the low thousands of dollars per month) so the rules page shows one
+  -- breach and one warning per rule.
   -- Events are pre-inserted because the evaluator is flag-gated; the dedupe
   -- key (rule, type, email, window_start) keeps a live evaluator idempotent.
   ------------------------------------------------------------------
@@ -751,7 +798,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   VALUES
     (rule_monthly, demo_org, 'Monthly agent budget', 'monthly-agent-budget',
      'Per-person monthly cap on agent/CLI spend.',
-     'email.endsWith("@demo.getgram.ai")', 350, 'monthly', 80, 'flag', TRUE, 1,
+     'email.endsWith("@demo.getgram.ai")', 200000, 'monthly', 80, 'flag', TRUE, 1,
      now() - interval '20 days'),
     -- Builder-representable condition: the rule edit sheet cannot round-trip
     -- 'email in [...]' CEL (no is-one-of operator), which left the condition
@@ -759,26 +806,26 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     (rule_weekly, demo_org, 'Support weekly cap', 'support-weekly-cap',
      'Weekly guardrail for the support rotation.',
      'department_name == "Support Engineering"',
-     200, 'weekly', 75, 'block', TRUE, 1, now() - interval '15 days');
+     60000, 'weekly', 75, 'block', TRUE, 1, now() - interval '15 days');
 
   INSERT INTO spend_rule_events (organization_id, spend_rule_id, rule_urn, event_type,
                                  user_id, email, display_name, spend_usd_cents,
                                  limit_usd_cents, window_start, window_end, created_at)
   VALUES
     (demo_org, rule_monthly, 'spend_rule:monthly-agent-budget:v1', 'breach',
-     'user_demo_mateo', 'mateo@demo.getgram.ai', 'Mateo Alvarez', 409, 350,
+     'user_demo_mateo', 'mateo@demo.getgram.ai', 'Mateo Alvarez', 231900, 200000,
      date_trunc('month', now()), date_trunc('month', now()) + interval '1 month',
      now() - interval '1 day'),
     (demo_org, rule_monthly, 'spend_rule:monthly-agent-budget:v1', 'warning',
-     'user_demo_lucas', 'lucas@demo.getgram.ai', 'Lucas Meyer', 305, 350,
+     'user_demo_lucas', 'lucas@demo.getgram.ai', 'Lucas Meyer', 171400, 200000,
      date_trunc('month', now()), date_trunc('month', now()) + interval '1 month',
      now() - interval '2 days'),
     (demo_org, rule_weekly, 'spend_rule:support-weekly-cap:v1', 'breach',
-     'user_demo_jonas', 'jonas@demo.getgram.ai', 'Jonas Lindqvist', 267, 200,
+     'user_demo_jonas', 'jonas@demo.getgram.ai', 'Jonas Lindqvist', 74200, 60000,
      date_trunc('week', now()), date_trunc('week', now()) + interval '1 week',
      now() - interval '6 hours'),
     (demo_org, rule_weekly, 'spend_rule:support-weekly-cap:v1', 'warning',
-     'user_demo_amara', 'amara@demo.getgram.ai', 'Amara Okafor', 152, 200,
+     'user_demo_amara', 'amara@demo.getgram.ai', 'Amara Okafor', 48700, 60000,
      date_trunc('week', now()), date_trunc('week', now()) + interval '1 week',
      now() - interval '10 hours');
 
