@@ -50,8 +50,12 @@ url = "https://localhost:{{ vars.siteport | default('5173') }}"
 # `wt status` — one line per worktree: is its stack up, and where. The built-in
 # table can't express this: liveness is only in `url_active` in the JSON, not
 # in any column template.
+# `wt status` — interactive TUI: live-updating stack states, per-worktree boot
+# logs (enter), multi-select remove (space + d). Without a TTY (pipes, agents)
+# it prints a single plain-text frame instead, so scripting keeps working.
+# The old one-shot table remains at `mise run git:workstatus` / `gwst`.
 [aliases]
-status = "mise run git:workstatus"
+status = "mise run git:worktui"
 
 #
 # ## Dev server URL
