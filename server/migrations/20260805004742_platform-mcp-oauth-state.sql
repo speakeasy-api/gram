@@ -1,5 +1,3 @@
--- atlas:txmode none
-
 -- Create "platform_mcp_oauth_clients" table
 CREATE TABLE "platform_mcp_oauth_clients" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -76,8 +74,6 @@ CREATE INDEX "platform_mcp_authorization_grants_expires_at_idx" ON "platform_mcp
 CREATE INDEX "platform_mcp_authorization_grants_oauth_client_id_idx" ON "platform_mcp_authorization_grants" ("oauth_client_id");
 -- Create index "platform_mcp_authorization_grants_org_code_hash_idx" to table: "platform_mcp_authorization_grants"
 CREATE INDEX "platform_mcp_authorization_grants_org_code_hash_idx" ON "platform_mcp_authorization_grants" ("organization_id", "authorization_code_hash");
--- Create index "projects_organization_id_id_key" to table: "projects"
-CREATE UNIQUE INDEX CONCURRENTLY "projects_organization_id_id_key" ON "projects" ("organization_id", "id");
 -- Create "platform_mcp_onboarding_milestones" table
 CREATE TABLE "platform_mcp_onboarding_milestones" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

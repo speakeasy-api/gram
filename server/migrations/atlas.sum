@@ -1,4 +1,4 @@
-h1:ZOXi1nZE/RBdquSAIRgFvovnA84ZPcwUc1jC+uUv4lc=
+h1:8DIRitjtt0nnlEw0LW7hDebAsFDbCNYXKAbtYxpK/vU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -314,4 +314,4 @@ h1:ZOXi1nZE/RBdquSAIRgFvovnA84ZPcwUc1jC+uUv4lc=
 20260803183323_add-unproxied-mcp-servers.sql h1:qzO4JQBZcDOdBk+J5bKitwZToe5vocZryD2n+GFhK8U=
 20260803193050_litellm-instances.sql h1:tXo5MT2gc1ofWtT8ndwAo5Ms2G4vUKhF8wUuZr1r+Zc=
 20260803194013_litellm-instance-health.sql h1:xocULUVta5ICjDnH83WT/zQbXN0ZyzRbmpQvGXU0JW0=
-20260805004742_platform-mcp-oauth-state.sql h1:S1RpN77wZxAI3y644jcu1KNZlcqD8Jya1IdVKS55FVo=
+20260805004742_platform-mcp-oauth-state.sql h1:+pwpYW0oQ41e7Quo61ZKnmJa7vNm8NVBXUmYjxdGfr0=
