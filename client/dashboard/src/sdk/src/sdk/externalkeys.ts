@@ -106,7 +106,7 @@ export class ExternalKeys extends ClientSDK {
    * deleteAwsKmsKey externalKeys
    *
    * @remarks
-   * Soft-delete an AWS KMS external key by ID. Requires org:admin.
+   * Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
    */
   async deleteAwsKms(
     request: DeleteAwsKmsKeyRequest,
@@ -125,7 +125,7 @@ export class ExternalKeys extends ClientSDK {
    * deleteGcpKmsKey externalKeys
    *
    * @remarks
-   * Soft-delete a GCP KMS external key by ID. Requires org:admin.
+   * Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
    */
   async deleteGcpKms(
     request: DeleteGcpKmsKeyRequest,
@@ -239,7 +239,7 @@ export class ExternalKeys extends ClientSDK {
    * updateAwsKmsKey externalKeys
    *
    * @remarks
-   * Replace an AWS KMS external key's configuration. Requires org:admin.
+   * Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.
    */
   async updateAwsKms(
     request: UpdateAwsKmsKeyRequest,
@@ -258,7 +258,7 @@ export class ExternalKeys extends ClientSDK {
    * updateGcpKmsKey externalKeys
    *
    * @remarks
-   * Replace a GCP KMS external key's configuration. Requires org:admin.
+   * Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.
    */
   async updateGcpKms(
     request: UpdateGcpKmsKeyRequest,
