@@ -89,8 +89,13 @@ func (m *MockServer) handleGetOrCreateApp(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (m *MockServer) CreateMessage(ctx context.Context, inp *models.MessageIn) (*models.MessageOut, error) {
-	args := m.Called(ctx, inp)
+// CreateMessage receives the application id as its own argument rather than
+// letting it stay buried in the request path, so a test can assert which Svix
+// application a message was addressed to. That is the only signal that
+// distinguishes a correctly routed webhook from one delivered to the wrong
+// organization, and the body does not carry it.
+func (m *MockServer) CreateMessage(ctx context.Context, appID string, inp *models.MessageIn) (*models.MessageOut, error) {
+	args := m.Called(ctx, appID, inp)
 
 	msg, _ := args.Get(0).(*models.MessageOut)
 	return msg, args.Error(1)
@@ -105,7 +110,7 @@ func (m *MockServer) handleMessageCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	out, err := m.CreateMessage(ctx, &inp)
+	out, err := m.CreateMessage(ctx, r.PathValue("appID"), &inp)
 	if err != nil {
 		code := http.StatusInternalServerError
 		var httpErr *HTTPStatusError
