@@ -1936,6 +1936,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			var admissionErr error
 			admission, admissionErr = s.platformAdmission.Evaluate(ctx, input.OrganizationID, input.OrganizationSlug)
 			if admissionErr != nil {
+				if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
+					return nil, admissionErr
+				}
 				s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
 					attr.SlogOrganizationID(input.OrganizationID),
 					attr.SlogError(admissionErr))

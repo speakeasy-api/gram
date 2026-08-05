@@ -2029,6 +2029,27 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NotContains(t, afterDisabled, "__platform_mcp__")
 }
 
+func TestPluginsService_PublishProject_StopsForCanceledPlatformMCPAdmission(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{err: context.Canceled})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "default")
+
+	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "platform admission canceled",
+		SkipIfUnchanged: true,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.False(t, mock.createRepoCalled)
+	require.False(t, mock.pushFilesCalled)
+}
+
 func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 	t.Parallel()
 
