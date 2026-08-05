@@ -75,6 +75,27 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
+-- One row per organization provisioned by the enterprise trial signup flow.
+-- Only that transaction inserts a row; a trial is never attached to an
+-- organization that already exists, which is what lets expiry hardcode its
+-- demotion. Unrelated to organization_metadata.free_trial_*, another concept.
+CREATE TABLE IF NOT EXISTS enterprise_trials (
+  organization_id TEXT NOT NULL,
+  ends_at timestamptz NOT NULL,
+
+  -- The sweeper acts on ends_at only while both are null: a conversion stamped
+  -- in the promotion transaction cannot be demoted, and demotion happens once
+  -- per armed trial. Clearing demoted_at with a new ends_at re-arms it.
+  converted_at timestamptz,
+  demoted_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT enterprise_trials_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT enterprise_trials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
 -- Billing contract metadata for an organization. Currently holds the
 -- "tokens under management" (TUM) contract terms for enterprise accounts.
 CREATE TABLE IF NOT EXISTS billing_metadata (
