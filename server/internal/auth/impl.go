@@ -433,6 +433,18 @@ func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organiza
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
+	// A company name means this login started from the sign-up page. Validate
+	// before anything is minted or stored, so a rejected name leaves no orphan
+	// nonce behind — and so a bad name fails before the identity-provider hop
+	// rather than after it. Only when the parameter is present: a malformed
+	// value must never be able to block an ordinary login.
+	orgName := strings.TrimSpace(conv.PtrValOr(payload.OrgName, ""))
+	if orgName != "" {
+		if err := validateOrgName(orgName); err != nil {
+			return nil, err
+		}
+	}
+
 	callbackURL := s.buildCallbackURL(ctx)
 
 	nonce, err := generateNonce()
@@ -444,6 +456,14 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	binding := nonceBindingFromContext(ctx)
 	if err := s.nonceStore.Set(ctx, nonceKey(nonce), binding, nonceTTL); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error storing login nonce").LogError(ctx, s.logger)
+	}
+
+	// Stash the name against the nonce so the callback can create the org
+	// inline, without it ever riding through a redirect param or the address bar.
+	if orgName != "" {
+		if err := s.nonceStore.Set(ctx, signupIntentKey(nonce), signupIntent{OrgName: orgName}, nonceTTL); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error storing signup intent").LogError(ctx, s.logger)
+		}
 	}
 
 	state := encodeStateParam(payload, nonce)
@@ -1081,6 +1101,25 @@ func generateNonce() (string, error) {
 
 func nonceKey(nonce string) string {
 	return "auth:login_nonce:" + nonce
+}
+
+// signupIntent is what the user supplied on the sign-up page before
+// authenticating. It lives only for the duration of the identity-provider round
+// trip: if the user abandons the flow it expires with the nonce and nothing was
+// created.
+//
+// Deliberately growable. Adding fields later (campaign attribution, plan) is
+// additive — this is short-lived JSON in Redis, so there is no migration and no
+// back-compat window.
+type signupIntent struct {
+	OrgName string `json:"org_name"`
+}
+
+// signupIntentKey namespaces the intent separately from the nonce binding.
+// Folding it into the binding value would leave a nonceTTL-long window after
+// deploy where in-flight nonces are the old shape and fail to decode.
+func signupIntentKey(nonce string) string {
+	return "auth:signup_intent:" + nonce
 }
 
 // validateAuthNonce validates that the OAuth callback was initiated by a Login call

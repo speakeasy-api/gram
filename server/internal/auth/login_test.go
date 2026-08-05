@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
@@ -140,4 +141,106 @@ func TestService_Login(t *testing.T) {
 		require.Equal(t, redirectURL, state["final_destination_url"])
 		require.NotEmpty(t, state["nonce"], "state should contain a nonce")
 	})
+
+	t.Run("login without org name writes no signup intent", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{})
+		require.NoError(t, err)
+
+		nonce := nonceFromLocation(t, result.Location)
+		var intent map[string]any
+		err = instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent)
+		// ErrorIs, not Error: a bare error assertion would also pass if Redis
+		// were unreachable, turning "nothing was written" into a claim the test
+		// never actually checked.
+		require.ErrorIs(t, err, redisCache.ErrCacheMiss, "ordinary login must not write a signup intent")
+	})
+
+	t.Run("login with org name stores the intent under the nonce", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := "Acme Inc"
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
+		require.NoError(t, err)
+
+		nonce := nonceFromLocation(t, result.Location)
+		var intent struct {
+			OrgName string `json:"org_name"`
+		}
+		require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
+		require.Equal(t, "Acme Inc", intent.OrgName)
+	})
+
+	t.Run("login with an invalid org name errors and stores nothing", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := "Bob's Bakery"
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Contains(t, err.Error(), "organization name contains invalid characters")
+		// Nothing is asserted about Redis here: on the error path Login returns
+		// no state param, so the test has no nonce to look a key up by. The
+		// no-orphan-nonce property comes from validating before the mint, which
+		// Step 4 enforces by ordering.
+	})
+
+	t.Run("login with an over-long org name errors", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := strings.Repeat("a", 101)
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Contains(t, err.Error(), "organization name is too long")
+	})
+
+	t.Run("login with a blank org name behaves like no org name", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := "   "
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
+		require.NoError(t, err, "a blank org name must not break an ordinary login")
+		require.NotNil(t, result)
+
+		nonce := nonceFromLocation(t, result.Location)
+		var intent map[string]any
+		err = instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent)
+		require.ErrorIs(t, err, redisCache.ErrCacheMiss, "a blank org name must not write an intent")
+	})
+}
+
+// nonceFromLocation pulls the nonce out of the state param on an authorization
+// URL returned by Login.
+func nonceFromLocation(t *testing.T, location string) string {
+	t.Helper()
+
+	parsed, err := url.Parse(location)
+	require.NoError(t, err)
+
+	raw, err := base64.RawURLEncoding.DecodeString(parsed.Query().Get("state"))
+	require.NoError(t, err)
+
+	var state struct {
+		Nonce string `json:"nonce"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &state))
+	require.NotEmpty(t, state.Nonce)
+	return state.Nonce
 }
