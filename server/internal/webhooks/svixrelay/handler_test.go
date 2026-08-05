@@ -1,6 +1,7 @@
 package svixrelay_test
 
 import (
+	"encoding/json"
 	"strconv"
 	"testing"
 
@@ -43,6 +44,54 @@ func TestHandle_DeliversForEligibleOrg(t *testing.T) {
 		"the envelope's event id is what makes redelivery idempotent on Svix's side")
 	require.Equal(t, "audit_log.asset_event_v1", in.EventType)
 	require.Equal(t, "asset.create", in.Payload["action"])
+}
+
+// TestHandle_PreservesLargeNumbersInPayload guards the payload's opacity. The
+// handler has to decode it to hand the SDK a map, and a plain Unmarshal turns
+// every number into a float64 — which rounds anything past 2^53 and rewrites
+// large magnitudes in exponent notation, silently and without an error. The
+// values below are chosen to land either side of that: 2^53+1 is off by one,
+// and the 20-digit id loses its last three digits entirely.
+func TestHandle_PreservesLargeNumbersInPayload(t *testing.T) {
+	t.Parallel()
+
+	inst := newHandlerTestInstance(t)
+	orgID := seedOrg(t, inst.conn, "app_123", true)
+
+	const payload = `{"id":"a","just_past_float64":9007199254740993,"external_id":12345678901234567890,"big_exp":1e21,"ordinary":5,"fractional":1.5}`
+
+	rec := &svixRecorder{}
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
+		Return(&models.MessageOut{Id: "msg_1"}, nil).
+		Run(rec.record)
+
+	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(payload)), gcp.MessageMetadata{})
+	require.NoError(t, err)
+
+	calls := rec.observed()
+	require.Len(t, calls, 1)
+	require.NotNil(t, calls[0].msg)
+
+	// Compared as literals, deliberately. Anything that parses the two sides
+	// back into interface{} — JSONEq included — turns both into float64 and
+	// rounds the expectation to match whatever it is handed, so the assertion
+	// would hold no matter how badly the value had been mangled.
+	literal := func(key string) string {
+		v, ok := calls[0].msg.Payload[key]
+		require.True(t, ok, "%s missing from the delivered payload", key)
+
+		n, ok := v.(json.Number)
+		require.Truef(t, ok, "%s arrived as %T, so its original literal is already gone", key, v)
+
+		return n.String()
+	}
+
+	require.Equal(t, "9007199254740993", literal("just_past_float64"))
+	require.Equal(t, "12345678901234567890", literal("external_id"))
+	require.Equal(t, "1e21", literal("big_exp"))
+	require.Equal(t, "5", literal("ordinary"))
+	require.Equal(t, "1.5", literal("fractional"))
+	require.Equal(t, "a", calls[0].msg.Payload["id"])
 }
 
 func TestHandle_DropsEventMissingIdentifiers(t *testing.T) {

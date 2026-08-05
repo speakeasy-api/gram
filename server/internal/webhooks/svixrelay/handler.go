@@ -14,6 +14,7 @@
 package svixrelay
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -127,8 +128,8 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 		return nil
 	}
 
-	var payload map[string]any
-	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+	payload, err := decodePayload(ev.GetPayload())
+	if err != nil {
 		// A malformed payload will not become well-formed on redelivery.
 		h.drop(ctx, dropReasonInvalidPayload)
 		h.logger.ErrorContext(ctx, "dropping webhook event with unreadable payload",
@@ -219,6 +220,36 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 	default:
 		return fmt.Errorf("svix message create: %w", err)
 	}
+}
+
+// decodePayload decodes the opaque event payload into the shape the Svix SDK
+// takes.
+//
+// UseNumber, not a plain Unmarshal. Decoding into map[string]any turns every
+// JSON number into a float64, whose 53-bit mantissa silently rounds any integer
+// past 9007199254740992 and rewrites large magnitudes in exponent notation —
+// 12345678901234567890 is delivered as 12345678901234567000, with no error
+// anywhere. This payload is the customer's, carried through verbatim by
+// contract, so it has to survive the decode and re-encode unchanged.
+// json.Number holds the original literal, and the SDK marshals with
+// encoding/json, which writes it back as a number rather than a quoted string.
+func decodePayload(raw []byte) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+
+	var payload map[string]any
+	if err := dec.Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode webhook payload: %w", err)
+	}
+
+	// Decode stops after the first value where Unmarshal rejects anything
+	// trailing it. Keeping that strictness means swapping the decoder does not
+	// quietly widen what counts as a valid payload.
+	if dec.More() {
+		return nil, errors.New("decode webhook payload: unexpected data after top-level value")
+	}
+
+	return payload, nil
 }
 
 func (h *Handler) drop(ctx context.Context, reason string) {

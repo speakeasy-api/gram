@@ -105,7 +105,14 @@ func (m *MockServer) handleMessageCreate(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 
 	var inp models.MessageIn
-	if err := json.NewDecoder(r.Body).Decode(&inp); err != nil {
+	// UseNumber so the double is not itself lossy. MessageIn.Payload is a
+	// map[string]any, and a plain decode would turn every number into a float64
+	// — which would round exactly the values a test wants to prove survived the
+	// trip, and would do it on both sides of the comparison so the test still
+	// passed.
+	dec := json.NewDecoder(r.Body)
+	dec.UseNumber()
+	if err := dec.Decode(&inp); err != nil {
 		http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
