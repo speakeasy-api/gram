@@ -5,6 +5,7 @@ import {
 } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils";
+import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { ModalProvider } from "@/components/ui/context/ModalContext";
@@ -77,11 +78,6 @@ function getAdminOverrideCookie(): string | null {
 // a demo instead of an impersonation warning. It is entered either through
 // the admin override cookie or session-side via auth.enterDemo (any user),
 // so demo detection keys off the active org slug, not the cookie.
-export const DEMO_ORG_SLUG = "acme-demo";
-
-// Set by the /explore-demo page before switching, so Exit demo can return a
-// multi-org user to the org they actually came from.
-export const PRE_DEMO_ORG_KEY = "gram:pre-demo-org";
 
 /** Banner shows for admin cookie-impersonation or any session in the demo org. */
 const useShowsImpersonationBanner = (): boolean => {

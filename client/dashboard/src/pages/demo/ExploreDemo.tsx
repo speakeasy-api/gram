@@ -1,4 +1,4 @@
-import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/components/app-layout";
+import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { GramError } from "@gram/client/models/errors/gramerror.js";

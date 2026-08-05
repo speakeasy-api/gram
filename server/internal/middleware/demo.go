@@ -90,9 +90,11 @@ func DemoOrgWriteGuard(demoOrgID string, resolve SessionActiveOrgResolver) func(
 				return
 			}
 
+			// Full Goa error envelope so generated SDK clients parse this as a
+			// regular service error instead of failing response validation.
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"name":"forbidden","message":"the demo organization is read-only"}`))
+			_, _ = w.Write([]byte(`{"name":"forbidden","id":"demo_org_read_only","message":"the demo organization is read-only","temporary":false,"timeout":false,"fault":false}`))
 		})
 	}
 }
