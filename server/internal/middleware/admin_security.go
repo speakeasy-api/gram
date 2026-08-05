@@ -123,6 +123,25 @@ func (c *adminCookieRewriter) Write(b []byte) (int, error) {
 	return n, nil
 }
 
+// Flush must be forwarded explicitly — the embedded interface hides the
+// underlying writer's Flush from type asserts, breaking streaming. Flushing
+// commits headers, so the cookie rewrite has to happen first.
+func (c *adminCookieRewriter) Flush() {
+	if !c.wroteHeader {
+		c.rewrite()
+		c.wroteHeader = true
+	}
+	if f, ok := c.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap lets http.ResponseController reach controls of the underlying
+// writer that this wrapper does not forward.
+func (c *adminCookieRewriter) Unwrap() http.ResponseWriter {
+	return c.ResponseWriter
+}
+
 func (c *adminCookieRewriter) rewrite() {
 	h := c.Header()
 	cookies := h.Values("Set-Cookie")
