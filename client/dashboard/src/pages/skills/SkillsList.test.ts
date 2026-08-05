@@ -11,6 +11,7 @@ function skill(overrides: Partial<Skill>): Skill {
     summary: "Draft customer release notes",
     sourceKind: "manual",
     classification: "custom",
+    tags: [],
     latestVersionId: "version_a",
     versionCount: 1,
     hasValidVersion: true,
@@ -53,6 +54,17 @@ describe("SkillsList filtering", () => {
       ),
     ).toEqual(["b"]);
     expect(filterSkills(skills, "", ["manual"], ["built_in"])).toEqual([]);
+  });
+
+  it("filters by any overlapping tag", () => {
+    const tagged = [
+      skill({ id: "a", tags: ["ops", "runbook"] }),
+      skill({ id: "b", tags: ["docs"] }),
+    ];
+    expect(
+      filterSkills(tagged, "", [], [], ["ops"]).map((item) => item.id),
+    ).toEqual(["a"]);
+    expect(filterSkills(tagged, "", [], [], ["missing"])).toEqual([]);
   });
 
   it("prioritizes addable skills without reordering either group", () => {

@@ -107,6 +107,7 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         summary: "Summary",
         classification: "custom",
         sourceKind: "manual",
+        tags: [],
         versionCount: 1,
         seenCount: 3,
         updatedAt: new Date("2026-07-16T00:00:00Z"),
@@ -160,6 +161,9 @@ vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   invalidateAllSkills: testState.invalidateSkills,
+}));
+vi.mock("@gram/client/react-query/skillTags.js", () => ({
+  invalidateAllSkillTags: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@gram/client/react-query/archiveSkill.js", () => ({
   useArchiveSkillMutation: () => testState.archive,

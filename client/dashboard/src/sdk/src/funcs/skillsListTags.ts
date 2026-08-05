@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -12,6 +12,10 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import {
+  ListSkillTagsResult,
+  ListSkillTagsResult$inboundSchema,
+} from "../models/components/listskilltagsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,47 +31,36 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListSkillsRequest,
-  ListSkillsRequest$outboundSchema,
-  ListSkillsResponse,
-  ListSkillsResponse$inboundSchema,
-  ListSkillsSecurity,
-} from "../models/operations/listskills.js";
+  ListSkillTagsRequest,
+  ListSkillTagsRequest$outboundSchema,
+  ListSkillTagsSecurity,
+} from "../models/operations/listskilltags.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
-import {
-  createPageIterator,
-  haltIterator,
-  PageIterator,
-  Paginator,
-} from "../types/operations.js";
 
 /**
- * list skills
+ * listTags skills
  *
  * @remarks
- * List active skills in the project. The implementation requires the skills product feature and skill read scope.
+ * List distinct tags used by active skills in the project. The implementation requires the skills product feature and skill read scope.
  */
-export function skillsList(
+export function skillsListTags(
   client: GramCore,
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillTagsRequest | undefined,
+  security?: ListSkillTagsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
-  PageIterator<
-    Result<
-      ListSkillsResponse,
-      | ServiceError
-      | GramError
-      | ResponseValidationError
-      | ConnectionError
-      | RequestAbortedError
-      | RequestTimeoutError
-      | InvalidRequestError
-      | UnexpectedClientError
-      | SDKValidationError
-    >,
-    { cursor: string }
+  Result<
+    ListSkillTagsResult,
+    | ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
   >
 > {
   return new APIPromise($do(
@@ -80,51 +73,38 @@ export function skillsList(
 
 async function $do(
   client: GramCore,
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillTagsRequest | undefined,
+  security?: ListSkillTagsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
-    PageIterator<
-      Result<
-        ListSkillsResponse,
-        | ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >,
-      { cursor: string }
+    Result<
+      ListSkillTagsResult,
+      | ServiceError
+      | GramError
+      | ResponseValidationError
+      | ConnectionError
+      | RequestAbortedError
+      | RequestTimeoutError
+      | InvalidRequestError
+      | UnexpectedClientError
+      | SDKValidationError
     >,
     APICall,
   ]
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(z.optional(ListSkillsRequest$outboundSchema), value),
+    (value) => z.parse(z.optional(ListSkillTagsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return [haltIterator(parsed), { status: "invalid" }];
+    return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/skills.list")();
-
-  const query = encodeFormQuery({
-    "classifications": payload?.classifications,
-    "cursor": payload?.cursor,
-    "limit": payload?.limit,
-    "search": payload?.search,
-    "sort": payload?.sort,
-    "source_kinds": payload?.source_kinds,
-    "tags": payload?.tags,
-  });
+  const path = pathToFunc("/rpc/skills.listTags")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -172,7 +152,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listSkills",
+    operationID: "listSkillTags",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -190,13 +170,12 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return [haltIterator(requestRes), { status: "invalid" }];
+    return [requestRes, { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -208,7 +187,7 @@ async function $do(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return [haltIterator(doResult), { status: "request-error", request: req }];
+    return [doResult, { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -216,8 +195,8 @@ async function $do(
     HttpMeta: { Response: response, Request: req },
   };
 
-  const [result, raw] = await M.match<
-    ListSkillsResponse,
+  const [result] = await M.match<
+    ListSkillTagsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -228,65 +207,15 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListSkillsResponse$inboundSchema, { key: "Result" }),
+    M.json(200, ListSkillTagsResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return [haltIterator(result), {
-      status: "complete",
-      request: req,
-      response,
-    }];
+    return [result, { status: "complete", request: req, response }];
   }
 
-  const nextFunc = (
-    responseData: unknown,
-  ): {
-    next: Paginator<
-      Result<
-        ListSkillsResponse,
-        | ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >
-    >;
-    "~next"?: { cursor: string };
-  } => {
-    const nextCursor = (responseData as { next_cursor?: unknown }).next_cursor;
-    if (typeof nextCursor !== "string") {
-      return { next: () => null };
-    }
-    if (nextCursor.trim() === "") {
-      return { next: () => null };
-    }
-
-    const nextVal = () =>
-      skillsList(
-        client,
-        {
-          ...request!,
-          cursor: nextCursor,
-        },
-        security,
-        options,
-      );
-
-    return { next: nextVal, "~next": { cursor: nextCursor } };
-  };
-
-  const page = { ...result, ...nextFunc(raw) };
-  return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
-    status: "complete",
-    request: req,
-    response,
-  }];
+  return [result, { status: "complete", request: req, response }];
 }
