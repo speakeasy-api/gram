@@ -412,8 +412,12 @@ func skillNameOf(input json.RawMessage) string {
 }
 
 func isEmptyData(d *components.HookIngestData) bool {
+	// McpInventoryCollected is meaningful on its own: a successful read that
+	// found no servers carries no entries, and dropping the block here would
+	// erase the very distinction it exists to make.
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil &&
+		d.McpInventoryCollected == nil &&
 		len(d.McpAttribution) == 0 && len(d.McpInventory) == 0 &&
 		len(d.PromptAttachments) == 0
 }

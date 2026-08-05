@@ -848,27 +848,24 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 	return true
 }
 
-// canonicalClientReportsMCPInventory reports whether the sending client is new
-// enough to collect the Codex MCP inventory the meta-tool guard resolves
-// against.
+// canonicalClientReportsMCPInventory reports whether this session's MCP server
+// list was actually read, which is what makes an empty inventory mean anything.
 //
-// Every relay released before that change left adapter_version unset, and
-// nothing else has ever populated it, so its absence identifies them exactly.
-// Enforcing regardless would deny every meta-tool call from those clients —
-// including reads of Gram-hosted servers that work today — because they send
-// no inventory for the guard to clear the target against. Degrading instead
-// keeps them at their current behavior and lets enforcement arrive with the
-// hooks upgrade, rather than depending on a server deploy and a hooks release
-// being ordered correctly.
+// The guard denies a meta-tool call it cannot clear against an inventory, so it
+// has to tell "the agent has no MCP servers" from "we could not read the list".
+// Both arrive as zero entries. Only the sender knows which happened, and it
+// says so with mcp_inventory_collected — true means the list was read (an empty
+// one then genuinely means no servers, and denying is right), false or absent
+// means it could not be, so the inventory proves nothing and the guard must not
+// treat it as proof of absence.
 //
-// A capable client that reports no inventory is a different case and is denied
-// — deliberately, not because no servers exist. It may have none configured,
-// but collection is best-effort and can also come back empty when the codex
-// binary cannot be located, `codex mcp list` errors or times out, or the
-// session's inventory never reached the cache. All of those leave the target
-// unproven, and an unproven target is not an absent one.
+// Absent also covers every relay released before the flag existed. Those send
+// no inventory at all, and enforcing on them would deny every meta-tool call
+// including reads of Gram-hosted servers that work today — so they keep their
+// current behavior until they upgrade, rather than enforcement depending on a
+// server deploy and a hooks release landing in the right order.
 func canonicalClientReportsMCPInventory(payload *gen.IngestPayload) bool {
-	return payload != nil && strings.TrimSpace(conv.PtrValOr(payload.Source.AdapterVersion, "")) != ""
+	return payload != nil && payload.Data != nil && conv.PtrValOr(payload.Data.McpInventoryCollected, false)
 }
 
 func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {

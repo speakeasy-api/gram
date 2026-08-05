@@ -29,10 +29,10 @@ type mcpInventoryEntry struct {
 // plugin and claude.ai connector servers, which are absent from config files,
 // are included. Collection is best-effort: hooks must continue when the CLI
 // is unavailable, slow, or returns an unfamiliar format.
-func collectClaudeMCPInventory(ctx context.Context, cwd string) []mcpInventoryEntry {
+func collectClaudeMCPInventory(ctx context.Context, cwd string) ([]mcpInventoryEntry, bool) {
 	bin, err := exec.LookPath("claude")
 	if err != nil {
-		return nil
+		return nil, false
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, claudeMCPInventoryTimeout)
@@ -43,9 +43,9 @@ func collectClaudeMCPInventory(ctx context.Context, cwd string) []mcpInventoryEn
 	}
 	out, err := cmd.Output()
 	if err != nil && len(out) == 0 {
-		return nil
+		return nil, false
 	}
-	return parseClaudeMCPInventory(string(out))
+	return parseClaudeMCPInventory(string(out)), true
 }
 
 // parseClaudeMCPInventory parses `<name>: <target> (<transport>) - <status>`.
@@ -110,10 +110,10 @@ func parseClaudeMCPInventory(out string) []mcpInventoryEntry {
 // meta-tool reads then deny), and a `-c mcp_servers.x.url=…` override is
 // invisible (the snapshot reports the default target for that name). See
 // DNO-770.
-func collectCodexMCPInventory(ctx context.Context, cwd string) []mcpInventoryEntry {
+func collectCodexMCPInventory(ctx context.Context, cwd string) ([]mcpInventoryEntry, bool) {
 	binary := findCodexBinary()
 	if binary == "" {
-		return nil
+		return nil, false
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, codexMCPInventoryTimeout)
@@ -124,9 +124,9 @@ func collectCodexMCPInventory(ctx context.Context, cwd string) []mcpInventoryEnt
 	}
 	out, err := cmd.Output()
 	if err != nil && len(out) == 0 {
-		return nil
+		return nil, false
 	}
-	return parseCodexMCPInventory(out)
+	return parseCodexMCPInventory(out), true
 }
 
 // parseCodexMCPInventory reads `codex mcp list --json`. The server parses the
@@ -184,8 +184,13 @@ func upperAlpha(s string) bool {
 	return true
 }
 
-func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInventoryEntry) {
-	if len(entries) == 0 {
+// attachMCPInventory records the snapshot AND whether it could be read at all.
+// An agent with no MCP servers and an agent whose list could not be read both
+// produce zero entries, and the server denies MCP calls it cannot clear against
+// an inventory — so without the flag a missing binary silently becomes "this
+// session has no servers" and blocks legitimate traffic (DNO-771).
+func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInventoryEntry, collected bool) {
+	if !collected {
 		return
 	}
 	if payload.Data == nil {
@@ -202,6 +207,7 @@ func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInve
 			Usage:             nil,
 		}
 	}
+	payload.Data.McpInventoryCollected = &collected
 	payload.Data.McpInventory = make([]components.HookMCPData, 0, len(entries))
 	for _, entry := range entries {
 		redactedURL := ""
