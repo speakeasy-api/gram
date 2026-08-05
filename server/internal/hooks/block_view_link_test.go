@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"errors"
 	"os"
 	"regexp"
@@ -10,13 +11,26 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+// blockLinkColumns reads the optional foreign keys straight off the row. The
+// block page query does not expose them, and "the row survived" is only half
+// the contract — a salvage that cleared the wrong column, or cleared more than
+// the database named, would still insert and still pass a survival check.
+func blockLinkColumns(t *testing.T, ctx context.Context, conn *pgxpool.Pool, blockID uuid.UUID) testrepo.GetToolCallBlockLinksFixtureRow {
+	t.Helper()
+	row, err := testrepo.New(conn).GetToolCallBlockLinksFixture(ctx, blockID)
+	require.NoError(t, err)
+	return row
+}
 
 // TestToolCallBlockSurvivesUnresolvableChatLink: the block URL is handed to the
 // agent before the row is written, so losing the insert means the user opens a
@@ -57,6 +71,14 @@ func TestToolCallBlockSurvivesUnresolvableChatLink(t *testing.T) {
 	require.NoError(t, err, "the block must be readable even though its links were unresolvable")
 	require.Equal(t, "blocked for the test", block.Reason)
 	require.Equal(t, *authCtx.ProjectID, block.ProjectID)
+
+	// The enrichment is reduced, not silently retained: both dangling links
+	// must be null on the persisted row.
+	links := blockLinkColumns(t, ctx, ti.conn, blockID)
+	require.False(t, links.ChatID.Valid, "the unresolvable chat link must be cleared, not kept")
+	require.False(t, links.RiskPolicyID.Valid, "the unresolvable policy link must be cleared, not kept")
+	require.False(t, links.ChatMessageID.Valid)
+	require.False(t, links.RiskResultID.Valid)
 }
 
 // TestToolCallBlockKeepsResolvableLink guards the other half of the contract:
@@ -115,6 +137,14 @@ func TestToolCallBlockKeepsResolvableLink(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, blocks, 1, "the resolvable message link must survive the salvage")
 	require.Equal(t, blockID, blocks[0].BlockID)
+
+	// Read the columns directly too: the lookup above proves the message link
+	// survived, this proves the salvage stopped there.
+	links := blockLinkColumns(t, ctx, ti.conn, blockID)
+	require.True(t, links.ChatMessageID.Valid, "a link the database never rejected must be kept")
+	require.Equal(t, messageID, links.ChatMessageID.UUID)
+	require.False(t, links.ChatID.Valid, "the dangling chat link must still be cleared")
+	require.False(t, links.RiskPolicyID.Valid, "the dangling policy link must still be cleared")
 }
 
 // TestClearRejectedBlockLinkClearsOnlyNamedLink states the salvage contract
@@ -142,23 +172,19 @@ func TestClearRejectedBlockLinkClearsOnlyNamedLink(t *testing.T) {
 		{constraint: "tool_call_blocks_risk_result_id_fkey", column: "risk_result_id"},
 		{constraint: "tool_call_blocks_risk_policy_id_fkey", column: "risk_policy_id"},
 	} {
-		t.Run(tt.column, func(t *testing.T) {
-			t.Parallel()
+		params := populated()
+		links := optionalBlockLinks(&params)
+		dropped, ok := clearRejectedBlockLink(links, &pgconn.PgError{Code: pgForeignKeyViolation, ConstraintName: tt.constraint})
+		require.True(t, ok, tt.column)
+		require.Equal(t, tt.column, dropped)
 
-			params := populated()
-			links := optionalBlockLinks(&params)
-			dropped, ok := clearRejectedBlockLink(links, &pgconn.PgError{Code: pgForeignKeyViolation, ConstraintName: tt.constraint})
-			require.True(t, ok)
-			require.Equal(t, tt.column, dropped)
-
-			for _, link := range links {
-				if link.column == tt.column {
-					require.False(t, link.value.Valid, "the named link must be cleared")
-					continue
-				}
-				require.True(t, link.value.Valid, "%s must be left alone when %s is rejected", link.column, tt.column)
+		for _, link := range links {
+			if link.column == tt.column {
+				require.False(t, link.value.Valid, "%s must be cleared when its constraint is named", link.column)
+				continue
 			}
-		})
+			require.True(t, link.value.Valid, "%s must be left alone when %s is rejected", link.column, tt.column)
+		}
 	}
 }
 
@@ -189,11 +215,9 @@ func TestClearRejectedBlockLinkRefusesUnsalvageable(t *testing.T) {
 		// wrong; clearing it again would not change the row.
 		{name: "link already null", err: &pgconn.PgError{Code: pgForeignKeyViolation, ConstraintName: "tool_call_blocks_chat_id_fkey"}},
 	} {
-		t.Run(tt.name, func(t *testing.T) {
-			dropped, ok := clearRejectedBlockLink(links, tt.err)
-			require.False(t, ok)
-			require.Empty(t, dropped)
-		})
+		dropped, ok := clearRejectedBlockLink(links, tt.err)
+		require.False(t, ok, tt.name)
+		require.Empty(t, dropped, tt.name)
 	}
 
 	require.True(t, params.ChatMessageID.Valid, "no link may be cleared when the error is unsalvageable")
