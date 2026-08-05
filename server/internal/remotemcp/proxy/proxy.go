@@ -504,6 +504,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
+	// Decoded before the generic chain so the requested version is recorded
+	// even when an interceptor rejects the request. A rejected handshake is
+	// still a handshake worth attributing to a protocol revision.
+	initializeReq, _ := initializeRequestFromUserRequest(userReq)
+	recordRequestedProtocolVersion(span, initializeReq)
+
 	if err := p.runUserRequestInterceptors(ctx, userReq); err != nil {
 		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 	}
@@ -514,10 +520,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// for any request whose method does not match — the corresponding typed
 	// loop is skipped in that case. At most one of the three is non-nil for
 	// a given request.
-	initializeReq, _ := initializeRequestFromUserRequest(userReq)
 	if initializeReq != nil {
-		recordRequestedProtocolVersion(span, initializeReq)
-
 		if err := p.runInitializeRequestInterceptors(ctx, initializeReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
@@ -667,8 +670,14 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
 
+		// The response id is matched against the request's even though this
+		// path carries exactly one message each way, so the check is symmetric
+		// with the SSE path and an upstream answering with an id it was never
+		// asked about is not attributed as this session's negotiation.
 		if initializeReq != nil {
-			recordNegotiatedProtocolVersion(span, remoteMsg)
+			if resp, ok := msg.(*jsonrpc.Response); ok && jsonrpcIDsEqual(resp.ID, userReqID) {
+				recordNegotiatedProtocolVersion(span, remoteMsg)
+			}
 		}
 
 		// Typed response dispatch runs after the generic chain, symmetric
