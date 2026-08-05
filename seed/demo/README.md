@@ -51,8 +51,43 @@ ever needed (fresh rows are past every MV date cutoff).
 
 1. Edit the SQL in `server/internal/demoseed/`.
 2. `mise run seed:demo`, verify per `verify.md`.
-3. Fix until green, tick the page in `PAGES.md`, commit. Prod picks the change
-   up on the next release.
+3. Run the safety test (below), fix until green, tick the page in `PAGES.md`,
+   commit. Prod picks the change up on the next release.
+
+## Safety test (required CI check)
+
+`TestDemoSeedSafety` (`server/internal/demoseed/safety_test.go`) is the
+merge-blocking guard for every seed change, run by the standalone
+`demo-seed-safety` job in `pr.yaml` (wired into `ci-gate`). Locally:
+
+    mise run test:server -tags=demoseed_safety ./internal/demoseed/...
+
+It is build-tagged out of the sharded server suite, so a plain
+`go test ./server/internal/demoseed/` reporting "no test files" is expected.
+
+How it works: a fake "customer" tenant is provisioned by running a
+transformed copy of the seed itself (every demo identifier string-rewritten
+via `otherTenantReplacements`), so the customer has rows in exactly the
+tables the seed touches — automatically including tables future seed versions
+add. Then the real seed runs twice, with stray demo rows planted in between,
+and the test asserts:
+
+1. **Isolation** — no row outside the demo scope is modified, deleted, or
+   added (full row-fingerprint snapshots in Postgres; per-table count + hash
+   of non-demo rows in ClickHouse, scoped by `organization_id` /
+   `gram_project_id` columns).
+2. **Cleanup** — the planted stray demo rows are wiped by the rerun, so seed
+   versions can always roll forward.
+3. **Idempotence** — per-table row counts are identical after every run for
+   plain MergeTree tables; Summing/Aggregating MV targets collapse rows on
+   `now()`-bucketed keys, so they are checked for isolation only.
+
+What that means when extending the seed: scope every statement to the demo
+constants, pair every insert with a delete (or upsert), keep the
+`gram.deployment.id: demo-seed` marker on all telemetry rows, name ClickHouse
+scoping columns `organization_id`/`gram_project_id`, and register any new
+globally-unique identifier family in `otherTenantReplacements`. The
+`gram-demo-seed` agent skill covers these rules in detail.
 
 ## Server changes required for user access (not yet implemented)
 
