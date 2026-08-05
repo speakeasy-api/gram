@@ -87,6 +87,21 @@ WITH existing_alias AS (
 SELECT COUNT(*) = 1 AS known
 FROM resolved;
 
+-- name: ResolveSkillInjectionVerdict :one
+-- Returns the judge's rationale for a captured skill manifest that a background
+-- scan flagged for prompt injection, matched by its raw SHA-256 within the
+-- project's live skills. A row exists only when a matching version is flagged,
+-- so pgx.ErrNoRows means "unknown, unscanned, or clean" — the caller treats all
+-- three as not-flagged and lets the activation through.
+SELECT sv.injection_rationale
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.archived_at IS NULL
+  AND sv.raw_sha256 = @raw_sha256
+  AND sv.injection_flagged IS TRUE
+LIMIT 1;
+
 -- name: HasSkillObservationRawHash :one
 SELECT EXISTS (
   SELECT 1

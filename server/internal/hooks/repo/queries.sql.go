@@ -694,6 +694,34 @@ func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKno
 	return known, err
 }
 
+const resolveSkillInjectionVerdict = `-- name: ResolveSkillInjectionVerdict :one
+SELECT sv.injection_rationale
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.archived_at IS NULL
+  AND sv.raw_sha256 = $2
+  AND sv.injection_flagged IS TRUE
+LIMIT 1
+`
+
+type ResolveSkillInjectionVerdictParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+// Returns the judge's rationale for a captured skill manifest that a background
+// scan flagged for prompt injection, matched by its raw SHA-256 within the
+// project's live skills. A row exists only when a matching version is flagged,
+// so pgx.ErrNoRows means "unknown, unscanned, or clean" — the caller treats all
+// three as not-flagged and lets the activation through.
+func (q *Queries) ResolveSkillInjectionVerdict(ctx context.Context, arg ResolveSkillInjectionVerdictParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, resolveSkillInjectionVerdict, arg.ProjectID, arg.RawSha256)
+	var injection_rationale pgtype.Text
+	err := row.Scan(&injection_rationale)
+	return injection_rationale, err
+}
+
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
 `
