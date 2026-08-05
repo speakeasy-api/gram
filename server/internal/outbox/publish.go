@@ -97,7 +97,7 @@ type PublishBatchResult struct {
 //
 // THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
 func Publish(ctx context.Context, dbtx DBTX, orgID string, msg Message) (PublishResult, error) {
-	entry, err := buildEntry(ctx, orgID, msg)
+	entry, err := buildEntry(ctx, orgID, msg, otel.GetTextMapPropagator())
 	if err != nil {
 		return PublishResult{}, err
 	}
@@ -122,9 +122,11 @@ func Publish(ctx context.Context, dbtx DBTX, orgID string, msg Message) (Publish
 //
 // THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
 func PublishBatch(ctx context.Context, dbtx repo.DBTX, orgID string, msgs []Message) (PublishBatchResult, error) {
+	propagator := otel.GetTextMapPropagator()
+
 	entries := make([]repo.BulkInsertPublishOutboxEntriesParams, 0, len(msgs))
 	for _, msg := range msgs {
-		entry, err := buildEntry(ctx, orgID, msg)
+		entry, err := buildEntry(ctx, orgID, msg, propagator)
 		if err != nil {
 			return PublishBatchResult{}, err
 		}
@@ -154,7 +156,16 @@ type publishEntry struct {
 	Attributes     []byte
 }
 
-func buildEntry(ctx context.Context, orgID string, msg Message) (publishEntry, error) {
+// buildEntry turns a message into the row that will be written.
+//
+// The propagator is a parameter rather than an otel.GetTextMapPropagator call
+// in here, because it is the only input that would otherwise be reachable only
+// through a process-wide singleton. Exercising the trace capture would then
+// mean swapping that singleton mid-run, which every other test in the package
+// shares — a leak if it is not restored, and a coin toss between parallel
+// tests either way. Callers pass the global; tests pass whichever propagator
+// they mean to assert about.
+func buildEntry(ctx context.Context, orgID string, msg Message, propagator propagation.TextMapPropagator) (publishEntry, error) {
 	if msg.Proto == nil || !msg.Proto.ProtoReflect().IsValid() {
 		return publishEntry{}, oops.Permanent(fmt.Errorf("publish outbox message must not be nil"))
 	}
@@ -188,7 +199,7 @@ func buildEntry(ctx context.Context, orgID string, msg Message) (publishEntry, e
 	// Trace context last so a caller-supplied attribute cannot displace the link
 	// back to the producing request, which is the one thing only this call site
 	// can supply.
-	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(attrs))
+	propagator.Inject(ctx, propagation.MapCarrier(attrs))
 
 	attributes, err := json.Marshal(attrs)
 	if err != nil {

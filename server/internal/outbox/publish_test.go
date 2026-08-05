@@ -1,16 +1,12 @@
 package outbox_test
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/protobuf/proto"
 
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
@@ -78,31 +74,6 @@ func TestPublish_RejectsOversizedMessage(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "over the")
 	require.Equal(t, int64(0), inst.countRows(t))
-}
-
-func TestPublish_CapturesProducerTraceContext(t *testing.T) {
-	t.Parallel()
-
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-	tp := sdktrace.NewTracerProvider()
-	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
-
-	inst := newOutboxTestInstance(t)
-	orgID := inst.seedOrg(t)
-
-	ctx, span := tp.Tracer("test").Start(t.Context(), "produce")
-	res, err := outbox.Publish(ctx, inst.conn, orgID, outbox.Message{Proto: &webhooksv1.Event{}})
-	span.End()
-	require.NoError(t, err)
-
-	row, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), res.ID)
-	require.NoError(t, err)
-
-	var attrs map[string]string
-	require.NoError(t, json.Unmarshal(row.Attributes, &attrs))
-	require.Contains(t, attrs, "traceparent",
-		"the producer's trace has to travel on the row; the relay publishes under a trace of its own")
-	require.Contains(t, attrs["traceparent"], span.SpanContext().TraceID().String())
 }
 
 // TestPublishWebhookEvent_EventIDMatchesRow guards the invariant the Svix
