@@ -285,6 +285,9 @@ func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrout
 func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
+func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
+	return fmt.Errorf("not implemented in bench")
+}
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }

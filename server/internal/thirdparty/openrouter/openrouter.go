@@ -205,6 +205,10 @@ type Provisioner interface {
 	// /v1/keys/:hash) and mirrors the new value into the local DB.
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error)
 
+	// DisableAPIKey marks the org's key disabled and zeroes its upstream
+	// spending ceiling. An org with no key of that type is a no-op.
+	DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error
+
 	GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error)
 
 	// GetKeyUsage issues GET /v1/key for the given API key and returns the
@@ -432,6 +436,41 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	}
 
 	return keyLimit, nil
+}
+
+// DisableAPIKey stops an organization from spending on its platform key. The
+// upstream ceiling is the only place that binds every caller: key resolution
+// never reads the disabled column, and lockout leaves the dashboard session
+// path and platform-initiated background usage able to reach the key.
+//
+// The flag is written before the upstream PATCH so a retry after a failed
+// round trip still works: RefreshAPIKeyLimit refuses a key whose stored
+// monthly_credits is already 0 unless the key is disabled. It also preserves
+// the reinstatement path, because sales can raise the limit again on a key
+// that reads 0.
+func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("disable openrouter key: %w", err)
+	}
+
+	rows, err := o.repo.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
+	if err != nil {
+		return fmt.Errorf("mark openrouter key disabled: %w", err)
+	}
+	if rows == 0 {
+		return nil
+	}
+
+	zero := 0
+	if _, err := o.RefreshAPIKeyLimit(ctx, orgID, keyType, &zero); err != nil {
+		return fmt.Errorf("zero disabled openrouter key limit: %w", err)
+	}
+
+	return nil
 }
 
 type keyUsageResponse struct {

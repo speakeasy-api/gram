@@ -148,6 +148,7 @@ type Activities struct {
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
+	demoteExpiredEnterpriseTrials   *activities.DemoteExpiredEnterpriseTrials
 }
 
 func NewActivities(
@@ -319,6 +320,7 @@ func NewActivities(
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		demoteExpiredEnterpriseTrials:   activities.NewDemoteExpiredEnterpriseTrials(logger, db, openrouterProvisioner, auditLogger),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
@@ -752,6 +754,21 @@ func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules
 func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
 	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
 		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) ListExpiredEnterpriseTrials(ctx context.Context) ([]string, error) {
+	orgs, err := a.demoteExpiredEnterpriseTrials.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list expired enterprise trials: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) DemoteExpiredEnterpriseTrial(ctx context.Context, args activities.DemoteExpiredEnterpriseTrialArgs) error {
+	if err := a.demoteExpiredEnterpriseTrials.Demote(ctx, args); err != nil {
+		return fmt.Errorf("demote expired enterprise trial: %w", err)
 	}
 	return nil
 }

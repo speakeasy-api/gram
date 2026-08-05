@@ -58,6 +58,31 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	return i, err
 }
 
+const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :execrows
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type DisableOpenRouterAPIKeyParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Marks the key disabled without deleting it, so a reinstated organization
+// keeps the same upstream key. Reports the affected row count: an organization
+// that never made a completion has no key row and nothing to disable.
+func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
 SELECT organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys

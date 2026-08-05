@@ -34,6 +34,17 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: DisableOpenRouterAPIKey :execrows
+-- Marks the key disabled without deleting it, so a reinstated organization
+-- keeps the same upstream key. Reports the affected row count: an organization
+-- that never made a completion has no key row and nothing to disable.
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
 -- name: UpdateOpenRouterKeyMonthlyCredits :exec
 -- Updates only monthly_credits for the given organization. Used by the
 -- metrics-collection reconciliation path when the upstream OpenRouter limit
