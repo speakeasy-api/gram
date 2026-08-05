@@ -1,0 +1,208 @@
+// Package svixrelay delivers webhook events from the gram.webhooks.v1.Event
+// topic to Svix.
+//
+// This is the consumer half of the outbox refactor. The producer writes an
+// event transactionally and the relay publishes it; everything Svix-specific —
+// whether an organization is eligible, what a permanent HTTP failure looks
+// like, how many times to retry — lives here.
+//
+// Retry and dead-lettering are the subscription's job, not this handler's.
+// Returning an error nacks the message, which hands it to the subscription's
+// retry policy and, after enough attempts, its dead letter topic. The handler
+// therefore only has to decide, for each event, whether another attempt could
+// possibly succeed.
+package svixrelay
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	svix "github.com/svix/svix-webhooks/go"
+	"github.com/svix/svix-webhooks/go/models"
+	"go.opentelemetry.io/otel/metric"
+
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+)
+
+const (
+	meterDelivered = "webhooks.svix.delivered"
+	meterDropped   = "webhooks.svix.dropped"
+)
+
+// Drop reasons, recorded as a metric dimension. Deliberately low cardinality —
+// organization id belongs on the log and the span, never on a metric label.
+const (
+	dropReasonNotEligible    = "not_eligible"
+	dropReasonInvalidPayload = "invalid_payload"
+	dropReasonRejected       = "rejected"
+	dropReasonDuplicate      = "duplicate"
+)
+
+type Handler struct {
+	logger    *slog.Logger
+	svix      *svix.Svix
+	allowSet  *allowSet
+	delivered metric.Int64Counter
+	dropped   metric.Int64Counter
+}
+
+// NewHandler builds the subscriber.
+//
+// dispatch gates the actual Svix call. Deploying with it false lets the
+// subscription, its permissions and its decoding be verified against real
+// traffic before anything is delivered; the reverse order — delivering before
+// the wiring is proven — has no safe rollback.
+func NewHandler(
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	svixClient *svix.Svix,
+) *Handler {
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay")
+
+	delivered, err := meter.Int64Counter(
+		meterDelivered,
+		metric.WithDescription("Number of webhook events handed to Svix"),
+		metric.WithUnit("{event}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric error", attr.SlogMetricName(meterDelivered), attr.SlogError(err))
+	}
+
+	dropped, err := meter.Int64Counter(
+		meterDropped,
+		metric.WithDescription("Number of webhook events acknowledged without delivery"),
+		metric.WithUnit("{event}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric error", attr.SlogMetricName(meterDropped), attr.SlogError(err))
+	}
+
+	return &Handler{
+		logger:    logger.With(attr.SlogComponent("svix-relay")),
+		svix:      svixClient,
+		allowSet:  newAllowSet(db),
+		delivered: delivered,
+		dropped:   dropped,
+	}
+}
+
+func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.MessageMetadata) error {
+	orgID := ev.GetOrganizationId()
+	eventID := ev.GetEventId()
+
+	// A gate failure is not a "no". Returning the error nacks the message so it
+	// is retried, because dropping an event during a database outage would lose
+	// it permanently.
+	appID, err := h.allowSet.svixAppFor(ctx, orgID)
+	if err != nil {
+		return fmt.Errorf("resolve svix app for organization: %w", err)
+	}
+	if appID == "" {
+		h.drop(ctx, dropReasonNotEligible)
+		return nil
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		// A malformed payload will not become well-formed on redelivery.
+		h.drop(ctx, dropReasonInvalidPayload)
+		h.logger.ErrorContext(ctx, "dropping webhook event with unreadable payload",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogOutboxPublicID(eventID),
+			attr.SlogError(err),
+		)
+		return nil
+	}
+
+	out, err := h.svix.Message.Create(ctx, appID, models.MessageIn{
+		EventId:                &eventID,
+		EventType:              ev.GetEventType(),
+		Payload:                payload,
+		Application:            nil,
+		Channels:               nil,
+		DeliverAt:              nil,
+		PayloadRetentionHours:  nil,
+		PayloadRetentionPeriod: nil,
+		Tags:                   nil,
+		TransformationsParams:  nil,
+	}, &svix.MessageCreateOptions{
+		IdempotencyKey: &eventID,
+		WithContent:    nil,
+	})
+	if err == nil {
+		var messageID string
+		if out != nil {
+			messageID = out.Id
+		}
+		if h.delivered != nil {
+			h.delivered.Add(ctx, 1)
+		}
+		h.logger.InfoContext(ctx, "webhook event delivered",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogOutboxPublicID(eventID),
+			attr.SlogSvixAppID(appID),
+			attr.SlogSvixMessageID(messageID),
+		)
+		return nil
+	}
+
+	status := svixStatus(err)
+	switch {
+	// Svix rejects a repeated eventId for an application with 409. Because
+	// event_id is stable across redeliveries, that response means this exact
+	// event is already in Svix — a success we are seeing twice, not a failure.
+	// The old Temporal relay classified it as a permanent 4xx and dead-lettered
+	// it; doing that here would turn every at-least-once redelivery outside the
+	// idempotency window into a lost event.
+	case status == 409:
+		h.drop(ctx, dropReasonDuplicate)
+		h.logger.InfoContext(ctx, "webhook event already delivered",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogOutboxPublicID(eventID),
+			attr.SlogSvixAppID(appID),
+		)
+		return nil
+
+	// Any other 4xx except rate limiting is a rejection of this specific
+	// message. Nacking would burn the whole delivery budget re-sending
+	// something Svix has already refused, so acknowledge and record it.
+	case status >= 400 && status < 500 && status != 429:
+		h.drop(ctx, dropReasonRejected)
+		h.logger.ErrorContext(ctx, "svix rejected webhook event",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogOutboxPublicID(eventID),
+			attr.SlogSvixAppID(appID),
+			attr.SlogHTTPResponseStatusCode(status),
+			attr.SlogError(err),
+		)
+		return nil
+
+	// Rate limits, 5xx and transport failures are all worth another attempt.
+	default:
+		return fmt.Errorf("svix message create: %w", err)
+	}
+}
+
+func (h *Handler) drop(ctx context.Context, reason string) {
+	if h.dropped != nil {
+		h.dropped.Add(ctx, 1, metric.WithAttributes(attr.WebhookDropReason(reason)))
+	}
+}
+
+// svixStatus returns the HTTP status behind a Svix SDK error, or 0 when the
+// failure was not an HTTP response at all (a transport error, say).
+func svixStatus(err error) int {
+	var svixErr *svix.Error
+	if !errors.As(err, &svixErr) {
+		return 0
+	}
+
+	return svixErr.Status()
+}

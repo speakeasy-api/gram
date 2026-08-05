@@ -42,3 +42,39 @@ func (r iteratorForBulkInsertOutboxEntries) Err() error {
 func (q *Queries) BulkInsertOutboxEntries(ctx context.Context, arg []BulkInsertOutboxEntriesParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"outbox"}, []string{"organization_id", "event_type", "payload"}, &iteratorForBulkInsertOutboxEntries{rows: arg})
 }
+
+// iteratorForBulkInsertPublishOutboxEntries implements pgx.CopyFromSource.
+type iteratorForBulkInsertPublishOutboxEntries struct {
+	rows                 []BulkInsertPublishOutboxEntriesParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForBulkInsertPublishOutboxEntries) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForBulkInsertPublishOutboxEntries) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].PublicID,
+		r.rows[0].OrganizationID,
+		r.rows[0].Topic,
+		r.rows[0].Message,
+		r.rows[0].Attributes,
+	}, nil
+}
+
+func (r iteratorForBulkInsertPublishOutboxEntries) Err() error {
+	return nil
+}
+
+func (q *Queries) BulkInsertPublishOutboxEntries(ctx context.Context, arg []BulkInsertPublishOutboxEntriesParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"publish_outbox"}, []string{"public_id", "organization_id", "topic", "message", "attributes"}, &iteratorForBulkInsertPublishOutboxEntries{rows: arg})
+}

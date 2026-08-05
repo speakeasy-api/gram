@@ -236,3 +236,84 @@ ON CONFLICT (outbox_id) DO UPDATE SET
     last_error = EXCLUDED.last_error,
     dead_lettered = TRUE,
     updated_at = clock_timestamp();
+
+-- name: ClaimPublishOutboxBatch :many
+-- Leases a batch of publishable rows to this drainer. The lease plus SKIP
+-- LOCKED is what makes concurrent drains safe: two workers claim disjoint sets
+-- rather than racing to publish the same row. attempts is incremented here
+-- rather than on failure so it counts deliveries attempted, which is what the
+-- dead-letter threshold acts on. The statement commits on its own — the caller
+-- must not hold a transaction open across the Pub/Sub round trip, or a stalled
+-- publish would pin an XID and block vacuum database-wide.
+UPDATE publish_outbox SET
+    locked_until = clock_timestamp() + @lease::interval,
+    attempts = attempts + 1,
+    updated_at = clock_timestamp()
+WHERE id IN (
+  SELECT o.id
+  FROM publish_outbox o
+  WHERE (o.retry_after IS NULL OR o.retry_after <= clock_timestamp())
+    AND (o.locked_until IS NULL OR o.locked_until <= clock_timestamp())
+  ORDER BY o.id ASC
+  LIMIT @batch_size
+  FOR UPDATE SKIP LOCKED
+)
+RETURNING id, public_id, organization_id, topic, message, attributes, attempts, created_at;
+
+-- name: DeletePublishedOutboxRows :execrows
+-- Removes rows whose publish was acknowledged by Pub/Sub. Deleting rather than
+-- marking is what keeps the table near-empty and its updates cheap.
+DELETE FROM publish_outbox
+WHERE id = ANY(@ids::bigint[]);
+
+-- name: MarkPublishOutboxFailed :exec
+-- Records a transient publish failure and releases the lease so the row is
+-- eligible again once retry_after elapses.
+UPDATE publish_outbox SET
+    last_error = @last_error,
+    retry_after = @retry_after,
+    locked_until = NULL,
+    updated_at = clock_timestamp()
+WHERE id = ANY(@ids::bigint[]);
+
+-- name: DeadLetterPublishOutboxRows :execrows
+-- Moves rows that can never publish out of the queue in one statement, so a
+-- crash cannot leave a row both dead-lettered and still pending.
+WITH moved AS (
+  DELETE FROM publish_outbox
+  WHERE id = ANY(@ids::bigint[])
+  RETURNING public_id, organization_id, topic, message, attributes, attempts,
+            created_at AS row_enqueued_at
+)
+INSERT INTO publish_outbox_dead_letters (
+  public_id, organization_id, topic, message, attributes, attempts, last_error, enqueued_at
+)
+SELECT moved.public_id, moved.organization_id, moved.topic, moved.message,
+       moved.attributes, moved.attempts, @last_error, moved.row_enqueued_at
+FROM moved;
+
+-- name: GCPublishOutboxDeadLetters :execrows
+-- Bounds the dead letter table. Batched via LIMIT to keep lock time short.
+DELETE FROM publish_outbox_dead_letters
+WHERE id IN (
+  SELECT d.id
+  FROM publish_outbox_dead_letters d
+  WHERE d.created_at < @cutoff
+  ORDER BY d.id ASC
+  LIMIT @batch_size
+);
+
+-- name: CountPendingPublishOutboxRows :one
+-- Backs the queue depth gauge. Cheap only because the table is near-empty in
+-- steady state; a growing count is itself the signal worth alerting on.
+SELECT COUNT(*) FROM publish_outbox;
+
+-- name: ReleasePublishOutboxRows :exec
+-- Drops the lease on rows claimed but not acted upon, so the next drain sees
+-- them immediately instead of waiting out the lease. attempts is decremented
+-- back because the claim incremented it for a delivery that never happened.
+UPDATE publish_outbox SET
+    locked_until = NULL,
+    attempts = GREATEST(attempts - 1, 0),
+    updated_at = clock_timestamp()
+WHERE id = ANY(@ids::bigint[]);

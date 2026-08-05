@@ -39,6 +39,133 @@ func (q *Queries) BackfillClaudeUserMessagePromptID(ctx context.Context, arg Bac
 	return err
 }
 
+const claimPublishOutboxBatch = `-- name: ClaimPublishOutboxBatch :many
+UPDATE publish_outbox SET
+    locked_until = clock_timestamp() + $1::interval,
+    attempts = attempts + 1,
+    updated_at = clock_timestamp()
+WHERE id IN (
+  SELECT o.id
+  FROM publish_outbox o
+  WHERE (o.retry_after IS NULL OR o.retry_after <= clock_timestamp())
+    AND (o.locked_until IS NULL OR o.locked_until <= clock_timestamp())
+  ORDER BY o.id ASC
+  LIMIT $2
+  FOR UPDATE SKIP LOCKED
+)
+RETURNING id, public_id, organization_id, topic, message, attributes, attempts, created_at
+`
+
+type ClaimPublishOutboxBatchParams struct {
+	Lease     pgtype.Interval
+	BatchSize int32
+}
+
+type ClaimPublishOutboxBatchRow struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Leases a batch of publishable rows to this drainer. The lease plus SKIP
+// LOCKED is what makes concurrent drains safe: two workers claim disjoint sets
+// rather than racing to publish the same row. attempts is incremented here
+// rather than on failure so it counts deliveries attempted, which is what the
+// dead-letter threshold acts on. The statement commits on its own — the caller
+// must not hold a transaction open across the Pub/Sub round trip, or a stalled
+// publish would pin an XID and block vacuum database-wide.
+func (q *Queries) ClaimPublishOutboxBatch(ctx context.Context, arg ClaimPublishOutboxBatchParams) ([]ClaimPublishOutboxBatchRow, error) {
+	rows, err := q.db.Query(ctx, claimPublishOutboxBatch, arg.Lease, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimPublishOutboxBatchRow
+	for rows.Next() {
+		var i ClaimPublishOutboxBatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.Topic,
+			&i.Message,
+			&i.Attributes,
+			&i.Attempts,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countPendingPublishOutboxRows = `-- name: CountPendingPublishOutboxRows :one
+SELECT COUNT(*) FROM publish_outbox
+`
+
+// Backs the queue depth gauge. Cheap only because the table is near-empty in
+// steady state; a growing count is itself the signal worth alerting on.
+func (q *Queries) CountPendingPublishOutboxRows(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingPublishOutboxRows)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deadLetterPublishOutboxRows = `-- name: DeadLetterPublishOutboxRows :execrows
+WITH moved AS (
+  DELETE FROM publish_outbox
+  WHERE id = ANY($2::bigint[])
+  RETURNING public_id, organization_id, topic, message, attributes, attempts,
+            created_at AS row_enqueued_at
+)
+INSERT INTO publish_outbox_dead_letters (
+  public_id, organization_id, topic, message, attributes, attempts, last_error, enqueued_at
+)
+SELECT moved.public_id, moved.organization_id, moved.topic, moved.message,
+       moved.attributes, moved.attempts, $1, moved.row_enqueued_at
+FROM moved
+`
+
+type DeadLetterPublishOutboxRowsParams struct {
+	LastError string
+	Ids       []int64
+}
+
+// Moves rows that can never publish out of the queue in one statement, so a
+// crash cannot leave a row both dead-lettered and still pending.
+func (q *Queries) DeadLetterPublishOutboxRows(ctx context.Context, arg DeadLetterPublishOutboxRowsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deadLetterPublishOutboxRows, arg.LastError, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePublishedOutboxRows = `-- name: DeletePublishedOutboxRows :execrows
+DELETE FROM publish_outbox
+WHERE id = ANY($1::bigint[])
+`
+
+// Removes rows whose publish was acknowledged by Pub/Sub. Deleting rather than
+// marking is what keeps the table near-empty and its updates cheap.
+func (q *Queries) DeletePublishedOutboxRows(ctx context.Context, ids []int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePublishedOutboxRows, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const fetchOutboxRowsByIDs = `-- name: FetchOutboxRowsByIDs :many
 SELECT
     o.id,
@@ -162,6 +289,31 @@ type GCProcessedOutboxRowsParams struct {
 // outbox_relays row automatically. Batched via LIMIT to bound lock time.
 func (q *Queries) GCProcessedOutboxRows(ctx context.Context, arg GCProcessedOutboxRowsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, gCProcessedOutboxRows, arg.Cutoff, arg.BatchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const gCPublishOutboxDeadLetters = `-- name: GCPublishOutboxDeadLetters :execrows
+DELETE FROM publish_outbox_dead_letters
+WHERE id IN (
+  SELECT d.id
+  FROM publish_outbox_dead_letters d
+  WHERE d.created_at < $1
+  ORDER BY d.id ASC
+  LIMIT $2
+)
+`
+
+type GCPublishOutboxDeadLettersParams struct {
+	Cutoff    pgtype.Timestamptz
+	BatchSize int32
+}
+
+// Bounds the dead letter table. Batched via LIMIT to keep lock time short.
+func (q *Queries) GCPublishOutboxDeadLetters(ctx context.Context, arg GCPublishOutboxDeadLettersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, gCPublishOutboxDeadLetters, arg.Cutoff, arg.BatchSize)
 	if err != nil {
 		return 0, err
 	}
@@ -635,5 +787,43 @@ type MarkOutboxRelayProcessedParams struct {
 // Marks a relay as successfully delivered to Svix.
 func (q *Queries) MarkOutboxRelayProcessed(ctx context.Context, arg MarkOutboxRelayProcessedParams) error {
 	_, err := q.db.Exec(ctx, markOutboxRelayProcessed, arg.OutboxID, arg.SvixMessageID)
+	return err
+}
+
+const markPublishOutboxFailed = `-- name: MarkPublishOutboxFailed :exec
+UPDATE publish_outbox SET
+    last_error = $1,
+    retry_after = $2,
+    locked_until = NULL,
+    updated_at = clock_timestamp()
+WHERE id = ANY($3::bigint[])
+`
+
+type MarkPublishOutboxFailedParams struct {
+	LastError  pgtype.Text
+	RetryAfter pgtype.Timestamptz
+	Ids        []int64
+}
+
+// Records a transient publish failure and releases the lease so the row is
+// eligible again once retry_after elapses.
+func (q *Queries) MarkPublishOutboxFailed(ctx context.Context, arg MarkPublishOutboxFailedParams) error {
+	_, err := q.db.Exec(ctx, markPublishOutboxFailed, arg.LastError, arg.RetryAfter, arg.Ids)
+	return err
+}
+
+const releasePublishOutboxRows = `-- name: ReleasePublishOutboxRows :exec
+UPDATE publish_outbox SET
+    locked_until = NULL,
+    attempts = GREATEST(attempts - 1, 0),
+    updated_at = clock_timestamp()
+WHERE id = ANY($1::bigint[])
+`
+
+// Drops the lease on rows claimed but not acted upon, so the next drain sees
+// them immediately instead of waiting out the lease. attempts is decremented
+// back because the claim incremented it for a delivery that never happened.
+func (q *Queries) ReleasePublishOutboxRows(ctx context.Context, ids []int64) error {
+	_, err := q.db.Exec(ctx, releasePublishOutboxRows, ids)
 	return err
 }

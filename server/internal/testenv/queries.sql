@@ -65,9 +65,12 @@ UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, sca
 -- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
 -- name: CountOutboxEntriesByEventType :one
+-- Counts enqueued webhook events of a given type. The event type lives in a
+-- Pub/Sub message attribute rather than a column now, because the outbox row
+-- itself is transport-agnostic.
 SELECT COUNT(*)
-FROM outbox
-WHERE event_type = @event_type;
+FROM publish_outbox
+WHERE attributes->>'event_type' = @event_type::text;
 
 -- name: ListRiskResultsAll :many
 -- Fixture query used by the risk-analysis activity tests that need to
@@ -95,6 +98,34 @@ SELECT
     last_error
 FROM outbox_relays
 WHERE outbox_id = @outbox_id;
+
+-- name: GetPublishOutboxRow :one
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, retry_after, locked_until, created_at
+FROM publish_outbox
+WHERE id = @id;
+
+-- name: GetPublishOutboxDeadLetter :one
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, enqueued_at, created_at
+FROM publish_outbox_dead_letters
+WHERE public_id = @public_id;
+
+-- name: CountPublishOutboxRows :one
+SELECT COUNT(*) FROM publish_outbox;
+
+-- name: SeedPublishOutboxRow :one
+-- Fixture insert that can set the retry/lease columns a producer never touches.
+INSERT INTO publish_outbox (
+    public_id, organization_id, topic, message, attributes,
+    attempts, retry_after, locked_until
+)
+VALUES (
+    COALESCE(sqlc.narg(public_id)::uuid, generate_uuidv7()),
+    @organization_id, @topic, @message, @attributes,
+    @attempts, sqlc.narg(retry_after), sqlc.narg(locked_until)
+)
+RETURNING id, public_id;
 
 -- name: SetOrgWebhookConfig :exec
 -- Sets the Svix app ID and webhooks_enabled flag on an organization.
