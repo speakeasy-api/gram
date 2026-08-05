@@ -96,7 +96,6 @@ import {
   ALL_POLICY_MESSAGE_TYPES,
   categoriesToPayload,
   policyMessageTypesForForm,
-  policyToCategories,
 } from "./policy-form";
 import {
   getPolicyDeleteImpactText,
@@ -104,6 +103,7 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { SeverityBadge } from "./risk-ui";
+import { policySummary } from "./policy-summary";
 
 /** Per-policy config for the Non-Corporate Accounts category: the list of
  *  email domains treated as corporate. Rendered inside the category's
@@ -378,14 +378,6 @@ const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_response",
 ]);
 
-/** Map sources to display categories for the table row badges. */
-function sourcesToCategories(
-  sources: string[],
-  presidioEntities?: string[],
-): RuleCategory[] {
-  return [...policyToCategories(sources, presidioEntities)];
-}
-
 function policyMessageTypesForDisplay(
   messageTypes?: string[],
 ): PolicyMessageType[] {
@@ -500,16 +492,43 @@ function messageTypesSummary(
   return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
-function truncatePrompt(prompt: string, maxLength = 60): string {
-  const singleLine = prompt.trim().replace(/\s+/g, " ");
-  if (singleLine.length <= maxLength) {
-    return singleLine;
-  }
-  return `${singleLine.slice(0, maxLength - 1)}…`;
-}
-
 function isPromptPolicy(policy: RiskPolicy): boolean {
   return policy.policyType === "prompt_based";
+}
+
+/** Policy name over what the policy detects. The second line is dropped when
+ *  the name already says it, which is the common case for auto-generated names
+ *  ("Secrets Exposure Flagger" over "Secrets"). */
+function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
+  const summary = policySummary(row.policy);
+
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
+      <span className="flex min-w-0 items-center gap-1.5 font-medium">
+        <span className="truncate">{row.policy.name}</span>
+        {row.kind === "prompt" && (
+          <SimpleTooltip tooltip="Prompt-based policy">
+            <Sparkles
+              aria-label="Prompt-based policy"
+              className="text-muted-foreground h-3.5 w-3.5 shrink-0"
+            />
+          </SimpleTooltip>
+        )}
+      </span>
+      {summary && (
+        <SimpleTooltip tooltip={summary.text}>
+          <span
+            className={cn(
+              "text-muted-foreground truncate text-xs",
+              summary.kind === "prompt" && "italic",
+            )}
+          >
+            {summary.text}
+          </span>
+        </SimpleTooltip>
+      )}
+    </span>
+  );
 }
 
 /** Compact relative date for the policy table's Created/Updated columns, with
@@ -716,21 +735,9 @@ function PolicyCenterContent() {
   const policyColumns: Column<PolicyRow>[] = [
     {
       key: "name",
-      header: "Name",
-      width: "1fr",
-      render: (row) => (
-        <span className="flex min-w-0 items-center gap-1.5 font-medium">
-          <span className="truncate">{row.policy.name}</span>
-          {row.kind === "prompt" && (
-            <SimpleTooltip tooltip="Prompt-based policy">
-              <Sparkles
-                aria-label="Prompt-based policy"
-                className="text-muted-foreground h-3.5 w-3.5 shrink-0"
-              />
-            </SimpleTooltip>
-          )}
-        </span>
-      ),
+      header: "Policy",
+      width: "3fr",
+      render: (row) => <PolicyNameCell row={row} />,
     },
     {
       key: "action",
@@ -751,42 +758,6 @@ function PolicyCenterContent() {
           <SeverityBadge score={row.policy.score} />
         </span>
       ),
-    },
-    {
-      key: "sources",
-      header: nlEnabled ? "Categories / Prompt" : "Categories",
-      width: "2fr",
-      render: (row) => {
-        if (row.kind === "prompt") {
-          const prompt = row.policy.prompt ?? "";
-          return (
-            <SimpleTooltip tooltip={prompt}>
-              <span className="text-muted-foreground block max-w-full truncate text-sm italic">
-                {truncatePrompt(prompt)}
-              </span>
-            </SimpleTooltip>
-          );
-        }
-
-        const riskPolicy = row.policy;
-        const categories = sourcesToCategories(
-          riskPolicy.sources,
-          riskPolicy.presidioEntities,
-        );
-        if (riskPolicy.customRuleIds?.length) {
-          categories.push("custom");
-        }
-
-        if (categories.length === 0) {
-          return <span className="text-muted-foreground text-sm">—</span>;
-        }
-
-        return (
-          <span className="text-muted-foreground text-sm">
-            {categories.map((cat) => RULE_CATEGORY_META[cat].label).join(", ")}
-          </span>
-        );
-      },
     },
     {
       key: "messageTypes",
