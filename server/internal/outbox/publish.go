@@ -1,12 +1,30 @@
+// Package outbox provides the producer side of the transactional outbox. It
+// writes a message, and the topic that message is destined for, using the
+// caller's transaction, so the message is enqueued if and only if the caller's
+// work commits.
+//
+// Typical usage from a service handler:
+//
+//	_, err := outbox.PublishWebhookEvent(ctx, tx, orgID, events.AuditLogCreated, payload)
+//	if err != nil { ... }
+//	// then commit the caller's transaction
+//
+// Nothing is delivered inline. A background relay claims committed rows and
+// hands each one to the Pub/Sub topic its message type declares; what any
+// particular consumer does with it — Svix included — is that consumer's
+// subscription, not this package's concern.
 package outbox
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
@@ -14,6 +32,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/repo"
 )
+
+// DBTX is the minimal database interface required by Publish. Callers can pass
+// a transaction or a pool; the batch variants require repo.DBTX because they
+// COPY (see PublishBatch).
+type DBTX interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+// noopCopyFromDBTX adapts a DBTX to repo.DBTX for the single-row path, which
+// never copies. Reaching CopyFrom through it is a programming error, not a
+// runtime condition, so it fails permanently rather than inviting a retry.
+type noopCopyFromDBTX struct {
+	DBTX
+}
+
+func (n noopCopyFromDBTX) CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error) {
+	return 0, oops.Permanent(errors.New("not implemented"))
+}
 
 // maxMessageBytes bounds what may be enqueued. Pub/Sub rejects messages above
 // 10 MiB, and the relay drains strictly in id order, so a single oversized row

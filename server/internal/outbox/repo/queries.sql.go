@@ -12,44 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type BulkInsertOutboxEntriesParams struct {
-	OrganizationID string
-	EventType      string
-	Payload        []byte
-}
-
 type BulkInsertPublishOutboxEntriesParams struct {
 	PublicID       uuid.UUID
 	OrganizationID string
 	Topic          string
 	Message        []byte
 	Attributes     []byte
-}
-
-const insertOutboxEntry = `-- name: InsertOutboxEntry :one
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES ($1, $2, $3)
-RETURNING id, created_at
-`
-
-type InsertOutboxEntryParams struct {
-	OrganizationID string
-	EventType      string
-	Payload        []byte
-}
-
-type InsertOutboxEntryRow struct {
-	ID        int64
-	CreatedAt pgtype.Timestamptz
-}
-
-// Inserts a new outbox event for an organization and returns identifiers
-// needed for downstream relay/signal coordination.
-func (q *Queries) InsertOutboxEntry(ctx context.Context, arg InsertOutboxEntryParams) (InsertOutboxEntryRow, error) {
-	row := q.db.QueryRow(ctx, insertOutboxEntry, arg.OrganizationID, arg.EventType, arg.Payload)
-	var i InsertOutboxEntryRow
-	err := row.Scan(&i.ID, &i.CreatedAt)
-	return i, err
 }
 
 const insertPublishOutboxEntry = `-- name: InsertPublishOutboxEntry :one

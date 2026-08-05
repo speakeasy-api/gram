@@ -894,6 +894,28 @@ func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deplo
 	return err
 }
 
+const seedOutboxEntry = `-- name: SeedOutboxEntry :one
+INSERT INTO outbox (organization_id, event_type, payload)
+VALUES ($1, $2, $3)
+RETURNING id
+`
+
+type SeedOutboxEntryParams struct {
+	OrganizationID string
+	EventType      string
+	Payload        []byte
+}
+
+// Fixture insert for the deprecated outbox table. Producers write to
+// publish_outbox now, so the only thing that still needs to create one of
+// these rows is the legacy relay's own tests; this goes away with them.
+func (q *Queries) SeedOutboxEntry(ctx context.Context, arg SeedOutboxEntryParams) (int64, error) {
+	row := q.db.QueryRow(ctx, seedOutboxEntry, arg.OrganizationID, arg.EventType, arg.Payload)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const seedPublishOutboxRow = `-- name: SeedPublishOutboxRow :one
 INSERT INTO publish_outbox (
     public_id, organization_id, topic, message, attributes,

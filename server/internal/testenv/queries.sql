@@ -82,6 +82,14 @@ WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
 ORDER BY id;
 
+-- name: SeedOutboxEntry :one
+-- Fixture insert for the deprecated outbox table. Producers write to
+-- publish_outbox now, so the only thing that still needs to create one of
+-- these rows is the legacy relay's own tests; this goes away with them.
+INSERT INTO outbox (organization_id, event_type, payload)
+VALUES (@organization_id, @event_type, @payload)
+RETURNING id;
+
 -- name: GetOutboxEntry :one
 -- Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
 SELECT id FROM outbox WHERE id = @id;
