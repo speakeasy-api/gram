@@ -31,8 +31,11 @@ type ChatMessageWriter struct {
 	logger       *slog.Logger
 	assetStorage assets.BlobStore
 	observers    []MessageObserver
-	shutdownCtx  context.Context //nolint:containedctx // must outlive any single request
-	cancel       context.CancelFunc
+	// turnStream, when set, receives a frame per persisted row so dashboard
+	// subscribers can render a turn without polling. Nil disables publishing.
+	turnStream  *TurnStream
+	shutdownCtx context.Context //nolint:containedctx // must outlive any single request
+	cancel      context.CancelFunc
 }
 
 func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
@@ -44,12 +47,19 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		observers:    nil,
 		shutdownCtx:  ctx,
 		cancel:       cancel,
+		turnStream:   nil,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
 		return nil
 	}
 	return w, shutdown
+}
+
+// WithTurnStream enables per-row turn frame publishing.
+func (w *ChatMessageWriter) WithTurnStream(stream *TurnStream) *ChatMessageWriter {
+	w.turnStream = stream
+	return w
 }
 
 func (w *ChatMessageWriter) AddObserver(obs MessageObserver) {
@@ -163,6 +173,7 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 		return 0, err
 	}
 	if n > 0 {
+		w.publishTurnFrames(ctx, nil, params)
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return n, nil
@@ -231,6 +242,9 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	}
 
 	if int64(len(pending))+n > 0 {
+		// After commit: a frame announces a row that exists, so a rolled-back
+		// turn never announces itself.
+		w.publishTurnFrames(ctx, pending, assistants)
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return nil
@@ -247,6 +261,7 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 	if err := w.storeMessages(ctx, w.db, rows); err != nil {
 		return err
 	}
+	w.publishRowFrames(ctx, rows)
 	w.notifyMessagesStored(ctx, projectID)
 	return nil
 }
