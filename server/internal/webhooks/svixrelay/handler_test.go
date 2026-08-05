@@ -23,10 +23,15 @@ func TestHandle_DeliversForEligibleOrg(t *testing.T) {
 	eventID := uuid.NewString()
 
 	var captured *models.MessageIn
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	var capturedApp string
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.MessageOut{Id: "msg_1"}, nil).
 		Run(func(args mock.Arguments) {
-			in, ok := args.Get(1).(*models.MessageIn)
+			appID, ok := args.Get(1).(string)
+			require.True(t, ok)
+			capturedApp = appID
+
+			in, ok := args.Get(2).(*models.MessageIn)
 			require.True(t, ok)
 			captured = in
 		})
@@ -34,6 +39,8 @@ func TestHandle_DeliversForEligibleOrg(t *testing.T) {
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, eventID, []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
 
+	require.Equal(t, "app_123", capturedApp,
+		"the event is addressed to the Svix application configured on its own organization")
 	require.NotNil(t, captured)
 	require.NotNil(t, captured.EventId)
 	require.Equal(t, eventID, *captured.EventId,
@@ -52,7 +59,7 @@ func TestHandle_DropsEventMissingIdentifiers(t *testing.T) {
 
 		err := inst.handler.Handle(t.Context(), newEvent("", uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
 		require.NoError(t, err, "no organization can be resolved on a later attempt either")
-		inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+		inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("no event id", func(t *testing.T) {
@@ -66,7 +73,7 @@ func TestHandle_DropsEventMissingIdentifiers(t *testing.T) {
 
 		err := inst.handler.Handle(t.Context(), newEvent(orgID, "", []byte(validPayload)), gcp.MessageMetadata{})
 		require.NoError(t, err)
-		inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+		inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
 	})
 }
 
@@ -78,7 +85,7 @@ func TestHandle_DropsWhenOrgHasNoSvixApp(t *testing.T) {
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err, "an ineligible org is an acknowledged drop, not a retry")
-	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestHandle_DropsWhenWebhooksDisabled(t *testing.T) {
@@ -89,7 +96,7 @@ func TestHandle_DropsWhenWebhooksDisabled(t *testing.T) {
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
-	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestHandle_DropsUnknownOrg(t *testing.T) {
@@ -99,7 +106,7 @@ func TestHandle_DropsUnknownOrg(t *testing.T) {
 
 	err := inst.handler.Handle(t.Context(), newEvent(uuid.NewString(), uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
-	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestHandle_DropsUnreadablePayload(t *testing.T) {
@@ -110,7 +117,7 @@ func TestHandle_DropsUnreadablePayload(t *testing.T) {
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte("not json")), gcp.MessageMetadata{})
 	require.NoError(t, err, "a malformed payload will not become well-formed on redelivery")
-	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
 }
 
 // TestHandle_AcksDuplicate is the behaviour change from the old Temporal relay.
@@ -124,7 +131,7 @@ func TestHandle_AcksDuplicate(t *testing.T) {
 	inst := newHandlerTestInstance(t)
 	orgID := seedOrg(t, inst.conn, "app_123", true)
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, &svixtest.HTTPStatusError{Code: 409, Msg: "conflict"})
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
@@ -141,7 +148,7 @@ func TestHandle_AcksPermanentRejections(t *testing.T) {
 			inst := newHandlerTestInstance(t)
 			orgID := seedOrg(t, inst.conn, "app_123", true)
 
-			inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+			inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 				Return(nil, &svixtest.HTTPStatusError{Code: status, Msg: "rejected"})
 
 			err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
@@ -161,7 +168,7 @@ func TestHandle_NacksTransientFailures(t *testing.T) {
 			inst := newHandlerTestInstance(t)
 			orgID := seedOrg(t, inst.conn, "app_123", true)
 
-			inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+			inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 				Return(nil, &svixtest.HTTPStatusError{Code: status, Msg: "try again"})
 
 			err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})

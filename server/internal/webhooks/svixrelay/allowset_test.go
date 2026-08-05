@@ -28,10 +28,10 @@ func TestAllowSet_ResolvesOrgsIndependently(t *testing.T) {
 	deliveredEvent := uuid.NewString()
 
 	var captured []string
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.MessageOut{Id: "msg_1"}, nil).
 		Run(func(args mock.Arguments) {
-			in, ok := args.Get(1).(*models.MessageIn)
+			in, ok := args.Get(2).(*models.MessageIn)
 			require.True(t, ok)
 			require.NotNil(t, in.EventId)
 			captured = append(captured, *in.EventId)
@@ -44,6 +44,59 @@ func TestAllowSet_ResolvesOrgsIndependently(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, []string{deliveredEvent}, captured)
+}
+
+// TestAllowSet_RoutesEachOrgToItsOwnApp is the property a routing bug would
+// break and nothing else here would catch: every other test seeds a single
+// organization, so a resolver that returned the same application for everyone
+// would satisfy all of them.
+//
+// The two organizations are interleaved rather than handled in sequence,
+// because the cache and its singleflight are shared process-wide — resolving
+// one organization must not populate or answer for another.
+func TestAllowSet_RoutesEachOrgToItsOwnApp(t *testing.T) {
+	t.Parallel()
+
+	inst := newHandlerTestInstance(t)
+	first := seedOrg(t, inst.conn, "app_first", true)
+	second := seedOrg(t, inst.conn, "app_second", true)
+
+	// Event id to the app it was addressed to, so a swap is visible as a
+	// mismatch rather than as a count that still adds up.
+	routed := map[string]string{}
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
+		Return(&models.MessageOut{Id: "msg_1"}, nil).
+		Run(func(args mock.Arguments) {
+			appID, ok := args.Get(1).(string)
+			require.True(t, ok)
+
+			in, ok := args.Get(2).(*models.MessageIn)
+			require.True(t, ok)
+			require.NotNil(t, in.EventId)
+
+			routed[*in.EventId] = appID
+		})
+
+	events := []struct {
+		orgID string
+		app   string
+	}{
+		{first, "app_first"},
+		{second, "app_second"},
+		{first, "app_first"},   // served from cache
+		{second, "app_second"}, // served from cache
+	}
+
+	want := map[string]string{}
+	for _, ev := range events {
+		eventID := uuid.NewString()
+		want[eventID] = ev.app
+
+		err := inst.handler.Handle(t.Context(), newEvent(ev.orgID, eventID, []byte(validPayload)), gcp.MessageMetadata{})
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, want, routed)
 }
 
 // TestAllowSet_CachesIneligibleOrg pins the cost of caching the negative
@@ -69,5 +122,5 @@ func TestAllowSet_CachesIneligibleOrg(t *testing.T) {
 
 	err = inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
-	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything)
+	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
 }
