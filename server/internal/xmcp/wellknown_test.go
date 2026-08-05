@@ -172,6 +172,12 @@ func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithProxy(t *testing.T
 	require.True(t, ok)
 	require.Contains(t, grants, "authorization_code")
 	require.Contains(t, grants, "refresh_token")
+
+	// The same route serves two different metadata shapes. Authorization
+	// responses on this legacy oauth-proxy shape carry no `iss`, so it must
+	// not advertise support: advertising without emitting is the one
+	// combination MCP clients treat as fatal.
+	require.NotContains(t, metadata, "authorization_response_iss_parameter_supported")
 }
 
 func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
@@ -277,6 +283,11 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend(t *testing.
 	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
 	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
 	require.Equal(t, expectedIssuer+"/revoke", metadata["revocation_endpoint"])
+
+	// RFC 9207 §3. Asserted per surface because the route base is baked into
+	// the issuer that `iss` has to match, so a regression can land on one
+	// surface while the other stays correct.
+	require.Equal(t, true, metadata["authorization_response_iss_parameter_supported"])
 }
 
 // TestHandleWellKnownOAuthServerMetadata_IssuerGatedToolsetBackend mirrors
