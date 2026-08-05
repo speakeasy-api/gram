@@ -445,9 +445,7 @@ jobs:
           # Release-artifact build; the action's -D warnings default would
           # diverge from the in-image fallback build.
           rustflags: ""
-          # TEMP(AGE-3104): save on this PR branch once to demonstrate the warm
-          # build; revert to main-only before merge.
-          cache-save-if: true
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build assistant runner
         run: |
