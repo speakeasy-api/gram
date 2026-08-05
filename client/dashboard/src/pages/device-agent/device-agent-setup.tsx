@@ -633,7 +633,6 @@ function FleetIdentity() {
         <div className="mt-4 flex flex-col gap-3">
           {generatedToken && (
             <Alert variant="warning">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>
                 {autoCopied
                   ? "managed.json copied to your clipboard"
@@ -656,7 +655,6 @@ function FleetIdentity() {
 
           {isError && (
             <Alert variant="error">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>Couldn't generate a token</AlertTitle>
               <AlertDescription>
                 Something went wrong creating the agent token. Try again, or
@@ -693,7 +691,6 @@ function FleetIdentity() {
             </Dialog.Description>
           </Dialog.Header>
           <Alert variant="error">
-            <Icon name="triangle-alert" className="h-4 w-4" />
             <AlertTitle>
               Your current MDM integration will stop working
             </AlertTitle>
@@ -993,7 +990,6 @@ export function DeviceAgentSetup(): React.JSX.Element {
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
           <Alert variant="info">
-            <Icon name="building-2" className="h-4 w-4" />
             <AlertTitle>Rolling out to more than a few machines?</AlertTitle>
             <AlertDescription>
               We recommend deploying the agent through your MDM (Kandji, Jamf,
