@@ -207,10 +207,10 @@ type Provisioner interface {
 	// enabled, upstream and locally.
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error)
 
-	// DisableAPIKey drops the org's upstream spending ceiling to zero, turns the
-	// key off, and mirrors both into the local DB. The key survives, so
-	// RefreshAPIKeyLimit can reinstate it. An org with no key of that type is a
-	// no-op.
+	// DisableAPIKey turns the org's key off upstream and records that locally,
+	// after which ProvisionAPIKey refuses it with ErrPlatformKeyDisabled. The
+	// key survives, so RefreshAPIKeyLimit can reinstate it. An org with no key
+	// of that type is a no-op.
 	DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error
 
 	GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error)
@@ -299,6 +299,13 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		}
 
 	default:
+		// This is where the lockdown binds. Every platform-key completion
+		// resolves through here, so refusing the key is what turns a demotion
+		// into an error the caller can explain, rather than an upstream
+		// rejection whose status also means "our provisioning key is broken".
+		if key.Disabled {
+			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
+		}
 		openrouterKey = key.Key
 	}
 
@@ -427,8 +434,8 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
 	if key.Disabled {
 		// Setting a limit on a disabled key does not bring it back, so
-		// reinstatement has to clear the flag on both sides. A stale local flag
-		// would keep the key out of credit-usage polling while it spends again.
+		// reinstatement has to clear the flag upstream too. UpdateOpenRouterKey
+		// clears the local one.
 		enabled := false
 		patch.Disabled = &enabled
 	}
@@ -449,33 +456,19 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
 	}
 
-	if key.Disabled {
-		if err := o.repo.EnableOpenRouterAPIKey(ctx, repo.EnableOpenRouterAPIKeyParams{
-			OrganizationID: orgID,
-			KeyType:        string(keyType),
-		}); err != nil {
-			return 0, fmt.Errorf("clear openrouter key disabled flag: %w", err)
-		}
-	}
-
 	return keyLimit, nil
 }
 
-// DisableAPIKey stops an organization from spending on its platform key.
-// Upstream is the only place that binds every caller: key resolution never
-// reads the disabled column, and lockout leaves the dashboard session path and
-// platform-initiated background usage able to reach the key.
+// DisableAPIKey stops an organization from spending on its platform key. Gram
+// enforces the lockdown itself: ProvisionAPIKey refuses a disabled key and
+// returns ErrPlatformKeyDisabled, so each surface fails with a reason it can
+// state to the user. The upstream flag covers any spend that never passes
+// through key resolution, such as a key that leaked.
 //
-// The patch carries both halves of the lockdown. The zero ceiling is what
-// makes a completion fail with 402, which classifyHTTPError turns into
-// ErrInsufficientCredits: chat reports a distinct code and resolution analysis
-// skips the segment rather than logging a failure per segment. The disabled
-// flag is the unambiguous off switch, since OpenRouter does not document how a
-// key behaves at exactly zero usage against a zero ceiling.
+// The key survives, so RefreshAPIKeyLimit can reinstate it.
 //
-// The upstream PATCH runs before the local write. A failure then leaves a key
-// that still spends but is still polled for usage, which the next sweep
-// retries. The reverse order would hide a spending key from usage polling.
+// The upstream PATCH runs before the local write. The reverse order would
+// record a lockdown that a permanently failing PATCH never made.
 func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	keyType = keyType.OrDefault()
 	if err := keyType.Validate(); err != nil {
@@ -494,11 +487,10 @@ func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType Ke
 		return fmt.Errorf("get openrouter key to disable: %w", err)
 	}
 
-	zero := float64(0)
 	disabled := true
 	if _, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
-		Limit:      &zero,
-		LimitReset: "monthly",
+		Limit:      nil,
+		LimitReset: "",
 		Disabled:   &disabled,
 	}); err != nil {
 		return fmt.Errorf("disable upstream openrouter key: %w", err)

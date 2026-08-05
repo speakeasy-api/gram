@@ -61,7 +61,6 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :exec
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
-    monthly_credits = 0,
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND key_type = $2
@@ -74,32 +73,10 @@ type DisableOpenRouterAPIKeyParams struct {
 }
 
 // Locks the key down without deleting it, so a reinstated organization keeps
-// the same upstream key. Mirrors both halves of the upstream lockdown: the
-// ceiling drops to 0 and the flag drops the key out of credit-usage polling.
+// the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
+// refuses to hand the key to a completion.
 func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) error {
 	_, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
-	return err
-}
-
-const enableOpenRouterAPIKey = `-- name: EnableOpenRouterAPIKey :exec
-UPDATE openrouter_api_keys
-SET disabled = FALSE,
-    updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND key_type = $2
-  AND deleted IS FALSE
-`
-
-type EnableOpenRouterAPIKeyParams struct {
-	OrganizationID string
-	KeyType        string
-}
-
-// Reverses DisableOpenRouterAPIKey. Reinstatement runs through
-// RefreshAPIKeyLimit, which sets a fresh ceiling in the same call, so this
-// only has to clear the flag.
-func (q *Queries) EnableOpenRouterAPIKey(ctx context.Context, arg EnableOpenRouterAPIKeyParams) error {
-	_, err := q.db.Exec(ctx, enableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
 	return err
 }
 
@@ -152,7 +129,7 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = $1, key_hash = $2, key = $3
+SET monthly_credits = $1, key_hash = $2, key = $3, disabled = FALSE
 WHERE organization_id = $4
   AND key_type = $5
   AND deleted IS FALSE
@@ -167,6 +144,8 @@ type UpdateOpenRouterKeyParams struct {
 	KeyType        string
 }
 
+// Also clears the disabled flag. This is the reinstatement write, and its only
+// caller turns the upstream key back on in the same call.
 func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterKeyParams) (OpenrouterApiKey, error) {
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,

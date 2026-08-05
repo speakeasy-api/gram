@@ -1229,6 +1229,8 @@ func IsHistoryCorrupted(err error) bool {
 // (and through the runner to the assistant runtime).
 func (s *Service) classifyCompletionError(ctx context.Context, label string, err error) error {
 	switch {
+	case openrouter.IsPlatformKeyDisabled(err):
+		return oops.C(oops.CodeInferenceDisabled).LogError(ctx, s.logger)
 	case openrouter.IsInsufficientCredits(err):
 		return oops.C(oops.CodeInsufficientCredits).LogError(ctx, s.logger)
 	case openrouter.IsHistoryCorruptionCandidate(err):

@@ -34,15 +34,6 @@ func (u *disableTestUpstream) recorded() []string {
 	return append([]string(nil), u.patches...)
 }
 
-func decodePatch(t *testing.T, body string) updateKeyRequest {
-	t.Helper()
-
-	var decoded updateKeyRequest
-	require.NoError(t, json.Unmarshal([]byte(body), &decoded))
-
-	return decoded
-}
-
 func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disableTestUpstream, *repo.Queries) {
 	t.Helper()
 
@@ -77,23 +68,12 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 				return
 			}
 
-			var body updateKeyRequest
-			if err := json.Unmarshal(raw, &body); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
 			upstream.mu.Lock()
 			upstream.patches = append(upstream.patches, string(raw))
 			upstream.mu.Unlock()
 
-			limit := 100.0
-			if body.Limit != nil {
-				limit = *body.Limit
-			}
-
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{"limit": limit, "hash": "hash-1"},
+				"data": map[string]any{"limit": 100.0, "hash": "hash-1"},
 			})
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -120,18 +100,17 @@ func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
 	require.NoError(t, err)
 
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+
 	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
 
-	patches := upstream.recorded()
-	require.Len(t, patches, 1)
-
-	// Both halves ride in one patch. The zero ceiling keeps the upstream
-	// rejection a 402, which chat and resolution analysis both branch on.
-	lockdown := decodePatch(t, patches[0])
-	require.NotNil(t, lockdown.Disabled)
-	require.True(t, *lockdown.Disabled)
-	require.NotNil(t, lockdown.Limit)
-	require.Zero(t, *lockdown.Limit)
+	// The patch carries the off switch and nothing else. Touching the ceiling
+	// would lose the value a reinstatement restores.
+	require.Equal(t, []string{`{"disabled":true}`}, upstream.recorded())
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
@@ -139,7 +118,34 @@ func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, row.Disabled)
-	require.Equal(t, int64(0), row.MonthlyCredits)
+	require.Equal(t, before.MonthlyCredits, row.MonthlyCredits)
+}
+
+// The lockdown binds at key resolution, so a disabled key must never reach a
+// completion. This is what turns a demotion into an error Gram can explain.
+func TestProvisionAPIKey_RefusesDisabledKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, _ := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+
+	key, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.ErrorIs(t, err, ErrPlatformKeyDisabled)
+	require.Empty(t, key, "a refused resolution must not leak the key it refused")
+
+	// Reinstatement makes resolution work again without minting a new key.
+	limit := 42
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+
+	key, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-disable-1", key)
 }
 
 // A retried demotion must not fail on a key it already turned off, so
@@ -200,17 +206,15 @@ func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 
 	patches := upstream.recorded()
 	require.Len(t, patches, 2)
-
-	reinstate := decodePatch(t, patches[1])
-	require.NotNil(t, reinstate.Disabled)
-	require.False(t, *reinstate.Disabled, "a limit alone does not bring a disabled key back")
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":false}`, patches[1],
+		"a limit alone does not bring a disabled key back")
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.False(t, row.Disabled, "a stale flag keeps the key out of credit-usage polling")
+	require.False(t, row.Disabled, "a stale flag keeps key resolution failing after reinstatement")
 	require.Equal(t, int64(42), row.MonthlyCredits)
 
 	// Refreshing an enabled key must send the body it sent before the disabled

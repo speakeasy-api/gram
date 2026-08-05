@@ -23,6 +23,19 @@ func IsInsufficientCredits(err error) bool {
 	return errors.Is(err, ErrInsufficientCredits)
 }
 
+// ErrPlatformKeyDisabled is returned when an organization's provisioned
+// platform key is locked down (see DisableAPIKey). Key resolution fails on it
+// before the request reaches OpenRouter, so the caller gets a reason it can
+// state to the user instead of an upstream status that means several things at
+// once. It clears on reinstatement only, never on a credit top-up.
+var ErrPlatformKeyDisabled = errors.New("openrouter: platform key disabled")
+
+// IsPlatformKeyDisabled reports whether err originated from a locked-down
+// platform key anywhere in the error chain.
+func IsPlatformKeyDisabled(err error) bool {
+	return errors.Is(err, ErrPlatformKeyDisabled)
+}
+
 // ErrHistoryCorruptionCandidate signals OpenRouter (or the upstream provider
 // it proxies for) rejected the request with a 4xx consistent with a
 // malformed or oversize transcript. Callers self-heal by trimming history

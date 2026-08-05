@@ -24,6 +24,11 @@ const (
 	CodeNotImplemented      Code = "not_implemented"
 	CodeInsufficientCredits Code = "insufficient_credits"
 	CodeRateLimitExceeded   Code = "rate_limit_exceeded"
+	// CodeInferenceDisabled marks an organization whose platform inference key
+	// an operator locked down, such as an enterprise trial that expired without
+	// converting. No credit top-up clears it, which is what separates it from
+	// CodeInsufficientCredits: only a deliberate reinstatement does. Maps to 403.
+	CodeInferenceDisabled Code = "inference_disabled"
 	// CodeCanceled represents a request whose client disconnected mid-flight,
 	// surfacing as a context.Canceled cause while the request context is itself
 	// canceled. It is not a server fault. It is never authored directly:
@@ -51,6 +56,7 @@ var StatusCodes = map[Code]int{
 	CodeNotImplemented:      http.StatusNotImplemented,
 	CodeInsufficientCredits: http.StatusPaymentRequired,
 	CodeRateLimitExceeded:   http.StatusTooManyRequests,
+	CodeInferenceDisabled:   http.StatusForbidden,
 	// 499 (client closed request) is non-standard but matches the convention
 	// already used by the request access log middleware.
 	CodeCanceled: 499,
@@ -80,6 +86,8 @@ func (c Code) UserMessage() string {
 		return "requested feature is not implemented"
 	case CodeInsufficientCredits:
 		return "token balance exhausted"
+	case CodeInferenceDisabled:
+		return "AI features are disabled for this organization, contact support to restore access"
 	case CodeRateLimitExceeded:
 		return "rate limit exceeded"
 	case CodeUnavailable:
@@ -104,7 +112,7 @@ func (c Code) MCPCode() MCPCode {
 	switch c {
 	case CodeUnauthorized:
 		return MCPCodeUnauthorized
-	case CodeForbidden:
+	case CodeForbidden, CodeInferenceDisabled:
 		return MCPCodeForbidden
 	case CodeBadRequest, CodeConflict, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest
