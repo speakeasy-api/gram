@@ -54,7 +54,7 @@
     "@stripe/stripe-js": "^7.8.0",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-virtual": "^3.14.8",
+    "@tanstack/react-virtual": "^3.14.9",
     "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.11.1",
     "ai": "catalog:",
