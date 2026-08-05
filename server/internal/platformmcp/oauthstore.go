@@ -68,16 +68,11 @@ func (s *PostgresOAuthStore) RevokeClient(ctx context.Context, clientID string, 
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := adminrepo.New(tx)
-	clientIDRecord, err := q.RevokeAdminMCPOAuthClient(ctx, adminrepo.RevokeAdminMCPOAuthClientParams{ClientID: clientID, RevokedAt: timestamp(now)})
+	_, err = q.RevokeAdminMCPOAuthClient(ctx, adminrepo.RevokeAdminMCPOAuthClientParams{ClientID: clientID, RevokedAt: timestamp(now)})
 	if err != nil {
 		return mapOAuthReadError(err)
 	}
-	if err := q.RevokeAdminMCPSessionsForClient(ctx, adminrepo.RevokeAdminMCPSessionsForClientParams{OauthClientID: clientIDRecord, RevokedAt: timestamp(now)}); err != nil {
-		return fmt.Errorf("revoke admin client sessions: %w", err)
-	}
-	if _, err := q.RevokeAdminMCPConnectionsForClient(ctx, adminrepo.RevokeAdminMCPConnectionsForClientParams{OauthClientID: clientIDRecord, RevokedAt: timestamp(now)}); err != nil {
-		return fmt.Errorf("revoke admin client connections: %w", err)
-	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit revoke admin client: %w", err)
 	}
@@ -149,8 +144,8 @@ func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input admi
 		return adminoauth.Connection{}, mapOAuthReadError(err)
 	}
 	if err := q.LockAdminMCPConnectionAuthorization(ctx, adminrepo.LockAdminMCPConnectionAuthorizationParams{
-		OrganizationID: pgtype.Text{String: input.Connection.OrganizationID, Valid: true},
-		SubjectUrn:     pgtype.Text{String: input.Connection.Subject, Valid: true},
+		OrganizationID: input.Connection.OrganizationID,
+		SubjectUrn:     input.Connection.Subject,
 		OauthClientID:  client.ClientID,
 	}); err != nil {
 		return adminoauth.Connection{}, fmt.Errorf("lock admin connection authorization: %w", err)
@@ -177,10 +172,10 @@ func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input admi
 	} else if err != nil {
 		return adminoauth.Connection{}, mapOAuthReadError(err)
 	} else {
-		if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{ConnectionID: current.ID, ConnectionGeneration: current.ActiveGeneration}); err != nil {
+		if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{OrganizationID: current.OrganizationID, ConnectionID: current.ID, ConnectionGeneration: current.ActiveGeneration, RevokedAt: timestamp(input.Now)}); err != nil {
 			return adminoauth.Connection{}, fmt.Errorf("revoke reauthorized admin session family: %w", err)
 		}
-		updated, err := q.RotateAdminMCPConnectionGeneration(ctx, adminrepo.RotateAdminMCPConnectionGenerationParams{ConnectionID: current.ID, ActiveGeneration: generation})
+		updated, err := q.RotateAdminMCPConnectionGeneration(ctx, adminrepo.RotateAdminMCPConnectionGenerationParams{ConnectionID: current.ID, OrganizationID: current.OrganizationID, ActiveGeneration: generation, ReauthorizedAt: timestamp(input.Now)})
 		if err != nil {
 			return adminoauth.Connection{}, mapOAuthWriteError(err)
 		}
@@ -194,6 +189,7 @@ func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input admi
 		return adminoauth.Connection{}, adminoauth.ErrClientMismatch
 	}
 	if _, err := q.CreateAdminMCPAuthorizationGrant(ctx, adminrepo.CreateAdminMCPAuthorizationGrantParams{
+		OrganizationID:        connection.OrganizationID,
 		AuthorizationCodeHash: opaqueHash(input.Grant.Code),
 		OauthClientID:         client.ID,
 		ConnectionID:          grantConnectionID,
@@ -210,7 +206,7 @@ func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input admi
 	return connection, nil
 }
 
-func (s *PostgresOAuthStore) RevokeConnection(ctx context.Context, connectionID string, now time.Time) error {
+func (s *PostgresOAuthStore) RevokeConnection(ctx context.Context, organizationID, connectionID string, now time.Time) error {
 	if s == nil || s.db == nil {
 		return adminoauth.ErrNotFound
 	}
@@ -224,17 +220,17 @@ func (s *PostgresOAuthStore) RevokeConnection(ctx context.Context, connectionID 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := adminrepo.New(tx)
-	connection, err := q.GetAdminMCPConnectionForUpdate(ctx, id)
+	connection, err := q.GetAdminMCPConnectionForUpdate(ctx, adminrepo.GetAdminMCPConnectionForUpdateParams{ID: id, OrganizationID: organizationID})
 	if err != nil {
 		return mapOAuthReadError(err)
 	}
 	if connection.RevokedAt.Valid || connection.ClientRevokedAt.Valid {
 		return adminoauth.ErrRevoked
 	}
-	if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{ConnectionID: id, ConnectionGeneration: connection.ActiveGeneration}); err != nil {
+	if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{OrganizationID: organizationID, ConnectionID: id, ConnectionGeneration: connection.ActiveGeneration, RevokedAt: timestamp(now)}); err != nil {
 		return fmt.Errorf("revoke admin connection sessions: %w", err)
 	}
-	if _, err := q.RevokeAdminMCPConnection(ctx, adminrepo.RevokeAdminMCPConnectionParams{ID: id, RevokedAt: timestamp(now)}); err != nil {
+	if _, err := q.RevokeAdminMCPConnection(ctx, adminrepo.RevokeAdminMCPConnectionParams{ID: id, OrganizationID: organizationID, RevokedAt: timestamp(now)}); err != nil {
 		return mapOAuthWriteError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -255,7 +251,7 @@ func (s *PostgresOAuthStore) IssueGrant(ctx context.Context, grant adminoauth.Gr
 	if err != nil {
 		return adminoauth.ErrGeneration
 	}
-	connection, err := adminrepo.New(s.db).GetActiveAdminMCPConnectionByID(ctx, connectionID)
+	connection, err := adminrepo.New(s.db).GetActiveAdminMCPConnectionByID(ctx, adminrepo.GetActiveAdminMCPConnectionByIDParams{ID: connectionID, OrganizationID: grant.Connection.OrganizationID})
 	if err != nil {
 		return mapOAuthReadError(err)
 	}
@@ -266,6 +262,7 @@ func (s *PostgresOAuthStore) IssueGrant(ctx context.Context, grant adminoauth.Gr
 		return adminoauth.ErrGeneration
 	}
 	_, err = adminrepo.New(s.db).CreateAdminMCPAuthorizationGrant(ctx, adminrepo.CreateAdminMCPAuthorizationGrantParams{
+		OrganizationID:        grant.Connection.OrganizationID,
 		AuthorizationCodeHash: opaqueHash(grant.Code),
 		OauthClientID:         connection.OauthClientID,
 		ConnectionID:          connectionID,
@@ -288,7 +285,7 @@ func (s *PostgresOAuthStore) ConsumeGrant(ctx context.Context, input adminoauth.
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := adminrepo.New(tx)
-	row, err := q.GetAdminMCPAuthorizationGrantForConsume(ctx, opaqueHash(input.Code))
+	row, err := q.GetAdminMCPAuthorizationGrantForConsume(ctx, adminrepo.GetAdminMCPAuthorizationGrantForConsumeParams{OrganizationID: input.OrganizationID, AuthorizationCodeHash: opaqueHash(input.Code)})
 	if err != nil {
 		return adminoauth.Grant{}, mapOAuthReadError(err)
 	}
@@ -310,7 +307,7 @@ func (s *PostgresOAuthStore) ConsumeGrant(ctx context.Context, input adminoauth.
 	if err := verifyPKCE(input.CodeVerifier, row.CodeChallenge); err != nil {
 		return adminoauth.Grant{}, err
 	}
-	if _, err := q.ConsumeAdminMCPAuthorizationGrant(ctx, row.ID); err != nil {
+	if _, err := q.ConsumeAdminMCPAuthorizationGrant(ctx, adminrepo.ConsumeAdminMCPAuthorizationGrantParams{ID: row.ID, OrganizationID: input.OrganizationID, ConsumedAt: timestamp(input.Now)}); err != nil {
 		return adminoauth.Grant{}, mapOAuthWriteError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -330,18 +327,18 @@ func (s *PostgresOAuthStore) CreateSession(ctx context.Context, session adminoau
 	return s.createSessionWithQueries(ctx, q, session)
 }
 
-func (s *PostgresOAuthStore) GetSessionByRefreshHash(ctx context.Context, refreshHash string) (adminoauth.Session, error) {
+func (s *PostgresOAuthStore) GetSessionByRefreshHash(ctx context.Context, organizationID, refreshHash string) (adminoauth.Session, error) {
 	if s == nil || s.db == nil {
 		return adminoauth.Session{}, adminoauth.ErrNotFound
 	}
-	row, err := adminrepo.New(s.db).GetAdminMCPSessionForRefresh(ctx, refreshHash)
+	row, err := adminrepo.New(s.db).GetAdminMCPSessionForRefresh(ctx, adminrepo.GetAdminMCPSessionForRefreshParams{OrganizationID: organizationID, RefreshTokenHash: refreshHash})
 	if err != nil {
 		return adminoauth.Session{}, mapOAuthReadError(err)
 	}
 	return sessionFromRow(row), nil
 }
 
-func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, refreshHash string, now time.Time) (bool, error) {
+func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizationID, refreshHash string, now time.Time) (bool, error) {
 	if s == nil || s.db == nil {
 		return false, adminoauth.ErrNotFound
 	}
@@ -351,7 +348,7 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, refreshHash
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := adminrepo.New(tx)
-	row, err := q.GetAdminMCPSessionForRefreshForUpdate(ctx, refreshHash)
+	row, err := q.GetAdminMCPSessionForRefreshForUpdate(ctx, adminrepo.GetAdminMCPSessionForRefreshForUpdateParams{OrganizationID: organizationID, RefreshTokenHash: refreshHash})
 	if err != nil {
 		return false, mapOAuthReadError(err)
 	}
@@ -361,7 +358,7 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, refreshHash
 		}
 		return false, nil
 	}
-	if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration}); err != nil {
+	if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{OrganizationID: organizationID, ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration, RevokedAt: timestamp(now)}); err != nil {
 		return false, fmt.Errorf("revoke reused admin session family: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -380,7 +377,7 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input adminoauth
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := adminrepo.New(tx)
-	row, err := q.GetAdminMCPSessionForRefreshForUpdate(ctx, input.RefreshHash)
+	row, err := q.GetAdminMCPSessionForRefreshForUpdate(ctx, adminrepo.GetAdminMCPSessionForRefreshForUpdateParams{OrganizationID: input.OrganizationID, RefreshTokenHash: input.RefreshHash})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return adminoauth.Session{}, adminoauth.ErrAlreadyUsed
 	}
@@ -388,7 +385,7 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input adminoauth
 		return adminoauth.Session{}, fmt.Errorf("lock admin session: %w", err)
 	}
 	if row.RevokedAt.Valid {
-		if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration}); err != nil {
+		if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{OrganizationID: input.OrganizationID, ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration, RevokedAt: timestamp(input.Now)}); err != nil {
 			return adminoauth.Session{}, fmt.Errorf("revoke reused admin session family: %w", err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -396,11 +393,11 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input adminoauth
 		}
 		return adminoauth.Session{}, adminoauth.ErrAlreadyUsed
 	}
-	if row.ClientID != input.ClientID || row.ConnectionGeneration.String() != input.Generation || row.ActiveGeneration != row.ConnectionGeneration || input.Replacement.Connection.ID != row.ConnectionID.String() {
+	if row.OrganizationID != input.OrganizationID || row.ClientID != input.ClientID || row.ConnectionGeneration.String() != input.Generation || row.ActiveGeneration != row.ConnectionGeneration || input.Replacement.Connection.ID != row.ConnectionID.String() {
 		return adminoauth.Session{}, adminoauth.ErrGeneration
 	}
 	if !row.RefreshExpiresAt.Valid || input.Now.After(row.RefreshExpiresAt.Time) {
-		if _, err := q.RevokeAdminMCPSession(ctx, row.ID); err != nil {
+		if _, err := q.RevokeAdminMCPSession(ctx, adminrepo.RevokeAdminMCPSessionParams{ID: row.ID, OrganizationID: input.OrganizationID, RevokedAt: timestamp(input.Now)}); err != nil {
 			return adminoauth.Session{}, mapOAuthWriteError(err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -418,7 +415,7 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input adminoauth
 	if err != nil {
 		return adminoauth.Session{}, adminoauth.ErrNotFound
 	}
-	if _, err := q.RotateAdminMCPSession(ctx, adminrepo.RotateAdminMCPSessionParams{ID: row.ID, ReplacedBySessionID: uuid.NullUUID{UUID: replacementID, Valid: true}, RotatedAt: timestamp(input.Now)}); err != nil {
+	if _, err := q.RotateAdminMCPSession(ctx, adminrepo.RotateAdminMCPSessionParams{ID: row.ID, OrganizationID: input.OrganizationID, ReplacedBySessionID: uuid.NullUUID{UUID: replacementID, Valid: true}, RotatedAt: timestamp(input.Now)}); err != nil {
 		return adminoauth.Session{}, mapOAuthWriteError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -427,7 +424,7 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input adminoauth
 	return adminoauth.Session{ID: row.ID.String(), ClientID: row.ClientID, JTI: row.Jti, RefreshHash: row.RefreshTokenHash, ExpiresAt: row.ExpiresAt.Time, RefreshExpiresAt: row.RefreshExpiresAt.Time, Connection: adminoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String()}}, nil
 }
 
-func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, refreshHash, clientID string, _ time.Time) (adminoauth.Session, error) {
+func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (adminoauth.Session, error) {
 	if s == nil || s.db == nil {
 		return adminoauth.Session{}, adminoauth.ErrNotFound
 	}
@@ -437,7 +434,7 @@ func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, refreshHash, cli
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := adminrepo.New(tx)
-	row, err := q.GetAdminMCPSessionForRefreshForUpdate(ctx, refreshHash)
+	row, err := q.GetAdminMCPSessionForRefreshForUpdate(ctx, adminrepo.GetAdminMCPSessionForRefreshForUpdateParams{OrganizationID: organizationID, RefreshTokenHash: refreshHash})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return adminoauth.Session{}, adminoauth.ErrNotFound
 	}
@@ -447,7 +444,7 @@ func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, refreshHash, cli
 	if row.ClientID != clientID {
 		return adminoauth.Session{}, adminoauth.ErrNotFound
 	}
-	if _, err := q.RevokeAdminMCPSession(ctx, row.ID); err != nil {
+	if _, err := q.RevokeAdminMCPSession(ctx, adminrepo.RevokeAdminMCPSessionParams{ID: row.ID, OrganizationID: organizationID, RevokedAt: timestamp(now)}); err != nil {
 		return adminoauth.Session{}, mapOAuthWriteError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -456,7 +453,7 @@ func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, refreshHash, cli
 	return adminoauth.Session{ID: row.ID.String(), ClientID: row.ClientID, JTI: row.Jti, RefreshHash: row.RefreshTokenHash, ExpiresAt: row.ExpiresAt.Time, RefreshExpiresAt: row.RefreshExpiresAt.Time, Connection: adminoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String()}}, nil
 }
 
-func (s *PostgresOAuthStore) RevokeAccessSession(ctx context.Context, jti, clientID string, _ time.Time) (adminoauth.Session, error) {
+func (s *PostgresOAuthStore) RevokeAccessSession(ctx context.Context, organizationID, jti, clientID string, now time.Time) (adminoauth.Session, error) {
 	if s == nil || s.db == nil {
 		return adminoauth.Session{}, adminoauth.ErrNotFound
 	}
@@ -464,14 +461,14 @@ func (s *PostgresOAuthStore) RevokeAccessSession(ctx context.Context, jti, clien
 	if err != nil {
 		return adminoauth.Session{}, mapOAuthReadError(err)
 	}
-	row, err := adminrepo.New(s.db).RevokeAdminMCPSessionByJTI(ctx, adminrepo.RevokeAdminMCPSessionByJTIParams{Jti: jti, OauthClientID: client.ID})
+	row, err := adminrepo.New(s.db).RevokeAdminMCPSessionByJTI(ctx, adminrepo.RevokeAdminMCPSessionByJTIParams{OrganizationID: organizationID, Jti: jti, OauthClientID: client.ID, RevokedAt: timestamp(now)})
 	if err != nil {
 		return adminoauth.Session{}, mapOAuthReadError(err)
 	}
 	return adminoauth.Session{ID: row.ID.String(), JTI: row.Jti, RefreshHash: row.RefreshTokenHash}, nil
 }
 
-func (s *PostgresOAuthStore) RotateConnectionGeneration(ctx context.Context, connectionID, generation string, _ time.Time) (adminoauth.Connection, error) {
+func (s *PostgresOAuthStore) RotateConnectionGeneration(ctx context.Context, organizationID, connectionID, generation string, now time.Time) (adminoauth.Connection, error) {
 	if s == nil || s.db == nil {
 		return adminoauth.Connection{}, adminoauth.ErrNotFound
 	}
@@ -489,14 +486,14 @@ func (s *PostgresOAuthStore) RotateConnectionGeneration(ctx context.Context, con
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := adminrepo.New(tx)
-	current, err := q.GetActiveAdminMCPConnectionByID(ctx, id)
+	current, err := q.GetActiveAdminMCPConnectionByID(ctx, adminrepo.GetActiveAdminMCPConnectionByIDParams{ID: id, OrganizationID: organizationID})
 	if err != nil {
 		return adminoauth.Connection{}, mapOAuthReadError(err)
 	}
-	if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{ConnectionID: id, ConnectionGeneration: current.ActiveGeneration}); err != nil {
+	if err := q.RevokeAdminMCPSessionFamily(ctx, adminrepo.RevokeAdminMCPSessionFamilyParams{OrganizationID: organizationID, ConnectionID: id, ConnectionGeneration: current.ActiveGeneration, RevokedAt: timestamp(now)}); err != nil {
 		return adminoauth.Connection{}, fmt.Errorf("revoke old admin generation: %w", err)
 	}
-	connection, err := q.RotateAdminMCPConnectionGeneration(ctx, adminrepo.RotateAdminMCPConnectionGenerationParams{ConnectionID: id, ActiveGeneration: newGeneration})
+	connection, err := q.RotateAdminMCPConnectionGeneration(ctx, adminrepo.RotateAdminMCPConnectionGenerationParams{ConnectionID: id, OrganizationID: organizationID, ActiveGeneration: newGeneration, ReauthorizedAt: timestamp(now)})
 	if err != nil {
 		return adminoauth.Connection{}, mapOAuthWriteError(err)
 	}
@@ -519,11 +516,11 @@ func (s *PostgresOAuthStore) createSessionWithQueries(ctx context.Context, q *ad
 	if err != nil {
 		return adminoauth.ErrGeneration
 	}
-	connection, err := q.GetActiveAdminMCPConnectionByID(ctx, connectionID)
+	connection, err := q.GetActiveAdminMCPConnectionByID(ctx, adminrepo.GetActiveAdminMCPConnectionByIDParams{ID: connectionID, OrganizationID: session.Connection.OrganizationID})
 	if err != nil {
 		return mapOAuthReadError(err)
 	}
-	_, err = q.CreateAdminMCPSession(ctx, adminrepo.CreateAdminMCPSessionParams{ID: id, ConnectionID: connectionID, OauthClientID: connection.OauthClientID, ConnectionGeneration: generation, Jti: session.JTI, RefreshTokenHash: session.RefreshHash, ExpiresAt: timestamp(session.ExpiresAt), RefreshExpiresAt: timestamp(session.RefreshExpiresAt)})
+	_, err = q.CreateAdminMCPSession(ctx, adminrepo.CreateAdminMCPSessionParams{ID: id, OrganizationID: session.Connection.OrganizationID, ConnectionID: connectionID, OauthClientID: connection.OauthClientID, ConnectionGeneration: generation, Jti: session.JTI, RefreshTokenHash: session.RefreshHash, ExpiresAt: timestamp(session.ExpiresAt), RefreshExpiresAt: timestamp(session.RefreshExpiresAt)})
 	return mapOAuthWriteError(err)
 }
 
@@ -536,7 +533,7 @@ func validateSessionConnection(ctx context.Context, q *adminrepo.Queries, sessio
 	if err != nil {
 		return adminoauth.ErrGeneration
 	}
-	connection, err := q.GetActiveAdminMCPConnectionByID(ctx, connectionID)
+	connection, err := q.GetActiveAdminMCPConnectionByID(ctx, adminrepo.GetActiveAdminMCPConnectionByIDParams{ID: connectionID, OrganizationID: session.Connection.OrganizationID})
 	if err != nil {
 		return mapOAuthReadError(err)
 	}

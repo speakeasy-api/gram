@@ -17,7 +17,9 @@ import (
 	adminoauth "github.com/speakeasy-api/gram/server/internal/adminmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type memoryCache struct {
@@ -319,10 +321,12 @@ func TestOAuthHTTPRefreshReturnsTransientGateError(t *testing.T) {
 	connection := adminoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
 	require.NoError(t, store.RegisterClient(t.Context(), adminoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(t.Context(), connection))
-	require.NoError(t, store.CreateSession(t.Context(), adminoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash("refresh-token"), ExpiresAt: time.Now().Add(time.Hour), RefreshExpiresAt: time.Now().Add(time.Hour)}))
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	require.NoError(t, err)
+	require.NoError(t, store.CreateSession(t.Context(), adminoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash(refreshToken), ExpiresAt: time.Now().Add(time.Hour), RefreshExpiresAt: time.Now().Add(time.Hour)}))
 	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
 
-	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token=refresh-token&client_id=client-1"))
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token="+url.QueryEscape(refreshToken)+"&client_id=client-1"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	service.TokenHandler().ServeHTTP(response, request)
@@ -351,21 +355,54 @@ func TestOAuthHTTPRefreshReplayIsRejectedBeforeAuthorization(t *testing.T) {
 	connection := adminoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
 	require.NoError(t, store.RegisterClient(context.Background(), adminoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(context.Background(), connection))
-	old := adminoauth.Session{ID: "session-old", ClientID: "client-1", Connection: connection, JTI: "jti-old", RefreshHash: opaqueHash("refresh-old"), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
+	refreshOld, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	require.NoError(t, err)
+	refreshNew, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	require.NoError(t, err)
+	old := adminoauth.Session{ID: "session-old", ClientID: "client-1", Connection: connection, JTI: "jti-old", RefreshHash: opaqueHash(refreshOld), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
 	require.NoError(t, store.CreateSession(context.Background(), old))
-	replacement := adminoauth.Session{ID: "session-new", ClientID: "client-1", Connection: connection, JTI: "jti-new", RefreshHash: opaqueHash("refresh-new"), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
-	_, err := store.RotateSession(context.Background(), adminoauth.RotateSessionInput{RefreshHash: old.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: replacement})
+	replacement := adminoauth.Session{ID: "session-new", ClientID: "client-1", Connection: connection, JTI: "jti-new", RefreshHash: opaqueHash(refreshNew), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
+	_, err = store.RotateSession(context.Background(), adminoauth.RotateSessionInput{OrganizationID: connection.OrganizationID, RefreshHash: old.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: replacement})
 	require.NoError(t, err)
 
-	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token=refresh-old&client_id=client-1"))
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token="+url.QueryEscape(refreshOld)+"&client_id=client-1"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	service.TokenHandler().ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_grant"`)
-	_, err = store.RotateSession(context.Background(), adminoauth.RotateSessionInput{RefreshHash: replacement.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: adminoauth.Session{ID: "session-after", ClientID: "client-1", Connection: connection, JTI: "jti-after", RefreshHash: "refresh-after", ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}})
+	_, err = store.RotateSession(context.Background(), adminoauth.RotateSessionInput{OrganizationID: connection.OrganizationID, RefreshHash: replacement.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: adminoauth.Session{ID: "session-after", ClientID: "client-1", Connection: connection, JTI: "jti-after", RefreshHash: "refresh-after", ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}})
 	require.ErrorIs(t, err, adminoauth.ErrAlreadyUsed)
+}
+
+func TestOAuthHTTPRevokesExpiredAccessToken(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	store := testStore(t, service)
+	now := time.Now()
+	connection := adminoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
+	require.NoError(t, store.RegisterClient(t.Context(), adminoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+	require.NoError(t, store.RegisterConnection(t.Context(), connection))
+	jti, err := service.credentials.Issue(accessJTICredential, connection.OrganizationID)
+	require.NoError(t, err)
+	accessToken, _, err := service.signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: "user-1"}, Audience: service.audience, Issuer: service.issuer, Lifetime: -time.Minute, ClientID: "client-1", JTI: jti})
+	require.NoError(t, err)
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	require.NoError(t, err)
+	require.NoError(t, store.CreateSession(t.Context(), adminoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
+
+	form := url.Values{"token": {accessToken}, "token_type_hint": {"access_token"}, "client_id": {"client-1"}}
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/revoke", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	service.RevokeHandler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	stored, err := store.GetSessionByRefreshHash(t.Context(), connection.OrganizationID, opaqueHash(refreshToken))
+	require.NoError(t, err)
+	require.NotNil(t, stored.RevokedAt)
 }
 
 func TestOAuthHTTPRejectsMalformedRefreshSubject(t *testing.T) {
@@ -375,10 +412,13 @@ func TestOAuthHTTPRejectsMalformedRefreshSubject(t *testing.T) {
 	store := testStore(t, service)
 	now := time.Now()
 	require.NoError(t, store.RegisterClient(context.Background(), adminoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
-	require.NoError(t, store.RegisterConnection(context.Background(), adminoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "malformed", OrganizationID: "org-1", Generation: "generation-1"}))
-	require.NoError(t, store.CreateSession(context.Background(), adminoauth.Session{ID: "session-1", ClientID: "client-1", Connection: adminoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "malformed", OrganizationID: "org-1", Generation: "generation-1"}, JTI: "jti-1", RefreshHash: opaqueHash("refresh-token"), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
+	connection := adminoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "malformed", OrganizationID: "org-1", Generation: "generation-1"}
+	require.NoError(t, store.RegisterConnection(context.Background(), connection))
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	require.NoError(t, err)
+	require.NoError(t, store.CreateSession(context.Background(), adminoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
 
-	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token=refresh-token&client_id=client-1"))
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token="+url.QueryEscape(refreshToken)+"&client_id=client-1"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	service.TokenHandler().ServeHTTP(response, request)
@@ -407,7 +447,16 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 		Authorizer:    allowAuthorizer{},
 		Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
 		Signer:        sessiontokens.NewSigner("test-key"),
+		Encryption:    testEncryption(t),
 	})
 	require.NoError(t, err)
 	return service
+}
+
+func testEncryption(t *testing.T) *encryption.Client {
+	t.Helper()
+
+	client, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
+	return client
 }

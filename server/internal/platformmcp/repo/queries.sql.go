@@ -14,19 +14,27 @@ import (
 
 const consumeAdminMCPAuthorizationGrant = `-- name: ConsumeAdminMCPAuthorizationGrant :one
 UPDATE admin_mcp_authorization_grants
-SET consumed_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE id = $1
+SET consumed_at = $1,
+    updated_at = $1
+WHERE id = $2
+  AND organization_id = $3
   AND consumed_at IS NULL
   AND revoked_at IS NULL
-RETURNING id, authorization_code_hash, oauth_client_id, connection_id, connection_generation, redirect_uri, code_challenge, expires_at, consumed_at, revoked_at, created_at, updated_at
+RETURNING id, organization_id, authorization_code_hash, oauth_client_id, connection_id, connection_generation, redirect_uri, code_challenge, expires_at, consumed_at, revoked_at, created_at, updated_at
 `
 
-func (q *Queries) ConsumeAdminMCPAuthorizationGrant(ctx context.Context, id uuid.UUID) (AdminMcpAuthorizationGrant, error) {
-	row := q.db.QueryRow(ctx, consumeAdminMCPAuthorizationGrant, id)
+type ConsumeAdminMCPAuthorizationGrantParams struct {
+	ConsumedAt     pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ConsumeAdminMCPAuthorizationGrant(ctx context.Context, arg ConsumeAdminMCPAuthorizationGrantParams) (AdminMcpAuthorizationGrant, error) {
+	row := q.db.QueryRow(ctx, consumeAdminMCPAuthorizationGrant, arg.ConsumedAt, arg.ID, arg.OrganizationID)
 	var i AdminMcpAuthorizationGrant
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.AuthorizationCodeHash,
 		&i.OauthClientID,
 		&i.ConnectionID,
@@ -44,6 +52,7 @@ func (q *Queries) ConsumeAdminMCPAuthorizationGrant(ctx context.Context, id uuid
 
 const createAdminMCPAuthorizationGrant = `-- name: CreateAdminMCPAuthorizationGrant :one
 INSERT INTO admin_mcp_authorization_grants (
+    organization_id,
     authorization_code_hash,
     oauth_client_id,
     connection_id,
@@ -58,12 +67,14 @@ INSERT INTO admin_mcp_authorization_grants (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
-RETURNING id, authorization_code_hash, oauth_client_id, connection_id, connection_generation, redirect_uri, code_challenge, expires_at, consumed_at, revoked_at, created_at, updated_at
+RETURNING id, organization_id, authorization_code_hash, oauth_client_id, connection_id, connection_generation, redirect_uri, code_challenge, expires_at, consumed_at, revoked_at, created_at, updated_at
 `
 
 type CreateAdminMCPAuthorizationGrantParams struct {
+	OrganizationID        string
 	AuthorizationCodeHash string
 	OauthClientID         uuid.UUID
 	ConnectionID          uuid.UUID
@@ -75,6 +86,7 @@ type CreateAdminMCPAuthorizationGrantParams struct {
 
 func (q *Queries) CreateAdminMCPAuthorizationGrant(ctx context.Context, arg CreateAdminMCPAuthorizationGrantParams) (AdminMcpAuthorizationGrant, error) {
 	row := q.db.QueryRow(ctx, createAdminMCPAuthorizationGrant,
+		arg.OrganizationID,
 		arg.AuthorizationCodeHash,
 		arg.OauthClientID,
 		arg.ConnectionID,
@@ -86,6 +98,7 @@ func (q *Queries) CreateAdminMCPAuthorizationGrant(ctx context.Context, arg Crea
 	var i AdminMcpAuthorizationGrant
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.AuthorizationCodeHash,
 		&i.OauthClientID,
 		&i.ConnectionID,
@@ -151,6 +164,7 @@ func (q *Queries) CreateAdminMCPConnection(ctx context.Context, arg CreateAdminM
 }
 
 const createAdminMCPOAuthClient = `-- name: CreateAdminMCPOAuthClient :one
+
 INSERT INTO admin_mcp_oauth_clients (
     client_id,
     client_secret_hash,
@@ -175,6 +189,9 @@ type CreateAdminMCPOAuthClientParams struct {
 	ClientSecretExpiresAt pgtype.Timestamptz
 }
 
+// The OAuth client registry is global because dynamic registration happens before
+// browser authentication and organization selection. Every other Admin-owned
+// state transition below receives an explicit organization_id predicate.
 func (q *Queries) CreateAdminMCPOAuthClient(ctx context.Context, arg CreateAdminMCPOAuthClientParams) (AdminMcpOauthClient, error) {
 	row := q.db.QueryRow(ctx, createAdminMCPOAuthClient,
 		arg.ClientID,
@@ -202,6 +219,7 @@ func (q *Queries) CreateAdminMCPOAuthClient(ctx context.Context, arg CreateAdmin
 const createAdminMCPSession = `-- name: CreateAdminMCPSession :one
 INSERT INTO admin_mcp_sessions (
     id,
+    organization_id,
     connection_id,
     oauth_client_id,
     connection_generation,
@@ -217,13 +235,15 @@ INSERT INTO admin_mcp_sessions (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9
 )
-RETURNING id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
+RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
 type CreateAdminMCPSessionParams struct {
 	ID                   uuid.UUID
+	OrganizationID       string
 	ConnectionID         uuid.UUID
 	OauthClientID        uuid.UUID
 	ConnectionGeneration uuid.UUID
@@ -236,6 +256,7 @@ type CreateAdminMCPSessionParams struct {
 func (q *Queries) CreateAdminMCPSession(ctx context.Context, arg CreateAdminMCPSessionParams) (AdminMcpSession, error) {
 	row := q.db.QueryRow(ctx, createAdminMCPSession,
 		arg.ID,
+		arg.OrganizationID,
 		arg.ConnectionID,
 		arg.OauthClientID,
 		arg.ConnectionGeneration,
@@ -247,6 +268,7 @@ func (q *Queries) CreateAdminMCPSession(ctx context.Context, arg CreateAdminMCPS
 	var i AdminMcpSession
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.ConnectionID,
 		&i.OauthClientID,
 		&i.ConnectionGeneration,
@@ -302,9 +324,15 @@ FROM admin_mcp_connections AS connection
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
 WHERE connection.id = $1
+  AND connection.organization_id = $2
   AND connection.revoked_at IS NULL
   AND client.revoked_at IS NULL
 `
+
+type GetActiveAdminMCPConnectionByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
 
 type GetActiveAdminMCPConnectionByIDRow struct {
 	ID               uuid.UUID
@@ -320,8 +348,8 @@ type GetActiveAdminMCPConnectionByIDRow struct {
 	ClientID         string
 }
 
-func (q *Queries) GetActiveAdminMCPConnectionByID(ctx context.Context, id uuid.UUID) (GetActiveAdminMCPConnectionByIDRow, error) {
-	row := q.db.QueryRow(ctx, getActiveAdminMCPConnectionByID, id)
+func (q *Queries) GetActiveAdminMCPConnectionByID(ctx context.Context, arg GetActiveAdminMCPConnectionByIDParams) (GetActiveAdminMCPConnectionByIDRow, error) {
+	row := q.db.QueryRow(ctx, getActiveAdminMCPConnectionByID, arg.ID, arg.OrganizationID)
 	var i GetActiveAdminMCPConnectionByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -369,23 +397,30 @@ SELECT
     session.connection_id,
     session.oauth_client_id,
     session.connection_generation,
-    connection.organization_id,
+    session.organization_id,
     connection.subject_urn,
     connection.active_generation,
     client.client_id
 FROM admin_mcp_sessions AS session
 JOIN admin_mcp_connections AS connection
   ON connection.id = session.connection_id
- AND connection.oauth_client_id = session.oauth_client_id
+  AND connection.organization_id = session.organization_id
+  AND connection.oauth_client_id = session.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
-WHERE session.jti = $1
+WHERE session.organization_id = $1
+  AND session.jti = $2
   AND session.expires_at > clock_timestamp()
   AND session.revoked_at IS NULL
   AND connection.revoked_at IS NULL
   AND connection.active_generation = session.connection_generation
   AND client.revoked_at IS NULL
 `
+
+type GetActiveAdminMCPSessionByJTIParams struct {
+	OrganizationID string
+	Jti            string
+}
 
 type GetActiveAdminMCPSessionByJTIRow struct {
 	ConnectionID         uuid.UUID
@@ -397,8 +432,8 @@ type GetActiveAdminMCPSessionByJTIRow struct {
 	ClientID             string
 }
 
-func (q *Queries) GetActiveAdminMCPSessionByJTI(ctx context.Context, jti string) (GetActiveAdminMCPSessionByJTIRow, error) {
-	row := q.db.QueryRow(ctx, getActiveAdminMCPSessionByJTI, jti)
+func (q *Queries) GetActiveAdminMCPSessionByJTI(ctx context.Context, arg GetActiveAdminMCPSessionByJTIParams) (GetActiveAdminMCPSessionByJTIRow, error) {
+	row := q.db.QueryRow(ctx, getActiveAdminMCPSessionByJTI, arg.OrganizationID, arg.Jti)
 	var i GetActiveAdminMCPSessionByJTIRow
 	err := row.Scan(
 		&i.ConnectionID,
@@ -413,21 +448,29 @@ func (q *Queries) GetActiveAdminMCPSessionByJTI(ctx context.Context, jti string)
 }
 
 const getAdminMCPAuthorizationGrantForConsume = `-- name: GetAdminMCPAuthorizationGrantForConsume :one
-SELECT auth_grant.id, auth_grant.authorization_code_hash, auth_grant.oauth_client_id, auth_grant.connection_id, auth_grant.connection_generation, auth_grant.redirect_uri, auth_grant.code_challenge, auth_grant.expires_at, auth_grant.consumed_at, auth_grant.revoked_at, auth_grant.created_at, auth_grant.updated_at, connection.organization_id, connection.subject_urn, connection.active_generation, client.client_id
+SELECT auth_grant.id, auth_grant.organization_id, auth_grant.authorization_code_hash, auth_grant.oauth_client_id, auth_grant.connection_id, auth_grant.connection_generation, auth_grant.redirect_uri, auth_grant.code_challenge, auth_grant.expires_at, auth_grant.consumed_at, auth_grant.revoked_at, auth_grant.created_at, auth_grant.updated_at, connection.subject_urn, connection.active_generation, client.client_id
 FROM admin_mcp_authorization_grants AS auth_grant
 JOIN admin_mcp_connections AS connection
   ON connection.id = auth_grant.connection_id
- AND connection.oauth_client_id = auth_grant.oauth_client_id
+  AND connection.organization_id = auth_grant.organization_id
+  AND connection.oauth_client_id = auth_grant.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = auth_grant.oauth_client_id
-WHERE auth_grant.authorization_code_hash = $1
+WHERE auth_grant.organization_id = $1
+  AND auth_grant.authorization_code_hash = $2
   AND connection.revoked_at IS NULL
   AND client.revoked_at IS NULL
 FOR UPDATE OF auth_grant
 `
 
+type GetAdminMCPAuthorizationGrantForConsumeParams struct {
+	OrganizationID        string
+	AuthorizationCodeHash string
+}
+
 type GetAdminMCPAuthorizationGrantForConsumeRow struct {
 	ID                    uuid.UUID
+	OrganizationID        string
 	AuthorizationCodeHash string
 	OauthClientID         uuid.UUID
 	ConnectionID          uuid.UUID
@@ -439,17 +482,17 @@ type GetAdminMCPAuthorizationGrantForConsumeRow struct {
 	RevokedAt             pgtype.Timestamptz
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
-	OrganizationID        string
 	SubjectUrn            string
 	ActiveGeneration      uuid.UUID
 	ClientID              string
 }
 
-func (q *Queries) GetAdminMCPAuthorizationGrantForConsume(ctx context.Context, authorizationCodeHash string) (GetAdminMCPAuthorizationGrantForConsumeRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPAuthorizationGrantForConsume, authorizationCodeHash)
+func (q *Queries) GetAdminMCPAuthorizationGrantForConsume(ctx context.Context, arg GetAdminMCPAuthorizationGrantForConsumeParams) (GetAdminMCPAuthorizationGrantForConsumeRow, error) {
+	row := q.db.QueryRow(ctx, getAdminMCPAuthorizationGrantForConsume, arg.OrganizationID, arg.AuthorizationCodeHash)
 	var i GetAdminMCPAuthorizationGrantForConsumeRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.AuthorizationCodeHash,
 		&i.OauthClientID,
 		&i.ConnectionID,
@@ -461,7 +504,6 @@ func (q *Queries) GetAdminMCPAuthorizationGrantForConsume(ctx context.Context, a
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.OrganizationID,
 		&i.SubjectUrn,
 		&i.ActiveGeneration,
 		&i.ClientID,
@@ -475,8 +517,14 @@ FROM admin_mcp_connections AS connection
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
 WHERE connection.id = $1
+  AND connection.organization_id = $2
 FOR UPDATE OF connection
 `
+
+type GetAdminMCPConnectionForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
 
 type GetAdminMCPConnectionForUpdateRow struct {
 	ID               uuid.UUID
@@ -493,8 +541,8 @@ type GetAdminMCPConnectionForUpdateRow struct {
 	ClientRevokedAt  pgtype.Timestamptz
 }
 
-func (q *Queries) GetAdminMCPConnectionForUpdate(ctx context.Context, id uuid.UUID) (GetAdminMCPConnectionForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPConnectionForUpdate, id)
+func (q *Queries) GetAdminMCPConnectionForUpdate(ctx context.Context, arg GetAdminMCPConnectionForUpdateParams) (GetAdminMCPConnectionForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getAdminMCPConnectionForUpdate, arg.ID, arg.OrganizationID)
 	var i GetAdminMCPConnectionForUpdateRow
 	err := row.Scan(
 		&i.ID,
@@ -553,18 +601,27 @@ func (q *Queries) GetAdminMCPServer(ctx context.Context, arg GetAdminMCPServerPa
 }
 
 const getAdminMCPSessionForRefresh = `-- name: GetAdminMCPSessionForRefresh :one
-SELECT session.id, session.connection_id, session.oauth_client_id, session.connection_generation, session.jti, session.refresh_token_hash, session.expires_at, session.refresh_expires_at, session.rotated_at, session.revoked_at, session.replaced_by_session_id, session.created_at, session.updated_at, connection.organization_id, connection.subject_urn, connection.active_generation, client.client_id
+SELECT session.id, session.organization_id, session.connection_id, session.oauth_client_id, session.connection_generation, session.jti, session.refresh_token_hash, session.expires_at, session.refresh_expires_at, session.rotated_at, session.revoked_at, session.replaced_by_session_id, session.created_at, session.updated_at, connection.subject_urn, connection.active_generation, client.client_id
 FROM admin_mcp_sessions AS session
 JOIN admin_mcp_connections AS connection
   ON connection.id = session.connection_id
- AND connection.oauth_client_id = session.oauth_client_id
+  AND connection.organization_id = session.organization_id
+  AND connection.oauth_client_id = session.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
-WHERE session.refresh_token_hash = $1
+WHERE session.organization_id = $1
+  AND session.refresh_token_hash = $2
+  AND client.revoked_at IS NULL
 `
+
+type GetAdminMCPSessionForRefreshParams struct {
+	OrganizationID   string
+	RefreshTokenHash string
+}
 
 type GetAdminMCPSessionForRefreshRow struct {
 	ID                   uuid.UUID
+	OrganizationID       string
 	ConnectionID         uuid.UUID
 	OauthClientID        uuid.UUID
 	ConnectionGeneration uuid.UUID
@@ -577,17 +634,17 @@ type GetAdminMCPSessionForRefreshRow struct {
 	ReplacedBySessionID  uuid.NullUUID
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
-	OrganizationID       string
 	SubjectUrn           string
 	ActiveGeneration     uuid.UUID
 	ClientID             string
 }
 
-func (q *Queries) GetAdminMCPSessionForRefresh(ctx context.Context, refreshTokenHash string) (GetAdminMCPSessionForRefreshRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPSessionForRefresh, refreshTokenHash)
+func (q *Queries) GetAdminMCPSessionForRefresh(ctx context.Context, arg GetAdminMCPSessionForRefreshParams) (GetAdminMCPSessionForRefreshRow, error) {
+	row := q.db.QueryRow(ctx, getAdminMCPSessionForRefresh, arg.OrganizationID, arg.RefreshTokenHash)
 	var i GetAdminMCPSessionForRefreshRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.ConnectionID,
 		&i.OauthClientID,
 		&i.ConnectionGeneration,
@@ -600,7 +657,6 @@ func (q *Queries) GetAdminMCPSessionForRefresh(ctx context.Context, refreshToken
 		&i.ReplacedBySessionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.OrganizationID,
 		&i.SubjectUrn,
 		&i.ActiveGeneration,
 		&i.ClientID,
@@ -609,19 +665,28 @@ func (q *Queries) GetAdminMCPSessionForRefresh(ctx context.Context, refreshToken
 }
 
 const getAdminMCPSessionForRefreshForUpdate = `-- name: GetAdminMCPSessionForRefreshForUpdate :one
-SELECT session.id, session.connection_id, session.oauth_client_id, session.connection_generation, session.jti, session.refresh_token_hash, session.expires_at, session.refresh_expires_at, session.rotated_at, session.revoked_at, session.replaced_by_session_id, session.created_at, session.updated_at, connection.organization_id, connection.subject_urn, connection.active_generation, client.client_id
+SELECT session.id, session.organization_id, session.connection_id, session.oauth_client_id, session.connection_generation, session.jti, session.refresh_token_hash, session.expires_at, session.refresh_expires_at, session.rotated_at, session.revoked_at, session.replaced_by_session_id, session.created_at, session.updated_at, connection.subject_urn, connection.active_generation, client.client_id
 FROM admin_mcp_sessions AS session
 JOIN admin_mcp_connections AS connection
   ON connection.id = session.connection_id
- AND connection.oauth_client_id = session.oauth_client_id
+  AND connection.organization_id = session.organization_id
+  AND connection.oauth_client_id = session.oauth_client_id
 JOIN admin_mcp_oauth_clients AS client
   ON client.id = session.oauth_client_id
-WHERE session.refresh_token_hash = $1
+WHERE session.organization_id = $1
+  AND session.refresh_token_hash = $2
+  AND client.revoked_at IS NULL
 FOR UPDATE OF session
 `
 
+type GetAdminMCPSessionForRefreshForUpdateParams struct {
+	OrganizationID   string
+	RefreshTokenHash string
+}
+
 type GetAdminMCPSessionForRefreshForUpdateRow struct {
 	ID                   uuid.UUID
+	OrganizationID       string
 	ConnectionID         uuid.UUID
 	OauthClientID        uuid.UUID
 	ConnectionGeneration uuid.UUID
@@ -634,17 +699,17 @@ type GetAdminMCPSessionForRefreshForUpdateRow struct {
 	ReplacedBySessionID  uuid.NullUUID
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
-	OrganizationID       string
 	SubjectUrn           string
 	ActiveGeneration     uuid.UUID
 	ClientID             string
 }
 
-func (q *Queries) GetAdminMCPSessionForRefreshForUpdate(ctx context.Context, refreshTokenHash string) (GetAdminMCPSessionForRefreshForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getAdminMCPSessionForRefreshForUpdate, refreshTokenHash)
+func (q *Queries) GetAdminMCPSessionForRefreshForUpdate(ctx context.Context, arg GetAdminMCPSessionForRefreshForUpdateParams) (GetAdminMCPSessionForRefreshForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getAdminMCPSessionForRefreshForUpdate, arg.OrganizationID, arg.RefreshTokenHash)
 	var i GetAdminMCPSessionForRefreshForUpdateRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.ConnectionID,
 		&i.OauthClientID,
 		&i.ConnectionGeneration,
@@ -657,7 +722,6 @@ func (q *Queries) GetAdminMCPSessionForRefreshForUpdate(ctx context.Context, ref
 		&i.ReplacedBySessionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.OrganizationID,
 		&i.SubjectUrn,
 		&i.ActiveGeneration,
 		&i.ClientID,
@@ -759,12 +823,17 @@ func (q *Queries) ListAdminMCPServers(ctx context.Context, arg ListAdminMCPServe
 }
 
 const lockAdminMCPConnectionAuthorization = `-- name: LockAdminMCPConnectionAuthorization :exec
-SELECT pg_advisory_xact_lock(hashtext($1 || ':' || $2 || ':' || $3::text))
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        format('%s:%s:%s', $1::text, $2::text, $3::text),
+        0
+    )
+)
 `
 
 type LockAdminMCPConnectionAuthorizationParams struct {
-	OrganizationID pgtype.Text
-	SubjectUrn     pgtype.Text
+	OrganizationID string
+	SubjectUrn     string
 	OauthClientID  string
 }
 
@@ -778,17 +847,19 @@ UPDATE admin_mcp_connections
 SET revoked_at = $1,
     updated_at = $1
 WHERE id = $2
+  AND organization_id = $3
   AND revoked_at IS NULL
 RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, revoked_at, created_at, updated_at
 `
 
 type RevokeAdminMCPConnectionParams struct {
-	RevokedAt pgtype.Timestamptz
-	ID        uuid.UUID
+	RevokedAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) RevokeAdminMCPConnection(ctx context.Context, arg RevokeAdminMCPConnectionParams) (AdminMcpConnection, error) {
-	row := q.db.QueryRow(ctx, revokeAdminMCPConnection, arg.RevokedAt, arg.ID)
+	row := q.db.QueryRow(ctx, revokeAdminMCPConnection, arg.RevokedAt, arg.ID, arg.OrganizationID)
 	var i AdminMcpConnection
 	err := row.Scan(
 		&i.ID,
@@ -803,45 +874,6 @@ func (q *Queries) RevokeAdminMCPConnection(ctx context.Context, arg RevokeAdminM
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const revokeAdminMCPConnectionsForClient = `-- name: RevokeAdminMCPConnectionsForClient :many
-UPDATE admin_mcp_connections
-SET revoked_at = $1,
-    updated_at = $1
-WHERE oauth_client_id = $2
-  AND revoked_at IS NULL
-RETURNING id, active_generation
-`
-
-type RevokeAdminMCPConnectionsForClientParams struct {
-	RevokedAt     pgtype.Timestamptz
-	OauthClientID uuid.UUID
-}
-
-type RevokeAdminMCPConnectionsForClientRow struct {
-	ID               uuid.UUID
-	ActiveGeneration uuid.UUID
-}
-
-func (q *Queries) RevokeAdminMCPConnectionsForClient(ctx context.Context, arg RevokeAdminMCPConnectionsForClientParams) ([]RevokeAdminMCPConnectionsForClientRow, error) {
-	rows, err := q.db.Query(ctx, revokeAdminMCPConnectionsForClient, arg.RevokedAt, arg.OauthClientID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RevokeAdminMCPConnectionsForClientRow
-	for rows.Next() {
-		var i RevokeAdminMCPConnectionsForClientRow
-		if err := rows.Scan(&i.ID, &i.ActiveGeneration); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const revokeAdminMCPOAuthClient = `-- name: RevokeAdminMCPOAuthClient :one
@@ -867,18 +899,26 @@ func (q *Queries) RevokeAdminMCPOAuthClient(ctx context.Context, arg RevokeAdmin
 
 const revokeAdminMCPSession = `-- name: RevokeAdminMCPSession :one
 UPDATE admin_mcp_sessions
-SET revoked_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE id = $1
+SET revoked_at = $1,
+    updated_at = $1
+WHERE id = $2
+  AND organization_id = $3
   AND revoked_at IS NULL
-RETURNING id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
+RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
-func (q *Queries) RevokeAdminMCPSession(ctx context.Context, id uuid.UUID) (AdminMcpSession, error) {
-	row := q.db.QueryRow(ctx, revokeAdminMCPSession, id)
+type RevokeAdminMCPSessionParams struct {
+	RevokedAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) RevokeAdminMCPSession(ctx context.Context, arg RevokeAdminMCPSessionParams) (AdminMcpSession, error) {
+	row := q.db.QueryRow(ctx, revokeAdminMCPSession, arg.RevokedAt, arg.ID, arg.OrganizationID)
 	var i AdminMcpSession
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.ConnectionID,
 		&i.OauthClientID,
 		&i.ConnectionGeneration,
@@ -897,24 +937,33 @@ func (q *Queries) RevokeAdminMCPSession(ctx context.Context, id uuid.UUID) (Admi
 
 const revokeAdminMCPSessionByJTI = `-- name: RevokeAdminMCPSessionByJTI :one
 UPDATE admin_mcp_sessions
-SET revoked_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE jti = $1
-  AND oauth_client_id = $2
+SET revoked_at = $1,
+    updated_at = $1
+WHERE organization_id = $2
+  AND jti = $3
+  AND oauth_client_id = $4
   AND revoked_at IS NULL
-RETURNING id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
+RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
 type RevokeAdminMCPSessionByJTIParams struct {
-	Jti           string
-	OauthClientID uuid.UUID
+	RevokedAt      pgtype.Timestamptz
+	OrganizationID string
+	Jti            string
+	OauthClientID  uuid.UUID
 }
 
 func (q *Queries) RevokeAdminMCPSessionByJTI(ctx context.Context, arg RevokeAdminMCPSessionByJTIParams) (AdminMcpSession, error) {
-	row := q.db.QueryRow(ctx, revokeAdminMCPSessionByJTI, arg.Jti, arg.OauthClientID)
+	row := q.db.QueryRow(ctx, revokeAdminMCPSessionByJTI,
+		arg.RevokedAt,
+		arg.OrganizationID,
+		arg.Jti,
+		arg.OauthClientID,
+	)
 	var i AdminMcpSession
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.ConnectionID,
 		&i.OauthClientID,
 		&i.ConnectionGeneration,
@@ -933,58 +982,56 @@ func (q *Queries) RevokeAdminMCPSessionByJTI(ctx context.Context, arg RevokeAdmi
 
 const revokeAdminMCPSessionFamily = `-- name: RevokeAdminMCPSessionFamily :exec
 UPDATE admin_mcp_sessions
-SET revoked_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE connection_id = $1
-  AND connection_generation = $2
+SET revoked_at = $1,
+    updated_at = $1
+WHERE organization_id = $2
+  AND connection_id = $3
+  AND connection_generation = $4
   AND revoked_at IS NULL
 `
 
 type RevokeAdminMCPSessionFamilyParams struct {
+	RevokedAt            pgtype.Timestamptz
+	OrganizationID       string
 	ConnectionID         uuid.UUID
 	ConnectionGeneration uuid.UUID
 }
 
 func (q *Queries) RevokeAdminMCPSessionFamily(ctx context.Context, arg RevokeAdminMCPSessionFamilyParams) error {
-	_, err := q.db.Exec(ctx, revokeAdminMCPSessionFamily, arg.ConnectionID, arg.ConnectionGeneration)
-	return err
-}
-
-const revokeAdminMCPSessionsForClient = `-- name: RevokeAdminMCPSessionsForClient :exec
-UPDATE admin_mcp_sessions
-SET revoked_at = $1,
-    updated_at = $1
-WHERE oauth_client_id = $2
-  AND revoked_at IS NULL
-`
-
-type RevokeAdminMCPSessionsForClientParams struct {
-	RevokedAt     pgtype.Timestamptz
-	OauthClientID uuid.UUID
-}
-
-func (q *Queries) RevokeAdminMCPSessionsForClient(ctx context.Context, arg RevokeAdminMCPSessionsForClientParams) error {
-	_, err := q.db.Exec(ctx, revokeAdminMCPSessionsForClient, arg.RevokedAt, arg.OauthClientID)
+	_, err := q.db.Exec(ctx, revokeAdminMCPSessionFamily,
+		arg.RevokedAt,
+		arg.OrganizationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+	)
 	return err
 }
 
 const rotateAdminMCPConnectionGeneration = `-- name: RotateAdminMCPConnectionGeneration :one
 UPDATE admin_mcp_connections
 SET active_generation = $1,
-    reauthorized_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE id = $2
+    reauthorized_at = $2,
+    updated_at = $2
+WHERE id = $3
+  AND organization_id = $4
   AND revoked_at IS NULL
 RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, revoked_at, created_at, updated_at
 `
 
 type RotateAdminMCPConnectionGenerationParams struct {
 	ActiveGeneration uuid.UUID
+	ReauthorizedAt   pgtype.Timestamptz
 	ConnectionID     uuid.UUID
+	OrganizationID   string
 }
 
 func (q *Queries) RotateAdminMCPConnectionGeneration(ctx context.Context, arg RotateAdminMCPConnectionGenerationParams) (AdminMcpConnection, error) {
-	row := q.db.QueryRow(ctx, rotateAdminMCPConnectionGeneration, arg.ActiveGeneration, arg.ConnectionID)
+	row := q.db.QueryRow(ctx, rotateAdminMCPConnectionGeneration,
+		arg.ActiveGeneration,
+		arg.ReauthorizedAt,
+		arg.ConnectionID,
+		arg.OrganizationID,
+	)
 	var i AdminMcpConnection
 	err := row.Scan(
 		&i.ID,
@@ -1008,21 +1055,29 @@ SET revoked_at = $1,
     replaced_by_session_id = $2,
     updated_at = $1
 WHERE id = $3
+  AND organization_id = $4
   AND revoked_at IS NULL
-RETURNING id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
+RETURNING id, organization_id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at, rotated_at, revoked_at, replaced_by_session_id, created_at, updated_at
 `
 
 type RotateAdminMCPSessionParams struct {
 	RotatedAt           pgtype.Timestamptz
 	ReplacedBySessionID uuid.NullUUID
 	ID                  uuid.UUID
+	OrganizationID      string
 }
 
 func (q *Queries) RotateAdminMCPSession(ctx context.Context, arg RotateAdminMCPSessionParams) (AdminMcpSession, error) {
-	row := q.db.QueryRow(ctx, rotateAdminMCPSession, arg.RotatedAt, arg.ReplacedBySessionID, arg.ID)
+	row := q.db.QueryRow(ctx, rotateAdminMCPSession,
+		arg.RotatedAt,
+		arg.ReplacedBySessionID,
+		arg.ID,
+		arg.OrganizationID,
+	)
 	var i AdminMcpSession
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.ConnectionID,
 		&i.OauthClientID,
 		&i.ConnectionGeneration,

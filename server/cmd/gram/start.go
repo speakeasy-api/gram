@@ -1281,12 +1281,17 @@ func newStartCommand() *cli.Command {
 				Authorizer:    adminAuthorizer,
 				Organizations: adminmcp.NewLiveOrganizationSelector(db, adminAuthorizer),
 				Signer:        sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
+				Encryption:    encryptionClient,
 			})
 			if err != nil {
 				return fmt.Errorf("create admin mcp oauth service: %w", err)
 			}
+			adminAuthenticator, err := adminmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, encryptionClient, adminOAuth.Issuer(), adminOAuth.Audience())
+			if err != nil {
+				return fmt.Errorf("create admin mcp authenticator: %w", err)
+			}
 			adminRuntime := adminmcp.NewRuntime(
-				adminmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, adminOAuth.Issuer(), adminOAuth.Audience()),
+				adminAuthenticator,
 				adminGate,
 				adminAuthorizer,
 				adminOAuth.ProtectedResourceURL(),
