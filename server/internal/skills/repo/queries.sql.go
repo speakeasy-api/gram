@@ -635,6 +635,10 @@ WHERE project_id = $1
     COALESCE(cardinality($4::text[]), 0) = 0
     OR classification = ANY($4::text[])
   )
+  AND (
+    COALESCE(cardinality($5::text[]), 0) = 0
+    OR tags && $5::text[]
+  )
 `
 
 type CountSkillsParams struct {
@@ -642,6 +646,7 @@ type CountSkillsParams struct {
 	Search          pgtype.Text
 	SourceKinds     []string
 	Classifications []string
+	Tags            []string
 }
 
 // CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
@@ -652,6 +657,7 @@ func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64
 		arg.Search,
 		arg.SourceKinds,
 		arg.Classifications,
+		arg.Tags,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -3180,6 +3186,35 @@ func (q *Queries) ListDeletedSkillEfficacyChatIDs(ctx context.Context, arg ListD
 	return items, nil
 }
 
+const listDistinctSkillTags = `-- name: ListDistinctSkillTags :many
+SELECT DISTINCT tag::text AS tag
+FROM skills s
+CROSS JOIN LATERAL unnest(s.tags) AS tag
+WHERE s.project_id = $1
+  AND s.archived_at IS NULL
+ORDER BY tag
+`
+
+func (q *Queries) ListDistinctSkillTags(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDistinctSkillTags, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		items = append(items, tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenSkillEditSuggestions = `-- name: ListOpenSkillEditSuggestions :many
 SELECT
   suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at,
@@ -4745,6 +4780,10 @@ SELECT
         COALESCE(cardinality($4::text[]), 0) = 0
         OR counted.classification = ANY($4::text[])
       )
+      AND (
+        COALESCE(cardinality($5::text[]), 0) = 0
+        OR counted.tags && $5::text[]
+      )
   )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
@@ -4776,29 +4815,33 @@ WHERE s.project_id = $1
     OR s.classification = ANY($4::text[])
   )
   AND (
+    COALESCE(cardinality($5::text[]), 0) = 0
+    OR s.tags && $5::text[]
+  )
+  AND (
     (
-      COALESCE(NULLIF($5::text, ''), 'name') = 'name'
+      COALESCE(NULLIF($6::text, ''), 'name') = 'name'
       AND (
-        $6::text IS NULL
-        OR s.name > $6::text
+        $7::text IS NULL
+        OR s.name > $7::text
       )
     )
     OR (
-      COALESCE(NULLIF($5::text, ''), 'name') = 'updated'
+      COALESCE(NULLIF($6::text, ''), 'name') = 'updated'
       AND (
-        $7::timestamptz IS NULL
+        $8::timestamptz IS NULL
         OR (s.updated_at, s.id) < (
-          $7::timestamptz,
-          $8::uuid
+          $8::timestamptz,
+          $9::uuid
         )
       )
     )
   )
 ORDER BY
-  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'name' THEN s.name END ASC,
-  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
-  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.id END DESC
-LIMIT $9
+  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.id END DESC
+LIMIT $10
 `
 
 type ListSkillsParams struct {
@@ -4806,6 +4849,7 @@ type ListSkillsParams struct {
 	Search          pgtype.Text
 	SourceKinds     []string
 	Classifications []string
+	Tags            []string
 	SortOrder       string
 	CursorName      pgtype.Text
 	CursorUpdatedAt pgtype.Timestamptz
@@ -4828,6 +4872,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 		arg.Search,
 		arg.SourceKinds,
 		arg.Classifications,
+		arg.Tags,
 		arg.SortOrder,
 		arg.CursorName,
 		arg.CursorUpdatedAt,
@@ -6193,9 +6238,10 @@ UPDATE skills
 SET name = $1,
     display_name = $2,
     summary = $3::text,
+    tags = $4,
     updated_at = clock_timestamp()
-WHERE project_id = $4
-  AND id = $5
+WHERE project_id = $5
+  AND id = $6
   AND archived_at IS NULL
 RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
@@ -6204,6 +6250,7 @@ type UpdateSkillDetailsParams struct {
 	Name        string
 	DisplayName string
 	Summary     pgtype.Text
+	Tags        []string
 	ProjectID   uuid.UUID
 	ID          uuid.UUID
 }
@@ -6213,6 +6260,7 @@ func (q *Queries) UpdateSkillDetails(ctx context.Context, arg UpdateSkillDetails
 		arg.Name,
 		arg.DisplayName,
 		arg.Summary,
+		arg.Tags,
 		arg.ProjectID,
 		arg.ID,
 	)

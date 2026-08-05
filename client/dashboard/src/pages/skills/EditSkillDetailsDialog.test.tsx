@@ -19,6 +19,7 @@ const testState = vi.hoisted(() => ({
   invalidateSuggestions: vi.fn().mockResolvedValue(undefined),
   invalidateFeedback: vi.fn().mockResolvedValue(undefined),
   invalidateEfficacy: vi.fn().mockResolvedValue(undefined),
+  invalidateTags: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -26,6 +27,14 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 vi.mock("@gram/client/react-query/updateSkill.js", () => ({
   useUpdateSkillMutation: () => testState.update,
+}));
+vi.mock("@gram/client/react-query/skillTags.js", () => ({
+  useSkillTags: () => ({
+    data: { tags: ["ops"] },
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  invalidateAllSkillTags: testState.invalidateTags,
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   invalidateAllSkills: testState.invalidateSkills,
@@ -48,6 +57,28 @@ vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
 vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
+vi.mock("@/components/ui/MultiSelect", () => ({
+  MultiSelect: ({
+    defaultValue,
+    onValueChange,
+  }: {
+    defaultValue: string[];
+    onValueChange: (value: string[]) => void;
+  }) => (
+    <input
+      aria-label="Tags"
+      defaultValue={defaultValue.join(",")}
+      onChange={(event) =>
+        onValueChange(
+          event.currentTarget.value
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+        )
+      }
+    />
+  ),
+}));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -60,6 +91,7 @@ const skill = {
   summary: "Captured summary",
   sourceKind: "captured",
   classification: "custom",
+  tags: ["ops"],
   versionCount: 1,
   hasValidVersion: true,
   seenCount: 2,
@@ -77,6 +109,7 @@ beforeEach(() => {
   testState.invalidateSuggestions.mockClear();
   testState.invalidateFeedback.mockClear();
   testState.invalidateEfficacy.mockClear();
+  testState.invalidateTags.mockClear();
 });
 
 afterEach(cleanup);
@@ -113,6 +146,7 @@ describe("EditSkillDetailsDialog", () => {
             name: "curated-name",
             displayName: "Curated name",
             summary: "Curated summary",
+            tags: ["ops"],
           },
         },
       });
@@ -136,6 +170,9 @@ describe("EditSkillDetailsDialog", () => {
       testState.queryClient,
     );
     expect(testState.invalidateEfficacy).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateTags).toHaveBeenCalledWith(
       testState.queryClient,
     );
     expect(onOpenChange).toHaveBeenCalledWith(false);
