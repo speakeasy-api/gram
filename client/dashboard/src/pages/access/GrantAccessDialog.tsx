@@ -150,7 +150,7 @@ export function GrantAccessDialog({
           </Text>
         )}
 
-        {member && (
+        {member && !loadFailed && (
           <div className="space-y-4 py-2">
             <div className="border-border flex items-center gap-3 rounded-md border p-3">
               <Avatar className="h-9 w-9">

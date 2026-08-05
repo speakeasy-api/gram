@@ -747,12 +747,15 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	requestAccessURL := mcpaccess.RequestAccessURL(ti.siteURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
-		Scope:        "mcp:connect",
-		ResourceID:   mcpServer.ID.String(),
-		ResourceName: "test mcp server",
-	})
-	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n"+requestAccessURL, oopsErr.Error())
+	// Assert the literal URL invariants rather than round-tripping through
+	// mcpaccess.RequestAccessURL — these params are the integration contract
+	// with the dashboard's /request-access page.
+	message := oopsErr.Error()
+	require.Contains(t, message, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n")
+	require.Contains(t, message, "/"+authCtx.OrganizationSlug+"/request-access?")
+	require.Contains(t, message, "scope=mcp%3Aconnect")
+	require.Contains(t, message, "resource_id="+mcpServer.ID.String())
+	require.Contains(t, message, "resource_name=test+mcp+server")
 
 	select {
 	case <-upstreamHit:

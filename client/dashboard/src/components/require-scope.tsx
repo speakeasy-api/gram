@@ -200,36 +200,40 @@ function Unauthorized({
     "idle" | "sending" | "sent" | "error"
   >("idle");
 
+  const { hasScope } = useRBAC();
   const requestAccessMutation = useRequestAccessMutation();
-  const requestableScopes = getRequestableScopes(scopes);
+  // Only request scopes the user is actually missing — an all-scopes gate can
+  // trip on a partial grant, and admins shouldn't be asked for held scopes.
+  const requestableScopes = getRequestableScopes(scopes).filter(
+    (s) => !hasScope(s, resourceId),
+  );
   const canRequestAccess = requestableScopes.length > 0;
 
   const handleRequestAccess = async () => {
     if (!canRequestAccess || requestableScopes.length === 0) return;
 
     setRequestState("sending");
-    try {
-      // An "any scope suffices" gate only needs the first requestable scope;
-      // an all-scopes gate must request every missing scope or granting one
-      // still leaves the user blocked.
-      const scopesToRequest = all ? requestableScopes : [requestableScopes[0]!];
-      const results = await Promise.all(
-        scopesToRequest.map((scopeToRequest) =>
-          requestAccessMutation.mutateAsync({
-            request: {
-              requestAccessForm: {
-                scope: scopeToRequest,
-                resourceId,
-              },
+    // An "any scope suffices" gate only needs the first requestable scope; an
+    // all-scopes gate must request every missing scope or granting one still
+    // leaves the user blocked. Judge on settled results so one failed request
+    // doesn't report failure when another admin notification went out.
+    const scopesToRequest = all ? requestableScopes : [requestableScopes[0]!];
+    const results = await Promise.allSettled(
+      scopesToRequest.map((scopeToRequest) =>
+        requestAccessMutation.mutateAsync({
+          request: {
+            requestAccessForm: {
+              scope: scopeToRequest,
+              resourceId,
             },
-          }),
-        ),
-      );
-      const notified = results.some((r) => r.sentToCount > 0);
-      setRequestState(notified ? "sent" : "error");
-    } catch {
-      setRequestState("error");
-    }
+          },
+        }),
+      ),
+    );
+    const notified = results.some(
+      (r) => r.status === "fulfilled" && r.value.sentToCount > 0,
+    );
+    setRequestState(notified ? "sent" : "error");
   };
 
   return (
