@@ -80,6 +80,13 @@ const (
 // hook activity for its session id. Each hook received refreshes it.
 const sessionMCPListTTL = 12 * time.Hour
 
+// sessionMCPInventoryReadTTL outlives the snapshot on purpose. The snapshot
+// expiring costs detail — the guard falls back to a name-only deny — but the
+// read status expiring flips the guard off entirely, because an absent status
+// is indistinguishable from a sender that never reported one. A session idle
+// past the snapshot TTL must not silently stop being enforced.
+const sessionMCPInventoryReadTTL = 7 * 24 * time.Hour
+
 // hookIdempotencyTTL bounds how long a hook idempotency token blocks a repeat
 // persistence. It only needs to outlive a sender's retry window (a handful of
 // backoff attempts within seconds), so a few minutes is ample while keeping

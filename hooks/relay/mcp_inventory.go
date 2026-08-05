@@ -213,9 +213,7 @@ func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInve
 			Usage:             nil,
 		}
 	}
-	if collected {
-		payload.Data.McpInventoryCollected = &collected
-	}
+	payload.Data.McpInventoryCollected = &collected
 	if len(entries) == 0 {
 		return
 	}

@@ -420,7 +420,7 @@ func isEmptyData(d *components.HookIngestData) bool {
 	// flag exists to carry would be erased.
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil &&
-		d.McpInventoryCollected == nil &&
+		(d.McpInventoryCollected == nil || !*d.McpInventoryCollected) &&
 		len(d.McpAttribution) == 0 && len(d.McpInventory) == 0 &&
 		len(d.PromptAttachments) == 0
 }

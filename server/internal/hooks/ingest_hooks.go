@@ -807,38 +807,44 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	if sessionID == "" {
 		return
 	}
-	// Record the read separately from the entries: the sender only reports it
-	// on session start, while the meta-tool calls it gates arrive later as
-	// their own events carrying nothing. Gating on the current event's field
-	// would therefore skip every one of them.
+
+	// Extend both keys on every event, as the legacy endpoints do for the
+	// snapshot: a session outliving its TTL loses the inventory, and losing the
+	// read status silently disables the guard for the rest of that session.
+	s.refreshMCPListTTL(ctx, sessionID)
+	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPInventoryReadTTL); err != nil {
+		s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+	}
+
+	// Write the entries before the read status. The status is what licenses the
+	// guard to treat an empty inventory as proof no servers exist, so recording
+	// it while the entries write failed would leave the session claiming a read
+	// it cannot back up — and under block_all every later meta-tool call denies
+	// for the rest of the session.
+	if len(entries) > 0 {
+		if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
+				attr.SlogEvent("hook_mcp_list_cache_set_failed"),
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+			return
+		}
+	}
+
+	// The sender only reports this on session start; the meta-tool calls it
+	// gates arrive later carrying nothing, so it has to be held per session.
 	if inventoryRead {
-		if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), inventoryRead, sessionMCPListTTL); err != nil {
+		if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), inventoryRead, sessionMCPInventoryReadTTL); err != nil {
 			s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
 				attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
 				attr.SlogError(err),
 				attr.SlogGenAIConversationID(sessionID),
 			)
 		}
-	}
-	if len(entries) == 0 {
-		// Every other event in the session extends the snapshot's life, as the
-		// legacy endpoints do. Without this a session outliving the TTL loses
-		// its inventory and every later meta-tool call denies.
-		s.refreshMCPListTTL(ctx, sessionID)
-		if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPListTTL); err != nil {
-			s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(sessionID),
-			)
-		}
-		return
-	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
-		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
-			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
-			attr.SlogError(err),
-			attr.SlogGenAIConversationID(sessionID),
-		)
 	}
 }
 
