@@ -119,6 +119,9 @@ type OsSpec = {
   verify: string;
   // Manifest platform keys to surface as direct-download links for this OS.
   downloadKeys: string[];
+  // The OS ships a root-helper install package (.deb/.rpm on Linux) that gets
+  // its own setup step. See HelperPackageStep.
+  hasHelperPackage?: boolean;
 };
 
 const OS_CONFIG: Record<OsKey, OsSpec> = {
@@ -198,6 +201,7 @@ sudo mv speakeasyd speakeasy /usr/local/bin/`,
 speakeasyd -service start`,
     verify: `speakeasyd status`,
     downloadKeys: ["linux/amd64", "linux/arm64"],
+    hasHelperPackage: true,
   },
 };
 
@@ -439,6 +443,68 @@ function BinaryLegend() {
           and enrollment.
         </span>
       </div>
+    </div>
+  );
+}
+
+// HelperPackageStep is the Linux-only step for the speakeasy-helper root
+// helper. The daemon runs as the logged-in user and can't write the root-owned
+// managed config layer itself, so enforcement of "managed" tools needs the
+// helper installed as a systemd system service — which ships as a .deb/.rpm
+// (the Linux analog of the macOS .pkg). The packages are mirrored to the same
+// public bucket as the binaries but are deliberately NOT in the release
+// manifest (a root binary updates only via a package push, never the
+// user-context auto-updater), so the URLs are built from the resolved version
+// rather than read from manifest artifacts.
+function HelperPackageStep() {
+  const { data } = useAgentReleases();
+  const version = data?.latest["speakeasyd"]?.version ?? null;
+
+  const script = (fmt: "deb" | "rpm", install: string) =>
+    `${bashVersionAssign(version)}
+BASE=${RELEASES_BASE}/v$VERSION
+curl -fSLO "$BASE/speakeasy-helper_\${VERSION}_linux_amd64.${fmt}"
+${install}`;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Text muted>
+        The daemon runs as the logged-in user and can't write root-owned config,
+        so enforcing tools your org marks{" "}
+        <strong className="font-medium">managed</strong> needs the{" "}
+        <code>speakeasy-helper</code> package: it installs a privileged writer
+        as a systemd system service. Without it the agent still runs and
+        reports, but can't enforce the managed layer.
+      </Text>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Debian / Ubuntu (.deb)</SubLabel>
+        <StepNote>
+          amd64 shown — swap <code>linux_amd64</code> for{" "}
+          <code>linux_arm64</code> on ARM.
+        </StepNote>
+        <CodeBlock language="bash">
+          {script(
+            "deb",
+            `sudo apt install "./speakeasy-helper_\${VERSION}_linux_amd64.deb"`,
+          )}
+        </CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>RHEL / Fedora (.rpm)</SubLabel>
+        <CodeBlock language="bash">
+          {script(
+            "rpm",
+            `sudo rpm -i "speakeasy-helper_\${VERSION}_linux_amd64.rpm"`,
+          )}
+        </CodeBlock>
+      </div>
+      <Text small muted>
+        Verify with <code>systemctl status com.speakeasy.helper</code>. The
+        helper is deliberately outside the agent's auto-update channel — it
+        updates only via a package push (apt/dnf upgrade or your config
+        management).
+      </Text>
     </div>
   );
 }
@@ -821,6 +887,12 @@ function buildSteps(os: OsKey): SetupStep[] {
     title: "Verify it's running",
     body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
   });
+  if (cfg.hasHelperPackage) {
+    steps.push({
+      title: "Install the root helper package",
+      body: <HelperPackageStep />,
+    });
+  }
   steps.push({ title: "Set the user's identity", body: <IdentityStep /> });
   return steps;
 }
