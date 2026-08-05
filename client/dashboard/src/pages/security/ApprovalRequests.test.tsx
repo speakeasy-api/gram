@@ -65,6 +65,12 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: mocks.useRBAC,
 }));
 
+// The RequireScope fallback wires up the request-access mutation, which needs
+// the Gram SDK provider — stub it out since these tests never submit.
+vi.mock("@gram/client/react-query/requestAccess.js", () => ({
+  useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 describe("ApprovalRequests", () => {
   afterEach(() => {
     cleanup();
@@ -100,6 +106,7 @@ describe("ApprovalRequests", () => {
           (scope) => scope === "project:read" || scope === "project:write",
         ),
       hasAllScopes: () => true,
+      hasScope: () => false,
       isLoading: false,
     });
 
