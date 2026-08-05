@@ -14,7 +14,7 @@
 -- Constants (must match seed/demo/clickhouse.sql):
 --   org id       org_gram_demo_workspace
 --   project id   dec0de00-0000-4000-a000-000000000001 ('Default' — the only
---                project; ...0002 survives only as a legacy delete scope)
+--                project)
 --   chat ids     demo.det_uuid('gram-demo-chat-' || n) — md5 with RFC nibbles
 --   message ids  demo.det_uuid('gram-demo-msg-' || n || '-' || m)
 --   users        user_demo_* / *@demo.getgram.ai (parallel arrays below; the
@@ -38,7 +38,6 @@ AS $$
 DECLARE
   demo_org  CONSTANT text := 'org_gram_demo_workspace';
   proj_a    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000000001';
-  proj_b    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000000002';
   policy_a  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f001';
 
   asset_id     CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000a001';
@@ -184,7 +183,7 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM projects
-    WHERE id IN (proj_a, proj_b) AND organization_id <> demo_org
+    WHERE id = proj_a AND organization_id <> demo_org
   ) THEN
     RAISE EXCEPTION 'demo seed aborted: demo project id owned by another org';
   END IF;
@@ -209,14 +208,13 @@ BEGIN
   DELETE FROM toolsets WHERE organization_id = demo_org;
   DELETE FROM deployment_statuses WHERE deployment_id IN
     (SELECT id FROM deployments WHERE organization_id = demo_org);
-  DELETE FROM deployment_logs WHERE project_id IN (proj_a, proj_b);
+  DELETE FROM deployment_logs WHERE project_id = proj_a;
   DELETE FROM deployments WHERE organization_id = demo_org;
-  DELETE FROM assets WHERE project_id IN (proj_a, proj_b);
+  DELETE FROM assets WHERE project_id = proj_a;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
-  -- new users land somewhere obvious. proj_b remains declared ONLY as a
-  -- legacy-cleanup delete scope from when the seed created two projects.
+  -- new users land somewhere obvious.
   INSERT INTO projects (id, name, slug, organization_id) VALUES
     (proj_a, 'Default', 'default', demo_org);
 
@@ -812,7 +810,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
 
   SELECT count(*) INTO stray
-  FROM chats WHERE project_id IN (proj_a, proj_b) AND organization_id <> demo_org;
+  FROM chats WHERE project_id = proj_a AND organization_id <> demo_org;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % chats on demo projects belong to another org', stray;
   END IF;

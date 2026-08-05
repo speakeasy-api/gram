@@ -8,6 +8,10 @@ issues:
 
 run:
   relative-path-mode: wd
+  # The demo seed safety test is build-tagged out of the sharded test suite
+  # (it has its own CI job); the tag here keeps its files linted.
+  build-tags:
+    - demoseed_safety
 
 linters:
   enable:
