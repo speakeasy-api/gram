@@ -2,4 +2,4 @@
 "server": minor
 ---
 
-Add an OpenRouter key lockdown that drops the upstream spending ceiling to zero and disables the key, and make a limit refresh reinstate a locked-down key.
+Add an OpenRouter platform key lockdown. A locked-down key fails at key resolution with a distinct `inference_disabled` error rather than an upstream rejection, and a limit refresh reinstates it.

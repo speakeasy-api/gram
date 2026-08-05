@@ -27,8 +27,10 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: UpdateOpenRouterKey :one
+-- Also clears the disabled flag. This is the reinstatement write, and its only
+-- caller turns the upstream key back on in the same call.
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key
+SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key, disabled = FALSE
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
@@ -36,22 +38,10 @@ RETURNING *;
 
 -- name: DisableOpenRouterAPIKey :exec
 -- Locks the key down without deleting it, so a reinstated organization keeps
--- the same upstream key. Mirrors both halves of the upstream lockdown: the
--- ceiling drops to 0 and the flag drops the key out of credit-usage polling.
+-- the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
+-- refuses to hand the key to a completion.
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
-    monthly_credits = 0,
-    updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND key_type = @key_type
-  AND deleted IS FALSE;
-
--- name: EnableOpenRouterAPIKey :exec
--- Reverses DisableOpenRouterAPIKey. Reinstatement runs through
--- RefreshAPIKeyLimit, which sets a fresh ceiling in the same call, so this
--- only has to clear the flag.
-UPDATE openrouter_api_keys
-SET disabled = FALSE,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND key_type = @key_type
