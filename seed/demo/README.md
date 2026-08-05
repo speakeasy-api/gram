@@ -89,43 +89,45 @@ scoping columns `organization_id`/`gram_project_id`, and register any new
 globally-unique identifier family in `otherTenantReplacements`. The
 `gram-demo-seed` agent skill covers these rules in detail.
 
-## Server changes required for user access (not yet implemented)
+## Server changes required for user access
 
 Access is by IMPERSONATION only — demo org never gets membership rows.
 
-1. Demo-impersonation path parallel to the admin override
-   (`server/internal/middleware/admin.go`,
-   `server/internal/auth/impl.go` Callback priority 1): any authenticated user
-   may set active org to `org_gram_demo_workspace` — and ONLY that org.
-2. `authz.Engine.PrepareContext` (`server/internal/authz/engine.go:118`): demo
-   impersonation gets a read-only grant set (`org:read`, `project:read`,
+1. DONE: `auth.enterDemo` (`server/internal/auth/impl.go`) switches any
+   authenticated session's active org to `org_gram_demo_workspace` — and ONLY
+   that org — without a logout round-trip (unlike the admin override, which
+   only takes effect at the login callback). `sessions.Authenticate` accepts
+   the membership-less demo session.
+2. DONE: `authz.Engine.PrepareContext` gives any demo session the fixed
+   read-only grant set `authz.DemoScopeGrants()` (`org:read`, `project:read`,
    `mcp:read`, `skill:read`, `chat:read`; NO `environment:read`, no writes) —
-   not `allScopeGrants()`.
+   for everyone, including admins with the override cookie.
 3. DONE (commit ae256351c1): transcript block lifted for the demo org in
    `chat.LoadChat` via `constants.DemoOrganizationID`.
-4. Force scope enforcement for demo impersonation regardless of the org's RBAC
-   product feature, PLUS a defense-in-depth guard rejecting mutating RPCs when
-   `ActiveOrganizationID == demo org` (scope coverage across handlers is not
-   complete).
-5. Frontend: reuse the `ImpersonationBanner` machinery for a "Demo org —
-   read only" banner + exit; add the entry point ("Explore demo org").
-6. DONE for impersonation (commits 0f8d13113e + ae256351c1):
-   `access.listGrants` returns the admin scope set before the WorkOS check,
-   and `listMembers`/`listRoles` fall through to the pure-Postgres role
-   manager reads for impersonated WorkOS-less orgs. The dedicated
-   demo-impersonation path (change 1) should reuse the same carve-outs.
+4. DONE: `authz.Engine.ShouldEnforce` forces enforcement for the demo org
+   regardless of its RBAC product feature, and
+   `middleware.DemoOrgWriteGuard` (`server/internal/middleware/demo.go`,
+   wired in `start.go`) rejects mutating `/rpc` calls by method-name verb as
+   defense-in-depth (POST alone is no signal — telemetry/risk reads POST).
+5. DONE: `ImpersonationBanner` shows "Demo org — sample data" for any session
+   whose active org slug is `acme-demo` (cookie no longer required); exit
+   switches back to the user's own org via `auth.switchScopes`. Entry points:
+   the `/explore-demo` route (stable link target) and an "explore a live demo
+   org" link on the BookDemo gate. `/explore-demo` is exempt from the
+   AuthProvider whitelist gate and slug-redirect logic.
+6. DONE for impersonation (commits 0f8d13113e + ae256351c1) and extended to
+   demo sessions: `access.listGrants` returns the demo grant set, and
+   `listMembers`/`listRoles` fall through to the pure-Postgres role manager
+   reads (`isImpersonatingUnlinkedOrg` treats any demo session as
+   impersonating).
 7. RESOLVED by data: the demo org is seeded with
    `gram_account_type='enterprise'`, so `EnterpriseGate` pages (Logs, …) are
    unlocked. Demo identity is carried by the org id constant, never by
    account type.
-8. The auth callback's org-metadata upsert overwrites `gram_account_type`
-   (observed: 'demo' → 'pro' after one impersonation login). The daily seed
-   run restores it, but the server should preserve the demo account type so
-   the flag is trustworthy between runs.
-
-Until these land, verify locally with a platform-admin user (local `mise run
-seed` makes you one) via the existing admin override — expect the chat
-transcript sheet to be blocked (change 3) and writes to be allowed (change 4).
+8. OPEN: the auth callback's org-metadata upsert overwrites
+   `gram_account_type` (observed: 'demo' → 'pro' after one impersonation
+   login). The daily seed run restores it, but the server should preserve the
+   demo account type so the flag is trustworthy between runs.
 
 ## Customer-data rule
 

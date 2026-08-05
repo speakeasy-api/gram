@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
@@ -373,6 +374,15 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
+	// Sessions in the shared demo org have no membership rows. Return the
+	// full user-visible scope set so every dashboard page is browsable in the
+	// demo (page gates like Costs require org:admin). This is display-only:
+	// enforcement still uses the fixed read-only DemoScopeGrants set, and the
+	// write-guard middleware rejects mutations, so any action the wider UI
+	// exposes fails server-side.
+	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
+	}
 	if acPre.IsAdmin {
 		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
 			trace.SpanFromContext(ctx).SetAttributes(
@@ -468,7 +478,15 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 // fatal (page error boundaries and request retry loops).
 func (s *Service) isImpersonatingUnlinkedOrg(ctx context.Context) bool {
 	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || !ac.IsAdmin {
+	if !ok || ac == nil {
+		return false
+	}
+	// The shared demo org is always impersonated (no membership rows, no
+	// WorkOS link) — by any user, not just platform admins.
+	if ac.ActiveOrganizationID == constants.DemoOrganizationID {
+		return true
+	}
+	if !ac.IsAdmin {
 		return false
 	}
 	if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); !hasOverride {

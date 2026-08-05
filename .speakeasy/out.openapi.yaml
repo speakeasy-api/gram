@@ -8130,6 +8130,95 @@ paths:
       x-speakeasy-name-override: callback
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/auth.enterDemo:
+    post:
+      description: Switches the current session into the shared read-only demo organization.
+      operationId: enterDemo
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+          headers:
+            Gram-Session:
+              description: Session header
+              schema:
+                description: Session header
+                type: string
+            Set-Cookie:
+              description: The authentication session
+              schema:
+                description: The authentication session
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: enterDemo auth
+      tags:
+        - auth
+      x-speakeasy-name-override: enterDemo
+      x-speakeasy-react-hook:
+        name: EnterDemo
   /rpc/auth.info:
     get:
       description: Provides information about the current authentication status.

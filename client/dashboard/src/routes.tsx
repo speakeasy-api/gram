@@ -33,6 +33,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
+import ExploreDemo from "./pages/demo/ExploreDemo";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
@@ -194,6 +195,12 @@ const ROUTE_STRUCTURE = {
     title: "Register",
     url: "/register",
     component: Register,
+    unauthenticated: true,
+  },
+  exploreDemo: {
+    title: "Explore demo",
+    url: "/explore-demo",
+    component: ExploreDemo,
     unauthenticated: true,
   },
   home: {

@@ -4,6 +4,7 @@ import { useAssistantsGetManaged } from "@gram/client/react-query/assistantsGetM
 import { useEnsureManagedAssistantMutation } from "@gram/client/react-query/ensureManagedAssistant.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { isNotFoundError } from "@/lib/route-errors";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
 import type { ElementsTransportFactory } from "@/elements";
@@ -69,8 +70,13 @@ export function useServerAssistantTransport(
   // active one — still gets the writer path.
   const targetProjectId =
     organization.projects.find((p) => p.slug === projectSlug)?.id ?? "";
+  // The demo org advertises the full scope set so pages are browsable, but
+  // enforcement is read-only — never auto-fire the write-scoped provisioning
+  // path there (it would 403 and toast on every page load).
   const canCreate =
-    !!targetProjectId && hasScope("project:write", targetProjectId);
+    !!targetProjectId &&
+    organization.slug !== DEMO_ORG_SLUG &&
+    hasScope("project:write", targetProjectId);
 
   // The fetcher reads the project from the X-Gram-Project header, but react-
   // query only differentiates by query key — pass projectSlug into the request
