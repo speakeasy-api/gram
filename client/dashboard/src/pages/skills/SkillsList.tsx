@@ -29,7 +29,6 @@ import { useQueryState } from "nuqs";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { ApproveAllSkillSuggestions } from "./ApproveAllSkillSuggestions";
 import { skillShareUrl } from "./share-link";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import {
@@ -455,13 +454,6 @@ export default function SkillsList(): JSX.Element {
                     }}
                   />
                   <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
-                  <Page.Toolbar.Actions>
-                    <ApproveAllSkillSuggestions
-                      suggestions={openSuggestions.suggestions}
-                      total={openSuggestions.total}
-                      fullyLoaded={openSuggestions.fullyLoaded}
-                    />
-                  </Page.Toolbar.Actions>
                   <Page.Toolbar.Refresh
                     onRefresh={() => {
                       void Promise.all([
