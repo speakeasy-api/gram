@@ -2655,6 +2655,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
 				IsOAuth:     r.ToolsetIsOauth,
+				IsUnproxied: false,
 				EnvConfigs:  nil,
 			}
 
@@ -2711,6 +2712,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		// Gram host/slug and no Gram-managed OAuth apply.
 		mcpURL := ""
 		isOAuth := false
+		isUnproxied := false
 		switch {
 		case m.EndpointSlug != "":
 			// Custom-domain endpoints are served from the domain host; platform
@@ -2727,6 +2729,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			isOAuth = true
 		default:
 			mcpURL = conv.FromPGTextOrEmpty[string](m.UnproxiedUrl)
+			isUnproxied = true
 		}
 
 		// Environments are not yet wired to mcp_servers, so there are no
@@ -2738,6 +2741,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				MCPURL:      mcpURL,
 				IsPublic:    false,
 				IsOAuth:     isOAuth,
+				IsUnproxied: isUnproxied,
 				EnvConfigs:  nil,
 			},
 			sortOrder: m.ServerSortOrder,

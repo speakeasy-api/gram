@@ -953,7 +953,8 @@ func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *t
 
 	var config struct {
 		MCPServers map[string]struct {
-			URL string `json:"url"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
 		} `json:"mcpServers"`
 	}
 	require.NoError(t, json.Unmarshal(mcpConfig, &config))
@@ -962,6 +963,9 @@ func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *t
 	require.True(t, ok, "unproxied server missing from published .mcp.json")
 	require.Equal(t, "https://vendor.example.com/mcp", server.URL,
 		"unproxied server must publish its own vendor URL, not a Gram-hosted endpoint")
+	require.Empty(t, server.Headers,
+		"unproxied server must never carry Gram's API key (or any other Gram-managed credential): "+
+			"MCPURL points straight at the vendor, so any header here leaks a Gram credential to a third party")
 }
 
 // Reproduces the plugin_github_connections_installation_repo_key conflict:
