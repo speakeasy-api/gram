@@ -2,10 +2,12 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -17,6 +19,9 @@ import (
 // doesn't wait on it, which means a stalled DB/network call would otherwise leak
 // the goroutine indefinitely.
 const toolCallBlockWriteTimeout = 10 * time.Second
+
+// pgForeignKeyViolation is SQLSTATE 23503.
+const pgForeignKeyViolation = "23503"
 
 // toolCallBlockParams describes a hook-time block to persist. Only the reason
 // and tenancy are required; the chat / finding / policy links are optional
@@ -57,7 +62,7 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolCallBlockWriteTimeout)
 	defer cancel()
-	if err := s.repo.InsertToolCallBlock(ctx, repo.InsertToolCallBlockParams{
+	params := repo.InsertToolCallBlockParams{
 		ID:             blockID,
 		OrganizationID: p.OrganizationID,
 		ProjectID:      p.ProjectID,
@@ -69,12 +74,80 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 		RiskResultID:   p.RiskResultID,
 		ChatID:         p.ChatID,
 		ChatMessageID:  p.ChatMessageID,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "tool call block: failed to insert row",
+	}
+
+	// The URL was already handed to the agent, so losing this row means the
+	// user opens a block page that does not exist. The links are optional
+	// enrichment (every one is ON DELETE SET NULL), and any of them can point
+	// at a row that is not written yet: enforcement runs before the hook's
+	// chat and finding rows are persisted, so a block early in a session
+	// races its own chat. Drop whichever link the database rejects and keep
+	// the block rather than the other way round. Bounded by the number of
+	// optional links, since clearing one can reveal the next.
+	var err error
+	for attempt := 0; attempt <= blockEnrichmentLinkCount; attempt++ {
+		if err = s.repo.InsertToolCallBlock(ctx, params); err == nil {
+			return
+		}
+		dropped, ok := clearRejectedBlockLink(&params, err)
+		if !ok {
+			break
+		}
+		s.logger.WarnContext(ctx, "tool call block: dropping unresolvable link to keep the block",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(p.OrganizationID),
 			attr.SlogProjectID(p.ProjectID.String()),
+			attr.SlogValueAny(map[string]any{"block_id": blockID.String(), "dropped_link": dropped}),
 		)
+	}
+	s.logger.WarnContext(ctx, "tool call block: failed to insert row",
+		attr.SlogError(err),
+		attr.SlogOrganizationID(p.OrganizationID),
+		attr.SlogProjectID(p.ProjectID.String()),
+	)
+}
+
+// blockEnrichmentLinkCount is the number of optional foreign keys on
+// tool_call_blocks, bounding the retry loop below.
+const blockEnrichmentLinkCount = 4
+
+// clearRejectedBlockLink clears the one optional foreign key a
+// foreign-key-violation error names, reporting which. It returns false for any
+// other error, and for a violation naming a link that is already null or a
+// column that is not optional (organization_id, project_id) — those are real
+// failures with nothing to salvage.
+func clearRejectedBlockLink(params *repo.InsertToolCallBlockParams, err error) (string, bool) {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != pgForeignKeyViolation {
+		return "", false
+	}
+	switch pgErr.ConstraintName {
+	case "tool_call_blocks_chat_id_fkey":
+		if !params.ChatID.Valid {
+			return "", false
+		}
+		params.ChatID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		return "chat_id", true
+	case "tool_call_blocks_chat_message_id_fkey":
+		if !params.ChatMessageID.Valid {
+			return "", false
+		}
+		params.ChatMessageID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		return "chat_message_id", true
+	case "tool_call_blocks_risk_result_id_fkey":
+		if !params.RiskResultID.Valid {
+			return "", false
+		}
+		params.RiskResultID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		return "risk_result_id", true
+	case "tool_call_blocks_risk_policy_id_fkey":
+		if !params.RiskPolicyID.Valid {
+			return "", false
+		}
+		params.RiskPolicyID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		return "risk_policy_id", true
+	default:
+		return "", false
 	}
 }
 
