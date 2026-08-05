@@ -1,4 +1,4 @@
-h1:Bs0pT+vnoPML6h15n8czWE8J3jHtihvAmPMIhtTW1TQ=
+h1:rTaQ3oLZdRCNIEvcCRLDYowm8yl7Pei4AhJEGqNLA/w=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -331,3 +331,4 @@ h1:Bs0pT+vnoPML6h15n8czWE8J3jHtihvAmPMIhtTW1TQ=
 20260811183332_mcp-approval-workflow.sql h1:UwCSdC5Xh39xdlv47ACNaCw9VkOa/S1Gxsp0pIeFzeM=
 20260811225530_expand-assets-tiers.sql h1:K5IvMnYVFRA8qmUXXPvH5S0HtFWPUNYWbd7KCGlUFC4=
 20260811225943_assets-tier-dedupe-indexes.sql h1:thYfONo6SYry2Aew/GXLvIn/9WZtmZv82BfL7c5jp4A=
+20260812140226_jwks-index-external-key-tenant.sql h1:uuAVtFJtvI9Fh8P1g0lZCvFFIlUUoUraHM+HvBKT1dY=
