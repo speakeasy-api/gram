@@ -4,7 +4,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useSearchParams, useNavigate } from "react-router";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
-import { Page } from "@/components/page-layout";
+import { FullScreenPage } from "@/components/full-screen-page";
 import React, { useState } from "react";
 
 /**
@@ -57,133 +57,109 @@ export default function RequestAccess(): React.JSX.Element {
   };
 
   return (
-    <Page>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Request Access</Page.Section.Title>
-          <Page.Section.Body>
-            <div className="flex h-full min-h-[400px] w-full items-center justify-center">
-              <div className="flex max-w-md flex-col items-center gap-4 text-center">
-                <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-full">
-                  <Icon name="lock" className="text-muted-foreground h-6 w-6" />
+    <FullScreenPage contentClassName="max-w-md">
+      <div className="flex w-full flex-col items-center gap-4 text-center">
+        <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-full">
+          <Icon name="lock" className="text-muted-foreground h-6 w-6" />
+        </div>
+
+        <h1 className="text-xl font-semibold">Request Access</h1>
+
+        {!isValidScope ? (
+          <div className="flex flex-col items-center gap-4">
+            <p className="text-muted-foreground text-sm">
+              Invalid or missing scope parameter. Please use a valid access
+              request link.
+            </p>
+            <Button variant="secondary" size="sm" onClick={handleGoBack}>
+              Go Back
+            </Button>
+          </div>
+        ) : (
+          <>
+            <p className="text-muted-foreground text-sm">
+              You don&apos;t have the required permission to access this
+              resource. Click the button below to send a request to your
+              organization administrators.
+            </p>
+
+            {/* Scope info */}
+            <div className="bg-muted/25 w-full rounded-lg border px-4 py-3">
+              <Stack gap={2}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Requested scope:
+                  </span>
+                  <span className="font-mono text-xs">{scope}</span>
                 </div>
-
-                <h1 className="text-xl font-semibold">Request Access</h1>
-
-                {!isValidScope ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <p className="text-muted-foreground text-sm">
-                      Invalid or missing scope parameter. Please use a valid
-                      access request link.
-                    </p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleGoBack}
-                    >
-                      Go Back
-                    </Button>
+                {resourceName && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Resource:</span>
+                    <span>{resourceName}</span>
                   </div>
-                ) : (
-                  <>
-                    <p className="text-muted-foreground text-sm">
-                      You don&apos;t have the required permission to access this
-                      resource. Click the button below to send a request to your
-                      organization administrators.
-                    </p>
-
-                    {/* Scope info */}
-                    <div className="bg-muted/25 w-full rounded-lg border px-4 py-3">
-                      <Stack gap={2}>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            Requested scope:
-                          </span>
-                          <span className="font-mono text-xs">{scope}</span>
-                        </div>
-                        {resourceName && (
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">
-                              Resource:
-                            </span>
-                            <span>{resourceName}</span>
-                          </div>
-                        )}
-                      </Stack>
-                    </div>
-
-                    {/* Request button */}
-                    {requestState === "idle" && (
-                      <Button
-                        variant="primary"
-                        onClick={() => void handleRequestAccess()}
-                        disabled={requestAccessMutation.isPending}
-                      >
-                        {requestAccessMutation.isPending
-                          ? "Sending..."
-                          : "Send Request to Admins"}
-                      </Button>
-                    )}
-
-                    {requestState === "sending" && (
-                      <p className="text-muted-foreground text-sm">
-                        Sending request...
-                      </p>
-                    )}
-
-                    {requestState === "sent" && (
-                      <div className="flex w-full flex-col items-center gap-3">
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
-                            <Icon name="check" className="size-4" />
-                            Request sent successfully
-                          </div>
-                          <p className="text-muted-foreground text-xs">
-                            Your organization administrators have been notified.
-                            They will review your request and grant access if
-                            appropriate.
-                          </p>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={handleGoBack}
-                        >
-                          Go Back
-                        </Button>
-                      </div>
-                    )}
-
-                    {requestState === "error" && (
-                      <div className="flex flex-col items-center gap-3">
-                        <p className="text-destructive text-sm">
-                          Failed to send request. Please try again.
-                        </p>
-                        <Stack direction="horizontal" gap={2}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setRequestState("idle")}
-                          >
-                            Retry
-                          </Button>
-                          <Button
-                            variant="tertiary"
-                            size="sm"
-                            onClick={handleGoBack}
-                          >
-                            Go Back
-                          </Button>
-                        </Stack>
-                      </div>
-                    )}
-                  </>
                 )}
-              </div>
+              </Stack>
             </div>
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
-    </Page>
+
+            {/* Request button */}
+            {requestState === "idle" && (
+              <Button
+                variant="primary"
+                onClick={() => void handleRequestAccess()}
+                disabled={requestAccessMutation.isPending}
+              >
+                {requestAccessMutation.isPending
+                  ? "Sending..."
+                  : "Send Request to Admins"}
+              </Button>
+            )}
+
+            {requestState === "sending" && (
+              <p className="text-muted-foreground text-sm">
+                Sending request...
+              </p>
+            )}
+
+            {requestState === "sent" && (
+              <div className="flex w-full flex-col items-center gap-3">
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+                    <Icon name="check" className="size-4" />
+                    Request sent successfully
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Your organization administrators have been notified. They
+                    will review your request and grant access if appropriate.
+                  </p>
+                </div>
+                <Button variant="secondary" size="sm" onClick={handleGoBack}>
+                  Go Back
+                </Button>
+              </div>
+            )}
+
+            {requestState === "error" && (
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-destructive text-sm">
+                  Failed to send request. Please try again.
+                </p>
+                <Stack direction="horizontal" gap={2}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setRequestState("idle")}
+                  >
+                    Retry
+                  </Button>
+                  <Button variant="tertiary" size="sm" onClick={handleGoBack}>
+                    Go Back
+                  </Button>
+                </Stack>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </FullScreenPage>
   );
 }

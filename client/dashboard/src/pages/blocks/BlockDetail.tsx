@@ -1,4 +1,4 @@
-import { GramLogo } from "@/components/gram-logo";
+import { FullScreenPage } from "@/components/full-screen-page";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
@@ -32,21 +32,18 @@ export function BlockPage(): JSX.Element {
   }, [session.session]);
 
   return (
-    <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
-      <Stack gap={8} align="center" className="w-full max-w-xl">
-        <GramLogo className="w-25" variant="vertical" />
-        {session.session ? (
-          <BlockBody id={id} />
-        ) : (
-          <Stack direction="horizontal" gap={2} align="center">
-            <Icon name="loader-circle" className="size-4 animate-spin" />
-            <Text muted small>
-              Redirecting to sign in…
-            </Text>
-          </Stack>
-        )}
-      </Stack>
-    </div>
+    <FullScreenPage contentClassName="max-w-xl">
+      {session.session ? (
+        <BlockBody id={id} />
+      ) : (
+        <Stack direction="horizontal" gap={2} align="center">
+          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <Text muted small>
+            Redirecting to sign in…
+          </Text>
+        </Stack>
+      )}
+    </FullScreenPage>
   );
 }
 

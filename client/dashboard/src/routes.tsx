@@ -1057,6 +1057,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Request Access",
     url: "request-access",
     component: RequestAccess,
+    outsideMainLayout: true,
   },
   collections: {
     title: "Collections",

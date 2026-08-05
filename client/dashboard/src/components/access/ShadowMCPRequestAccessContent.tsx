@@ -1,4 +1,4 @@
-import { GramLogo } from "@/components/gram-logo";
+import { FullScreenPage } from "@/components/full-screen-page";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
@@ -111,19 +111,16 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   });
 
   return (
-    <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
-      <Stack gap={8} align="center" className="w-full max-w-sm">
-        <GramLogo className="w-25" variant="vertical" />
-        <RequestAccessMessage
-          state={state}
-          isPending={state === "submitting"}
-          onRetry={() => {
-            setSubmissionResult("idle");
-            setRetryCount((count) => count + 1);
-          }}
-        />
-      </Stack>
-    </div>
+    <FullScreenPage>
+      <RequestAccessMessage
+        state={state}
+        isPending={state === "submitting"}
+        onRetry={() => {
+          setSubmissionResult("idle");
+          setRetryCount((count) => count + 1);
+        }}
+      />
+    </FullScreenPage>
   );
 }
 
