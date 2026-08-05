@@ -1271,6 +1271,9 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)
+		if payload.ResourceID != nil && *payload.ResourceID != "" {
+			q.Set("resource_id", *payload.ResourceID)
+		}
 		accessURL.RawQuery = q.Encode()
 		manageAccessLink = accessURL.String()
 	}
@@ -1291,17 +1294,21 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 			// Log but don't fail the entire request if one email fails
 			logger.WarnContext(ctx, "failed to send access request email",
 				attr.SlogError(err),
-				slog.String("admin_email", adminEmail),
+				attr.SlogAccessRequestRecipient(adminEmail),
 			)
 			continue
 		}
 		sentCount++
 	}
 
+	if sentCount == 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "failed to notify any organization administrator").LogError(ctx, logger)
+	}
+
 	logger.InfoContext(ctx, "access request emails sent",
-		slog.Int("sent_count", sentCount),
-		slog.Int("admin_count", len(adminEmails)),
-		slog.String("scope", payload.Scope),
+		attr.SlogAccessRequestSentCount(sentCount),
+		attr.SlogAccessRequestAdminCount(len(adminEmails)),
+		attr.SlogAccessRequestScope(payload.Scope),
 	)
 
 	return &gen.RequestAccessResult{SentToCount: sentCount}, nil

@@ -235,6 +235,10 @@ const (
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
 	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
+	AccessRequestScopeKey               = attribute.Key("gram.access_request.scope")
+	AccessRequestAdminCountKey          = attribute.Key("gram.access_request.admin_count")
+	AccessRequestSentCountKey           = attribute.Key("gram.access_request.sent_count")
+	AccessRequestRecipientKey           = attribute.Key("gram.access_request.recipient")
 	McpMethodKey                        = attribute.Key("gram.mcp.method")
 	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
@@ -1151,6 +1155,24 @@ func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {
 
 func SlogCustomDomainNotifyRecipientCount(v int) slog.Attr {
 	return slog.Int(string(CustomDomainNotifyRecipientCountKey), v)
+}
+
+func AccessRequestScope(v string) attribute.KeyValue { return AccessRequestScopeKey.String(v) }
+func SlogAccessRequestScope(v string) slog.Attr      { return slog.String(string(AccessRequestScopeKey), v) }
+
+func AccessRequestAdminCount(v int) attribute.KeyValue { return AccessRequestAdminCountKey.Int(v) }
+func SlogAccessRequestAdminCount(v int) slog.Attr {
+	return slog.Int(string(AccessRequestAdminCountKey), v)
+}
+
+func AccessRequestSentCount(v int) attribute.KeyValue { return AccessRequestSentCountKey.Int(v) }
+func SlogAccessRequestSentCount(v int) slog.Attr {
+	return slog.Int(string(AccessRequestSentCountKey), v)
+}
+
+func AccessRequestRecipient(v string) attribute.KeyValue { return AccessRequestRecipientKey.String(v) }
+func SlogAccessRequestRecipient(v string) slog.Attr {
+	return slog.String(string(AccessRequestRecipientKey), v)
 }
 
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }

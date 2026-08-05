@@ -379,15 +379,6 @@ func NewService(
 	}
 }
 
-func (s *Service) authorizationChallengesURL(ctx context.Context) string {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return ""
-	}
-
-	return mcpaccess.AuthorizationChallengesURL(s.siteURL, authCtx.OrganizationSlug)
-}
-
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

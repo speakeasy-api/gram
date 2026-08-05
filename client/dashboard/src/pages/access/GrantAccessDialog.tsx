@@ -24,6 +24,8 @@ interface GrantAccessDialogProps {
   userId: string;
   /** The scope that was requested (e.g. "mcp:connect"). */
   scope: string;
+  /** Optional resource the scope was requested for; narrows role suggestions. */
+  resourceId?: string;
   onClose: () => void;
 }
 
@@ -44,12 +46,23 @@ function memberInitials(member: AccessMember): string {
 export function GrantAccessDialog({
   userId,
   scope,
+  resourceId,
   onClose,
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const { data: membersData, isLoading: membersLoading } = useMembers();
-  const { data: rolesData, isLoading: rolesLoading } = useRoles();
+  const {
+    data: membersData,
+    isLoading: membersLoading,
+    isError: membersError,
+    refetch: refetchMembers,
+  } = useMembers();
+  const {
+    data: rolesData,
+    isLoading: rolesLoading,
+    isError: rolesError,
+    refetch: refetchRoles,
+  } = useRoles();
 
   const member = useMemo(
     () => membersData?.members?.find((m) => m.id === userId) ?? null,
@@ -57,8 +70,8 @@ export function GrantAccessDialog({
   );
 
   const suggestedRoles = useMemo(
-    () => rolesCoveringScope(rolesData?.roles ?? [], scope),
-    [rolesData?.roles, scope],
+    () => rolesCoveringScope(rolesData?.roles ?? [], scope, resourceId),
+    [rolesData?.roles, scope, resourceId],
   );
 
   const updateMemberRoles = useUpdateMemberRolesMutation({
@@ -87,6 +100,7 @@ export function GrantAccessDialog({
   };
 
   const isLoading = membersLoading || rolesLoading;
+  const loadFailed = membersError || rolesError;
   const granted = assignedRoleId !== null && updateMemberRoles.isSuccess;
 
   return (
@@ -112,7 +126,25 @@ export function GrantAccessDialog({
           </div>
         )}
 
-        {!isLoading && !member && (
+        {loadFailed && (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <Text variant="body" className="text-destructive text-sm">
+              Failed to load members and roles.
+            </Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                if (membersError) void refetchMembers();
+                if (rolesError) void refetchRoles();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {!isLoading && !loadFailed && !member && (
           <Text muted small className="py-4">
             This member is no longer part of the organization.
           </Text>

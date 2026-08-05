@@ -83,7 +83,11 @@ export function RequireScope(
   switch (level) {
     case "page":
       return (
-        <>{props.fallback ?? <Unauthorized scopes={scopes} all={all} />}</>
+        <>
+          {props.fallback ?? (
+            <Unauthorized scopes={scopes} all={all} resourceId={resourceId} />
+          )}
+        </>
       );
 
     case "section":
@@ -183,11 +187,13 @@ function Unauthorized({
   description = "You don't have permission to view this page.",
   scopes,
   all,
+  resourceId,
 }: {
   title?: string;
   description?: string;
   scopes: Scope[];
   all: boolean;
+  resourceId?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [requestState, setRequestState] = React.useState<
@@ -203,16 +209,24 @@ function Unauthorized({
 
     setRequestState("sending");
     try {
-      // Request access for the first requestable scope (if multiple, admin can grant more)
-      const scopeToRequest = requestableScopes[0]!;
-      await requestAccessMutation.mutateAsync({
-        request: {
-          requestAccessForm: {
-            scope: scopeToRequest,
-          },
-        },
-      });
-      setRequestState("sent");
+      // An "any scope suffices" gate only needs the first requestable scope;
+      // an all-scopes gate must request every missing scope or granting one
+      // still leaves the user blocked.
+      const scopesToRequest = all ? requestableScopes : [requestableScopes[0]!];
+      const results = await Promise.all(
+        scopesToRequest.map((scopeToRequest) =>
+          requestAccessMutation.mutateAsync({
+            request: {
+              requestAccessForm: {
+                scope: scopeToRequest,
+                resourceId,
+              },
+            },
+          }),
+        ),
+      );
+      const notified = results.some((r) => r.sentToCount > 0);
+      setRequestState(notified ? "sent" : "error");
     } catch {
       setRequestState("error");
     }

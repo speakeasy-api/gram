@@ -1,6 +1,8 @@
 /** Pure helpers for suggesting roles that satisfy a requested scope. */
 
+import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import type { Role } from "@gram/client/models/components/role.js";
+import type { RoleGrant } from "@gram/client/models/components/rolegrant.js";
 
 /**
  * User-visible sub-scopes implied by each higher-privilege scope.
@@ -26,10 +28,43 @@ export function grantScopeCovers(grantScope: string, scope: string): boolean {
 }
 
 /**
- * Roles whose grants include the requested scope, preserving role order.
+ * True when the grant applies to the requested resource. A grant with no
+ * selectors is unrestricted; otherwise at least one selector must match the
+ * resource (wildcards included), mirroring server-side selector matching.
  */
-export function rolesCoveringScope(roles: Role[], scope: string): Role[] {
+function grantCoversResource(
+  grant: RoleGrant,
+  scope: string,
+  resourceId: string | undefined,
+): boolean {
+  if (!resourceId || !grant.selectors) return true;
+  const check = { resourceKind: resourceKindForScope(scope), resourceId };
+  return grant.selectors.some((selector) =>
+    selectorMatches(
+      Object.fromEntries(
+        Object.entries(selector).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      ),
+      check,
+    ),
+  );
+}
+
+/**
+ * Roles whose grants include the requested scope (for the requested resource,
+ * when one is given), preserving role order.
+ */
+export function rolesCoveringScope(
+  roles: Role[],
+  scope: string,
+  resourceId?: string,
+): Role[] {
   return roles.filter((role) =>
-    role.grants.some((grant) => grantScopeCovers(grant.scope, scope)),
+    role.grants.some(
+      (grant) =>
+        grantScopeCovers(grant.scope, scope) &&
+        grantCoversResource(grant, scope, resourceId),
+    ),
   );
 }

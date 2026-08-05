@@ -74,11 +74,13 @@ function AccessInner() {
   // to open a pre-filled one-click grant dialog.
   const grantUserId = searchParams.get("grant_user");
   const grantScope = searchParams.get("scope");
+  const grantResourceId = searchParams.get("resource_id") || undefined;
 
   const closeGrantDialog = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("grant_user");
     next.delete("scope");
+    next.delete("resource_id");
     setSearchParams(next, { replace: true });
   };
   const organization = useOrganization();
@@ -157,6 +159,7 @@ function AccessInner() {
         <GrantAccessDialog
           userId={grantUserId}
           scope={grantScope}
+          resourceId={grantResourceId}
           onClose={closeGrantDialog}
         />
       )}
