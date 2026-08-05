@@ -62,6 +62,7 @@ import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
 import { TunneledMcp } from "./tunneledmcp.js";
+import { UnproxiedMcp } from "./unproxiedmcp.js";
 import { Usage } from "./usage.js";
 import { UserSessionClients } from "./usersessionclients.js";
 import { UserSessionConsents } from "./usersessionconsents.js";
@@ -377,6 +378,11 @@ export class Gram extends ClientSDK {
   private _tunneledMcp?: TunneledMcp;
   get tunneledMcp(): TunneledMcp {
     return (this._tunneledMcp ??= new TunneledMcp(this._options));
+  }
+
+  private _unproxiedMcp?: UnproxiedMcp;
+  get unproxiedMcp(): UnproxiedMcp {
+    return (this._unproxiedMcp ??= new UnproxiedMcp(this._options));
   }
 
   private _usage?: Usage;

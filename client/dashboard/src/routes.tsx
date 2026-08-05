@@ -48,6 +48,7 @@ import {
 import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
+import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
@@ -304,6 +305,11 @@ const ROUTE_STRUCTURE = {
         title: "Add Tunneled MCP Server",
         url: "add-tunneled-mcp",
         component: CreateTunneledMcp,
+      },
+      addUnproxiedMcp: {
+        title: "Add Unproxied MCP Server",
+        url: "add-unproxied-mcp",
+        component: CreateUnproxiedMcp,
       },
     },
   },

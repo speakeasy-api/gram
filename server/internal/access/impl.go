@@ -686,6 +686,30 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 	return nil
 }
 
+// IsSpeakeasyStaffEmail reports whether email belongs to a Speakeasy-owned
+// domain (@speakeasy.com or @speakeasyapi.dev).
+func IsSpeakeasyStaffEmail(email string) bool {
+	return strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev")
+}
+
+// RequireStaffForUnproxiedMcp rejects the request unless authCtx's email is
+// on the Speakeasy staff domain allowlist. Shared by every package that
+// gates an unproxied-MCP-server action to Speakeasy staff (unproxiedmcp's
+// own create/delete, mcpservers' attach-to-backend check) so the check lives
+// in exactly one place. action is the verb used in the resulting error
+// message, e.g. "added", "deleted", "attached".
+func RequireStaffForUnproxiedMcp(ctx context.Context, authCtx *contextvalues.AuthContext, action string, logger *slog.Logger) error {
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if IsSpeakeasyStaffEmail(email) {
+		return nil
+	}
+
+	return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be %s by Speakeasy staff", action).LogWarn(ctx, logger)
+}
+
 // requirePlatformAdmin returns the auth context and an error if the caller is not
 // a Speakeasy employee. Mirrors the exact condition used by the platform-admin
 // impersonation feature in auth/impl.go: email domain OR admin DB flag.
@@ -701,7 +725,7 @@ func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.Auth
 	if ac.Email != nil {
 		email = *ac.Email
 	}
-	if strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev") {
+	if IsSpeakeasyStaffEmail(email) {
 		return ac, nil
 	}
 	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
