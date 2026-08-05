@@ -545,7 +545,7 @@ func serverPort(t *testing.T, rawURL string) int {
 	return value
 }
 
-func (h *proxyHarness) request(scenario, sessionHeader, sessionID, callID, guardrail, text string, stream bool) proxyResponse {
+func (h *proxyHarness) request(scenario, sessionHeader, sessionID, callID, guardrail, text string, stream bool, additionalSessionHeaders ...map[string]string) proxyResponse {
 	h.t.Helper()
 	prompt := h.prompt(scenario, sessionID, callID, text)
 	model := "fixture-openai"
@@ -562,6 +562,11 @@ func (h *proxyHarness) request(scenario, sessionHeader, sessionID, callID, guard
 	req.Header.Set("Authorization", "Bearer "+proxyMasterKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(sessionHeader, sessionID)
+	for _, headers := range additionalSessionHeaders {
+		for name, value := range headers {
+			req.Header.Set(name, value)
+		}
+	}
 	req.Header.Set("x-litellm-call-id", callID)
 	response, err := h.httpClient.Do(req)
 	require.NoError(h.t, err)
@@ -695,6 +700,18 @@ func (h *proxyHarness) nativeSessionHeaders() {
 		require.Equal(h.t, h.prompt(scenario, sessionID, "e2e-"+header+"-call-2", "turn 2"), messages[2].Content)
 		require.Equal(h.t, fixtureAnswer, messages[3].Content)
 	}
+
+	scenario, sessionID, callID := "session-header-precedence", "e2e-gram-session", "e2e-precedence-call"
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "precedence prompt", false, map[string]string{
+		"x-claude-code-session-id": "e2e-claude-session",
+		"session-id":               "e2e-codex-session",
+		"thread-id":                "e2e-codex-thread",
+		"x-session-id":             "e2e-opencode-session",
+	})
+	require.Equal(h.t, http.StatusOK, response.Status, string(response.Body))
+	h.requireCompletion(response.Body)
+	require.Equal(h.t, 1, h.provider.count(h.key(scenario, sessionID, callID)))
+	h.requireConversation(h.messages(sessionID, 2), h.prompt(scenario, sessionID, callID, "precedence prompt"))
 }
 
 func (h *proxyHarness) blockedNonStreaming() {

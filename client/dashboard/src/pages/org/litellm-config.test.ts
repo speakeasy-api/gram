@@ -16,7 +16,7 @@ describe("LiteLLM configuration", () => {
       "api_base: https://api.getgram.ai/rpc/litellm.ingest",
     );
     expect(config).toContain("Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY");
-    expect(config).toContain(`extra_headers:
+    expect(config).toContain(`      extra_headers:
         - x-gram-session-id
         - x-claude-code-session-id
         - session-id
