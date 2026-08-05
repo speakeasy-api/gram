@@ -100,7 +100,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"auth (callback|login|switch-scopes|logout|register|info)",
+		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
@@ -578,6 +578,9 @@ func ParseEndpoint(
 		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
 		authSwitchScopesProjectIDFlag      = authSwitchScopesFlags.String("project-id", "", "")
 		authSwitchScopesSessionTokenFlag   = authSwitchScopesFlags.String("session-token", "", "")
+
+		authEnterDemoFlags            = flag.NewFlagSet("enter-demo", flag.ExitOnError)
+		authEnterDemoSessionTokenFlag = authEnterDemoFlags.String("session-token", "", "")
 
 		authLogoutFlags            = flag.NewFlagSet("logout", flag.ExitOnError)
 		authLogoutSessionTokenFlag = authLogoutFlags.String("session-token", "", "")
@@ -3215,6 +3218,7 @@ func ParseEndpoint(
 	authCallbackFlags.Usage = authCallbackUsage
 	authLoginFlags.Usage = authLoginUsage
 	authSwitchScopesFlags.Usage = authSwitchScopesUsage
+	authEnterDemoFlags.Usage = authEnterDemoUsage
 	authLogoutFlags.Usage = authLogoutUsage
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
@@ -4197,6 +4201,9 @@ func ParseEndpoint(
 
 			case "switch-scopes":
 				epf = authSwitchScopesFlags
+
+			case "enter-demo":
+				epf = authEnterDemoFlags
 
 			case "logout":
 				epf = authLogoutFlags
@@ -6047,6 +6054,9 @@ func ParseEndpoint(
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
+			case "enter-demo":
+				endpoint = c.EnterDemo()
+				data, err = authc.BuildEnterDemoPayload(*authEnterDemoSessionTokenFlag)
 			case "logout":
 				endpoint = c.Logout()
 				data, err = authc.BuildLogoutPayload(*authLogoutSessionTokenFlag)
@@ -9347,6 +9357,7 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    callback: Handles the authentication callback.`)
 	fmt.Fprintln(os.Stderr, `    login: Proxies to auth login through speakeasy oidc.`)
 	fmt.Fprintln(os.Stderr, `    switch-scopes: Switches the authentication scope to a different organization.`)
+	fmt.Fprintln(os.Stderr, `    enter-demo: Switches the current session into the shared read-only demo organization.`)
 	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
@@ -9412,6 +9423,24 @@ func authSwitchScopesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth switch-scopes --organization-id \"abc123\" --project-id \"abc123\" --session-token \"abc123\"")
+}
+
+func authEnterDemoUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth enter-demo", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Switches the current session into the shared read-only demo organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth enter-demo --session-token \"abc123\"")
 }
 
 func authLogoutUsage() {

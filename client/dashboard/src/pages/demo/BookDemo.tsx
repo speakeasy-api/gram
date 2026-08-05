@@ -37,6 +37,17 @@ export default function BookDemo(): JSX.Element {
       }
     >
       <DemoBookingFlow />
+      <div className="mt-6 text-center">
+        <button
+          type="button"
+          onClick={() => {
+            window.location.href = "/explore-demo";
+          }}
+          className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
+        >
+          Or explore a live demo org →
+        </button>
+      </div>
     </AuthShell>
   );
 }

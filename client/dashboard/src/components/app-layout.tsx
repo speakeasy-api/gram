@@ -43,9 +43,7 @@ export const LoginCheck = (): JSX.Element => {
 };
 
 export const AppLayout = (): JSX.Element => {
-  const isAdmin = useIsPlatformAdmin();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  const isImpersonating = isAdmin && !!overrideSlug;
+  const isImpersonating = useShowsImpersonationBanner();
 
   return (
     <SidebarProvider
@@ -75,19 +73,40 @@ function getAdminOverrideCookie(): string | null {
   return value || null;
 }
 
-// The shared demo org is entered through the same override mechanism,
-// but it isn't a customer org being impersonated — brand it as a demo instead
-// of an impersonation warning.
-const DEMO_ORG_SLUG = "acme-demo";
+// The shared demo org isn't a customer org being impersonated — brand it as
+// a demo instead of an impersonation warning. It is entered either through
+// the admin override cookie or session-side via auth.enterDemo (any user),
+// so demo detection keys off the active org slug, not the cookie.
+export const DEMO_ORG_SLUG = "acme-demo";
+
+/** Banner shows for admin cookie-impersonation or any session in the demo org. */
+const useShowsImpersonationBanner = (): boolean => {
+  const isAdmin = useIsPlatformAdmin();
+  const organization = useOrganization();
+  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
+  return (isAdmin && !!overrideSlug) || organization.slug === DEMO_ORG_SLUG;
+};
 
 const ImpersonationBanner = () => {
   const organization = useOrganization();
+  const session = useSession();
   const client = useSdkClient();
   const isDemo = organization.slug === DEMO_ORG_SLUG;
 
   const exit = () => {
     void (async () => {
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
+      // Exiting the demo switches back to the user's own org when they have
+      // one — no logout round-trip. Falls through to logout otherwise (e.g.
+      // admin cookie-impersonation, or a user with no other org).
+      const ownOrg = session.organizations.find(
+        (org) => org.slug !== DEMO_ORG_SLUG,
+      );
+      if (isDemo && ownOrg) {
+        await client.auth.switchScopes({ organizationId: ownOrg.id });
+        window.location.replace("/");
+        return;
+      }
       await client.auth.logout();
       window.location.href = "/login";
     })();
@@ -214,9 +233,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const OrgLayout = (): JSX.Element => {
-  const isAdmin = useIsPlatformAdmin();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  const isImpersonating = isAdmin && !!overrideSlug;
+  const isImpersonating = useShowsImpersonationBanner();
 
   return (
     <SidebarProvider

@@ -113,6 +113,7 @@ trackedFiles:
   src/funcs/auditlogsList.ts: {}
   src/funcs/auditlogsListFacets.ts: {}
   src/funcs/authCallback.ts: {}
+  src/funcs/authEnterDemo.ts: {}
   src/funcs/authInfo.ts: {}
   src/funcs/authLogin.ts: {}
   src/funcs/authLogout.ts: {}
@@ -1427,6 +1428,7 @@ trackedFiles:
   src/models/operations/enablerbac.ts: {}
   src/models/operations/enablewebhooks.ts: {}
   src/models/operations/ensuremanagedassistant.ts: {}
+  src/models/operations/enterdemo.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
@@ -1957,6 +1959,7 @@ trackedFiles:
   src/react-query/enableRBAC.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
+  src/react-query/enterDemo.ts: {}
   src/react-query/evolveDeployment.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
@@ -4084,6 +4087,13 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  enterDemo:
+    speakeasy-default-enter-demo:
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   evaluatePromptGuardrail:
     speakeasy-default-evaluate-prompt-guardrail:
       requestBody:

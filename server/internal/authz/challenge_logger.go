@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -54,6 +55,12 @@ func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *
 	// Skip challenge logging when a Speakeasy admin is impersonating a
 	// customer org — challenges belong to the admin, not the customer.
 	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating {
+		return
+	}
+
+	// Likewise for sessions exploring the shared demo org: challenges there
+	// belong to the visitor, and the daily seed rerun would wipe them anyway.
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
 		return
 	}
 
