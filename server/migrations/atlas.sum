@@ -1,4 +1,4 @@
-h1:kGN2k+74tPovz2m6wlPVyRjYxbCwGc349ZKLh3SZrfk=
+h1:CfR1oj8lxGBRsrknANE4Qnqf/fEUFrBo/B8KTOpnbxQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -317,3 +317,4 @@ h1:kGN2k+74tPovz2m6wlPVyRjYxbCwGc349ZKLh3SZrfk=
 20260805004742_platform-mcp-oauth-state.sql h1:+pwpYW0oQ41e7Quo61ZKnmJa7vNm8NVBXUmYjxdGfr0=
 20260805161737_skills-add-tags.sql h1:aiav/5wPpriD/TI9TaFSNeDe8YgYjfZHv24iMM3zwSc=
 20260805191625_publish-outbox.sql h1:dqHs3CK4gTejbarFRGVwP1pqTPSXBkkuRnha8s2hrUY=
+20260805204136_jwks-index-external-key-tenant.sql h1:wtCmgwGxoUXpaYDKqP+5HUaErm2HAR92rg498g26yuY=
