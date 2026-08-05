@@ -22,31 +22,27 @@ func TestHandle_DeliversForEligibleOrg(t *testing.T) {
 	orgID := seedOrg(t, inst.conn, "app_123", true)
 	eventID := uuid.NewString()
 
-	var captured *models.MessageIn
-	var capturedApp string
+	rec := &svixRecorder{}
 	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.MessageOut{Id: "msg_1"}, nil).
-		Run(func(args mock.Arguments) {
-			appID, ok := args.Get(1).(string)
-			require.True(t, ok)
-			capturedApp = appID
-
-			in, ok := args.Get(2).(*models.MessageIn)
-			require.True(t, ok)
-			captured = in
-		})
+		Run(rec.record)
 
 	err := inst.handler.Handle(t.Context(), newEvent(orgID, eventID, []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
 
-	require.Equal(t, "app_123", capturedApp,
+	calls := rec.observed()
+	require.Len(t, calls, 1)
+
+	require.Equal(t, "app_123", calls[0].appID,
 		"the event is addressed to the Svix application configured on its own organization")
-	require.NotNil(t, captured)
-	require.NotNil(t, captured.EventId)
-	require.Equal(t, eventID, *captured.EventId,
+
+	in := calls[0].msg
+	require.NotNil(t, in)
+	require.NotNil(t, in.EventId)
+	require.Equal(t, eventID, *in.EventId,
 		"the envelope's event id is what makes redelivery idempotent on Svix's side")
-	require.Equal(t, "audit_log.asset_event_v1", captured.EventType)
-	require.Equal(t, "asset.create", captured.Payload["action"])
+	require.Equal(t, "audit_log.asset_event_v1", in.EventType)
+	require.Equal(t, "asset.create", in.Payload["action"])
 }
 
 func TestHandle_DropsEventMissingIdentifiers(t *testing.T) {

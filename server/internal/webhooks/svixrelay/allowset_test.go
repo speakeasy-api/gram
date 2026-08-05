@@ -27,15 +27,10 @@ func TestAllowSet_ResolvesOrgsIndependently(t *testing.T) {
 	droppedEvent := uuid.NewString()
 	deliveredEvent := uuid.NewString()
 
-	var captured []string
+	rec := &svixRecorder{}
 	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.MessageOut{Id: "msg_1"}, nil).
-		Run(func(args mock.Arguments) {
-			in, ok := args.Get(2).(*models.MessageIn)
-			require.True(t, ok)
-			require.NotNil(t, in.EventId)
-			captured = append(captured, *in.EventId)
-		})
+		Run(rec.record)
 
 	err := inst.handler.Handle(t.Context(), newEvent(ineligible, droppedEvent, []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
@@ -43,7 +38,11 @@ func TestAllowSet_ResolvesOrgsIndependently(t *testing.T) {
 	err = inst.handler.Handle(t.Context(), newEvent(eligible, deliveredEvent, []byte(validPayload)), gcp.MessageMetadata{})
 	require.NoError(t, err)
 
-	require.Equal(t, []string{deliveredEvent}, captured)
+	calls := rec.observed()
+	require.Len(t, calls, 1)
+	require.NotNil(t, calls[0].msg)
+	require.NotNil(t, calls[0].msg.EventId)
+	require.Equal(t, deliveredEvent, *calls[0].msg.EventId)
 }
 
 // TestAllowSet_RoutesEachOrgToItsOwnApp is the property a routing bug would
@@ -61,21 +60,10 @@ func TestAllowSet_RoutesEachOrgToItsOwnApp(t *testing.T) {
 	first := seedOrg(t, inst.conn, "app_first", true)
 	second := seedOrg(t, inst.conn, "app_second", true)
 
-	// Event id to the app it was addressed to, so a swap is visible as a
-	// mismatch rather than as a count that still adds up.
-	routed := map[string]string{}
+	rec := &svixRecorder{}
 	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.MessageOut{Id: "msg_1"}, nil).
-		Run(func(args mock.Arguments) {
-			appID, ok := args.Get(1).(string)
-			require.True(t, ok)
-
-			in, ok := args.Get(2).(*models.MessageIn)
-			require.True(t, ok)
-			require.NotNil(t, in.EventId)
-
-			routed[*in.EventId] = appID
-		})
+		Run(rec.record)
 
 	events := []struct {
 		orgID string
@@ -94,6 +82,16 @@ func TestAllowSet_RoutesEachOrgToItsOwnApp(t *testing.T) {
 
 		err := inst.handler.Handle(t.Context(), newEvent(ev.orgID, eventID, []byte(validPayload)), gcp.MessageMetadata{})
 		require.NoError(t, err)
+	}
+
+	// Event id to the app it was addressed to, so a swap is visible as a
+	// mismatch on a named event rather than as a count that still adds up.
+	routed := map[string]string{}
+	for _, call := range rec.observed() {
+		require.NotNil(t, call.msg)
+		require.NotNil(t, call.msg.EventId)
+
+		routed[*call.msg.EventId] = call.appID
 	}
 
 	require.Equal(t, want, routed)
