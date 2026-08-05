@@ -86,12 +86,23 @@ const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
 // we inline it (a concrete, copy-and-run value); otherwise we fall back to a
 // self-resolving one-liner so the snippet still works before the fetch lands
 // or if it fails.
+//
+// The manifest value is fetched at runtime and pasted by the user into a
+// (often sudo-adjacent) shell, so only a strictly semver-shaped version is
+// ever inlined — anything else (e.g. a tampered manifest smuggling `$(...)`)
+// takes the fallback path instead of landing in the snippet.
+const INLINABLE_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
+function inlinableVersion(version: string | null) {
+  return version !== null && INLINABLE_VERSION.test(version) ? version : null;
+}
 function bashVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
     ? `VERSION=${version}`
     : `VERSION=$(curl -s ${MANIFEST_URL} | jq -r '.latest.speakeasyd.version')`;
 }
 function psVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
     ? `$VERSION = "${version}"`
     : `$VERSION = (Invoke-RestMethod ${MANIFEST_URL}).latest.speakeasyd.version`;
@@ -466,6 +477,15 @@ BASE=${RELEASES_BASE}/v$VERSION
 curl -fSLO "$BASE/speakeasy-helper_\${VERSION}_linux_amd64.${fmt}"
 ${install}`;
 
+  // Both package flavors ship amd64 + arm64; the swap note sits above each
+  // snippet it applies to, matching the archNote convention in DownloadStep.
+  const archNote = (
+    <StepNote>
+      amd64 shown — swap <code>linux_amd64</code> for <code>linux_arm64</code>{" "}
+      on ARM.
+    </StepNote>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <Text muted>
@@ -478,10 +498,7 @@ ${install}`;
       </Text>
       <div className="flex flex-col gap-2">
         <SubLabel>Debian / Ubuntu (.deb)</SubLabel>
-        <StepNote>
-          amd64 shown — swap <code>linux_amd64</code> for{" "}
-          <code>linux_arm64</code> on ARM.
-        </StepNote>
+        {archNote}
         <CodeBlock language="bash">
           {script(
             "deb",
@@ -492,6 +509,7 @@ ${install}`;
       <OrDivider />
       <div className="flex flex-col gap-2">
         <SubLabel>RHEL / Fedora (.rpm)</SubLabel>
+        {archNote}
         <CodeBlock language="bash">
           {script(
             "rpm",
