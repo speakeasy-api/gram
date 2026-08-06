@@ -5,10 +5,12 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"time"
 
 	"go.opentelemetry.io/otel/codes"
@@ -31,6 +33,17 @@ import (
 const deviceAgentReleasesBaseURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod"
 
 const installDeviceAgentMacOSPath = "/v1/install/device-agent-macos.pkg"
+
+// maxManifestSize bounds how much of the releases manifest response we will
+// read; releases.json is tiny, so this is generous headroom against a large
+// or malicious upstream response.
+const maxManifestSize = 1 << 20 // 1MiB
+
+// deviceAgentVersionPattern matches the semver shape produced by the
+// device-agent release pipeline (e.g. "1.2.3" or "1.2.3-beta.1"), so a
+// malformed manifest can't smuggle path-traversal or other unexpected
+// characters into the redirect target.
+var deviceAgentVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 
 type deviceAgentReleasesManifest struct {
 	Latest struct {
@@ -118,18 +131,30 @@ func (s *Service) handleInstallDeviceAgentMacOS(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, maxManifestSize))
+
 	var manifest deviceAgentReleasesManifest
-	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+	if err := decoder.Decode(&manifest); err != nil {
 		span.SetStatus(codes.Error, "decode manifest")
 		s.logger.ErrorContext(ctx, "decode device-agent releases manifest", attr.SlogError(err))
 		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
 		return
 	}
 
+	if err := decoder.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("manifest body has trailing data after the JSON object")
+		}
+		span.SetStatus(codes.Error, "trailing data after manifest")
+		s.logger.ErrorContext(ctx, "device-agent releases manifest has trailing data after JSON object", attr.SlogError(err))
+		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+
 	version := manifest.Latest.Speakeasyd.Version
-	if version == "" {
-		span.SetStatus(codes.Error, "empty version")
-		s.logger.ErrorContext(ctx, "device-agent releases manifest missing latest.speakeasyd.version")
+	if !deviceAgentVersionPattern.MatchString(version) {
+		span.SetStatus(codes.Error, "invalid version")
+		s.logger.ErrorContext(ctx, "device-agent releases manifest has invalid latest.speakeasyd.version")
 		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
 		return
 	}
