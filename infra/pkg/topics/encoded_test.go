@@ -22,8 +22,25 @@ import (
 // stubBroker returns a publisher without contacting Pub/Sub, and counts how
 // often it was asked so lazy construction and caching can be observed.
 type stubBroker struct {
-	calls int
-	err   error
+	calls   int
+	err     error
+	clients []*pubsub.Client
+}
+
+// newStubBroker registers a cleanup that closes every client the broker
+// created: Set.Stop stops publishers but has no view of the clients behind
+// them, so without this each test leaks a gRPC client and its goroutines.
+func newStubBroker(t *testing.T) *stubBroker {
+	t.Helper()
+
+	broker := &stubBroker{calls: 0, err: nil, clients: nil}
+	t.Cleanup(func() {
+		for _, client := range broker.clients {
+			_ = client.Close()
+		}
+	})
+
+	return broker
 }
 
 func (s *stubBroker) PublisherForMessage(ctx context.Context, msg proto.Message) (*pubsub.Publisher, error) {
@@ -42,6 +59,8 @@ func (s *stubBroker) PublisherForMessage(ctx context.Context, msg proto.Message)
 	if err != nil {
 		return nil, err
 	}
+
+	s.clients = append(s.clients, client)
 
 	return client.Publisher("test-topic"), nil
 }
@@ -83,7 +102,7 @@ func TestAllCoversDeclaredTopics(t *testing.T) {
 func TestSetPublish_UnknownTopic(t *testing.T) {
 	t.Parallel()
 
-	broker := &stubBroker{}
+	broker := newStubBroker(t)
 	set := NewSet(broker, nil)
 
 	_, err := set.Publish(t.Context(), "gram.nope.v1.Missing", []byte("x"), nil).Get(t.Context())
@@ -101,7 +120,7 @@ func TestSetPublish_UnknownTopic(t *testing.T) {
 func TestSetPublish_DoesNotDecodePayloads(t *testing.T) {
 	t.Parallel()
 
-	broker := &stubBroker{}
+	broker := newStubBroker(t)
 	set := NewSet(broker, boundedSettings())
 	t.Cleanup(func() { _ = set.Stop(context.Background()) })
 
@@ -126,7 +145,7 @@ func TestSetPublish_DoesNotDecodePayloads(t *testing.T) {
 func TestSetPublish_CachesPublisherPerTopic(t *testing.T) {
 	t.Parallel()
 
-	broker := &stubBroker{}
+	broker := newStubBroker(t)
 	set := NewSet(broker, boundedSettings())
 	t.Cleanup(func() { _ = set.Stop(context.Background()) })
 
@@ -148,7 +167,9 @@ func TestSetPublish_CachesPublisherPerTopic(t *testing.T) {
 func TestSetPublish_BrokerFailureIsRetryable(t *testing.T) {
 	t.Parallel()
 
-	set := NewSet(&stubBroker{err: context.DeadlineExceeded}, nil)
+	broker := newStubBroker(t)
+	broker.err = context.DeadlineExceeded
+	set := NewSet(broker, nil)
 
 	_, err := set.Publish(t.Context(), string(GramRiskV1Finding), nil, nil).Get(t.Context())
 
@@ -162,7 +183,7 @@ func TestSetPublish_BrokerFailureIsRetryable(t *testing.T) {
 func TestSetWarm_BuildsEveryDeclaredTopic(t *testing.T) {
 	t.Parallel()
 
-	broker := &stubBroker{}
+	broker := newStubBroker(t)
 	set := NewSet(broker, boundedSettings())
 	t.Cleanup(func() { _ = set.Stop(context.Background()) })
 
@@ -178,7 +199,9 @@ func TestSetWarm_BuildsEveryDeclaredTopic(t *testing.T) {
 func TestSetWarm_SurfacesBrokerFailure(t *testing.T) {
 	t.Parallel()
 
-	set := NewSet(&stubBroker{err: context.DeadlineExceeded}, nil)
+	broker := newStubBroker(t)
+	broker.err = context.DeadlineExceeded
+	set := NewSet(broker, nil)
 
 	err := set.Warm(t.Context())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -201,7 +224,7 @@ func TestNoopPublisher(t *testing.T) {
 func TestSetPublish_AfterStopFails(t *testing.T) {
 	t.Parallel()
 
-	broker := &stubBroker{}
+	broker := newStubBroker(t)
 	set := NewSet(broker, boundedSettings())
 	require.NoError(t, set.Stop(context.Background()))
 
@@ -213,7 +236,7 @@ func TestSetPublish_AfterStopFails(t *testing.T) {
 func TestSetStopIsSafeWithoutPublishers(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, NewSet(&stubBroker{}, nil).Stop(context.Background()))
+	require.NoError(t, NewSet(newStubBroker(t), nil).Stop(context.Background()))
 }
 
 var _ gcp.PublisherBroker = (*stubBroker)(nil)
