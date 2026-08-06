@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
@@ -39,10 +41,31 @@ type Relay struct {
 	login  *loginFlow
 	// backfillDeny carries a blocked verdict from a reporting-only backfilled
 	// prompt (agenthooks discards its decision) to the decision-capable event
-	// that triggered the backfill in this same process. It was the turn's
+	// that triggered the backfill immediately after it. It was the turn's
 	// only prompt-policy check, so the deny gates that event instead.
-	backfillDeny string
+	//
+	// Keyed by provider|session|turn and guarded by mu: in the hook server
+	// one Relay serves every connection concurrently, so an unscoped slot
+	// would race and could gate an unrelated session's event. The backfill
+	// and its triggering event run back to back on one goroutine with the
+	// same session identity, so the keyed handoff pairs them exactly; the
+	// TTL sweeps entries whose triggering event carried no decision point
+	// (e.g. a Stop-triggered backfill) so a stale deny can never fire on a
+	// later turn.
+	mu           sync.Mutex
+	backfillDeny map[string]backfillDeny
 }
+
+// backfillDeny is one stored deny verdict awaiting its triggering event.
+type backfillDeny struct {
+	message string
+	at      time.Time
+}
+
+// backfillDenyTTL bounds how long a stored deny may wait for its triggering
+// event. The pair dispatches back to back in one connection — the gap is at
+// most the prompt's own delivery budget — so anything older is an orphan.
+const backfillDenyTTL = 2 * time.Minute
 
 // NewRelay builds a Relay from the resolved config.
 func NewRelay(cfg Config) *Relay {
@@ -50,8 +73,47 @@ func NewRelay(cfg Config) *Relay {
 		cfg:          cfg,
 		client:       newClient(cfg.ServerURL),
 		login:        newLoginFlow(cfg),
-		backfillDeny: "",
+		mu:           sync.Mutex{},
+		backfillDeny: map[string]backfillDeny{},
 	}
+}
+
+// backfillDenyKey scopes a stored deny to the event pair it belongs to. The
+// backfilled prompt copies the triggering event's Session verbatim, so both
+// sides derive the same key.
+func backfillDenyKey(base *agenthooks.Event) string {
+	return string(base.Provider) + "|" + base.Session.ID + "|" + base.Session.TurnID
+}
+
+// storeBackfillDeny records a backfilled prompt's blocked verdict for the
+// decision-capable event that triggered the backfill.
+func (r *Relay) storeBackfillDeny(base *agenthooks.Event, message string) {
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for k, d := range r.backfillDeny {
+		if now.Sub(d.at) > backfillDenyTTL {
+			delete(r.backfillDeny, k)
+		}
+	}
+	r.backfillDeny[backfillDenyKey(base)] = backfillDeny{message: message, at: now}
+}
+
+// takeBackfillDeny consumes the deny stored for this event's session/turn,
+// or returns "" when none is pending.
+func (r *Relay) takeBackfillDeny(base *agenthooks.Event) string {
+	key := backfillDenyKey(base)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	d, ok := r.backfillDeny[key]
+	if !ok {
+		return ""
+	}
+	delete(r.backfillDeny, key)
+	if time.Since(d.at) > backfillDenyTTL {
+		return ""
+	}
+	return d.message
 }
 
 // Login runs an interactive browser sign-in. force re-mints even when a
@@ -68,13 +130,19 @@ func (r *Relay) Login(ctx context.Context, force bool) error {
 // unauthenticated case.
 func NewRunner(cfg Config) *agenthooks.Runner {
 	r := NewRelay(cfg)
-	runner := agenthooks.New(agenthooks.WithPolicy(agenthooks.Policy{
+	opts := []agenthooks.Option{agenthooks.WithPolicy(agenthooks.Policy{
 		Fail:            agenthooks.FailOpen,
 		Unsupported:     agenthooks.Degrade,
 		AskFallback:     agenthooks.FallbackNoDecision,
 		ContinuationCap: 0,
 		Timeout:         0,
-	}))
+	})}
+	// The nil check must stay on the concrete pointer: wrapping a nil
+	// *telemetry.Recorder in the option's interface would make it non-nil.
+	if rec := newTelemetryRecorder(r); rec != nil {
+		opts = append(opts, agenthooks.WithTelemetry(rec))
+	}
+	runner := agenthooks.New(opts...)
 
 	runner.OnPromptSubmitted(r.onPrompt)
 	runner.OnToolPre(r.onToolPre)
@@ -329,10 +397,11 @@ func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenth
 	v := r.evaluate(ctx, e)
 	if e.Backfilled {
 		if v.block {
-			r.backfillDeny = v.message
-			if r.backfillDeny == "" {
-				r.backfillDeny = "Speakeasy blocked this turn's prompt."
+			msg := v.message
+			if msg == "" {
+				msg = "Speakeasy blocked this turn's prompt."
 			}
+			r.storeBackfillDeny(&e.Event, msg)
 		}
 		return agenthooks.AcceptPrompt(), nil
 	}
@@ -359,8 +428,7 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 	// A denied backfilled prompt would have blocked at prompt submission had
 	// that delivery not been missed; the deny lands on this triggering event
 	// instead, without reporting the tool call the agent never got to make.
-	if msg := r.backfillDeny; msg != "" {
-		r.backfillDeny = ""
+	if msg := r.takeBackfillDeny(&e.Event); msg != "" {
 		return agenthooks.Deny(msg).WithSystemMessage(msg), nil
 	}
 	if cursorMCPEcho(&e.Event, e.Tool.Name) {
@@ -378,8 +446,7 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 }
 
 func (r *Relay) onPermission(ctx context.Context, e *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
-	if msg := r.backfillDeny; msg != "" {
-		r.backfillDeny = ""
+	if msg := r.takeBackfillDeny(&e.Event); msg != "" {
 		return agenthooks.Deny(msg).WithSystemMessage(msg), nil
 	}
 	v := r.evaluate(ctx, e)

@@ -1120,7 +1120,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 			timeoutSeconds = 300
 			timeout = &timeoutSeconds
 		}
-		hooks := []claudeHookCommand{{Type: "command", Command: hooksBootstrapCommand(`$CLAUDE_PLUGIN_ROOT`, "claude-code", timeoutSeconds, false), Async: claudeHookAsyncFlag(event), Timeout: timeout}}
+		hooks := []claudeHookCommand{{Type: "command", Command: hooksBootstrapCommand(`$CLAUDE_PLUGIN_ROOT`, "claude-code", timeoutSeconds), Async: claudeHookAsyncFlag(event), Timeout: timeout}}
 		hookEvents[event] = []claudeHookMatcher{
 			{Matcher: "", Hooks: hooks},
 		}
@@ -1181,7 +1181,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents)+1)
 	hookEvents["sessionStart"] = []cursorHookCommand{
 		{
-			Command:    hooksBootstrapCommand(`$CURSOR_PLUGIN_ROOT`, "cursor", sessionStartTimeout, false),
+			Command:    hooksBootstrapCommand(`$CURSOR_PLUGIN_ROOT`, "cursor", sessionStartTimeout),
 			Matcher:    "",
 			Timeout:    &sessionStartTimeout,
 			FailClosed: hookFailClosed,
@@ -1198,7 +1198,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 			failClosed = hookFailClosed
 		}
 		hookEvents[event] = []cursorHookCommand{{
-			Command:    hooksBootstrapCommand(`$CURSOR_PLUGIN_ROOT`, "cursor", 60, false),
+			Command:    hooksBootstrapCommand(`$CURSOR_PLUGIN_ROOT`, "cursor", 60),
 			Matcher:    "",
 			Timeout:    nil,
 			FailClosed: failClosed,
@@ -1288,15 +1288,15 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
-		timeoutSeconds, async := codexHookParams(event)
+		timeoutSeconds := codexHookTimeoutSeconds(event)
 		hookTimeout := 0
 		if event == "SessionEnd" {
 			hookTimeout = timeoutSeconds
 		}
 		hooks := []codexHookCommand{{
 			Type:           "command",
-			Command:        codexHookCommandString(timeoutSeconds, async),
-			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+			Command:        codexHookCommandString(timeoutSeconds),
+			CommandWindows: codexHookCommandStringWindows(timeoutSeconds),
 			Timeout:        hookTimeout,
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
@@ -1617,20 +1617,20 @@ func computeCodexHookHash(event, command string) (string, error) {
 	return fmt.Sprintf("sha256:%x", sum), nil
 }
 
-// codexHookParams returns the timeout and relay --async flag for a Codex hook
-// event. The command string embeds both, and Codex trust-hashes the command,
-// so the hooks.json generator and the precomputed approvals must derive them
-// from this single source.
-func codexHookParams(event string) (timeoutSeconds int, async bool) {
-	async = event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
-	timeoutSeconds = 60
+// codexHookTimeoutSeconds returns the timeout for a Codex hook event. The
+// command string embeds it, and Codex trust-hashes the command, so the
+// hooks.json generator and the precomputed approvals must derive it from
+// this single source. (The old relay --async suffix for non-gating events is
+// gone: under `agenthooks client` the hook server early-acks them, replacing
+// the detached re-exec.)
+func codexHookTimeoutSeconds(event string) int {
 	switch event {
 	case "SessionStart":
-		timeoutSeconds = 330
+		return 330
 	case "SessionEnd":
-		timeoutSeconds = 3
+		return 3
 	}
-	return timeoutSeconds, async
+	return 60
 }
 
 // computeCodexHookApprovals returns pre-computed [hooks.state] entries for all
@@ -1639,12 +1639,12 @@ func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval,
 	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
-		timeoutSeconds, async := codexHookParams(event)
-		hash, err := computeCodexHookHash(event, codexHookCommandString(timeoutSeconds, async))
+		timeoutSeconds := codexHookTimeoutSeconds(event)
+		hash, err := computeCodexHookHash(event, codexHookCommandString(timeoutSeconds))
 		if err != nil {
 			return nil, fmt.Errorf("compute hash for %s hook: %w", event, err)
 		}
-		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds, async))
+		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds))
 		if err != nil {
 			return nil, fmt.Errorf("compute windows hash for %s hook: %w", event, err)
 		}
@@ -1662,12 +1662,12 @@ func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval,
 // commandWindows) AND hashed into the precomputed approvals — Codex hashes the
 // command string verbatim, so any drift between the two call sites silently
 // untrusts every hook.
-func codexHookCommandString(timeoutSeconds int, async bool) string {
-	return hooksBootstrapCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
+func codexHookCommandString(timeoutSeconds int) string {
+	return hooksBootstrapCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds)
 }
 
-func codexHookCommandStringWindows(timeoutSeconds int, async bool) string {
-	return hooksPowerShellCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
+func codexHookCommandStringWindows(timeoutSeconds int) string {
+	return hooksPowerShellCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds)
 }
 
 // GenerateCodexInstallScript produces a bash install script that:

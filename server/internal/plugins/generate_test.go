@@ -996,7 +996,7 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 			require.Nil(t, matchers[0].Hooks[0].Timeout)
 		}
 		require.Equal(t,
-			fmt.Sprintf(`bash "$CLAUDE_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$CLAUDE_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=claude-code --timeout=%ds`, timeoutSeconds),
+			fmt.Sprintf(`bash "$CLAUDE_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$CLAUDE_PLUGIN_ROOT/speakeasy.json" agenthooks client --provider=claude-code --timeout=%ds`, timeoutSeconds),
 			matchers[0].Hooks[0].Command,
 		)
 		blocking := event == "UserPromptSubmit" || event == "PreToolUse" || event == "Stop" || event == "SessionStart"
@@ -1025,7 +1025,7 @@ func TestGenerateCursorObservabilityPluginRegistersBootstrapCommands(t *testing.
 	sessionStart, ok := parsed.Hooks["sessionStart"]
 	require.True(t, ok, "Cursor sessionStart must be registered")
 	require.Len(t, sessionStart, 1)
-	require.Equal(t, `bash "$CURSOR_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$CURSOR_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=cursor --timeout=330s`, sessionStart[0].Command)
+	require.Equal(t, `bash "$CURSOR_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$CURSOR_PLUGIN_ROOT/speakeasy.json" agenthooks client --provider=cursor --timeout=330s`, sessionStart[0].Command)
 	require.NotNil(t, sessionStart[0].Timeout)
 	require.Equal(t, 330, *sessionStart[0].Timeout)
 	require.NotNil(t, sessionStart[0].FailClosed)
@@ -1042,7 +1042,7 @@ func TestGenerateCursorObservabilityPluginRegistersBootstrapCommands(t *testing.
 	for _, event := range CursorObservabilityHookEvents {
 		require.Contains(t, parsed.Hooks, event, "event %q must be registered", event)
 		require.Len(t, parsed.Hooks[event], 1)
-		require.Equal(t, `bash "$CURSOR_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$CURSOR_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=cursor --timeout=60s`, parsed.Hooks[event][0].Command)
+		require.Equal(t, `bash "$CURSOR_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$CURSOR_PLUGIN_ROOT/speakeasy.json" agenthooks client --provider=cursor --timeout=60s`, parsed.Hooks[event][0].Command)
 		if blockingEvents[event] {
 			require.NotNil(t, parsed.Hooks[event][0].FailClosed, "blocking event %q must fail closed", event)
 			require.True(t, *parsed.Hooks[event][0].FailClosed, "blocking event %q must fail closed", event)
@@ -1074,7 +1074,6 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		require.Len(t, groups, 1)
 		require.Len(t, groups[0].Hooks, 1)
 
-		async := event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 		timeoutSeconds := 60
 		switch event {
 		case "SessionStart":
@@ -1082,12 +1081,10 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		case "SessionEnd":
 			timeoutSeconds = 3
 		}
-		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		if async {
-			expectedSuffix += " --async"
-			expectedWindowsSuffix += " --async"
-		}
+		// No --async suffix on any event: the hook server early-acks
+		// non-gating events under `agenthooks client`.
+		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks client --provider=codex --timeout=%ds`, timeoutSeconds)
+		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks client --provider=codex --timeout=%ds`, timeoutSeconds)
 		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
 		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
 		if event == "SessionEnd" {
@@ -1095,8 +1092,8 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		} else {
 			require.Zero(t, groups[0].Hooks[0].Timeout)
 		}
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
+		require.NotContains(t, groups[0].Hooks[0].Command, "--async")
+		require.NotContains(t, groups[0].Hooks[0].CommandWindows, "--async")
 	}
 }
 
