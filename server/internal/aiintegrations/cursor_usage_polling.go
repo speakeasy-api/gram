@@ -168,6 +168,26 @@ func (src *cursorUsageSource) RetryAfter(err error) (time.Duration, bool) {
 
 func buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
 	userEmail := conv.NormalizeEmail(event.UserEmail)
+	attributes := map[attr.Key]any{
+		attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
+		attr.LogBodyKey:                            "Cursor usage metrics",
+		attr.ProjectIDKey:                          cfg.ProjectID.String(),
+		attr.OrganizationIDKey:                     cfg.OrganizationID,
+		attr.ResourceURNKey:                        cursorUsageMetricsURN,
+		attr.HookSourceKey:                         "cursor",
+		attr.AIIntegrationConfigIDKey:              cfg.ID.String(),
+		attr.GenAIUsageInputTokensKey:              event.TokenUsage.InputTokens,
+		attr.GenAIUsageOutputTokensKey:             event.TokenUsage.OutputTokens,
+		attr.GenAIUsageCacheReadInputTokensKey:     event.TokenUsage.CacheReadTokens,
+		attr.GenAIUsageCacheCreationInputTokensKey: event.TokenUsage.CacheWriteTokens,
+		attr.GenAIUsageCostKey:                     event.TokenUsage.TotalCents / 100,
+		attr.GenAIResponseModelKey:                 event.Model,
+		attr.CursorUsageEventHashKey:               generateCursorUsageEventHash(event),
+		attr.CursorChargedCentsKey:                 event.ChargedCents,
+	}
+	if event.ConversationID != "" {
+		attributes[attr.GenAIConversationIDKey] = event.ConversationID
+	}
 
 	return telemetry.LogParams{
 		Timestamp: event.Timestamp,
@@ -180,24 +200,8 @@ func buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.Log
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo: telemetry.UserInfoByEmail(userEmail),
-		Attributes: map[attr.Key]any{
-			attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
-			attr.LogBodyKey:                            "Cursor usage metrics",
-			attr.ProjectIDKey:                          cfg.ProjectID.String(),
-			attr.OrganizationIDKey:                     cfg.OrganizationID,
-			attr.ResourceURNKey:                        cursorUsageMetricsURN,
-			attr.HookSourceKey:                         "cursor",
-			attr.AIIntegrationConfigIDKey:              cfg.ID.String(),
-			attr.GenAIUsageInputTokensKey:              event.TokenUsage.InputTokens,
-			attr.GenAIUsageOutputTokensKey:             event.TokenUsage.OutputTokens,
-			attr.GenAIUsageCacheReadInputTokensKey:     event.TokenUsage.CacheReadTokens,
-			attr.GenAIUsageCacheCreationInputTokensKey: event.TokenUsage.CacheWriteTokens,
-			attr.GenAIUsageCostKey:                     event.TokenUsage.TotalCents / 100,
-			attr.GenAIResponseModelKey:                 event.Model,
-			attr.CursorUsageEventHashKey:               generateCursorUsageEventHash(event),
-			attr.CursorChargedCentsKey:                 event.ChargedCents,
-		},
+		UserInfo:   telemetry.UserInfoByEmail(userEmail),
+		Attributes: attributes,
 	}
 }
 
