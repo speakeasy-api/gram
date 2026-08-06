@@ -804,6 +804,8 @@ tags:
     description: Explore third-party tools in Gram.
   - name: keys
     description: Managing system api keys.
+  - name: litellm
+    description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata
