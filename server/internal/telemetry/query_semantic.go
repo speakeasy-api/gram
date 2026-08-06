@@ -18,7 +18,7 @@ import (
 // consumes. Service.Query routes every non-skill_version request through
 // here; the parity tests compare it against the retained legacy repo path.
 
-const semanticUsageModelName = "turn.usage"
+const semanticUsageModelName = "usage"
 
 // semanticAliasMaps holds the legacy-key alias maps derived from the loaded
 // definition (the legacy_key fields are the single source of the mapping).
@@ -32,9 +32,8 @@ type semanticAliasMaps struct {
 	// measureLegacyToCatalog aliases public measure keys (sort_by) to the
 	// model's catalog measure names.
 	measureLegacyToCatalog map[string]string
-	// qualifiedMeasures are all model measures, model-qualified, in
-	// declaration order.
-	qualifiedMeasures []string
+	// allMeasures are all model measure names in declaration order.
+	allMeasures []string
 }
 
 var loadSemanticAliases = sync.OnceValues(func() (*semanticAliasMaps, error) {
@@ -53,7 +52,7 @@ var loadSemanticAliases = sync.OnceValues(func() (*semanticAliasMaps, error) {
 		dimLegacyToCatalog:     make(map[string]string, len(def.Dimensions)),
 		dimCatalogToLegacy:     make(map[string]string, len(def.Dimensions)),
 		measureLegacyToCatalog: make(map[string]string, len(model.Measures)),
-		qualifiedMeasures:      make([]string, 0, len(model.Measures)),
+		allMeasures:            make([]string, 0, len(model.Measures)),
 	}
 	for _, dim := range def.Dimensions {
 		if dim.LegacyKey == "" {
@@ -66,7 +65,7 @@ var loadSemanticAliases = sync.OnceValues(func() (*semanticAliasMaps, error) {
 		if ms.LegacyKey != "" {
 			maps.measureLegacyToCatalog[ms.LegacyKey] = ms.Name
 		}
-		maps.qualifiedMeasures = append(maps.qualifiedMeasures, model.Name+"."+ms.Name)
+		maps.allMeasures = append(maps.allMeasures, ms.Name)
 	}
 	return maps, nil
 })
@@ -113,18 +112,20 @@ func (s *Service) queryAttributeMetricsSemantic(ctx context.Context, arg repo.At
 	}
 
 	tableQuery := semantic.Query{
-		Measures:               aliases.qualifiedMeasures,
+		Model:                  aliases.model.Name,
+		Measures:               aliases.allMeasures,
 		GroupBy:                groupBy,
 		Filters:                filters,
 		TimeStart:              arg.TimeStart,
 		TimeEnd:                arg.TimeEnd,
 		GranularitySeconds:     0,
 		Scope:                  semantic.Scope{ProjectIDs: arg.ProjectIDs},
-		Sort:                   &semantic.Sort{Measure: aliases.model.Name + "." + sortMeasure, Desc: true},
+		Sort:                   &semantic.Sort{Measure: sortMeasure, Desc: true},
 		IncludeDimensionValues: true,
 	}
 	timeseriesQuery := semantic.Query{
-		Measures:               aliases.qualifiedMeasures,
+		Model:                  aliases.model.Name,
+		Measures:               aliases.allMeasures,
 		GroupBy:                groupBy,
 		Filters:                filters,
 		TimeStart:              arg.TimeStart,

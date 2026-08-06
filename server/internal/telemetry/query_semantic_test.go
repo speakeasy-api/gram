@@ -211,7 +211,7 @@ func insertSemanticProviderUsageLog(t *testing.T, ctx context.Context, projectID
 // provider-settled Claude Chat row, and asserts the raw telemetry_logs
 // binding's row_filter admits only the hook-written (locally observed) row.
 // The legacy sessionSourceRowPredicate unions both populations; the semantic
-// raw binding deliberately splits them (provider.usage serves the settled
+// raw binding deliberately splits them (provider_reports serves the settled
 // complement).
 func TestQuerySemantic_RawBindingServesObservedPopulationOnly(t *testing.T) {
 	t.Parallel()
@@ -243,7 +243,8 @@ func TestQuerySemantic_RawBindingServesObservedPopulationOnly(t *testing.T) {
 
 	// A session filter is only served by the raw telemetry_logs binding.
 	plan, err := semantic.Plan(def, semantic.Query{
-		Measures:               []string{"turn.usage.cost_usd", "turn.usage.tokens_total"},
+		Model:                  "usage",
+		Measures:               []string{"cost_usd", "tokens_total"},
 		GroupBy:                "",
 		Filters:                []semantic.Filter{{Dimension: "session", Values: []string{hookChat, apiChat, settledChat, chatgptChat, codexChat}}},
 		TimeStart:              now.Add(-1 * time.Hour).UnixNano(),
@@ -264,11 +265,12 @@ func TestQuerySemantic_RawBindingServesObservedPopulationOnly(t *testing.T) {
 	require.EqualValues(t, 10, rows[0].Measures["tokens_total"].Int64)
 }
 
-// TestQuerySemantic_ProviderUsageServesSettledPopulationOnly is the complement
-// of the observed-population test above: provider.usage's row_filter must
-// count ONLY provider-settled rows (Admin-API-polled cursor usage and Claude
-// Chat usage) and exclude the hook-written row for the same workspace.
-func TestQuerySemantic_ProviderUsageServesSettledPopulationOnly(t *testing.T) {
+// TestQuerySemantic_ProviderReportsServeSettledPopulationOnly is the
+// complement of the observed-population test above: provider_reports'
+// row_filter must count ONLY provider-settled rows (Admin-API-polled cursor
+// usage and Claude Chat usage) and exclude the hook-written row for the same
+// workspace.
+func TestQuerySemantic_ProviderReportsServeSettledPopulationOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -292,7 +294,8 @@ func TestQuerySemantic_ProviderUsageServesSettledPopulationOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	plan, err := semantic.Plan(def, semantic.Query{
-		Measures:               []string{"provider.usage.tokens_total", "provider.usage.cost_usd", "provider.usage.charged_usd"},
+		Model:                  "provider_reports",
+		Measures:               []string{"tokens_total", "cost_usd", "charged_usd"},
 		GroupBy:                "",
 		Filters:                nil,
 		TimeStart:              now.Add(-1 * time.Hour).UnixNano(),

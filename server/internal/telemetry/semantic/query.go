@@ -4,8 +4,11 @@ package semantic
 // All names are catalog vocabulary; legacy telemetry.query keys never appear
 // here (the adapter in the telemetry package translates them).
 type Query struct {
-	// Measures are model-qualified measure names ("turn.usage.cost_usd").
-	// All measures must belong to the same model for now.
+	// Model is the fact model the query addresses (e.g. "usage"). One query
+	// reads one model; combining models is syntactically impossible, which is
+	// how mutually exclusive usage authorities stay separate.
+	Model string
+	// Measures are bare measure names of the model ("cost_usd").
 	Measures []string
 	// GroupBy is one catalog dimension, or "" for a single aggregate group.
 	GroupBy string
@@ -39,7 +42,7 @@ type Scope struct {
 	ProjectIDs []string
 }
 
-// Sort ranks table rows by a model-qualified measure.
+// Sort ranks table rows by one of the requested measures (bare name).
 type Sort struct {
 	Measure string
 	Desc    bool

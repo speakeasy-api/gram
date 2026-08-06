@@ -63,13 +63,19 @@ type CatalogDimension struct {
 	Description string `json:"description"`
 }
 
-// Model is one queryable fact model (e.g. turn.usage).
+// Model is one queryable fact model (e.g. usage).
 type Model struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// Internal marks models that exist to declare a population precisely
+	// (e.g. provider_reports) rather than to be queried by end users. The
+	// planner serves them like any other model; the flag's contract is that
+	// internal models are excluded from any future public catalog/endpoint
+	// (phase-3 enforcement).
+	Internal bool `json:"internal,omitempty"`
 	// RollupOf names the finer-grained model this model aggregates (e.g.
-	// agent.usage rolls up turn.usage). Documentation for consumers; the
-	// planner does not rewrite across it.
+	// sessions rolls up usage). Documentation for consumers; the planner
+	// does not rewrite across it.
 	RollupOf string `json:"rollup_of,omitempty"`
 	// Dimensions is the allowlist of catalog dimensions this model carries.
 	Dimensions []string  `json:"dimensions"`

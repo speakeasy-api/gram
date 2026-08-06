@@ -139,7 +139,7 @@
   ],
   "models": [
     {
-      "name": "turn.usage",
+      "name": "usage",
       "description": "one provider response observed from an agent surface at response time",
       "dimensions": [
         "project",
@@ -168,7 +168,7 @@
       "time": {
         "min_granularity_seconds": 1
       },
-      "exclusive_with": ["agent.usage", "provider.usage"],
+      "exclusive_with": ["sessions", "provider_reports"],
       "measures": [
         {
           "name": "cost_usd",
@@ -374,7 +374,7 @@
             }
           },
           "caveats": [
-            "This table conflates locally-observed and provider-settled usage rows: the Cursor hook and the Admin-API poller both stamp cursor:usage:metrics rows and the MV merges them, so a workspace observed through both double-counts here. Declared, not fixed (DNO follow-up); the provider.usage model serves the settled complement and the MV fix is a separate change.",
+            "This table conflates locally-observed and provider-settled usage rows: the Cursor hook and the Admin-API poller both stamp cursor:usage:metrics rows and the MV merges them, so a workspace observed through both double-counts here. Declared, not fixed (DNO follow-up); the provider_reports model serves the settled complement and the MV fix is a separate change.",
             "tool_calls carries a transitional fallback (expand-contract): rows written before the unique_tool_calls column existed hold only the default empty state, so uniqExactIfMerge resolves to 0 on them even when total_tool_calls counted calls. The if() falls back to the legacy row count for such groups until the backfiller rebuilds history; groups mixing pre- and post-migration buckets undercount (accepted as transitional)."
           ]
         },
@@ -488,9 +488,9 @@
       ]
     },
     {
-      "name": "agent.usage",
+      "name": "sessions",
       "description": "one agent session's usage, rolled up from observed responses",
-      "rollup_of": "turn.usage",
+      "rollup_of": "usage",
       "dimensions": [
         "project",
         "user",
@@ -517,7 +517,7 @@
       "time": {
         "min_granularity_seconds": 1
       },
-      "exclusive_with": ["turn.usage", "provider.usage"],
+      "exclusive_with": ["usage", "provider_reports"],
       "measures": [
         {
           "name": "cost_usd",
@@ -735,8 +735,9 @@
       ]
     },
     {
-      "name": "provider.usage",
+      "name": "provider_reports",
       "description": "one provider-settled usage or spend record from a provider API",
+      "internal": true,
       "dimensions": [
         "project",
         "user",
@@ -756,7 +757,7 @@
       "time": {
         "min_granularity_seconds": 1
       },
-      "exclusive_with": ["turn.usage", "agent.usage"],
+      "exclusive_with": ["usage", "sessions"],
       "measures": [
         {
           "name": "input_tokens",
@@ -895,7 +896,7 @@
       ]
     },
     {
-      "name": "agent.chat",
+      "name": "messages",
       "description": "one observed chat message on an agent surface",
       "dimensions": [
         "project",

@@ -26,27 +26,6 @@ type QueryPlan struct {
 	DimensionValuesDims []string
 }
 
-// ExclusiveModelsError reports a query combining measures from models that
-// must never be summed together (they describe the same underlying activity
-// from different authorities).
-type ExclusiveModelsError struct {
-	Models []string
-}
-
-func (e *ExclusiveModelsError) Error() string {
-	return fmt.Sprintf("measures from models %s are mutually exclusive and cannot be combined in one query", strings.Join(e.Models, " and "))
-}
-
-// UnsupportedQueryError reports a query shape the planner does not support
-// yet (as opposed to one that is invalid or unsatisfiable).
-type UnsupportedQueryError struct {
-	Reason string
-}
-
-func (e *UnsupportedQueryError) Error() string {
-	return "unsupported query: " + e.Reason
-}
-
 // UnsatisfiableError reports that no binding of the model can serve the
 // query, naming exactly which requested parts are unsatisfiable.
 type UnsatisfiableError struct {
@@ -84,64 +63,29 @@ func (e *UnsatisfiableError) Error() string {
 	return fmt.Sprintf("model %s cannot satisfy the query: %s", e.Model, strings.Join(parts, "; "))
 }
 
-// splitMeasureName splits a model-qualified measure name into model and
-// measure: the measure is the last dot-separated segment, the model is
-// everything before it (model names themselves contain dots).
-func splitMeasureName(qualified string) (model, measure string, err error) {
-	i := strings.LastIndex(qualified, ".")
-	if i <= 0 || i == len(qualified)-1 {
-		return "", "", fmt.Errorf("measure %q is not model-qualified (want <model>.<measure>)", qualified)
-	}
-	return qualified[:i], qualified[i+1:], nil
-}
-
 // Plan validates the query against the definition and selects the highest-
 // precedence binding that serves every requested dimension, measure, and the
-// requested granularity.
+// requested granularity. One query reads exactly one model (q.Model), so
+// mutually exclusive usage authorities can never be combined: the
+// exclusive_with declarations are definition-level documentation enforced by
+// the query shape itself.
 func Plan(def *Definition, q Query) (*QueryPlan, error) {
+	if q.Model == "" {
+		return nil, fmt.Errorf("query names no model")
+	}
 	if len(q.Measures) == 0 {
 		return nil, fmt.Errorf("query requests no measures")
 	}
 
-	// Group requested measures by model; multi-model queries are either
-	// exclusive (an error by declaration) or simply not supported yet.
-	modelName := ""
-	measureNames := make([]string, 0, len(q.Measures))
-	seenModels := make([]string, 0, 1)
-	for _, qualified := range q.Measures {
-		mName, msName, err := splitMeasureName(qualified)
-		if err != nil {
-			return nil, err
-		}
-		if !slices.Contains(seenModels, mName) {
-			seenModels = append(seenModels, mName)
-		}
-		modelName = mName
-		measureNames = append(measureNames, msName)
-	}
-	if len(seenModels) > 1 {
-		for _, name := range seenModels {
-			m, ok := def.Model(name)
-			if !ok {
-				return nil, fmt.Errorf("unknown model %q", name)
-			}
-			for _, other := range seenModels {
-				if other != name && slices.Contains(m.ExclusiveWith, other) {
-					return nil, &ExclusiveModelsError{Models: seenModels}
-				}
-			}
-		}
-		return nil, &UnsupportedQueryError{Reason: fmt.Sprintf("measures span models %s; multi-model queries are not supported yet", strings.Join(seenModels, ", "))}
-	}
-
-	model, ok := def.Model(modelName)
+	model, ok := def.Model(q.Model)
 	if !ok {
-		return nil, fmt.Errorf("unknown model %q", modelName)
+		return nil, fmt.Errorf("unknown model %q", q.Model)
 	}
+	modelName := model.Name
 
 	// Resolve requested measures, deduplicated, in model declaration order.
-	requested := make(map[string]bool, len(measureNames))
-	for _, name := range measureNames {
+	requested := make(map[string]bool, len(q.Measures))
+	for _, name := range q.Measures {
 		if _, ok := model.Measure(name); !ok {
 			return nil, fmt.Errorf("unknown measure %q for model %q", name, modelName)
 		}
@@ -181,17 +125,10 @@ func Plan(def *Definition, q Query) (*QueryPlan, error) {
 
 	sortMeasure := ""
 	if q.Sort != nil {
-		sortModel, sortName, err := splitMeasureName(q.Sort.Measure)
-		if err != nil {
-			return nil, err
-		}
-		if sortModel != modelName {
-			return nil, fmt.Errorf("sort measure %q does not belong to model %q", q.Sort.Measure, modelName)
-		}
-		if !slices.Contains(orderedNames, sortName) {
+		if !slices.Contains(orderedNames, q.Sort.Measure) {
 			return nil, fmt.Errorf("sort measure %q is not among the requested measures", q.Sort.Measure)
 		}
-		sortMeasure = sortName
+		sortMeasure = q.Sort.Measure
 	}
 
 	binding, err := selectBinding(model, requiredDims, orderedNames, q.GranularitySeconds, q.TimeEnd-q.TimeStart)

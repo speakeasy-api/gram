@@ -54,11 +54,11 @@ func TestLoad_EmbeddedDefinitionIsValid(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, def.Version)
 
-	model, ok := def.Model("turn.usage")
-	require.True(t, ok, "turn.usage model must exist")
-	require.Len(t, model.Dimensions, len(def.Dimensions), "turn.usage carries every catalog dimension")
+	model, ok := def.Model("usage")
+	require.True(t, ok, "usage model must exist")
+	require.Len(t, model.Dimensions, len(def.Dimensions), "usage carries every catalog dimension")
 	require.Len(t, model.Measures, 11)
-	require.ElementsMatch(t, []string{"agent.usage", "provider.usage"}, model.ExclusiveWith)
+	require.ElementsMatch(t, []string{"sessions", "provider_reports"}, model.ExclusiveWith)
 
 	// The canonical measure declaration order drives the compiled SELECT order.
 	names := make([]string, 0, len(model.Measures))
@@ -107,86 +107,90 @@ func TestLoad_Phase2ModelShapes(t *testing.T) {
 	def, err := semantic.Load()
 	require.NoError(t, err)
 
-	agentUsage, ok := def.Model("agent.usage")
+	sessions, ok := def.Model("sessions")
 	require.True(t, ok)
-	require.Equal(t, "turn.usage", agentUsage.RollupOf)
-	require.NotContains(t, agentUsage.Dimensions, "turn")
-	require.Contains(t, agentUsage.Dimensions, "session")
-	require.Len(t, agentUsage.Measures, 8)
-	require.ElementsMatch(t, []string{"turn.usage", "provider.usage"}, agentUsage.ExclusiveWith)
-	require.Len(t, agentUsage.Bindings, 2)
-	var agentSummary, agentRaw *semantic.Binding
-	for i := range agentUsage.Bindings {
-		switch agentUsage.Bindings[i].Source {
+	require.False(t, sessions.Internal)
+	require.Equal(t, "usage", sessions.RollupOf)
+	require.NotContains(t, sessions.Dimensions, "turn")
+	require.Contains(t, sessions.Dimensions, "session")
+	require.Len(t, sessions.Measures, 8)
+	require.ElementsMatch(t, []string{"usage", "provider_reports"}, sessions.ExclusiveWith)
+	require.Len(t, sessions.Bindings, 2)
+	var sessionsSummary, sessionsRaw *semantic.Binding
+	for i := range sessions.Bindings {
+		switch sessions.Bindings[i].Source {
 		case "chat_session_summaries":
-			agentSummary = &agentUsage.Bindings[i]
+			sessionsSummary = &sessions.Bindings[i]
 		case "telemetry_logs":
-			agentRaw = &agentUsage.Bindings[i]
+			sessionsRaw = &sessions.Bindings[i]
 		}
 	}
-	require.NotNil(t, agentSummary)
-	require.NotNil(t, agentRaw)
-	require.EqualValues(t, 172800, agentSummary.MinWindowSeconds)
-	require.Equal(t, semantic.TimeKindHourBucket, agentSummary.Time.Kind)
+	require.NotNil(t, sessionsSummary)
+	require.NotNil(t, sessionsRaw)
+	require.EqualValues(t, 172800, sessionsSummary.MinWindowSeconds)
+	require.Equal(t, semantic.TimeKindHourBucket, sessionsSummary.Time.Kind)
 	// The summaries table only carries per-chat facts; identity dims are
 	// merged arrays there and deliberately not exposed.
-	require.Len(t, agentSummary.Dimensions, 2)
-	require.Contains(t, agentSummary.Dimensions, "project")
-	require.Contains(t, agentSummary.Dimensions, "session")
-	require.Len(t, agentSummary.Measures, 8)
-	// The raw binding is turn.usage's minus the turn grain.
-	turnUsage, ok := def.Model("turn.usage")
+	require.Len(t, sessionsSummary.Dimensions, 2)
+	require.Contains(t, sessionsSummary.Dimensions, "project")
+	require.Contains(t, sessionsSummary.Dimensions, "session")
+	require.Len(t, sessionsSummary.Measures, 8)
+	// The raw binding is the usage model's minus the turn grain.
+	usage, ok := def.Model("usage")
 	require.True(t, ok)
-	var turnRaw *semantic.Binding
-	for i := range turnUsage.Bindings {
-		if turnUsage.Bindings[i].Source == "telemetry_logs" {
-			turnRaw = &turnUsage.Bindings[i]
+	require.False(t, usage.Internal)
+	var usageRaw *semantic.Binding
+	for i := range usage.Bindings {
+		if usage.Bindings[i].Source == "telemetry_logs" {
+			usageRaw = &usage.Bindings[i]
 		}
 	}
-	require.NotNil(t, turnRaw)
-	require.Equal(t, turnRaw.RowFilter, agentRaw.RowFilter)
-	require.Equal(t, turnRaw.Measures, agentRaw.Measures)
-	require.NotContains(t, agentRaw.Dimensions, "turn")
-	for name, expr := range agentRaw.Dimensions {
-		require.Equal(t, turnRaw.Dimensions[name], expr, "agent.usage raw dim %s must mirror turn.usage", name)
+	require.NotNil(t, usageRaw)
+	require.Equal(t, usageRaw.RowFilter, sessionsRaw.RowFilter)
+	require.Equal(t, usageRaw.Measures, sessionsRaw.Measures)
+	require.NotContains(t, sessionsRaw.Dimensions, "turn")
+	for name, expr := range sessionsRaw.Dimensions {
+		require.Equal(t, usageRaw.Dimensions[name], expr, "sessions raw dim %s must mirror usage", name)
 	}
-	require.Len(t, agentRaw.Dimensions, len(turnRaw.Dimensions)-1)
+	require.Len(t, sessionsRaw.Dimensions, len(usageRaw.Dimensions)-1)
 
-	providerUsage, ok := def.Model("provider.usage")
+	providerReports, ok := def.Model("provider_reports")
 	require.True(t, ok)
-	require.Empty(t, providerUsage.RollupOf)
-	require.NotContains(t, providerUsage.Dimensions, "session")
-	require.NotContains(t, providerUsage.Dimensions, "turn")
-	require.NotContains(t, providerUsage.Dimensions, "hostname")
-	require.ElementsMatch(t, []string{"turn.usage", "agent.usage"}, providerUsage.ExclusiveWith)
-	require.Len(t, providerUsage.Bindings, 1, "no summaries binding: the table cannot discriminate settled from observed rows")
-	require.Equal(t, "telemetry_logs", providerUsage.Bindings[0].Source)
-	charged, ok := providerUsage.Measure("charged_usd")
+	require.True(t, providerReports.Internal, "provider_reports declares the settled population; it is not a public model")
+	require.Empty(t, providerReports.RollupOf)
+	require.NotContains(t, providerReports.Dimensions, "session")
+	require.NotContains(t, providerReports.Dimensions, "turn")
+	require.NotContains(t, providerReports.Dimensions, "hostname")
+	require.ElementsMatch(t, []string{"usage", "sessions"}, providerReports.ExclusiveWith)
+	require.Len(t, providerReports.Bindings, 1, "no summaries binding: the table cannot discriminate settled from observed rows")
+	require.Equal(t, "telemetry_logs", providerReports.Bindings[0].Source)
+	charged, ok := providerReports.Measure("charged_usd")
 	require.True(t, ok)
 	require.Equal(t, "usd", charged.Unit)
 	require.Equal(t, "unavailable", charged.NullSemantics)
-	// Shared dims reuse turn.usage's raw expressions verbatim.
-	for name, expr := range providerUsage.Bindings[0].Dimensions {
-		require.Equal(t, turnRaw.Dimensions[name], expr, "provider.usage dim %s must mirror turn.usage raw", name)
+	// Shared dims reuse the usage model's raw expressions verbatim.
+	for name, expr := range providerReports.Bindings[0].Dimensions {
+		require.Equal(t, usageRaw.Dimensions[name], expr, "provider_reports dim %s must mirror the usage raw binding", name)
 	}
 
-	agentChat, ok := def.Model("agent.chat")
+	messages, ok := def.Model("messages")
 	require.True(t, ok)
-	require.Empty(t, agentChat.ExclusiveWith)
-	require.NotContains(t, agentChat.Dimensions, "turn")
-	require.Contains(t, agentChat.Dimensions, "session")
-	names := make([]string, 0, len(agentChat.Measures))
-	for _, ms := range agentChat.Measures {
+	require.False(t, messages.Internal)
+	require.Empty(t, messages.ExclusiveWith)
+	require.NotContains(t, messages.Dimensions, "turn")
+	require.Contains(t, messages.Dimensions, "session")
+	names := make([]string, 0, len(messages.Measures))
+	for _, ms := range messages.Measures {
 		names = append(names, ms.Name)
 	}
 	require.Equal(t, []string{"messages", "chats"}, names)
-	require.Len(t, agentChat.Bindings, 2)
-	for i := range agentChat.Bindings {
-		b := &agentChat.Bindings[i]
+	require.Len(t, messages.Bindings, 2)
+	for i := range messages.Bindings {
+		b := &messages.Bindings[i]
 		if b.Source == "chat_session_summaries" {
 			require.EqualValues(t, 172800, b.MinWindowSeconds)
 		} else {
-			require.Equal(t, turnRaw.RowFilter, b.RowFilter, "agent.chat raw population is turn.usage's observed population")
+			require.Equal(t, usageRaw.RowFilter, b.RowFilter, "messages raw population is the usage model's observed population")
 		}
 	}
 }

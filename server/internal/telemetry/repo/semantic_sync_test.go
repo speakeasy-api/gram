@@ -14,7 +14,7 @@ import (
 // While the legacy Go registries in this package and the embedded semantic
 // definition both exist, these tests pin them to each other so they cannot
 // drift: every catalog dimension with a legacy_key must carry exactly the
-// registry's physical expressions, and every turn.usage measure must carry
+// registry's physical expressions, and every usage-model measure must carry
 // exactly the aggregate SELECTs / session expression constants.
 
 // legacyQueryDimensionKeys is the public telemetry.query dimension allowlist
@@ -44,13 +44,13 @@ var legacyQueryDimensionKeys = []string{
 	"project_id",
 }
 
-func turnUsageBindings(t *testing.T) (def *semantic.Definition, summaries, raw *semantic.Binding) {
+func usageBindings(t *testing.T) (def *semantic.Definition, summaries, raw *semantic.Binding) {
 	t.Helper()
 
 	def, err := semantic.Load()
 	require.NoError(t, err)
-	model, ok := def.Model("turn.usage")
-	require.True(t, ok, "turn.usage model must exist")
+	model, ok := def.Model("usage")
+	require.True(t, ok, "usage model must exist")
 	for i := range model.Bindings {
 		switch model.Bindings[i].Source {
 		case "attribute_metrics_summaries":
@@ -67,7 +67,7 @@ func turnUsageBindings(t *testing.T) (def *semantic.Definition, summaries, raw *
 func TestSemanticDefinition_DimensionsMatchLegacyRegistry(t *testing.T) {
 	t.Parallel()
 
-	def, summaries, raw := turnUsageBindings(t)
+	def, summaries, raw := usageBindings(t)
 	registry := repo.TelemetryDimensionRegistryForTest()
 
 	kindToType := map[string]string{
@@ -111,13 +111,13 @@ func TestSemanticDefinition_DimensionsMatchLegacyRegistry(t *testing.T) {
 func TestSemanticDefinition_SummariesMeasuresMatchLegacySelects(t *testing.T) {
 	t.Parallel()
 
-	def, summaries, _ := turnUsageBindings(t)
-	model, ok := def.Model("turn.usage")
+	def, summaries, _ := usageBindings(t)
+	model, ok := def.Model("usage")
 	require.True(t, ok)
 
 	selects := repo.AttributeMeasureSelectsForTest()
 	require.Len(t, model.Measures, len(selects),
-		"turn.usage measure count drifted from attributeMeasureSelects")
+		"usage measure count drifted from attributeMeasureSelects")
 
 	// attributeMeasureSelects is ordered; the model declares measures in the
 	// same order with catalog names, so compare pairwise after stripping the
@@ -136,7 +136,7 @@ func TestSemanticDefinition_SummariesMeasuresMatchLegacySelects(t *testing.T) {
 func TestSemanticDefinition_RawMeasuresMatchSessionExprs(t *testing.T) {
 	t.Parallel()
 
-	_, _, raw := turnUsageBindings(t)
+	_, _, raw := usageBindings(t)
 
 	want := map[string]string{
 		"cost_usd":           repo.SessionCostExprForTest,
@@ -158,7 +158,7 @@ func TestSemanticDefinition_RawMeasuresMatchSessionExprs(t *testing.T) {
 func TestSemanticDefinition_RawGrainDimensionsMatchSessionExprs(t *testing.T) {
 	t.Parallel()
 
-	_, summaries, raw := turnUsageBindings(t)
+	_, summaries, raw := usageBindings(t)
 
 	// session/turn have no legacy keys (the registry doesn't carry them), so
 	// pin their raw expressions here explicitly. They must never appear on the
@@ -173,7 +173,7 @@ func TestSemanticDefinition_RawGrainDimensionsMatchSessionExprs(t *testing.T) {
 func TestSemanticDefinition_RawRowFilterIsObservedPopulation(t *testing.T) {
 	t.Parallel()
 
-	_, summaries, raw := turnUsageBindings(t)
+	_, summaries, raw := usageBindings(t)
 
 	require.Equal(t, "is_active = 1", summaries.RowFilter)
 
@@ -225,16 +225,16 @@ func TestSemanticDefinition_SessionSummaryBindingsMatchSessionsRepo(t *testing.T
 	def, err := semantic.Load()
 	require.NoError(t, err)
 
-	usageSummary := bindingBySource(t, def, "agent.usage", "chat_session_summaries")
-	chatSummary := bindingBySource(t, def, "agent.chat", "chat_session_summaries")
+	usageSummary := bindingBySource(t, def, "sessions", "chat_session_summaries")
+	chatSummary := bindingBySource(t, def, "messages", "chat_session_summaries")
 
 	// The window gate mirrors the ListSessions raw-vs-summary routing
 	// threshold exactly.
 	wantWindow := int64(repo.SessionSummaryMinWindow / time.Second)
 	require.Equal(t, wantWindow, usageSummary.MinWindowSeconds,
-		"agent.usage summaries min_window drifted from repo.SessionSummaryMinWindow")
+		"sessions summaries min_window drifted from repo.SessionSummaryMinWindow")
 	require.Equal(t, wantWindow, chatSummary.MinWindowSeconds,
-		"agent.chat summaries min_window drifted from repo.SessionSummaryMinWindow")
+		"messages summaries min_window drifted from repo.SessionSummaryMinWindow")
 
 	// Where the semantic measures overlap sessionSummaryMeasureSelects, the
 	// SQL must match modulo the s. qualifier.
@@ -252,7 +252,7 @@ func TestSemanticDefinition_SessionSummaryBindingsMatchSessionsRepo(t *testing.T
 		want, ok := summarySelects[legacyKey]
 		require.True(t, ok, "sessionSummaryMeasureSelects lost key %q", legacyKey)
 		require.Equal(t, stripSummaryQualifier(want), usageSummary.Measures[name].SQL,
-			"agent.usage summaries measure %q drifted from sessionSummaryMeasureSelects[%q]", name, legacyKey)
+			"sessions summaries measure %q drifted from sessionSummaryMeasureSelects[%q]", name, legacyKey)
 	}
 	// chats has no sessionSummaryMeasureSelects counterpart (ListSessions
 	// returns per-chat rows, never a chat count); pin the literal.
@@ -261,7 +261,7 @@ func TestSemanticDefinition_SessionSummaryBindingsMatchSessionsRepo(t *testing.T
 	wantMessages, ok := summarySelects["message_count"]
 	require.True(t, ok)
 	require.Equal(t, stripSummaryQualifier(wantMessages), chatSummary.Measures["messages"].SQL,
-		"agent.chat summaries messages drifted from sessionSummaryMeasureSelects[message_count]")
+		"messages summaries messages drifted from sessionSummaryMeasureSelects[message_count]")
 	require.Equal(t, "uniqExact(chat_id)", chatSummary.Measures["chats"].SQL)
 
 	// Both summary bindings serve only the per-chat grain the table keys on.
@@ -278,9 +278,9 @@ func TestSemanticDefinition_AgentChatRawMeasuresMatchSessionExprs(t *testing.T) 
 	def, err := semantic.Load()
 	require.NoError(t, err)
 
-	chatRaw := bindingBySource(t, def, "agent.chat", "telemetry_logs")
+	chatRaw := bindingBySource(t, def, "messages", "telemetry_logs")
 	require.Equal(t, repo.SessionMessageCountExprForTest, chatRaw.Measures["messages"].SQL,
-		"agent.chat raw messages drifted from sessionMessageCountExpr")
+		"messages raw messages drifted from sessionMessageCountExpr")
 	require.Equal(t, "uniqExactIf(chat_id, chat_id != '')", chatRaw.Measures["chats"].SQL)
 }
 
@@ -290,20 +290,20 @@ func TestSemanticDefinition_ProviderRowFilterIsSettledComplement(t *testing.T) {
 	def, err := semantic.Load()
 	require.NoError(t, err)
 
-	// provider.usage admits exactly the provider-reported rows the turn.usage
+	// provider_reports admits exactly the provider-reported rows the usage model's
 	// raw binding excludes: the claude_chat and chatgpt URNs (polled/imported
 	// only) and the cursor:usage/codex:usage rows the provider-API writers
 	// stamp gram.event.source = 'api'.
-	providerRaw := bindingBySource(t, def, "provider.usage", "telemetry_logs")
+	providerRaw := bindingBySource(t, def, "provider_reports", "telemetry_logs")
 	require.Equal(t,
 		"(startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage') OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) = 'api') OR (startsWith(gram_urn, 'codex:usage') AND toString(attributes.gram.event.source) = 'api'))",
 		providerRaw.RowFilter,
-		"provider.usage row_filter drifted from the settled complement")
+		"provider_reports row_filter drifted from the settled complement")
 
 	// Its dimension expressions reuse the observed raw binding's verbatim.
-	turnRaw := bindingBySource(t, def, "turn.usage", "telemetry_logs")
+	usageRaw := bindingBySource(t, def, "usage", "telemetry_logs")
 	for name, expr := range providerRaw.Dimensions {
-		require.Equal(t, turnRaw.Dimensions[name].SQL, expr.SQL,
-			"provider.usage dimension %q drifted from turn.usage's raw expression", name)
+		require.Equal(t, usageRaw.Dimensions[name].SQL, expr.SQL,
+			"provider_reports dimension %q drifted from the usage model's raw expression", name)
 	}
 }

@@ -35,19 +35,19 @@ func marshalArgs(t *testing.T, args []any) string {
 	return string(data)
 }
 
-func allTurnUsageMeasures() []string {
+func allUsageMeasures() []string {
 	return []string{
-		"turn.usage.cost_usd",
-		"turn.usage.input_tokens",
-		"turn.usage.output_tokens",
-		"turn.usage.tokens_total",
-		"turn.usage.cache_read_tokens",
-		"turn.usage.cache_write_tokens",
-		"turn.usage.tool_calls",
-		"turn.usage.chats",
-		"turn.usage.total_work_units",
-		"turn.usage.scored_cost",
-		"turn.usage.scored_tokens",
+		"cost_usd",
+		"input_tokens",
+		"output_tokens",
+		"tokens_total",
+		"cache_read_tokens",
+		"cache_write_tokens",
+		"tool_calls",
+		"chats",
+		"total_work_units",
+		"scored_cost",
+		"scored_tokens",
 	}
 }
 
@@ -57,14 +57,14 @@ func allTurnUsageMeasures() []string {
 // expressions don't cover).
 func rawServedMeasures() []string {
 	return []string{
-		"turn.usage.cost_usd",
-		"turn.usage.input_tokens",
-		"turn.usage.output_tokens",
-		"turn.usage.tokens_total",
-		"turn.usage.cache_read_tokens",
-		"turn.usage.cache_write_tokens",
-		"turn.usage.tool_calls",
-		"turn.usage.chats",
+		"cost_usd",
+		"input_tokens",
+		"output_tokens",
+		"tokens_total",
+		"cache_read_tokens",
+		"cache_write_tokens",
+		"tool_calls",
+		"chats",
 	}
 }
 
@@ -72,14 +72,15 @@ func rawServedMeasures() []string {
 // catalog vocabulary: all measures, grouped by user, ranked by cost.
 func demoQuery(granularitySeconds int64) semantic.Query {
 	return semantic.Query{
-		Measures:               allTurnUsageMeasures(),
+		Model:                  "usage",
+		Measures:               allUsageMeasures(),
 		GroupBy:                "user",
 		Filters:                nil,
 		TimeStart:              testTimeStart,
 		TimeEnd:                testTimeEnd,
 		GranularitySeconds:     granularitySeconds,
 		Scope:                  testScope,
-		Sort:                   &semantic.Sort{Measure: "turn.usage.cost_usd", Desc: true},
+		Sort:                   &semantic.Sort{Measure: "cost_usd", Desc: true},
 		IncludeDimensionValues: granularitySeconds == 0,
 	}
 }
@@ -126,6 +127,7 @@ func TestCompile_RawTableGolden(t *testing.T) {
 	require.NoError(t, err)
 
 	plan, err := semantic.Plan(def, semantic.Query{
+		Model:                  "usage",
 		Measures:               rawServedMeasures(),
 		GroupBy:                "user",
 		Filters:                []semantic.Filter{{Dimension: "session", Values: []string{"chat-1", "chat-2"}}},
@@ -133,7 +135,7 @@ func TestCompile_RawTableGolden(t *testing.T) {
 		TimeEnd:                testTimeEnd,
 		GranularitySeconds:     0,
 		Scope:                  testScope,
-		Sort:                   &semantic.Sort{Measure: "turn.usage.cost_usd", Desc: true},
+		Sort:                   &semantic.Sort{Measure: "cost_usd", Desc: true},
 		IncludeDimensionValues: false,
 	})
 	require.NoError(t, err)
@@ -155,7 +157,8 @@ func TestCompile_ArrayGroupByAndFilters(t *testing.T) {
 	// mixing "" and values ORs hasAny with emptiness so the "(unset)" bucket
 	// stays drillable; scalar filters compile to IN.
 	plan, err := semantic.Plan(def, semantic.Query{
-		Measures:  []string{"turn.usage.cost_usd"},
+		Model:     "usage",
+		Measures:  []string{"cost_usd"},
 		GroupBy:   "role",
 		Filters:   []semantic.Filter{{Dimension: "group", Values: []string{"eng", ""}}, {Dimension: "department", Values: []string{"Engineering"}}},
 		TimeStart: testTimeStart,
