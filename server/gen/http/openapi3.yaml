@@ -60760,7 +60760,6 @@ components:
                 - gram_account_type
                 - has_active_subscription
                 - whitelisted
-                - enterprise_trial
         IngestHookPayload:
             type: object
             properties:

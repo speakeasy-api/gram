@@ -18,6 +18,20 @@ actions:
       allOf:
         - $ref: "#/components/schemas/EnterpriseTrial"
       nullable: true
+  - target: $.components.schemas.InfoResponseBody.required
+    remove: true
+  - target: $.components.schemas.InfoResponseBody
+    update:
+      required:
+        - user_id
+        - user_email
+        - is_admin
+        - active_organization_id
+        - organizations
+        - gram_account_type
+        - has_active_subscription
+        - whitelisted
+        - enterprise_trial
   - target: $.paths.*[?(@.operationId=='uploadOpenAPIv3Asset' || @.operationId=='uploadFunctions' || @.operationId=='uploadImage')]
     update:
       requestBody:

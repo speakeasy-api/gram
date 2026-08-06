@@ -2,12 +2,15 @@ package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	authclient "github.com/speakeasy-api/gram/server/gen/http/auth/client"
+	authserver "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -16,6 +19,38 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
+
+func TestInfoTransport_EnterpriseTrialNull(t *testing.T) {
+	t.Parallel()
+
+	response := authserver.NewInfoResponseBody(&gen.InfoResult{
+		UserID:                "user-id",
+		UserEmail:             "user@example.com",
+		UserSignature:         nil,
+		UserDisplayName:       nil,
+		UserPhotoURL:          nil,
+		IsAdmin:               false,
+		ActiveOrganizationID:  "organization-id",
+		GramAccountType:       "test",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		EnterpriseTrial:       nil,
+		Organizations:         nil,
+		SessionToken:          "session-token",
+		SessionCookie:         "session-cookie",
+	})
+
+	bodyJSON, err := json.Marshal(response)
+	require.NoError(t, err)
+	require.Contains(t, string(bodyJSON), `"enterprise_trial":null`)
+
+	var body authclient.InfoResponseBody
+	require.NoError(t, json.Unmarshal(bodyJSON, &body))
+	require.NoError(t, authclient.ValidateInfoResponseBody(&body))
+
+	result := authclient.NewInfoResultOK(&body, "session-token", "session-cookie")
+	require.Nil(t, result.EnterpriseTrial)
+}
 
 func TestService_Info(t *testing.T) {
 	t.Parallel()

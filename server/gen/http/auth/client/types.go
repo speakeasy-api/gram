@@ -36,7 +36,7 @@ type InfoResponseBody struct {
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted     *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
-	EnterpriseTrial *EnterpriseTrialResponseBody     `form:"enterprise_trial,omitempty" json:"enterprise_trial,omitempty" xml:"enterprise_trial,omitempty"`
+	EnterpriseTrial *EnterpriseTrialResponseBody     `json:"enterprise_trial"`
 	Organizations   []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
@@ -2282,7 +2282,9 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		HasActiveSubscription: *body.HasActiveSubscription,
 		Whitelisted:           *body.Whitelisted,
 	}
-	v.EnterpriseTrial = unmarshalEnterpriseTrialResponseBodyToAuthEnterpriseTrial(body.EnterpriseTrial)
+	if body.EnterpriseTrial != nil {
+		v.EnterpriseTrial = unmarshalEnterpriseTrialResponseBodyToAuthEnterpriseTrial(body.EnterpriseTrial)
+	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
 		if val == nil {
@@ -2464,9 +2466,6 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.EnterpriseTrial == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("enterprise_trial", "body"))
 	}
 	if body.EnterpriseTrial != nil {
 		if err2 := ValidateEnterpriseTrialResponseBody(body.EnterpriseTrial); err2 != nil {

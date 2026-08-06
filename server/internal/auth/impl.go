@@ -756,6 +756,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		GramAccountType:       authCtx.AccountType,
 		HasActiveSubscription: authCtx.HasActiveSubscription,
 		Whitelisted:           authCtx.Whitelisted,
+		EnterpriseTrial:       nil,
 		UserID:                userInfo.UserID,
 		UserEmail:             userInfo.Email,
 		UserSignature:         userInfo.UserPylonSignature,

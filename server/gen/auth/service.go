@@ -110,7 +110,7 @@ type InfoResult struct {
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted     bool
-	EnterpriseTrial *EnterpriseTrial
+	EnterpriseTrial *EnterpriseTrial `json:"enterprise_trial"`
 	Organizations   []*OrganizationEntry
 	// The authentication session
 	SessionToken string

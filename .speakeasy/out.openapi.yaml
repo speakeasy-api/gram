@@ -60478,7 +60478,7 @@ components:
           type: string
         enterprise_trial:
           allOf:
-            - $ref: '#/components/schemas/EnterpriseTrial'
+            - $ref: "#/components/schemas/EnterpriseTrial"
           nullable: true
         gram_account_type:
           type: string

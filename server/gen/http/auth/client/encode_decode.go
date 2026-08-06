@@ -1724,6 +1724,9 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 // unmarshalEnterpriseTrialResponseBodyToAuthEnterpriseTrial builds a value of
 // type *auth.EnterpriseTrial from a value of type *EnterpriseTrialResponseBody.
 func unmarshalEnterpriseTrialResponseBodyToAuthEnterpriseTrial(v *EnterpriseTrialResponseBody) *auth.EnterpriseTrial {
+	if v == nil {
+		return nil
+	}
 	res := &auth.EnterpriseTrial{
 		StartedAt: *v.StartedAt,
 		EndsAt:    *v.EndsAt,

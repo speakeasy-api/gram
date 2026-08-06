@@ -34,7 +34,7 @@ type InfoResponseBody struct {
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted     bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
-	EnterpriseTrial *EnterpriseTrialResponseBody     `form:"enterprise_trial" json:"enterprise_trial" xml:"enterprise_trial"`
+	EnterpriseTrial *EnterpriseTrialResponseBody     `json:"enterprise_trial"`
 	Organizations   []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
