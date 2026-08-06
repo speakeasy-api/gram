@@ -71,6 +71,30 @@ func TestDiscoverTopicBindings_DerivesGoBinding(t *testing.T) {
 	require.Equal(t, "TestTopicsV1Thing", bindings[0].ConstName)
 }
 
+// TestDiscoverTopicBindings_SanitizesDerivedAlias covers a go_package with no
+// explicit alias whose last path element is not a valid Go identifier —
+// protoc-gen-go accepts these and sanitizes the package name itself, so the
+// registry generator must too or it dies in format.Source with a parse error
+// naming neither the proto file nor the alias.
+func TestDiscoverTopicBindings_SanitizesDerivedAlias(t *testing.T) {
+	t.Parallel()
+
+	bindings := bindingsFrom(t, &descriptorpb.FileDescriptorProto{
+		Name:       new("test/topics/v1/dashed.proto"),
+		Package:    new("test.topics.v1"),
+		Syntax:     new("proto3"),
+		Dependency: []string{"gcp/pubsub/v1/options.proto"},
+		Options:    &descriptorpb.FileOptions{GoPackage: new("example.com/gen/foo-bar")},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{Name: new("Thing"), Options: topicOptions(t)},
+		},
+	})
+
+	require.Len(t, bindings, 1)
+	require.Equal(t, "example.com/gen/foo-bar", bindings[0].GoImportPath)
+	require.Equal(t, "foo_bar", bindings[0].GoPackageAlias)
+}
+
 func TestDiscoverTopicBindings_IgnoresMessagesWithoutTopics(t *testing.T) {
 	t.Parallel()
 

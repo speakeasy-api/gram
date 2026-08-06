@@ -2,9 +2,11 @@ package gcp
 
 import (
 	"fmt"
+	"go/token"
 	"path"
 	"sort"
 	"strings"
+	"unicode"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -137,7 +139,36 @@ func goPackageOf(file protoreflect.FileDescriptor) (importPath, alias string, er
 		return "", "", fmt.Errorf("file %s has a malformed go_package option %q", file.Path(), goPackage)
 	}
 
-	return importPath, alias, nil
+	return importPath, sanitizeAlias(alias), nil
+}
+
+// sanitizeAlias coerces an alias into a valid Go identifier the same way
+// protoc-gen-go cleans package names: illegal runes become underscores, a
+// leading digit gets a prefix, and keywords get a suffix. Without this, a
+// go_package like "example.com/gen/foo-bar" (legal for protoc-gen-go, which
+// sanitizes it itself) templates a malformed import and generation dies in
+// format.Source with a parse error that names neither the proto file nor the
+// alias that caused it.
+func sanitizeAlias(alias string) string {
+	sanitized := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			return r
+		}
+		return '_'
+	}, alias)
+
+	if sanitized == "" {
+		return "_"
+	}
+	if unicode.IsDigit([]rune(sanitized)[0]) {
+		sanitized = "_" + sanitized
+	}
+	if !token.IsIdentifier(sanitized) {
+		// Everything structural is already fixed, so this is a Go keyword.
+		sanitized += "_"
+	}
+
+	return sanitized
 }
 
 // constNameFor turns a proto full name into an exported Go identifier, e.g.
