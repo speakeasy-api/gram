@@ -1028,6 +1028,8 @@ SELECT EXISTS (
 -- this skill version, anchored on the version rather than a chat message.
 -- Called for any completed judgement: a found = FALSE row is the coverage
 -- record, mirroring the empty result rows the chat batch path writes.
+-- The NOT EXISTS gate is not atomic against a concurrent upload of the same
+-- content, so ON CONFLICT defers the last word to the partial unique index.
 INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
 SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, @source::text, @found::boolean, sqlc.narg(rule_id)::text, sqlc.narg(description)::text, sqlc.narg(match)::text, sqlc.narg(confidence)::double precision
 FROM risk_policies p
@@ -1040,7 +1042,8 @@ WHERE p.project_id = @project_id
     FROM risk_results rr
     WHERE rr.skill_version_id = @skill_version_id
       AND rr.risk_policy_id = p.id
-  );
+  )
+ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL DO NOTHING;
 
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
