@@ -36,7 +36,7 @@ func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*a
 
 // BuildLoginPayload builds the payload for the auth login endpoint from CLI
 // flags.
-func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string) (*auth.LoginPayload, error) {
+func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLoginEmail string) (*auth.LoginPayload, error) {
 	var redirect *string
 	{
 		if authLoginRedirect != "" {
@@ -49,9 +49,16 @@ func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string) (*auth
 			orgName = &authLoginOrgName
 		}
 	}
+	var email *string
+	{
+		if authLoginEmail != "" {
+			email = &authLoginEmail
+		}
+	}
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
 	v.OrgName = orgName
+	v.Email = email
 
 	return v, nil
 }

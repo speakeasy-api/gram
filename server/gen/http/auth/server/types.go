@@ -2353,10 +2353,11 @@ func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
 }
 
 // NewLoginPayload builds a auth service login endpoint payload.
-func NewLoginPayload(redirect *string, orgName *string) *auth.LoginPayload {
+func NewLoginPayload(redirect *string, orgName *string, email *string) *auth.LoginPayload {
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
 	v.OrgName = orgName
+	v.Email = email
 
 	return v
 }

@@ -8093,6 +8093,13 @@ paths:
           schema:
             description: Optional organization name. When set, the organization is created for a new user during the auth callback.
             type: string
+        - allowEmptyValue: true
+          description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
+          in: query
+          name: email
+          schema:
+            description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
+            type: string
       responses:
         "307":
           description: Temporary Redirect response.

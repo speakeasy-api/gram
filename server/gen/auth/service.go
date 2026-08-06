@@ -120,6 +120,9 @@ type LoginPayload struct {
 	// Optional organization name. When set, the organization is created for a new
 	// user during the auth callback.
 	OrgName *string
+	// Optional email address. Pre-fills the email field on the identity provider's
+	// sign-up screen. Never stored.
+	Email *string
 }
 
 // LoginResult is the result type of the auth service login method.

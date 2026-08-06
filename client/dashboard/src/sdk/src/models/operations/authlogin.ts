@@ -17,6 +17,10 @@ export type AuthLoginRequest = {
    * Optional organization name. When set, the organization is created for a new user during the auth callback.
    */
   orgName?: string | undefined;
+  /**
+   * Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
+   */
+  email?: string | undefined;
 };
 
 export type AuthLoginResponse = {
@@ -27,6 +31,7 @@ export type AuthLoginResponse = {
 export type AuthLoginRequest$Outbound = {
   redirect?: string | undefined;
   org_name?: string | undefined;
+  email?: string | undefined;
 };
 
 /** @internal */
@@ -37,6 +42,7 @@ export const AuthLoginRequest$outboundSchema: z.ZodMiniType<
   z.object({
     redirect: z.optional(z.string()),
     orgName: z.optional(z.string()),
+    email: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
