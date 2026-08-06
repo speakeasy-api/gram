@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 func TestService_Callback(t *testing.T) {
@@ -640,7 +641,12 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
 		require.NoError(t, err)
 		require.Equal(t, "Acme Inc", org.Name)
-		require.False(t, org.Whitelisted, "signup orgs match register and stay gated")
+		require.True(t, org.Whitelisted, "signup orgs match register and clear the demo gate")
+		require.Equal(t, "enterprise", org.GramAccountType)
+
+		trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, session.ActiveOrganizationID)
+		require.NoError(t, err)
+		require.Equal(t, "enterprise", trial.Tier)
 	})
 
 	t.Run("intent is consumed so it cannot be replayed", func(t *testing.T) {

@@ -3,3 +3,17 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Trial struct {
+	OrganizationID string
+	Tier           string
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}

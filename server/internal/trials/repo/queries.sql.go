@@ -11,6 +11,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createTrial = `-- name: CreateTrial :exec
+INSERT INTO trials (organization_id, tier, ends_at)
+VALUES ($1, $2, $3)
+`
+
+type CreateTrialParams struct {
+	OrganizationID string
+	Tier           string
+	EndsAt         pgtype.Timestamptz
+}
+
+// One row per organization forever: extend a trial by moving ends_at forward,
+// never by inserting a second row.
+func (q *Queries) CreateTrial(ctx context.Context, arg CreateTrialParams) error {
+	_, err := q.db.Exec(ctx, createTrial, arg.OrganizationID, arg.Tier, arg.EndsAt)
+	return err
+}
+
 const getActiveTrial = `-- name: GetActiveTrial :one
 SELECT organization_id, created_at, ends_at
 FROM trials
@@ -30,6 +48,27 @@ func (q *Queries) GetActiveTrial(ctx context.Context, organizationID string) (Ge
 	row := q.db.QueryRow(ctx, getActiveTrial, organizationID)
 	var i GetActiveTrialRow
 	err := row.Scan(&i.OrganizationID, &i.CreatedAt, &i.EndsAt)
+	return i, err
+}
+
+const getTrial = `-- name: GetTrial :one
+SELECT organization_id, tier, ends_at, converted_at, demoted_at, created_at, updated_at
+FROM trials
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetTrial(ctx context.Context, organizationID string) (Trial, error) {
+	row := q.db.QueryRow(ctx, getTrial, organizationID)
+	var i Trial
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Tier,
+		&i.EndsAt,
+		&i.ConvertedAt,
+		&i.DemotedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 

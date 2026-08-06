@@ -1,3 +1,14 @@
+-- name: CreateTrial :exec
+-- One row per organization forever: extend a trial by moving ends_at forward,
+-- never by inserting a second row.
+INSERT INTO trials (organization_id, tier, ends_at)
+VALUES (@organization_id, @tier, @ends_at);
+
+-- name: GetTrial :one
+SELECT *
+FROM trials
+WHERE organization_id = @organization_id;
+
 -- name: GetActiveTrial :one
 SELECT organization_id, created_at, ends_at
 FROM trials

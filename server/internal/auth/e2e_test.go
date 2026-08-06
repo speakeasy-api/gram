@@ -14,6 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	accessRepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -25,10 +26,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -172,7 +175,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, authzProvisioner)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
@@ -466,7 +469,8 @@ func TestSyncMembershipsFromWorkOS_EmptyResponseRevokesWorkOSRelationships(t *te
 }
 
 // TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition verifies that a
-// new user with zero orgs and the "assistants" disposition gets auto-provisioned.
+// new user with zero orgs and the "assistants" disposition gets auto-provisioned,
+// and that the organization it provisions arms no enterprise trial.
 func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 	t.Parallel()
 
@@ -493,6 +497,25 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 	require.NotContains(t, result.Location, "signin_error=")
 	assert.Contains(t, result.Location, "assistants")
 	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationID := authCtx.ActiveOrganizationID
+	require.NotEmpty(t, organizationID)
+
+	// An assistants organization is a live product for a user who never asked for
+	// a trial, so arming one here would strip entitlements two weeks later. The
+	// account type stays whatever the billing provider reports, the stub's "pro".
+	org, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.NotEqual(t, "enterprise", org.GramAccountType)
+	require.True(t, org.Whitelisted)
+
+	_, err = trialsRepo.New(inst.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 // TestE2E_Callback_ExistingUserWithDBOrgs verifies the happy path: user
