@@ -1,7 +1,12 @@
 import { SidebarMenuItem } from "@/components/ui/Sidebar";
-import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
+import { ChevronRightIcon } from "lucide-react";
 import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
@@ -64,6 +69,10 @@ export function NavGroupProvider({
     if (activeGroup) initial.add(activeGroup);
     return initial;
   });
+  // Groups the user expanded via the chevron toggle. These survive navigation;
+  // a group that is open only because it holds the active route collapses as
+  // soon as the user navigates to a different group.
+  const explicitRef = React.useRef(new Set<string>());
   const [hoveredItem, setHoveredItem] = React.useState<string | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const itemRefs = React.useRef<Map<string, HTMLElement>>(new Map());
@@ -77,29 +86,36 @@ export function NavGroupProvider({
       const next = new Set(prev);
       if (next.has(group)) {
         next.delete(group);
+        explicitRef.current.delete(group);
       } else {
         // Opening a non-default group collapses defaults
         if (!defaultsRef.current.has(group)) {
-          for (const d of defaultsRef.current) next.delete(d);
+          for (const d of defaultsRef.current) {
+            if (!explicitRef.current.has(d)) next.delete(d);
+          }
         }
         next.add(group);
+        explicitRef.current.add(group);
       }
       return next;
     });
   }, []);
 
+  // Opens a group without marking it explicit — used when a closed group's
+  // header link is clicked, where the navigation is about to make the group
+  // active anyway.
   const openGroupFn = React.useCallback((group: string) => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
     _setOpenGroups((prev) => {
       if (prev.has(group)) return prev;
-      const next = new Set<string>();
+      const next = new Set(prev);
       // Opening a non-default group collapses defaults
       if (!defaultsRef.current.has(group)) {
-        next.add(group);
-      } else {
-        for (const g of prev) next.add(g);
-        next.add(group);
+        for (const d of defaultsRef.current) {
+          if (!explicitRef.current.has(d)) next.delete(d);
+        }
       }
+      next.add(group);
       return next;
     });
   }, []);
@@ -110,16 +126,21 @@ export function NavGroupProvider({
 
   React.useEffect(() => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
-    if (activeGroup) {
-      _setOpenGroups((prev) => {
-        if (prev.has(activeGroup)) return prev;
-        const next = new Set(prev);
-        next.add(activeGroup);
-        return next;
-      });
-    } else if (defaultsRef.current.size > 0) {
-      _setOpenGroups(new Set(defaultsRef.current));
-    }
+    _setOpenGroups((prev) => {
+      if (!activeGroup && defaultsRef.current.size > 0) {
+        // Sidebars with a default-open set reset to it on top-level pages.
+        return new Set([...defaultsRef.current, ...explicitRef.current]);
+      }
+      // Only defaults and explicitly expanded groups stay open across
+      // navigation; the previously active group collapses.
+      const next = new Set(
+        [...prev].filter(
+          (g) => defaultsRef.current.has(g) || explicitRef.current.has(g),
+        ),
+      );
+      if (activeGroup) next.add(activeGroup);
+      return next;
+    });
   }, [activeGroup]);
 
   const resolvedActive = activeItem ?? activeGroup ?? null;
@@ -386,7 +407,7 @@ export function NavButton({
       target={target}
       onClick={handleClick}
       className={cn(
-        "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
+        "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
           ? "text-foreground font-semibold"
@@ -480,13 +501,13 @@ export function CollapsibleNavGroup({
           onMouseEnter={navItem.onMouseEnter}
           onMouseLeave={navItem.onMouseLeave}
           onMouseMove={navItem.onMouseMove}
-          className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
+          className="relative group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
         >
           <Link
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
-              "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
+              "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-7 text-left text-sm transition-colors hover:no-underline",
               "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
               isOpen
@@ -503,7 +524,7 @@ export function CollapsibleNavGroup({
             <span className="flex-1 truncate transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
               {label}
             </span>
-            {stage && isOpen && (
+            {stage && (
               <ReleaseStageBadge
                 stage={stage}
                 noTooltip
@@ -511,12 +532,26 @@ export function CollapsibleNavGroup({
               />
             )}
           </Link>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
+              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 z-1 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-sm transition-colors group-data-[collapsible=icon]:hidden"
+            >
+              <ChevronRightIcon
+                className={cn(
+                  "size-3.5 transition-transform duration-200",
+                  isOpen && "rotate-90",
+                )}
+              />
+            </button>
+          </CollapsibleTrigger>
         </div>
 
         <CollapsibleContent className="data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden">
-          <div className="border-border mt-1 ml-4 border-l pl-2 group-data-[collapsible=icon]:hidden">
+          <div className="border-border mt-0.5 ml-4 border-l pl-2 group-data-[collapsible=icon]:hidden">
             <motion.ul
-              className="flex flex-col gap-0.5 py-0.5"
+              className="flex flex-col py-0.5"
               initial={isOpen ? "open" : "closed"}
               animate={isOpen ? "open" : "closed"}
               variants={{
@@ -599,7 +634,7 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
-            "relative z-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
+            "relative z-1 flex items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors hover:no-underline",
             item.active
               ? "text-foreground font-semibold"
               : "text-muted-foreground hover:text-foreground",
