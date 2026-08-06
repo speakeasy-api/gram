@@ -1004,13 +1004,49 @@ VALUES (
   , @dead_letter_reason
 );
 
--- name: InsertSkillPromptInjectionResults :exec
--- Records one finding per enabled policy that subscribes to prompt injection,
--- anchored on the captured skill version rather than a chat message.
+-- name: SkillVersionNeedsPromptInjectionScan :one
+-- True when some enabled prompt-injection policy has no recorded scan of this
+-- skill version yet. Drives the scan gate: no such policy means judging the
+-- content would produce nothing storable, and an already-recorded scan must
+-- not be repeated (content is immutable per version, so the verdict cannot
+-- change). A policy enabled after capture has no row, so it reports true and
+-- the version becomes eligible again.
+SELECT EXISTS (
+  SELECT 1
+  FROM risk_policies p
+  WHERE p.project_id = @project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = @skill_version_id
+        AND rr.risk_policy_id = p.id
+    )
+);
+
+-- name: RecordSkillPromptInjectionScan :exec
+-- Records one row per enabled prompt-injection policy that has not yet scanned
+-- this skill version, anchored on the version rather than a chat message.
+-- Called for a completed judgement whether or not it found anything: a
+-- found = FALSE row is the coverage record that separates "judged clean" from
+-- "never judged", mirroring how the chat batch path writes empty result rows.
+-- A judge failure records nothing, leaving the version eligible for a later
+-- scan rather than silently passing as clean.
 INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
-SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, 'prompt_injection', TRUE, @rule_id::text, @description::text, @match::text, @confidence::double precision
+SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, @source::text, @found::boolean, sqlc.narg(rule_id)::text, sqlc.narg(description)::text, sqlc.narg(match)::text, sqlc.narg(confidence)::double precision
 FROM risk_policies p
-WHERE p.project_id = @project_id AND p.enabled IS TRUE AND p.deleted IS FALSE AND 'prompt_injection' = ANY (p.sources);
+WHERE p.project_id = @project_id
+  AND p.enabled IS TRUE
+  AND p.deleted IS FALSE
+  AND 'prompt_injection' = ANY (p.sources)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM risk_results rr
+    WHERE rr.skill_version_id = @skill_version_id
+      AND rr.risk_policy_id = p.id
+  );
 
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
