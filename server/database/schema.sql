@@ -4718,6 +4718,18 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_content_part_idx
 ON risk_results (project_id, chat_content_part_id);
 
+-- The skill_version_id anchor needs the same index cover its chat siblings
+-- have. Leads with skill_version_id rather than project_id because the
+-- ON DELETE CASCADE from skill_versions looks rows up by that column alone;
+-- without it every version delete seq-scans this table. Trailing
+-- risk_policy_id serves the per-version, per-policy lookups (findings for
+-- this version, has this version already been scanned under this policy).
+-- Partial: the column is NULL on every chat-anchored row, which is nearly
+-- all of them.
+CREATE INDEX IF NOT EXISTS risk_results_skill_version_id_idx
+ON risk_results (skill_version_id, risk_policy_id)
+WHERE skill_version_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
