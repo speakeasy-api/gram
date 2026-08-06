@@ -210,7 +210,10 @@ export default function SkillsList(): JSX.Element {
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
 
   // Copied share links point at the org's custom domain when one is live.
-  const { domain: customDomain } = useCustomDomain();
+  // Only pay for the domains request when a listed skill is actually shared.
+  const { domain: customDomain } = useCustomDomain(
+    skills.some((skill) => !!skill.shareToken),
+  );
   const shareDomain = skillShareDomain(customDomain);
 
   const columns: Column<Skill>[] = [
