@@ -19,12 +19,14 @@ func TestProvisionOrganizationAdminWithoutWorkOSUserIDReturnsError(t *testing.T)
 	seedOrganization(t, ctx, conn, organizationID)
 
 	provisioner := NewProvisioner(conn)
+	acquireCount := conn.Stat().AcquireCount()
 	err := provisioner.ProvisionOrganizationAdmin(ctx, organizationID, InitialOrganizationAdmin{
 		UserID:             "user_test",
 		WorkOSUserID:       "",
 		WorkOSMembershipID: "",
 	})
 	require.EqualError(t, err, "assign initial organization admin: WorkOS user ID is required")
+	require.Equal(t, acquireCount, conn.Stat().AcquireCount())
 
 	_, err = repo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
 	require.ErrorIs(t, err, pgx.ErrNoRows)

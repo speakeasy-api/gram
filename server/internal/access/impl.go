@@ -671,34 +671,6 @@ func RequireStaffForUnproxiedMcp(ctx context.Context, authCtx *contextvalues.Aut
 	return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be %s by Speakeasy staff", action).LogWarn(ctx, logger)
 }
 
-// requirePlatformAdmin returns the auth context and an error if the caller is not
-// a Speakeasy employee. Mirrors the exact condition used by the platform-admin
-// impersonation feature in auth/impl.go: email domain OR admin DB flag.
-// Email is read from the auth context (session cache). Admin is read from the
-// DB because AuthContext does not carry it; the DB value is synced from the
-// Speakeasy provider on every login so it matches the session cache.
-func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
-	}
-	email := ""
-	if ac.Email != nil {
-		email = *ac.Email
-	}
-	if IsSpeakeasyStaffEmail(email) {
-		return ac, nil
-	}
-	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").LogError(ctx, s.logger)
-	}
-	if !user.Admin {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-	return ac, nil
-}
-
 type challengeUserInfo struct {
 	email    string
 	photoURL *string

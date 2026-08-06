@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -91,6 +92,13 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
 	if authCtx.SessionID == nil && !isAssistant {
 		return ctx, nil
+	}
+
+	// Sessions in the shared demo org (which has no membership rows) get a
+	// fixed read-only grant set. This must precede scope and admin overrides so
+	// neither can widen a demo session back to write grants.
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
+		return GrantsToContext(ctx, DemoScopeGrants()), nil
 	}
 
 	if overrides, ok := e.GetScopeOverrides(ctx); ok {

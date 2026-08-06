@@ -21,6 +21,8 @@ type InitialOrganizationAdmin struct {
 	WorkOSMembershipID string
 }
 
+var errInitialAdminWorkOSUserIDRequired = errors.New("assign initial organization admin: WorkOS user ID is required")
+
 type Provisioner struct {
 	db *pgxpool.Pool
 }
@@ -32,6 +34,10 @@ func NewProvisioner(db *pgxpool.Pool) *Provisioner {
 // ProvisionOrganizationAdmin seeds the built-in roles and grants, then assigns
 // the organization creator to the admin role in the same transaction.
 func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizationID string, admin InitialOrganizationAdmin) error {
+	if admin.WorkOSUserID == "" {
+		return errInitialAdminWorkOSUserIDRequired
+	}
+
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin organization access provisioning transaction: %w", err)
@@ -53,7 +59,7 @@ func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizati
 // assigns the organization creator using a caller-owned transaction.
 func (p *Provisioner) ProvisionOrganizationAdminTx(ctx context.Context, tx pgx.Tx, organizationID string, admin InitialOrganizationAdmin) error {
 	if admin.WorkOSUserID == "" {
-		return errors.New("assign initial organization admin: WorkOS user ID is required")
+		return errInitialAdminWorkOSUserIDRequired
 	}
 
 	if err := SeedSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -68,15 +69,27 @@ var UsePublishedPorts = sync.OnceValue(func() bool {
 })
 
 // WithoutPublishedPorts strips module-declared exposed ports when tests can
-// route directly to container IPs. Containers using this option must use a
-// log or exec wait strategy: testcontainers' host-port wait always resolves a
-// mapped port, even when its external check is disabled.
+// route directly to container IPs. Containers using this option must retain a
+// log or exec wait strategy for unpublished-port readiness.
 func WithoutPublishedPorts() testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
 		if !UsePublishedPorts() {
 			req.ExposedPorts = nil
 		}
 		return nil
+	}
+}
+
+// WithPublishedPortWait waits for Docker's host-port proxy only on platforms
+// that publish container ports. Host-port waits cannot be used when ports are
+// unpublished because testcontainers always resolves the mapped port first.
+func WithPublishedPortWait(port nat.Port) testcontainers.CustomizeRequestOption {
+	return func(req *testcontainers.GenericContainerRequest) error {
+		if !UsePublishedPorts() {
+			return nil
+		}
+
+		return testcontainers.WithAdditionalWaitStrategy(wait.ForListeningPort(string(port)))(req)
 	}
 }
 

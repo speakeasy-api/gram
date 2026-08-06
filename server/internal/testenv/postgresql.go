@@ -50,6 +50,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 			// the init-script bootstrap run.
 			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 		),
+		WithPublishedPortWait("5432/tcp"),
 		WithoutPublishedPorts(),
 		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		testcontainers.WithEnv(map[string]string{"PGDATA": "/var/lib/postgresql/data"}),
