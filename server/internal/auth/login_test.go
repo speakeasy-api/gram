@@ -226,6 +226,91 @@ func TestService_Login(t *testing.T) {
 		err = instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent)
 		require.ErrorIs(t, err, redisCache.ErrCacheMiss, "a blank org name must not write an intent")
 	})
+
+	t.Run("login from the sign-up page sets the AuthKit hints", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := "Acme Inc"
+		email := "someone@example.com"
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{
+			Redirect: nil,
+			OrgName:  &orgName,
+			Email:    &email,
+		})
+		require.NoError(t, err)
+
+		parsed, err := url.Parse(result.Location)
+		require.NoError(t, err)
+
+		q := parsed.Query()
+		require.Equal(t, "someone@example.com", q.Get("login_hint"))
+		require.Equal(t, "sign-up", q.Get("screen_hint"))
+	})
+
+	t.Run("an ordinary login sets neither hint", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{
+			Redirect: nil,
+			OrgName:  nil,
+			Email:    nil,
+		})
+		require.NoError(t, err)
+
+		parsed, err := url.Parse(result.Location)
+		require.NoError(t, err)
+
+		q := parsed.Query()
+		require.False(t, q.Has("login_hint"))
+		require.False(t, q.Has("screen_hint"))
+	})
+
+	// The org name is the marker that a login began on /sign-up, so it alone
+	// selects the sign-up screen. An email only fills the field in.
+	t.Run("an org name without an email still lands on the sign-up screen", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := "Acme Inc"
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{
+			Redirect: nil,
+			OrgName:  &orgName,
+			Email:    nil,
+		})
+		require.NoError(t, err)
+
+		parsed, err := url.Parse(result.Location)
+		require.NoError(t, err)
+
+		q := parsed.Query()
+		require.False(t, q.Has("login_hint"))
+		require.Equal(t, "sign-up", q.Get("screen_hint"))
+	})
+
+	t.Run("login with an invalid email errors and stores nothing", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := "Acme Inc"
+		email := "not-an-address"
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{
+			Redirect: nil,
+			OrgName:  &orgName,
+			Email:    &email,
+		})
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
 }
 
 // nonceFromLocation pulls the nonce out of the state param on an authorization

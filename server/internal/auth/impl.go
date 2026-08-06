@@ -490,6 +490,20 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		}
 	}
 
+	// An email means the sign-up page collected one to pre-fill on the identity
+	// provider's screen. Validated at the same gate and for the same reasons,
+	// and likewise only when present.
+	//
+	// Deliberately never stored: nothing server-side reads it after the
+	// redirect, and stashing an unverified address alongside the company name
+	// would invite a later reader to treat it as identity.
+	email := strings.TrimSpace(conv.PtrValOr(payload.Email, ""))
+	if email != "" {
+		if err := validateSignupEmail(email); err != nil {
+			return nil, err
+		}
+	}
+
 	callbackURL := s.buildCallbackURL(ctx)
 
 	nonce, err := generateNonce()
@@ -515,13 +529,23 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	state := encodeStateParam(payload, nonce)
 
+	// The company name is what marks a login as having begun on /sign-up, so it
+	// alone selects AuthKit's sign-up screen. Keeping one signal authoritative
+	// beats a second flag that can drift out of sync with it. The email only
+	// fills the field in, so a sign-up without one still lands on the right
+	// screen.
+	screenHint := ""
+	if orgName != "" {
+		screenHint = "sign-up"
+	}
+
 	authURL, err := s.identity.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 		CallbackURL:     callbackURL,
 		State:           state,
 		Scope:           "",
 		ScopesSupported: nil,
-		LoginHint:       "",
-		ScreenHint:      "",
+		LoginHint:       email,
+		ScreenHint:      screenHint,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)
