@@ -4726,7 +4726,13 @@ ON risk_results (project_id, chat_content_part_id);
 -- this version, has this version already been scanned under this policy).
 -- Partial: the column is NULL on every chat-anchored row, which is nearly
 -- all of them.
-CREATE INDEX IF NOT EXISTS risk_results_skill_version_id_idx
+--
+-- UNIQUE because one version is scanned at most once per policy: content is
+-- immutable per version, so a second row is always a duplicate. The writer
+-- gates on a NOT EXISTS check, which is not atomic against a concurrent
+-- upload of the same content; this is what makes that race collapse to one
+-- row instead of two.
+CREATE UNIQUE INDEX IF NOT EXISTS risk_results_skill_version_id_risk_policy_id_key
 ON risk_results (skill_version_id, risk_policy_id)
 WHERE skill_version_id IS NOT NULL;
 
