@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,13 +33,20 @@ type loginFlow struct {
 	cfg      Config
 	timeout  time.Duration
 	cooldown time.Duration
+	// interactive marks a preflight sign-in already in progress, so the hook
+	// server's concurrent session starts (one goroutine per connection) don't
+	// each open a browser before the first attempt writes its cooldown
+	// marker. Best-effort like the marker itself; the explicit login
+	// subcommand runs in its own process and is not gated by it.
+	interactive atomic.Bool
 }
 
 func newLoginFlow(cfg Config) *loginFlow {
 	return &loginFlow{
-		cfg:      cfg,
-		timeout:  envDuration("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", defaultLoginTimeout),
-		cooldown: envDuration("GRAM_HOOKS_LOGIN_COOLDOWN_SECONDS", defaultLoginCooldown),
+		cfg:         cfg,
+		timeout:     envDuration("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", defaultLoginTimeout),
+		cooldown:    envDuration("GRAM_HOOKS_LOGIN_COOLDOWN_SECONDS", defaultLoginCooldown),
+		interactive: atomic.Bool{},
 	}
 }
 
@@ -51,6 +59,10 @@ func (l *loginFlow) tryInteractive(ctx context.Context) {
 	if ok, _ := loginViable(); !ok {
 		return
 	}
+	if !l.interactive.CompareAndSwap(false, true) {
+		return // another connection is already mid sign-in
+	}
+	defer l.interactive.Store(false)
 	if !l.cooldownElapsed(loginForced()) {
 		return
 	}
