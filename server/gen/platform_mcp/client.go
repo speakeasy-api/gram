@@ -39,6 +39,7 @@ func NewClient(getLifecycle, revokeConnection goa.Endpoint) *Client {
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetLifecycle(ctx context.Context, p *GetLifecyclePayload) (res *PlatformMCPLifecycle, err error) {
 	var ires any
@@ -62,6 +63,7 @@ func (c *Client) GetLifecycle(ctx context.Context, p *GetLifecyclePayload) (res 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RevokeConnection(ctx context.Context, p *RevokeConnectionPayload) (err error) {
 	_, err = c.RevokeConnectionEndpoint(ctx, p)

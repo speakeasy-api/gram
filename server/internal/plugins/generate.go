@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/url"
 	"path"
 	"slices"
 	"sort"
@@ -669,15 +670,6 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	cursorPlugins := make([]marketplaceEntry, 0)
 	codexPlugins := make([]codexMarketplaceEntry, 0)
 
-	if cfg.PlatformMCPEnabled {
-		claudePlugins = append(claudePlugins, marketplaceEntry{
-			Name:        platformMCPPluginName,
-			DisplayName: "Gram Platform MCP",
-			Source:      "./" + platformMCPPluginRoot,
-			Description: "Read-only organization administration through the Gram Platform MCP.",
-		})
-	}
-
 	if cfg.HooksAPIKey != "" {
 		claudeObservability := ClaudeObservabilitySlug(cfg)
 		claudePlugins = append(claudePlugins, marketplaceEntry{
@@ -704,6 +696,15 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Installation:   "INSTALLED_BY_DEFAULT",
 				Authentication: "ON_USE",
 			},
+		})
+	}
+
+	if cfg.PlatformMCPEnabled {
+		claudePlugins = append(claudePlugins, marketplaceEntry{
+			Name:        platformMCPPluginName,
+			DisplayName: "Gram Platform MCP",
+			Source:      "./" + platformMCPPluginRoot,
+			Description: "Read-only organization administration through the Gram Platform MCP.",
 		})
 	}
 
@@ -1939,6 +1940,11 @@ func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
 }
 
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
+	platformURL, err := url.Parse(strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp")
+	if err != nil || platformURL.Host == "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
+		return fmt.Errorf("invalid Platform MCP server URL %q", cfg.ServerURL)
+	}
+
 	meta, err := marshalJSON(claudePluginMeta{
 		Name:        platformMCPPluginName,
 		DisplayName: "Gram Platform MCP",
@@ -1958,7 +1964,7 @@ func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) e
 			Type:    "http",
 			Command: "",
 			Args:    nil,
-			URL:     strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp",
+			URL:     platformURL.String(),
 			Headers: nil,
 		},
 	}})

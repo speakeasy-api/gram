@@ -53,6 +53,7 @@ func EncodeGetLifecycleRequest(encoder func(*http.Request) goahttp.Encoder) func
 // platformMcp getLifecycle endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
 // DecodeGetLifecycleResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -94,6 +95,20 @@ func DecodeGetLifecycleResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewGetLifecyclePlatformMCPLifecycleOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetLifecycleUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "getLifecycle", err)
+			}
+			err = ValidateGetLifecycleUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "getLifecycle", err)
+			}
+			return nil, NewGetLifecycleUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetLifecycleUnauthorizedResponseBody
@@ -287,6 +302,7 @@ func EncodeRevokeConnectionRequest(encoder func(*http.Request) goahttp.Encoder) 
 // the platformMcp revokeConnection endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeRevokeConnectionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -315,6 +331,20 @@ func DecodeRevokeConnectionResponse(decoder func(*http.Response) goahttp.Decoder
 		switch resp.StatusCode {
 		case http.StatusNoContent:
 			return nil, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body RevokeConnectionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "revokeConnection", err)
+			}
+			err = ValidateRevokeConnectionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "revokeConnection", err)
+			}
+			return nil, NewRevokeConnectionUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body RevokeConnectionUnauthorizedResponseBody

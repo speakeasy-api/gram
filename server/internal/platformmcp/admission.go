@@ -64,11 +64,14 @@ func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, organiz
 	if err := ctx.Err(); err != nil {
 		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context after rollout: %w", err)
 	}
-	if rollout == feature.EvaluationIndeterminate {
-		return AdmissionIndeterminate, nil
-	}
-	if rollout == feature.EvaluationDisabled {
+	switch rollout {
+	case feature.EvaluationEnabled:
+	case feature.EvaluationDisabled:
 		return AdmissionDisabled, nil
+	case feature.EvaluationIndeterminate:
+		return AdmissionIndeterminate, nil
+	default:
+		return AdmissionIndeterminate, nil
 	}
 
 	eligible, err := c.eligibility.EligibleForPlatformMCP(ctx, organizationID)

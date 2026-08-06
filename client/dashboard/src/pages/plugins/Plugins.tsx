@@ -732,8 +732,7 @@ function lifecycleStatus(lifecycle: PlatformMcpLifecycle): {
     case "eligible":
       return {
         label: "Ready to connect",
-        description:
-          "Publish the default project marketplace, then install the Platform MCP from it.",
+        description: "Install the Platform MCP from the published marketplace.",
         variant: "information",
       };
     case "marketplace_unpublished":

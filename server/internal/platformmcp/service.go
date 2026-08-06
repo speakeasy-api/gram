@@ -3,7 +3,6 @@ package platformmcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -88,12 +87,12 @@ func (s *Service) GetLifecycle(ctx context.Context, _ *gen.GetLifecyclePayload) 
 		return nil, err
 	}
 	if s.lifecycle == nil {
-		return nil, oops.C(oops.CodeUnexpected)
+		return nil, oops.C(oops.CodeUnavailable)
 	}
 
 	lifecycle, err := s.lifecycle.GetLifecycle(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, fmt.Errorf("get platform mcp lifecycle: %w", err)
+		return nil, oops.E(oops.CodeUnavailable, err, "get platform mcp lifecycle").LogError(ctx, s.logger, attr.SlogError(err))
 	}
 
 	admission := AdmissionIndeterminate
@@ -114,13 +113,13 @@ func (s *Service) RevokeConnection(ctx context.Context, payload *gen.RevokeConne
 		return err
 	}
 	if s.lifecycle == nil {
-		return oops.C(oops.CodeUnexpected)
+		return oops.C(oops.CodeUnavailable)
 	}
 	if err := s.lifecycle.RevokeConnection(ctx, authCtx.ActiveOrganizationID, payload.ConnectionID, time.Now()); err != nil {
 		if errors.Is(err, platformoauth.ErrNotFound) || errors.Is(err, platformoauth.ErrRevoked) {
 			return oops.C(oops.CodeNotFound)
 		}
-		return fmt.Errorf("revoke platform mcp connection: %w", err)
+		return oops.E(oops.CodeUnavailable, err, "revoke platform mcp connection").LogError(ctx, s.logger, attr.SlogError(err))
 	}
 	return nil
 }
@@ -131,7 +130,7 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if s.authorizer == nil {
-		return nil, oops.C(oops.CodeUnexpected)
+		return nil, oops.C(oops.CodeUnavailable)
 	}
 	if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{
 		UserID:         authCtx.UserID,
@@ -143,7 +142,7 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 		if isAuthorizationDenied(err) {
 			return nil, oops.C(oops.CodeForbidden)
 		}
-		return nil, fmt.Errorf("require live organization admin: %w", err)
+		return nil, oops.E(oops.CodeUnavailable, err, "require live organization admin").LogError(ctx, s.logger, attr.SlogError(err))
 	}
 	return authCtx, nil
 }
