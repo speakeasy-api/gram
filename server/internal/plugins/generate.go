@@ -1941,7 +1941,7 @@ func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
 
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
 	platformURL, err := url.Parse(strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp")
-	if err != nil || platformURL.Host == "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
+	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
 		return fmt.Errorf("invalid Platform MCP server URL %q", cfg.ServerURL)
 	}
 

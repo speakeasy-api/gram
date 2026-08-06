@@ -2048,14 +2048,16 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	}
 
 	// An indeterminate result preserves the prior Platform package and its
-	// fingerprint instead of treating an outage as a package revocation.
+	// fingerprint instead of treating an outage as a package revocation. It must
+	// inspect the repository even when the stored fingerprints would otherwise
+	// permit SkipIfUnchanged.
 	publisher := newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionIndeterminate})
 	mock.getRepoFilesCalled = false
 	result, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "platform indeterminate",
-		SkipIfUnchanged: false,
+		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
 	require.False(t, result.Skipped)
@@ -2095,7 +2097,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "platform indeterminate missing repo",
-		SkipIfUnchanged: false,
+		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
 	require.False(t, result.Skipped)

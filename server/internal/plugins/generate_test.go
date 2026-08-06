@@ -129,7 +129,15 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 func TestGeneratePluginPackagesRejectsInvalidPlatformMCPServerURL(t *testing.T) {
 	t.Parallel()
 
-	for _, serverURL := range []string{"", "localhost:8080", "https:///missing-host", "ftp://example.com"} {
+	for _, serverURL := range []string{
+		"",
+		"localhost:8080",
+		"https:///missing-host",
+		"ftp://example.com",
+		"https://user:password@example.com",
+		"https://example.com?query=value",
+		"https://example.com#fragment",
+	} {
 		_, err := GeneratePluginPackages(fingerprintTestPlugins(), GenerateConfig{
 			OrgName:            "Acme Corp",
 			ServerURL:          serverURL,
