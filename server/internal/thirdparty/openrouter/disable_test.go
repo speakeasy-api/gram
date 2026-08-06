@@ -35,8 +35,7 @@ func (u *disableTestUpstream) recorded() []string {
 	return append([]string(nil), u.patches...)
 }
 
-// interceptPatch runs fn while a patch is in flight, which is the window
-// between a refresh reading the key row and writing it back.
+// interceptPatch runs fn while a patch is in flight.
 func (u *disableTestUpstream) interceptPatch(fn func()) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
