@@ -91,7 +91,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		guardian.WithResolver(newUnproxiedMCPMockResolver()),
 	)
 
-	svc := unproxiedmcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
+	svc := unproxiedmcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
 	return ctx, &testInstance{
 		service: svc,

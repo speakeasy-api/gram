@@ -343,29 +343,6 @@ func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
-// TestListChats_RBACDisabled_SeesOnlyOwnChats is the regression guard for the
-// RBAC-disabled org: enforcement is off, so even a would-be admin must fall back
-// to own-sessions-only rather than seeing every chat (Require short-circuits to
-// allow when enforcement is off — the handler must not treat that as admin).
-func TestListChats_RBACDisabled_SeesOnlyOwnChats(t *testing.T) {
-	t.Parallel()
-	ti := newTestChatServiceRBACDisabled(t)
-	// Grant org:admin; with the org's RBAC feature flag off, ShouldEnforce still
-	// returns false and the grant is moot.
-	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
-	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
-
-	result, err := ti.service.ListChats(ctx, defaultPayload())
-	require.NoError(t, err)
-	require.Equal(t, 1, result.Total)
-	require.Len(t, result.Chats, 1)
-	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
-}
-
 // TestListChats_ManagedAssistant_SeesAllChats verifies that the managed
 // assistant runtime (no session, non-admin owner, assistant principal
 // installed) gets project-wide chat results — the sidebar contract.

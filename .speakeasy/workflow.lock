@@ -7,7 +7,7 @@ targets:
         source: Hooks-Ingest
 workflow:
     workflowVersion: 1.0.0
-    speakeasyVersion: pinned
+    speakeasyVersion: 1.791.1
     sources:
         Gram-Internal:
             inputs:

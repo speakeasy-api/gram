@@ -762,6 +762,17 @@ func TestRecoverStaleReservationsBoundsConcurrentBatches(t *testing.T) {
 	require.Len(t, fixture.pendingEvaluations(t), 2)
 	require.Len(t, fixture.reservedEvaluations(t, 3), 1, "one bounded row remains")
 
+	// reservedEvaluations claims through the recovery query, which stamps
+	// updated_at = clock_timestamp() on the remaining row. On a fast runner the
+	// concurrent sweeps below can start inside the millisecond lease and find
+	// nothing stale, so age the row again.
+	aged, err = repo.New(fixture.db).BackdateReservedSkillEfficacyEvaluationsFixture(ctx, repo.BackdateReservedSkillEfficacyEvaluationsFixtureParams{
+		BackdateBy: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+		ProjectID:  fixture.projectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, aged)
+
 	var group sync.WaitGroup
 	results := make([]RecoveryResult, 2)
 	errs := make([]error, 2)
