@@ -163,7 +163,11 @@ func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublish
 	return pub, nil
 }
 
-// Stop flushes every publisher this set has opened.
+// Stop flushes every publisher this set has opened. Flushes run concurrently
+// so shutdown is bounded by the slowest one rather than their sum: under a
+// shared deadline, a sequential loop would let one slow topic starve the rest
+// of their flush window, abandoning buffered messages that then get re-claimed
+// and re-published on the next drain.
 func (s *Set) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	pubs := make([]gcp.EncodedPublisher, 0, len(s.publishers))
@@ -173,12 +177,14 @@ func (s *Set) Stop(ctx context.Context) error {
 	clear(s.publishers)
 	s.mu.Unlock()
 
-	var errs []error
-	for _, pub := range pubs {
-		if err := pub.Stop(ctx); err != nil {
-			errs = append(errs, err)
-		}
+	errs := make([]error, len(pubs))
+	var wg sync.WaitGroup
+	for i, pub := range pubs {
+		wg.Go(func() {
+			errs[i] = pub.Stop(ctx)
+		})
 	}
+	wg.Wait()
 
 	return errors.Join(errs...)
 }
