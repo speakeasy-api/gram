@@ -1179,6 +1179,7 @@ func newStartCommand() *cli.Command {
 				productFeatures,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
+				hookPIScanner,
 				policyBypass,
 				spendGate,
 				shadowMCPClient,

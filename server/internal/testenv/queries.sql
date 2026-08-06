@@ -289,3 +289,16 @@ INSERT INTO risk_results (
   @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
   @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
 );
+
+-- name: CountSkillPromptInjectionResults :one
+-- Test-only fixture: counts prompt-injection findings anchored to a version of
+-- the named skill. Attribution is what makes the finding useful, so tests
+-- assert on the skill_versions join rather than on the finding alone.
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.name = @skill_name
+  AND rr.source = 'prompt_injection'
+  AND rr.found IS TRUE;
