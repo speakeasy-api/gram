@@ -64,7 +64,8 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil)
+	encryptionClient := testenv.NewEncryptionClient(t)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, encryptionClient)
 	provisioner.baseURL = upstream.URL
 
 	const workers = 8
@@ -93,5 +94,49 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "sk-or-race-1", row.Key)
+	require.True(t, row.KeyEncrypted.Valid)
+	require.NotEqual(t, "sk-or-race-1", row.KeyEncrypted.String)
+	decryptedKey, err := encryptionClient.Decrypt(row.KeyEncrypted.String)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-race-1", decryptedKey)
 	require.Equal(t, "hash-1", row.KeyHash)
+}
+
+func TestProvisionAPIKey_BackfillsPlaintextKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "orprovisionbackfill")
+	require.NoError(t, err)
+
+	orgID := "org-" + uuid.NewString()[:8]
+	_, err = repo.New(conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		Key:            "sk-or-legacy",
+		KeyEncrypted:   pgtype.Text{},
+		KeyHash:        "legacy-hash",
+		MonthlyCredits: 100,
+	})
+	require.NoError(t, err)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	encryptionClient := testenv.NewEncryptionClient(t)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, encryptionClient)
+
+	apiKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-legacy", apiKey)
+
+	row, err := repo.New(conn).GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.True(t, row.KeyEncrypted.Valid)
+	require.NotEqual(t, row.Key, row.KeyEncrypted.String)
+	decryptedKey, err := encryptionClient.Decrypt(row.KeyEncrypted.String)
+	require.NoError(t, err)
+	require.Equal(t, row.Key, decryptedKey)
 }

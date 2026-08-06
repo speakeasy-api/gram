@@ -38,6 +38,7 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 		OrganizationID: orgID,
 		KeyType:        "chat",
 		Key:            "sk-chat",
+		KeyEncrypted:   pgtype.Text{},
 		KeyHash:        "hash-chat",
 		MonthlyCredits: 100,
 	})
@@ -46,6 +47,7 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 		OrganizationID: orgID,
 		KeyType:        "internal",
 		Key:            "sk-internal",
+		KeyEncrypted:   pgtype.Text{},
 		KeyHash:        "hash-internal",
 		MonthlyCredits: 100,
 	})
@@ -54,17 +56,14 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 	rows, err := repo.New(conn).GetOpenRouterCreditsMonitoringTargets(ctx, []string{"free"})
 	require.NoError(t, err)
 
-	byKeyType := map[string]string{}
+	keyTypes := map[string]bool{}
 	for _, row := range rows {
 		if row.OrganizationID != orgID {
 			continue
 		}
-		byKeyType[row.KeyType] = row.ApiKey
+		keyTypes[row.KeyType] = true
 	}
-	require.Equal(t, map[string]string{
-		"chat":     "sk-chat",
-		"internal": "sk-internal",
-	}, byKeyType)
+	require.Equal(t, map[string]bool{"chat": true, "internal": true}, keyTypes)
 
 	// The single-key lookup discriminates by type: each read returns its own
 	// row, never the sibling's.

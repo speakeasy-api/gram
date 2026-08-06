@@ -476,8 +476,7 @@ SELECT
     om.slug AS organization_slug,
     om.gram_account_type,
     k.key_type,
-    k.monthly_credits,
-    k.key AS api_key
+    k.monthly_credits
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL
@@ -493,7 +492,6 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
-	ApiKey           string
 }
 
 // Targets for periodic OpenRouter credit usage polling. Filters out disabled
@@ -501,9 +499,7 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 // account-type allowlist so coverage can expand (e.g. add 'pro') without a
 // code change. monthly_credits is the canonical limit last written by
 // RefreshAPIKeyLimit and reflects any per-org overrides applied via the
-// OpenrouterKeyRefreshWorkflow. The api_key is included so the caller can
-// issue the upstream usage HTTP call in a single round-trip — keep it inside
-// the activity boundary and never return it to the workflow.
+// OpenrouterKeyRefreshWorkflow.
 func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, accountTypes []string) ([]GetOpenRouterCreditsMonitoringTargetsRow, error) {
 	rows, err := q.db.Query(ctx, getOpenRouterCreditsMonitoringTargets, accountTypes)
 	if err != nil {
@@ -519,7 +515,6 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.GramAccountType,
 			&i.KeyType,
 			&i.MonthlyCredits,
-			&i.ApiKey,
 		); err != nil {
 			return nil, err
 		}

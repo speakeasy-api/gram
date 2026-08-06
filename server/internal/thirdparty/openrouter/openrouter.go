@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -243,13 +245,14 @@ type OpenRouter struct {
 	orClient        *guardian.HTTPClient
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
+	encryption      *encryption.Client
 	// baseURL is OpenRouterBaseURL outside of tests.
 	baseURL string
 }
 
 var _ Provisioner = (*OpenRouter)(nil)
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, encryptionClient *encryption.Client) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
 	return &OpenRouter{
@@ -262,8 +265,34 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		orClient:        orClient,
 		refresher:       refresher,
 		featureClient:   featureClient,
+		encryption:      encryptionClient,
 		baseURL:         OpenRouterBaseURL,
 	}
+}
+
+func (o *OpenRouter) decryptAPIKey(ctx context.Context, queries *repo.Queries, key repo.OpenrouterApiKey) (string, error) {
+	if key.KeyEncrypted.Valid {
+		plaintext, err := o.encryption.Decrypt(key.KeyEncrypted.String)
+		if err != nil {
+			return "", fmt.Errorf("decrypt openrouter API key: %w", err)
+		}
+
+		return plaintext, nil
+	}
+
+	encryptedKey, err := o.encryption.Encrypt([]byte(key.Key))
+	if err != nil {
+		return "", fmt.Errorf("encrypt openrouter API key: %w", err)
+	}
+	if err := queries.SetOpenRouterKeyEncryption(ctx, repo.SetOpenRouterKeyEncryptionParams{
+		OrganizationID: key.OrganizationID,
+		KeyType:        key.KeyType,
+		KeyEncrypted:   pgtype.Text{String: encryptedKey, Valid: true},
+	}); err != nil {
+		return "", fmt.Errorf("backfill openrouter API key encryption: %w", err)
+	}
+
+	return key.Key, nil
 }
 
 func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
@@ -284,14 +313,17 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 
-	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	case errors.Is(err, pgx.ErrNoRows), key.Key == "" && !key.KeyEncrypted.Valid:
 		openrouterKey, err = o.createAndStoreAPIKey(ctx, orgID, keyType)
 		if err != nil {
 			return "", err
 		}
 
 	default:
-		openrouterKey = key.Key
+		openrouterKey, err = o.decryptAPIKey(ctx, o.repo, key)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		}
 	}
 
 	if err := inv.Check("openrouter provisioning", "key is set", openrouterKey != ""); err != nil {
@@ -336,9 +368,13 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	// ProvisionAPIKey.
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
-	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	case errors.Is(err, pgx.ErrNoRows), key.Key == "" && !key.KeyEncrypted.Valid:
 	default:
-		return key.Key, nil
+		plaintext, err := o.decryptAPIKey(ctx, txRepo, key)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		}
+		return plaintext, nil
 	}
 
 	// Read through the transaction: this goroutine already holds a pool
@@ -362,10 +398,16 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", err
 	}
 
+	encryptedKey, err := o.encryption.Encrypt([]byte(*keyResponse.Key))
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to encrypt openrouter key").LogError(ctx, o.logger)
+	}
+
 	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
 		Key:            *keyResponse.Key,
+		KeyEncrypted:   pgtype.Text{String: encryptedKey, Valid: true},
 		KeyHash:        keyResponse.Data.Hash,
 		MonthlyCredits: int64(creditAmount),
 	})
@@ -425,7 +467,6 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
-		Key:            key.Key,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
@@ -456,7 +497,11 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return 0, limit, nil // the key doesn't exist yet
 	}
 
-	used, _, err := o.GetKeyUsage(ctx, key.Key)
+	apiKey, err := o.decryptAPIKey(ctx, o.repo, key)
+	if err != nil {
+		return 0, limit, err
+	}
+	used, _, err := o.GetKeyUsage(ctx, apiKey)
 	if err != nil {
 		return 0, limit, err
 	}
@@ -467,10 +512,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 // GetKeyUsage issues the upstream `/v1/key` call with the given API key and
 // returns the rounded monthly usage along with the upstream-configured monthly
 // limit already rounded to the int64 representation used by the DB. The
-// returned limit is nil when OpenRouter reports an unlimited key. Callers that
-// already have the key (e.g. the credits monitoring activity, which joins
-// openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
-// in GetCreditsUsed.
+// returned limit is nil when OpenRouter reports an unlimited key.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/key", nil)
 	if err != nil {
@@ -717,6 +759,10 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	if err != nil {
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
+	apiKey, err := o.decryptAPIKey(ctx, o.repo, key)
+	if err != nil {
+		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to decrypt openrouter API key").LogError(ctx, o.logger)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/generation", nil)
 	if err != nil {
@@ -727,7 +773,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	q.Set("id", generationID)
 	req.URL.RawQuery = q.Encode()
 
-	req.Header.Set("Authorization", "Bearer "+key.Key)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)

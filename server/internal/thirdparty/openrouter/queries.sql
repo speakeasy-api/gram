@@ -8,12 +8,14 @@ INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
   , key
+  , key_encrypted
   , key_hash
   , monthly_credits
 ) VALUES (
     @organization_id
   , @key_type
   , @key
+  , @key_encrypted
   , @key_hash
   , @monthly_credits
 )
@@ -26,9 +28,17 @@ WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE;
 
+-- name: SetOpenRouterKeyEncryption :exec
+UPDATE openrouter_api_keys
+SET key_encrypted = @key_encrypted
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND key_encrypted IS NULL
+  AND deleted IS FALSE;
+
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key
+SET monthly_credits = @monthly_credits, key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
