@@ -41,6 +41,11 @@ describe("EnterpriseTrialStatusCard", () => {
   it("renders the active trial status", () => {
     render(<EnterpriseTrialStatusCard />);
 
+    expect(
+      screen.getByRole("group", {
+        name: "Enterprise trial: Day 1 of 14, 14 days left",
+      }),
+    ).toBeTruthy();
     expect(screen.getByText("TRIAL")).toBeTruthy();
     expect(screen.getByText("Day 1/14")).toBeTruthy();
     expect(screen.getByText("14 days left")).toBeTruthy();

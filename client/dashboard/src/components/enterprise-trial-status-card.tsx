@@ -22,10 +22,13 @@ export function EnterpriseTrialStatusCard(): JSX.Element | null {
   const daysLeftLabel = `${status.remainingDays} day${status.remainingDays === 1 ? "" : "s"} left`;
   const progressValue = status.progress * 100;
   const progressLabel = `Day ${status.dayNumber} of ${status.totalDays}`;
+  const trialStatusLabel = `Enterprise trial: ${progressLabel}, ${daysLeftLabel}`;
 
   return (
     <Card className="shadow-none group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none">
       <div
+        role="group"
+        aria-label={trialStatusLabel}
         title={`Trial: ${daysLeftLabel}`}
         className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center"
       >
