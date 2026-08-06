@@ -208,3 +208,53 @@ func TestResolve_TrailingArgumentDoesNotDisplacePackage(t *testing.T) {
 	got := identity.Resolve("npx -y @scope/real-server --docs other-package")
 	require.Equal(t, "@scope/real-server", got.PackageName)
 }
+
+// Real configurations pass the server's own arguments after the package, e.g.
+// the filesystem server's allowed directories.
+func TestResolve_ServerArgumentsAfterPackageAreIgnored(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("npx -y @modelcontextprotocol/server-filesystem /Users/someone/Desktop /Users/someone/Downloads")
+	require.Equal(t, identity.KindPackage, got.Kind)
+	require.Equal(t, "@modelcontextprotocol/server-filesystem", got.PackageName)
+	require.False(t, got.VersionPinned)
+
+	pypi := identity.Resolve("uvx mcp-server-git --repository /Users/someone/projects/repo")
+	require.Equal(t, "mcp-server-git", pypi.PackageName)
+	require.Equal(t, identity.RegistryPyPI, pypi.Registry)
+}
+
+// `npx -p <pkg> <bin>` installs <pkg> and runs a binary from it, so the bare
+// word after the flag is a binary name rather than a package.
+func TestResolve_PackageFlagNamesThePackage(t *testing.T) {
+	t.Parallel()
+
+	separated := identity.Resolve("npx -p some-pkg@1.2.3 some-binary")
+	require.Equal(t, "some-pkg", separated.PackageName)
+	require.Equal(t, "1.2.3", separated.PackageVersion)
+	require.True(t, separated.VersionPinned)
+
+	joined := identity.Resolve("npx --package=some-pkg@1.2.3 some-binary")
+	require.Equal(t, "some-pkg", joined.PackageName)
+	require.Equal(t, "1.2.3", joined.PackageVersion)
+
+	long := identity.Resolve("npx --package some-pkg some-binary")
+	require.Equal(t, "some-pkg", long.PackageName)
+}
+
+// mcp-remote's own documented invocation uses the -p form, so the proxy
+// diversion has to survive it.
+func TestResolve_MCPRemoteViaPackageFlag(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("npx -p mcp-remote@latest mcp-remote-client https://remote.mcp.example/sse")
+	require.Equal(t, identity.KindRemote, got.Kind)
+	require.Equal(t, "url:https://remote.mcp.example/sse", got.ArtifactRef)
+}
+
+func TestResolve_PackageFlagWithNoValueIsUnresolved(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, identity.KindUnresolved, identity.Resolve("npx -p").Kind)
+	require.Equal(t, identity.KindUnresolved, identity.Resolve("npx --package").Kind)
+}
