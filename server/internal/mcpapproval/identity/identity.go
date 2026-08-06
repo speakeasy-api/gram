@@ -218,23 +218,63 @@ func resolveCommand(command string) Identity {
 
 // firstPackageSpec takes the first non-flag argument as the package spec.
 // Flags before it belong to the launcher (`-y`, `--yes`), and first-wins means
-// a trailing argument cannot displace the real package.
+// a trailing argument cannot displace the real package. Real configurations
+// pass the server's own arguments after the package
+// (`npx -y @scope/server /some/path`), so stopping at the first candidate is
+// what keeps those out.
 //
-// A launcher flag that takes a separate value (`npx --package foo bar`) is not
-// interpreted: the value is read as the package, which is the conservative
-// reading since that value is the package npx installs.
+// The exception is a flag that names the package itself. `npx -p <pkg> <bin>`
+// and `npx --package=<pkg> <bin>` both install <pkg> and then run a binary
+// from it, so the bare word after them is a binary name, not a package.
+// mcp-remote's own documented invocation takes that form.
 func firstPackageSpec(args []string, registry Registry) Identity {
 	for i, arg := range args {
+		if spec, ok := packageFlagValue(arg); ok {
+			return packageSpec(spec, args[i+1:], registry)
+		}
+		if isPackageFlag(arg) {
+			if i+1 >= len(args) {
+				return unresolved
+			}
+			return packageSpec(args[i+1], args[i+2:], registry)
+		}
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		if registry == RegistryNPM && isMCPRemoteSpec(arg) {
-			return mcpRemoteIdentity(args[i+1:])
-		}
-		return packageIdentity(arg, registry)
+
+		return packageSpec(arg, args[i+1:], registry)
 	}
 
 	return unresolved
+}
+
+// isPackageFlag reports whether an argument is the separated form of npx's
+// package selector, whose value is the following argument.
+func isPackageFlag(arg string) bool {
+	return arg == "-p" || arg == "--package"
+}
+
+// packageFlagValue extracts the value from the joined form of npx's package
+// selector (`--package=foo`, `-p=foo`).
+func packageFlagValue(arg string) (string, bool) {
+	for _, prefix := range []string{"--package=", "-p="} {
+		if value, ok := strings.CutPrefix(arg, prefix); ok && value != "" {
+			return value, true
+		}
+	}
+
+	return "", false
+}
+
+// packageSpec resolves a package spec, diverting to the proxy's target when
+// the package is mcp-remote. rest is what followed the spec, which is where
+// that target appears.
+func packageSpec(spec string, rest []string, registry Registry) Identity {
+	if registry == RegistryNPM && isMCPRemoteSpec(spec) {
+		return mcpRemoteIdentity(rest)
+	}
+
+	return packageIdentity(spec, registry)
 }
 
 // isMCPRemoteSpec reports whether an argument is the npm spec for mcp-remote,
