@@ -642,6 +642,19 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	trial, err := s.orgRepo.GetActiveEnterpriseTrial(ctx, authCtx.ActiveOrganizationID)
+	var enterpriseTrial *gen.EnterpriseTrial
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading active enterprise trial").LogError(ctx, s.logger)
+	default:
+		enterpriseTrial = &gen.EnterpriseTrial{
+			StartedAt: conv.FromPGTimestamptz(trial.CreatedAt),
+			EndsAt:    conv.FromPGTimestamptz(trial.EndsAt),
+		}
+	}
+
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
@@ -756,7 +769,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		GramAccountType:       authCtx.AccountType,
 		HasActiveSubscription: authCtx.HasActiveSubscription,
 		Whitelisted:           authCtx.Whitelisted,
-		EnterpriseTrial:       nil,
+		EnterpriseTrial:       enterpriseTrial,
 		UserID:                userInfo.UserID,
 		UserEmail:             userInfo.Email,
 		UserSignature:         userInfo.UserPylonSignature,

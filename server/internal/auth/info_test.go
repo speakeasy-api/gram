@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestInfoTransport_EnterpriseTrialNull(t *testing.T) {
@@ -54,6 +56,108 @@ func TestInfoTransport_EnterpriseTrialNull(t *testing.T) {
 
 func TestService_Info(t *testing.T) {
 	t.Parallel()
+
+	setupInfoRequest := func(t *testing.T) (context.Context, *testInstance, string) {
+		t.Helper()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+		session := sessions.Session{
+			SessionID:            t.Name(),
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: userInfo.Organizations[0].ID,
+			WorkOSSessionID:      "",
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+
+		return ctx, instance, session.ActiveOrganizationID
+	}
+
+	insertEnterpriseTrial := func(t *testing.T, ctx context.Context, instance *testInstance, organizationID string, createdAt, endsAt time.Time, convertedAt, demotedAt *time.Time) {
+		t.Helper()
+
+		require.NoError(t, testrepo.New(instance.conn).InsertEnterpriseTrialFixture(ctx, testrepo.InsertEnterpriseTrialFixtureParams{
+			OrganizationID: organizationID,
+			CreatedAt:      conv.ToPGTimestamptz(createdAt),
+			EndsAt:         conv.ToPGTimestamptz(endsAt),
+			ConvertedAt:    conv.PtrToPGTimestamptz(convertedAt),
+			DemotedAt:      conv.PtrToPGTimestamptz(demotedAt),
+		}))
+	}
+
+	timestampPtr := func(value time.Time) *time.Time {
+		return &value
+	}
+
+	t.Run("returns active enterprise trial", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, instance, organizationID := setupInfoRequest(t)
+		startedAt := time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC)
+		endsAt := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+		insertEnterpriseTrial(t, ctx, instance, organizationID, startedAt, endsAt, nil, nil)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Equal(t, &gen.EnterpriseTrial{
+			StartedAt: "2026-08-01T12:00:00Z",
+			EndsAt:    "2026-08-15T12:00:00Z",
+		}, result.EnterpriseTrial)
+	})
+
+	t.Run("returns no enterprise trial when the organization has no trial row", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, instance, _ := setupInfoRequest(t)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Nil(t, result.EnterpriseTrial)
+	})
+
+	for _, test := range []struct {
+		name        string
+		endsAt      time.Time
+		convertedAt *time.Time
+		demotedAt   *time.Time
+	}{
+		{
+			name:        "converted",
+			endsAt:      time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+			convertedAt: timestampPtr(time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC)),
+		},
+		{
+			name:      "demoted",
+			endsAt:    time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+			demotedAt: timestampPtr(time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC)),
+		},
+		{
+			name:   "expired",
+			endsAt: time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC),
+		},
+	} {
+		t.Run("does not return "+test.name+" enterprise trial", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, instance, organizationID := setupInfoRequest(t)
+			insertEnterpriseTrial(t, ctx, instance, organizationID, time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC), test.endsAt, test.convertedAt, test.demotedAt)
+
+			result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+			require.NoError(t, err)
+			require.Nil(t, result.EnterpriseTrial)
+		})
+	}
 
 	t.Run("successful info request for regular user", func(t *testing.T) {
 		t.Parallel()
