@@ -439,6 +439,9 @@ func (s *Service) callPlatformToolsetTool(
 		if errors.As(err, &shareableErr) {
 			return nil, fmt.Errorf("execute platform tool: %w", err)
 		}
+		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
+			return nil, rejected
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	outputBytes = int64(rw.body.Len())
