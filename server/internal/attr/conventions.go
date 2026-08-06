@@ -396,6 +396,8 @@ const (
 	ResourceURNKey                    = attribute.Key("gram.resource.urn")
 	ResourceURIKey                    = attribute.Key("gram.resource.uri")
 	SvixAppIDKey                      = attribute.Key("gram.svix.app_id")
+	SvixMessageIDKey                  = attribute.Key("gram.svix.message_id")
+	WebhookDropReasonKey              = attribute.Key("gram.webhook.drop_reason")
 	SvixPreviousAppIDKey              = attribute.Key("gram.svix.previous_app_id")
 	ToolsetIDKey                      = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                    = attribute.Key("gram.toolset.slug")
@@ -1679,6 +1681,14 @@ func SlogSlackTeamID(v string) slog.Attr      { return slog.String(string(SlackT
 
 func SvixAppID(v string) attribute.KeyValue { return SvixAppIDKey.String(v) }
 func SlogSvixAppID(v string) slog.Attr      { return slog.String(string(SvixAppIDKey), v) }
+
+func SvixMessageID(v string) attribute.KeyValue { return SvixMessageIDKey.String(v) }
+func SlogSvixMessageID(v string) slog.Attr      { return slog.String(string(SvixMessageIDKey), v) }
+
+func WebhookDropReason(v string) attribute.KeyValue { return WebhookDropReasonKey.String(v) }
+func SlogWebhookDropReason(v string) slog.Attr {
+	return slog.String(string(WebhookDropReasonKey), v)
+}
 
 func SvixPreviousAppID(v string) attribute.KeyValue { return SvixPreviousAppIDKey.String(v) }
 func SlogSvixPreviousAppID(v string) slog.Attr      { return slog.String(string(SvixPreviousAppIDKey), v) }

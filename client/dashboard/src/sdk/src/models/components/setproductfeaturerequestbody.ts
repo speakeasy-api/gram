@@ -14,7 +14,6 @@ export const FeatureName = {
   ToolIoLogs: "tool_io_logs",
   SessionCapture: "session_capture",
   AuthzChallengeLogging: "authz_challenge_logging",
-  Webhooks: "webhooks",
   Sso: "sso",
   Scim: "scim",
   HooksBrowserLogin: "hooks_browser_login",

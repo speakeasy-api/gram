@@ -47,14 +47,6 @@ func WithExactGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) c
 	return authz.GrantsToContext(ctx, normalized)
 }
 
-func RBACAlwaysEnabled(context.Context, string) (bool, error) {
-	return true, nil
-}
-
-func RBACAlwaysDisabled(context.Context, string) (bool, error) {
-	return false, nil
-}
-
 func ChallengeLoggingAlwaysDisabled(context.Context, string) (bool, error) {
 	return false, nil
 }

@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // maxBatchSize is the max number of outbox rows fetched per workflow run.
@@ -81,16 +80,14 @@ type Relay struct {
 	db          *pgxpool.Pool
 	svixClient  *svix.Svix
 	maxAttempts int32
-	features    *productfeatures.Client
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, svixClient *svix.Svix, features *productfeatures.Client) *Relay {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, svixClient *svix.Svix) *Relay {
 	return &Relay{
 		logger:      logger,
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"),
 		db:          db,
 		svixClient:  svixClient,
-		features:    features,
 		maxAttempts: maxAttempts,
 	}
 }
@@ -148,14 +145,10 @@ func (r *Relay) FilterNoopEvents(ctx context.Context, events []*Event) ([]*Event
 
 	total := 0
 	validEvents := make([]*Event, 0, len(events))
-	featureCheck := make(map[string]bool, len(events))
 	for _, res := range events {
-		enabled, err := areWebhooksEnabled(ctx, r.features, featureCheck, res)
-		if err != nil {
-			return nil, err
-		}
-
-		if enabled {
+		// 1. check if the org has onboarded to Svix
+		// 2. check that even if they onboarded, they haven't later disabled webhooks
+		if res.SvixAppID != "" && res.WebhooksEnabled {
 			validEvents = append(validEvents, res)
 			continue
 		}
@@ -346,25 +339,4 @@ func isPermanentSvixError(err error) bool {
 		return true
 	}
 	return false
-}
-
-func areWebhooksEnabled(
-	ctx context.Context,
-	client *productfeatures.Client,
-	inMemCache map[string]bool,
-	res *Event,
-) (bool, error) {
-	if _, ok := inMemCache[res.OrganizationID]; !ok {
-		featureEnabled, err := client.IsFeatureEnabled(ctx, res.OrganizationID, productfeatures.FeatureWebhooks)
-		if err != nil {
-			return false, fmt.Errorf("check webhooks feature flag: %w", err)
-		}
-
-		// 1. check the feature flag for the given org
-		// 2. check if the org has onboarded to Svix
-		// 3. check that even if they onboarded, they haven't later disabled webhooks
-		inMemCache[res.OrganizationID] = featureEnabled && res.SvixAppID != "" && res.WebhooksEnabled
-	}
-
-	return inMemCache[res.OrganizationID], nil
 }

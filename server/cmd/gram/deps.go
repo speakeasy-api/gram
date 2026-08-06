@@ -43,6 +43,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -67,6 +68,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -1045,6 +1047,36 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
+	// The outbox drain runs inside a Temporal activity, so a Pub/Sub stall must
+	// surface as a failed batch rather than as unbounded buffering behind an
+	// activity that has already claimed its rows.
+	outboxPublishSettings := pubsub.DefaultPublishSettings
+	outboxPublishSettings.Timeout = 30 * time.Second
+	outboxPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	outboxPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	outboxPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	outboxPublisher := gcp.NewRawPublisher(psbroker, outbox.ProtobufType,
+		gcp.WithRawPublishSettings(&outboxPublishSettings),
+	)
+	pubs = append(pubs, labelledStop{label: "outbox", pub: outboxPublisher})
+
+	// Fail here rather than at publish time. A topic that is registered but not
+	// resolvable would otherwise dead-letter every row written to it, one row at
+	// a time, with nothing to point at the wiring mistake that caused it.
+	if err := outbox.AssertResolvable(func(name protoreflect.FullName) error {
+		msg, ok := outbox.ProtobufType(name)
+		if !ok {
+			return fmt.Errorf("not in registry")
+		}
+		if _, err := psbroker.PublisherForMessage(ctx, msg); err != nil {
+			return fmt.Errorf("resolve publisher: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to verify outbox topics: %w", err)
+	}
+
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, pub := range pubs {
@@ -1056,6 +1088,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
+		Outbox:                  outboxPublisher,
 		PresidioAnalysis:        presidioAnalysis,
 		GitleaksAnalysis:        gitleaksAnalysis,
 		PromptInjectionAnalysis: promptInjectionAnalysis,

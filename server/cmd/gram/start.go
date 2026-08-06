@@ -579,6 +579,7 @@ func newStartCommand() *cli.Command {
 			idpClient := identity.NewWorkOSAdapter(umClient)
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			authzProvisioner := authz.NewProvisioner(db)
 
 			identityResolver := identity.NewResolver(
 				logger,
@@ -592,7 +593,6 @@ func newStartCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
-				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -688,7 +688,6 @@ func newStartCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
-			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 			if err != nil {
@@ -698,7 +697,6 @@ func newStartCommand() *cli.Command {
 				logger,
 				db,
 				chDB,
-				rbacEnabled,
 				challengeLoggingEnabled,
 				roleClient,
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
@@ -1147,10 +1145,10 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("create spend gate: %w", err)
 			}
 
-			about.Attach(mux, about.NewService(logger, tracerProvider))
+			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger, emailService, siteURL))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL))
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL.String()))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
@@ -1218,7 +1216,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
-				productFeatures,
+				authzProvisioner,
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
