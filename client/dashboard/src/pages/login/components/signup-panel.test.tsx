@@ -25,23 +25,18 @@ function renderPanel(initialEntry = "/sign-up") {
 }
 
 describe("SignUpPanel", () => {
-  it("asks only for the company name", () => {
+  it("asks for the email and company name only", () => {
     renderPanel();
+    expect(screen.getByLabelText("Work email")).toBeTruthy();
     expect(screen.getByLabelText("Company name")).toBeTruthy();
-    expect(screen.queryByLabelText("Work email")).toBeNull();
+    // The person's own name is deliberately absent: AuthKit has no parameter
+    // to pre-fill it, so asking here would mean typing it twice.
     expect(screen.queryByLabelText("Full name")).toBeNull();
-  });
-
-  it("labels the CTA with the identity provider", () => {
-    renderPanel();
-    expect(
-      screen.getByRole("button", { name: /continue with google/i }),
-    ).toBeTruthy();
   });
 
   it("leaves the CTA enabled on a pristine empty form", () => {
     renderPanel();
-    const cta = screen.getByRole("button", { name: /continue with google/i });
+    const cta = screen.getByRole("button", { name: /start trial/i });
     expect(cta.hasAttribute("disabled")).toBe(false);
   });
 
@@ -49,11 +44,34 @@ describe("SignUpPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(
-      screen.getByRole("button", { name: /continue with google/i }),
-    );
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
+    await user.click(screen.getByRole("button", { name: /start trial/i }));
 
     expect(await screen.findByText("Company name is required")).toBeTruthy();
+  });
+
+  it("requires an email before handing off", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+    await user.click(screen.getByRole("button", { name: /start trial/i }));
+
+    expect(await screen.findByText("Email is required")).toBeTruthy();
+  });
+
+  it("rejects a malformed email and disables the CTA", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.type(screen.getByLabelText("Work email"), "not-an-address");
+
+    expect(await screen.findByText(/valid email/i)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: /start trial/i })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("rejects characters the server would reject and disables the CTA", async () => {
@@ -67,7 +85,7 @@ describe("SignUpPanel", () => {
     ).toBeTruthy();
     expect(
       screen
-        .getByRole("button", { name: /continue with google/i })
+        .getByRole("button", { name: /start trial/i })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
@@ -80,15 +98,15 @@ describe("SignUpPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    await user.click(
-      screen.getByRole("button", { name: /continue with google/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /start trial/i }));
 
     expect(assign).toHaveBeenCalledTimes(1);
     const target = assign.mock.calls[0]?.[0] as string;
     expect(target).toContain("/rpc/auth.login");
     expect(target).toContain("org_name=Acme+Inc");
+    expect(target).toContain("email=someone%40example.com");
 
     assign.mockRestore();
   });
@@ -105,10 +123,9 @@ describe("SignUpPanel", () => {
     // page. JavaScript's \s matches it and the server's Go regex does not, so
     // without normalizing, this passes here and 500s there — on a top-level
     // navigation the panel cannot catch.
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    await user.click(
-      screen.getByRole("button", { name: /continue with google/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /start trial/i }));
 
     expect(assign).toHaveBeenCalledTimes(1);
     const target = assign.mock.calls[0]?.[0] as string;
@@ -131,10 +148,9 @@ describe("SignUpPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    await user.click(
-      screen.getByRole("button", { name: /continue with google/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /start trial/i }));
 
     expect(telemetryCapture).toHaveBeenCalledWith("onboarding_event", {
       action: "signup_started",
@@ -152,8 +168,9 @@ describe("SignUpPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-    const cta = screen.getByRole("button", { name: /continue with google/i });
+    const cta = screen.getByRole("button", { name: /start trial/i });
 
     await user.click(cta);
     expect(cta.hasAttribute("disabled")).toBe(true);
@@ -172,9 +189,7 @@ describe("SignUpPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(
-      screen.getByRole("button", { name: /continue with google/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /start trial/i }));
 
     expect(await screen.findByText("Company name is required")).toBeTruthy();
     expect(telemetryCapture).not.toHaveBeenCalled();

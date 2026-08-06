@@ -1,8 +1,6 @@
-import googleMark from "@/assets/google-mark.svg";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
-import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
@@ -26,6 +24,26 @@ function normalizeCompanyName(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+// Mirrors the server's validateSignupEmail: a length bound, exactly one `@`
+// with both sides non-empty, and no whitespace. Deliberately not an RFC 5322
+// grammar — the identity provider is authoritative and the user can change
+// this on the very next screen, so a stricter rule here could only reject
+// addresses WorkOS would have accepted.
+const MAX_EMAIL_LENGTH = 254;
+
+function validateEmail(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return "Email is required";
+  if (trimmed.length > MAX_EMAIL_LENGTH) {
+    return `Email must be ${MAX_EMAIL_LENGTH} characters or fewer`;
+  }
+  const parts = trimmed.split("@");
+  if (parts.length !== 2 || !parts[0] || !parts[1] || /\s/.test(trimmed)) {
+    return "Enter a valid email address";
+  }
+  return undefined;
+}
+
 function validateCompanyName(value: string): string | undefined {
   const normalized = normalizeCompanyName(value);
   if (!normalized) return "Company name is required";
@@ -46,7 +64,7 @@ function firstError(errors: unknown[]): string | undefined {
 export function SignUpPanel(): JSX.Element {
   const telemetry = useTelemetry();
   const form = useForm({
-    defaultValues: { companyName: "" },
+    defaultValues: { email: "", companyName: "" },
     onSubmit: ({ value }) => {
       // The server has no identity until the identity provider answers, so it
       // can't count this attempt — only the client sees it. Firing here joins
@@ -60,9 +78,14 @@ export function SignUpPanel(): JSX.Element {
       // name rides on this one login request as a query param, is stashed
       // against the login nonce, and stops there: it is not carried through
       // the identity-provider round trip and is not on the URL the user lands
-      // on afterwards.
+      // on afterwards. The email becomes WorkOS's login_hint so the field
+      // arrives pre-filled, and is never stored at all.
       window.location.assign(
-        buildLoginRedirectURL(null, normalizeCompanyName(value.companyName)),
+        buildLoginRedirectURL(
+          null,
+          normalizeCompanyName(value.companyName),
+          value.email.trim(),
+        ),
       );
     },
   });
@@ -119,10 +142,10 @@ export function SignUpPanel(): JSX.Element {
           {([canSubmit, isSubmitting, isSubmitted]) => (
             <>
               <form.Field
-                name="companyName"
+                name="email"
                 validators={{
-                  onChange: ({ value }) => validateCompanyName(value),
-                  onSubmit: ({ value }) => validateCompanyName(value),
+                  onChange: ({ value }) => validateEmail(value),
+                  onSubmit: ({ value }) => validateEmail(value),
                 }}
               >
                 {(field) => {
@@ -133,17 +156,16 @@ export function SignUpPanel(): JSX.Element {
                         htmlFor={field.name}
                         className="auth-mono text-[12px] text-(--muted-strong)"
                       >
-                        Company name
+                        Work email
                       </label>
                       <input
                         id={field.name}
                         name={field.name}
-                        type="text"
+                        type="email"
                         value={field.state.value}
                         onChange={(e) => field.handleChange(e.target.value)}
                         onBlur={field.handleBlur}
-                        placeholder="Acme Inc"
-                        disabled={isSubmitting}
+                        placeholder="you@company.com"
                         aria-invalid={error ? true : undefined}
                         aria-describedby={
                           error ? `${field.name}-error` : undefined
@@ -168,35 +190,75 @@ export function SignUpPanel(): JSX.Element {
                 }}
               </form.Field>
 
-              {/* The mark swaps for a spinner in the same leading slot and the
-                  label is unchanged, so the button keeps its width while the
-                  handoff is in flight.
+              <form.Field
+                name="companyName"
+                validators={{
+                  onChange: ({ value }) => validateCompanyName(value),
+                  onSubmit: ({ value }) => validateCompanyName(value),
+                }}
+              >
+                {(field) => {
+                  const error = firstError(field.state.meta.errors);
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <label
+                        htmlFor={field.name}
+                        className="auth-mono text-[12px] text-(--muted-strong)"
+                      >
+                        Company name
+                      </label>
+                      <input
+                        id={field.name}
+                        name={field.name}
+                        type="text"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="Acme Inc"
+                        aria-invalid={error ? true : undefined}
+                        aria-describedby={
+                          error ? `${field.name}-error` : undefined
+                        }
+                        className={cn(
+                          "w-full rounded-md border bg-(--card) px-3.5 py-[11px] text-[16px] text-black placeholder:text-(--muted) placeholder:opacity-55 focus:outline-none",
+                          error
+                            ? "border-destructive-default"
+                            : "border-(--input-edge) focus:border-(--focus)",
+                        )}
+                      />
+                      {error && (
+                        <p
+                          id={`${field.name}-error`}
+                          className="mt-0.5 text-[12px] leading-[1.45] text-destructive"
+                        >
+                          {error}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
+              </form.Field>
 
-                  isSubmitted keeps the button locked afterwards: the handoff is
-                  a navigation, not an awaited promise, so isSubmitting flips
-                  back before the browser leaves the page. Without it a second
-                  click fires signup_started twice. */}
+              {/* No spinner: the handoff is a top-level navigation, not an
+                  awaited promise, so isSubmitting flips back before the browser
+                  leaves the page and a spinner would flash for a few frames at
+                  most.
+
+                  isSubmitted keeps the button locked afterwards. Without it a
+                  second click fires signup_started twice.
+
+                  The label names no identity provider. The destination is
+                  AuthKit's hosted page, which offers every method enabled in
+                  WorkOS — email and password among them. */}
               <button
                 type="submit"
                 disabled={!canSubmit || isSubmitting || isSubmitted}
                 className={cn(
                   AUTH_BUTTON_CLASSES,
-                  "mx-auto gap-3 px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
+                  "mx-auto px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
                 )}
               >
-                {isSubmitting ? (
-                  <Loader2
-                    className="h-[18px] w-[18px] flex-none animate-spin"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <img
-                    src={googleMark}
-                    alt=""
-                    className="h-[18px] w-[18px] flex-none"
-                  />
-                )}
-                Continue with Google
+                Start Trial
               </button>
             </>
           )}
