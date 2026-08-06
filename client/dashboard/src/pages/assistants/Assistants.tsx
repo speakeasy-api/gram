@@ -12,7 +12,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { UpdatedAt } from "@/components/updated-at";
@@ -171,11 +171,11 @@ export default function AssistantsIndex(): JSX.Element {
           className="flex w-full flex-col"
         >
           <div className="border-b">
-            <TabsList className="h-auto gap-6 bg-transparent p-0">
+            <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
               <PageTabsTrigger value="audit">Activity</PageTabsTrigger>
-            </TabsList>
+            </PageTabsList>
           </div>
           <TabsContent
             value="assistants"
@@ -308,7 +308,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     <CardContextMenu actions={actions}>
       <routes.assistants.detail.Link
         params={[assistant.id]}
-        className="focus-visible:ring-ring block h-full no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <Card.Entity icon={<AssistantIcon />}>
           {/* Header row: name + actions */}

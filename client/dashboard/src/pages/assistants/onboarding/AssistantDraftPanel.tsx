@@ -9,7 +9,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
@@ -130,11 +130,11 @@ export function AssistantDraftPanel(): JSX.Element {
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="border-border border-b px-4">
-            <TabsList className="h-auto gap-6 bg-transparent p-0">
+            <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
-            </TabsList>
+            </PageTabsList>
           </div>
 
           <TabsContent

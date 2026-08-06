@@ -133,7 +133,9 @@ const ImpersonationBanner = () => {
       )}
     >
       <ShieldAlert className={cn("h-3.5 w-3.5 shrink-0", labelTone)} />
-      <span className={cn("text-eyebrow", labelTone)}>
+      {/* Plain concatenation: tailwind-merge would treat text-eyebrow and the
+          text-default-* tone as conflicting text-* utilities and drop one. */}
+      <span className={`text-eyebrow ${labelTone}`}>
         {isDemo
           ? "Demo org — sample data"
           : `Impersonating ${organization.slug}`}

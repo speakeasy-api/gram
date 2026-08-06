@@ -15,7 +15,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -161,7 +161,7 @@ export default function RemoteMCPDetails(): JSX.Element {
         >
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 bg-transparent p-0">
+              <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="mcp-servers">
                   MCP Servers
@@ -169,7 +169,7 @@ export default function RemoteMCPDetails(): JSX.Element {
                     ` (${linkedMcpServers.length})`}
                 </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
-              </TabsList>
+              </PageTabsList>
             </div>
           </div>
 
