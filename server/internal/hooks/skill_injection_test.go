@@ -44,6 +44,7 @@ func countSkillScanRecords(t *testing.T, ctx context.Context, ti *testInstance, 
 	count, err := testrepo.New(ti.conn).CountSkillScanRecords(ctx, testrepo.CountSkillScanRecordsParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillName: skillName,
+		FoundOnly: false,
 	})
 	require.NoError(t, err)
 	return int(count)
@@ -75,9 +76,10 @@ func countSkillInjectionFindings(t *testing.T, ctx context.Context, ti *testInst
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	count, err := testrepo.New(ti.conn).CountSkillPromptInjectionResults(ctx, testrepo.CountSkillPromptInjectionResultsParams{
+	count, err := testrepo.New(ti.conn).CountSkillScanRecords(ctx, testrepo.CountSkillScanRecordsParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillName: skillName,
+		FoundOnly: true,
 	})
 	require.NoError(t, err)
 	return int(count)
@@ -145,9 +147,12 @@ func TestSkillCapture_JudgeFailureRecordsNothing(t *testing.T) {
 	require.Equal(t, 0, countSkillScanRecords(t, ctx, ti, "unjudged-skill"))
 }
 
-// The version left unscanned by a failed judge is picked up by a later upload
-// of the same content, rather than being permanently written off as clean.
-func TestSkillCapture_UnscannedVersionIsScannedOnNextUpload(t *testing.T) {
+// Endpoint contract, not an end-to-end retry: if a second upload of the same
+// content arrives, a version left unscanned by a failed judge is scanned then
+// rather than written off as clean. Nothing in production sends that second
+// upload today - ingest_hooks.go sets content_required only for a hash the
+// server has not seen - so an outage still loses the version in practice.
+func TestSkillCapture_UnscannedVersionIsScannedOnRepeatUpload(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = captureFeatureStub{skills: true}
@@ -158,17 +163,17 @@ func TestSkillCapture_UnscannedVersionIsScannedOnNextUpload(t *testing.T) {
 	activateAndUploadSkill(t, ctx, ti, "retried-skill", body)
 	require.Equal(t, 0, countSkillScanRecords(t, ctx, ti, "retried-skill"))
 
-	// Same content, working judge. The version already exists, so the old
-	// CreatedVersion gate would have skipped this scan forever.
+	// Same content, working judge. The version already exists, so a
+	// created-version gate would have skipped this scan forever.
 	ti.service.piScanner = promptinjection.NewScanner(testenv.NewLogger(t), classifierReturning(promptinjection.LabelInjection))
 	require.NoError(t, ti.service.UploadSkillContent(ctx, uploadPayload(captureManifest("retried-skill", body))))
 
 	require.Equal(t, 1, countSkillInjectionFindings(t, ctx, ti, "retried-skill"))
 }
 
-// A recorded scan is never repeated: content is immutable per version, so
-// re-uploading it must not spend the judge or duplicate the row.
-func TestSkillCapture_RecordedScanIsNotRepeated(t *testing.T) {
+// Endpoint contract: content is immutable per version, so a repeat upload must
+// not spend the judge again or duplicate the row.
+func TestSkillCapture_RecordedScanIsNotRepeatedOnRepeatUpload(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = captureFeatureStub{skills: true}
