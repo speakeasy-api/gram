@@ -23,6 +23,14 @@ const (
 	// restarts it if it exits or exhausts its retry budget.
 	publishOutboxWatchdogInterval = 1 * time.Minute
 	publishOutboxIdleInterval     = 5 * time.Second
+	// publishOutboxDrainTimeout bounds one batch. The publish phase cannot
+	// outlast the 30s PublishSettings.Timeout the outbox publisher is built with
+	// (see deps.go), which leaves the claim and the settlement statements; 90s is
+	// that with room to spare. It sits deliberately above the relay's 60s claim
+	// lease: an attempt that reaches this bound has certainly lost its claim by
+	// the time the retry starts, so the retry re-claims immediately instead of
+	// racing the lease out.
+	publishOutboxDrainTimeout = 90 * time.Second
 )
 
 type PublishOutboxResult struct{}
@@ -33,8 +41,7 @@ type PublishOutboxResult struct{}
 // message body crosses the activity boundary and lands in workflow history.
 func PublishOutboxWorkflow(ctx workflow.Context) (PublishOutboxResult, error) {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
-		HeartbeatTimeout:    2 * time.Minute,
+		StartToCloseTimeout: publishOutboxDrainTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    5,
 			InitialInterval:    5 * time.Second,

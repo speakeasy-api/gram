@@ -35,7 +35,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/sdk/activity"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -54,6 +53,11 @@ const maxAttempts int32 = 10
 // claimLease is how long a claimed row stays invisible to other drainers. It
 // only has to outlast a publish round trip; if the drainer dies mid-batch, the
 // rows become claimable again this soon afterwards.
+//
+// It is also what bounds a drain: past the lease a batch can no longer be
+// settled, because the settlement statements match on the claim that made it.
+// The activity deadline in background/publish_outbox.go is set above this on
+// purpose, so an attempt is killed only once its claim has certainly lapsed.
 const claimLease = 60 * time.Second
 
 // maxMessageBytes mirrors the producer-side guard in the outbox package. Rows
@@ -198,10 +202,6 @@ func (r *Relay) Drain(ctx context.Context) (DrainResult, error) {
 
 	if len(rows) == 0 {
 		return DrainResult{Published: 0, DeadLettered: 0, Retrying: 0, HasMore: false}, nil
-	}
-
-	if activity.IsActivity(ctx) {
-		activity.RecordHeartbeat(ctx, len(rows))
 	}
 
 	results := r.publishAll(ctx, rows)
