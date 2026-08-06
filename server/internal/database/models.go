@@ -85,18 +85,19 @@ type ApiKey struct {
 }
 
 type Asset struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
-	Name          string
-	Url           string
-	Kind          string
-	ContentType   string
-	ContentLength int64
-	Sha256        string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Url            string
+	Kind           string
+	ContentType    string
+	ContentLength  int64
+	Sha256         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type Assistant struct {
