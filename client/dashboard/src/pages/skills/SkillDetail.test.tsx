@@ -235,12 +235,14 @@ vi.mock("@/components/ui/Button", () => {
     children,
     onClick,
     disabled,
+    variant,
   }: {
     children: ReactNode;
     onClick?: () => void;
     disabled?: boolean;
+    variant?: string;
   }) => (
-    <button onClick={onClick} disabled={disabled}>
+    <button onClick={onClick} disabled={disabled} data-variant={variant}>
       {children}
     </button>
   );
@@ -456,15 +458,8 @@ describe("SkillDetail", () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
     render(<SkillDetail />);
     const archiveButton = screen.getByRole("button", { name: "Archive" });
-    expect(archiveButton.className).toContain("bg-transparent");
-    expect(archiveButton.className).toContain(
-      "text-btn-destructive-secondary",
-    );
-    expect(archiveButton.className).toContain(
-      "hover:text-btn-destructive-secondary-hover",
-    );
-    expect(archiveButton.className).not.toContain(
-      "hover:bg-btn-destructive-hover",
+    expect(archiveButton.getAttribute("data-variant")).toBe(
+      "destructive-secondary",
     );
 
     fireEvent.click(archiveButton);
