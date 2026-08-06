@@ -92,8 +92,20 @@ type Set struct {
 	broker   gcp.PublisherBroker
 	settings *pubsub.PublishSettings
 
+	// mu guards only the map; each entry carries its own lock so one topic's
+	// construction never serialises another's.
 	mu         sync.Mutex
-	publishers map[Topic]gcp.EncodedPublisher
+	publishers map[Topic]*topicPublisher
+}
+
+// topicPublisher guards one topic's lazily built publisher. Construction is
+// not a pure lookup — the emulator broker reconciles the topic over the
+// network before handing a publisher back — so the lock held across it must be
+// per topic: callers of the same topic wait for the one build in flight,
+// callers of other topics proceed.
+type topicPublisher struct {
+	mu  sync.Mutex
+	pub gcp.EncodedPublisher
 }
 
 // NewSet returns a lazily populated set of topic publishers. settings, when
@@ -103,7 +115,7 @@ func NewSet(broker gcp.PublisherBroker, settings *pubsub.PublishSettings) *Set {
 		broker:     broker,
 		settings:   settings,
 		mu:         sync.Mutex{},
-		publishers: make(map[Topic]gcp.EncodedPublisher),
+		publishers: make(map[Topic]*topicPublisher),
 	}
 }
 
@@ -141,24 +153,33 @@ func (s *Set) Publish(ctx context.Context, name string, data []byte, attrs map[s
 
 func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublisher, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	tp, ok := s.publishers[topic]
+	if !ok {
+		tp = &topicPublisher{mu: sync.Mutex{}, pub: nil}
+		s.publishers[topic] = tp
+	}
+	s.mu.Unlock()
 
-	if pub, ok := s.publishers[topic]; ok {
-		return pub, nil
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+
+	if tp.pub != nil {
+		return tp.pub, nil
 	}
 
-	// A failure here is deliberately not marked permanent. Undeclared topics
-	// were ruled out by Lookup, which leaves the broker failing to reach
-	// Pub/Sub: the emulator reconciles the topic over the network before
-	// handing a publisher back, and a cancelled context surfaces here too.
-	// Marking those permanent would dead-letter a perfectly valid row over a
-	// blip or a shutdown.
+	// A failure here is deliberately not marked permanent, and not cached:
+	// undeclared topics were ruled out by Lookup, which leaves the broker
+	// failing to reach Pub/Sub — the emulator reconciles the topic over the
+	// network before handing a publisher back, and a cancelled context
+	// surfaces here too. Marking those permanent would dead-letter a
+	// perfectly valid row over a blip or a shutdown; caching them would make
+	// the blip last forever.
 	pub, err := newPublisher(ctx, s.broker, topic, s.settings)
 	if err != nil {
 		return nil, fmt.Errorf("create publisher for topic %s: %w", topic, err)
 	}
 
-	s.publishers[topic] = pub
+	tp.pub = pub
 
 	return pub, nil
 }
@@ -170,18 +191,27 @@ func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublish
 // and re-published on the next drain.
 func (s *Set) Stop(ctx context.Context) error {
 	s.mu.Lock()
-	pubs := make([]gcp.EncodedPublisher, 0, len(s.publishers))
-	for _, pub := range s.publishers {
-		pubs = append(pubs, pub)
+	tps := make([]*topicPublisher, 0, len(s.publishers))
+	for _, tp := range s.publishers {
+		tps = append(tps, tp)
 	}
 	clear(s.publishers)
 	s.mu.Unlock()
 
-	errs := make([]error, len(pubs))
+	errs := make([]error, len(tps))
 	var wg sync.WaitGroup
-	for i, pub := range pubs {
+	for i, tp := range tps {
 		wg.Go(func() {
-			errs[i] = pub.Stop(ctx)
+			// Waits out any construction still in flight for this topic, then
+			// takes ownership so a publisher is stopped exactly once.
+			tp.mu.Lock()
+			pub := tp.pub
+			tp.pub = nil
+			tp.mu.Unlock()
+
+			if pub != nil {
+				errs[i] = pub.Stop(ctx)
+			}
 		})
 	}
 	wg.Wait()
