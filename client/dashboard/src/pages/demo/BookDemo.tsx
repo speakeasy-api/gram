@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useCaptureEnterpriseGateViewed } from "@/contexts/Telemetry";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
+import { handleError } from "@/lib/errors";
 
 export default function BookDemo(): JSX.Element {
   const client = useSdkClient();
@@ -17,8 +18,12 @@ export default function BookDemo(): JSX.Element {
   });
 
   const handleLogout = async () => {
-    await client.auth.logout();
-    window.location.href = "/login";
+    try {
+      await client.auth.logout();
+      window.location.href = "/login";
+    } catch (err) {
+      handleError(err, { title: "Failed to log out" });
+    }
   };
 
   return (

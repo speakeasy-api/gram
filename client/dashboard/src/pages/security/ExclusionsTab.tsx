@@ -23,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import type { JSX, ReactNode } from "react";
 import { Ellipsis, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { serializeExclusionExpression } from "./exclusion-expression";
 import { ExclusionSheet, type ExclusionSheetState } from "./exclusion-sheet";
 import { BuiltinLibrary } from "./builtin-library";
@@ -59,19 +60,26 @@ export function ExclusionsTab({
   });
 
   const handleToggle = (exclusion: RiskExclusion, enabled: boolean) => {
-    updateMutation.mutate({
-      request: {
-        updateRiskExclusionRequestBody: {
-          id: exclusion.id,
-          matchType: exclusion.matchType,
-          matchValue: exclusion.matchValue,
-          ruleIdFilter: exclusion.ruleIdFilter,
-          sourceFilter: exclusion.sourceFilter,
-          riskPolicyId: exclusion.riskPolicyId,
-          enabled,
+    updateMutation.mutate(
+      {
+        request: {
+          updateRiskExclusionRequestBody: {
+            id: exclusion.id,
+            matchType: exclusion.matchType,
+            matchValue: exclusion.matchValue,
+            ruleIdFilter: exclusion.ruleIdFilter,
+            sourceFilter: exclusion.sourceFilter,
+            riskPolicyId: exclusion.riskPolicyId,
+            enabled,
+          },
         },
       },
-    });
+      {
+        onSuccess: () => {
+          toast.success(`Exclusion ${enabled ? "enabled" : "disabled"}`);
+        },
+      },
+    );
   };
 
   const exclusionActions = (exclusion: RiskExclusion): Action[] => [
@@ -83,7 +91,14 @@ export function ExclusionsTab({
       label: "Delete",
       destructive: true,
       onClick: () => {
-        deleteMutation.mutate({ request: { id: exclusion.id } });
+        deleteMutation.mutate(
+          { request: { id: exclusion.id } },
+          {
+            onSuccess: () => {
+              toast.success("Exclusion deleted");
+            },
+          },
+        );
       },
     },
   ];

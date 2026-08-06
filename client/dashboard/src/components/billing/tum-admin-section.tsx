@@ -14,6 +14,7 @@ import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBilli
 import { useQueryClient } from "@tanstack/react-query";
 import React, { Suspense, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { toast } from "sonner";
 import { handleError, toError } from "@/lib/errors";
 import { cyclesFromTum } from "./billing-cycles";
 
@@ -89,6 +90,7 @@ function ContractForm({
   const mutation = useSetBillingMetadataMutation({
     onSuccess: () => {
       void invalidateAllGetTokensUnderManagement(queryClient);
+      toast.success("Contract terms saved");
     },
   });
 

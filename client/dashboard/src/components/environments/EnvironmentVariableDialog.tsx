@@ -9,6 +9,7 @@ import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnv
 import { Button } from "@/components/ui/Button";
 import { AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 const NAME_PATTERN = /^[-_.a-zA-Z][-_.a-zA-Z0-9]*$/;
 
@@ -90,6 +91,7 @@ export function EnvironmentVariableDialog({
         telemetry.capture("environment_event", {
           action: "environment_updated",
         });
+        toast.success(isEdit ? "Variable updated" : "Variable created");
         onSaved();
         onOpenChange(false);
       },

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { AUTH_BUTTON_CLASSES } from "@/pages/login/components/auth-constants";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { useState } from "react";
+import { handleError } from "@/lib/errors";
 
 interface SwitchOrgProps {
   gate?: boolean;
@@ -101,14 +102,20 @@ export default function SwitchOrg({
     try {
       await client.auth.switchScopes({ organizationId: selectedOrgId });
       window.location.replace("/");
+    } catch (err) {
+      handleError(err, { title: "Failed to switch organization" });
     } finally {
       setIsSwitching(false);
     }
   };
 
   const handleLogout = async () => {
-    await client.auth.logout();
-    window.location.href = "/login";
+    try {
+      await client.auth.logout();
+      window.location.href = "/login";
+    } catch (err) {
+      handleError(err, { title: "Failed to log out" });
+    }
   };
 
   const currentOrg = allOrgs.find((org) => org.id === currentOrgId);

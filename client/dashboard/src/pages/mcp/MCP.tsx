@@ -11,6 +11,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { handleError } from "@/lib/errors";
 import { useRoutes } from "@/routes";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -273,15 +274,19 @@ function MCPOverview() {
     filteredMcpServers.length === 0;
 
   const handleCreateMcpServerSubmit = async () => {
-    const result = await client.toolsets.create({
-      createToolsetRequestBody: {
-        name: newMcpServerName,
-      },
-    });
+    try {
+      const result = await client.toolsets.create({
+        createToolsetRequestBody: {
+          name: newMcpServerName,
+        },
+      });
 
-    toast.success(`MCP server "${result.name}" created`);
+      toast.success(`MCP server "${result.name}" created`);
 
-    routes.mcp.details.tools.goTo(result.slug);
+      routes.mcp.details.tools.goTo(result.slug);
+    } catch (error) {
+      handleError(error, { title: "Failed to create MCP server" });
+    }
   };
 
   const newMcpServerButton = (

@@ -162,6 +162,7 @@ function RBACManagementSection(): ReactElement {
       void invalidateAllRbacStatus(queryClient);
       void invalidateAllGrants(queryClient);
       setConfirmAction(null);
+      toast.success("RBAC enabled");
     },
   });
 
@@ -170,6 +171,7 @@ function RBACManagementSection(): ReactElement {
       void invalidateAllRbacStatus(queryClient);
       void invalidateAllGrants(queryClient);
       setConfirmAction(null);
+      toast.success("RBAC disabled");
     },
   });
 
@@ -258,6 +260,9 @@ function ProductFeaturesSection(): ReactElement {
   } = useFeaturesSetMutation({
     onSuccess: (_data, mutationVariables) => {
       void invalidateAllProductFeatures(queryClient);
+      const enabled =
+        mutationVariables.request.setProductFeatureRequestBody.enabled;
+      toast.success(enabled ? "Feature enabled" : "Feature disabled");
       if (
         mutationVariables.request?.setProductFeatureRequestBody?.featureName ===
         FeatureName.Skills

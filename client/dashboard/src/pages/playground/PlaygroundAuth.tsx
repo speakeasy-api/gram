@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Stack } from "@/components/ui/Stack";
 import { CheckCircle, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import {
   environmentHasValue,
@@ -189,6 +190,7 @@ export function PlaygroundAuth({
       // values so the user can retry without retyping.
       setEditedKeys(new Set());
       setUserProvidedValues({});
+      toast.success("Credentials saved");
     } catch {
       // Error toast is already shown by usePlaygroundEnvironment.
     }

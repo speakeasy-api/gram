@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Outlet } from "react-router";
+import { toast } from "sonner";
 import { PromptsEmptyState } from "./PromptsEmptyState";
 
 export function PromptsRoot(): JSX.Element {
@@ -85,6 +86,7 @@ export function PromptTemplateCard({
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
+      toast.success("Prompt deleted");
       void invalidateAllTemplates(queryClient);
     },
   });

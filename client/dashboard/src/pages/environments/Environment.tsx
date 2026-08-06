@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/Button";
 import { AlertCircle, CodeXml, Eye, EyeOff, Lock, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import { type Action, MoreActions } from "@/components/ui/MoreActions";
@@ -190,6 +191,7 @@ function EnvironmentPageInner() {
         action: "environment_deleted",
       });
       void environment!.refetch();
+      toast.success("Environment deleted");
       void navigate("/environments");
     },
   });
@@ -254,12 +256,22 @@ function EnvironmentPageInner() {
     setSelectedToolsetSlug("");
     if (entriesToUpdate.length === 0) return;
 
-    updateEnvironment({
-      request: {
-        slug: environment.slug,
-        updateEnvironmentRequestBody: { entriesToUpdate, entriesToRemove: [] },
+    updateEnvironment(
+      {
+        request: {
+          slug: environment.slug,
+          updateEnvironmentRequestBody: {
+            entriesToUpdate,
+            entriesToRemove: [],
+          },
+        },
       },
-    });
+      {
+        onSuccess: () => {
+          toast.success("Variables added");
+        },
+      },
+    );
   }, [selectedToolset, environment, updateEnvironment]);
 
   const handleToggleReveal = useCallback((varName: string) => {
@@ -277,15 +289,22 @@ function EnvironmentPageInner() {
   const confirmDelete = useCallback(
     (varName: string) => {
       if (!environment) return;
-      updateEnvironment({
-        request: {
-          slug: environment.slug,
-          updateEnvironmentRequestBody: {
-            entriesToUpdate: [],
-            entriesToRemove: [varName],
+      updateEnvironment(
+        {
+          request: {
+            slug: environment.slug,
+            updateEnvironmentRequestBody: {
+              entriesToUpdate: [],
+              entriesToRemove: [varName],
+            },
           },
         },
-      });
+        {
+          onSuccess: () => {
+            toast.success("Variable deleted");
+          },
+        },
+      );
       setDeleteConfirmDialog({ open: false, varName: "" });
     },
     [environment, updateEnvironment],

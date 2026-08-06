@@ -160,6 +160,7 @@ export default function Plugins(): JSX.Element {
     onSuccess: async (data) => {
       setIsCreateDialogOpen(false);
       await invalidateAllPlugins(queryClient);
+      toast.success("Plugin created");
       void navigate(routes.plugins.detail.href(data.id));
     },
   });

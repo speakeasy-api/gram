@@ -3,6 +3,7 @@ import { useRoutes } from "@/routes";
 import { useCreateTemplateMutation } from "@gram/client/react-query/createTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { PromptEditor } from "./PromptEditor";
 
 export default function NewPromptPage(): JSX.Element {
@@ -14,6 +15,7 @@ export default function NewPromptPage(): JSX.Element {
     error,
   } = useCreateTemplateMutation({
     onSuccess: () => {
+      toast.success("Prompt created");
       routes.prompts.goTo();
     },
     onSettled: () => {

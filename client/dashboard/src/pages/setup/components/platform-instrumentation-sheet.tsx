@@ -208,6 +208,7 @@ export function PlatformInstrumentationSheet({
             setApiKeyPending((prev) => ({ ...prev, [platform.id]: false }));
             if (data.key) {
               setApiKeys((prev) => ({ ...prev, [platform.id]: data.key! }));
+              toast.success("API key generated");
             } else {
               setApiKeyError((prev) => ({
                 ...prev,

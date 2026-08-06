@@ -59,6 +59,7 @@ import {
 } from "react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
@@ -589,13 +590,17 @@ function PolicyCenterContent() {
   }, [queryClient]);
 
   const createMutation = useRiskCreatePolicyMutation({
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      toast.success("Policy created");
+    },
   });
 
   const deleteMutation = useRiskPoliciesDeleteMutation({
     onSuccess: () => {
       setPolicyToDelete(null);
       invalidate();
+      toast.success("Policy deleted");
     },
   });
 

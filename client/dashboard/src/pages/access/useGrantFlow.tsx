@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
@@ -151,7 +152,12 @@ export function useGrantFlow(): {
                 },
               },
             },
-            { onSuccess: () => markResolved(createChallenge.id) },
+            {
+              onSuccess: () => {
+                toast.success("Access granted");
+                markResolved(createChallenge.id);
+              },
+            },
           );
         }}
       />

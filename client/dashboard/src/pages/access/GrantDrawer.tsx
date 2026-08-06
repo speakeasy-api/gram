@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -102,6 +103,7 @@ export function GrantDrawer({
       },
       {
         onSuccess: () => {
+          toast.success("Access granted");
           onResolved?.();
           handleClose();
         },

@@ -9,10 +9,19 @@ import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@/components/ui/Stack";
 import { Eye, FileText, LogIn, Monitor, Unplug } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
+
+const FEATURE_LABELS: Partial<Record<FeatureName, string>> = {
+  [FeatureName.Logs]: "Logs",
+  [FeatureName.ToolIoLogs]: "Tool I/O logging",
+  [FeatureName.SessionCapture]: "Agent session capture",
+  [FeatureName.HooksBrowserLogin]: "Hook browser sign-in",
+  [FeatureName.HooksFailOpen]: "Fail open during outages",
+};
 
 export default function OrgLogs(): JSX.Element {
   return (
@@ -71,6 +80,11 @@ function OrgLogsInner() {
           setHooksBrowserLoginEnabled(enabled);
         } else if (featureName === FeatureName.HooksFailOpen) {
           setHooksFailOpenEnabled(enabled);
+        }
+
+        const label = FEATURE_LABELS[featureName];
+        if (label) {
+          toast.success(`${label} ${enabled ? "enabled" : "disabled"}`);
         }
       },
       onError: (error) => {

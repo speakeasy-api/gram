@@ -7,6 +7,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
+import { handleError } from "@/lib/errors";
 import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components/deployment.js";
 import { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
@@ -152,6 +153,7 @@ export default function DeployStep(): React.JSX.Element | null {
       })
       .catch((err) => {
         console.error("Deployment failed:", err);
+        handleError(err, { title: "Failed to generate tools" });
         step.setState("failed");
         stepper.setState("error");
       });

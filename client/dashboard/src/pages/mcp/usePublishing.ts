@@ -10,6 +10,7 @@ import type { ExternalMCPServer } from "@gram/client/models/components/externalm
 import { buildCollectionsListServersQuery } from "@gram/client/react-query/collectionsListServers.js";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 // PublishingTarget identifies the server being published, parametrized on the
 // attachment backend. Toolset-backed servers match on toolset_id (or the
@@ -158,6 +159,7 @@ export function usePublishing(target: PublishingTarget): UsePublishingResult {
         ),
       ]);
 
+      toast.success("Publishing updated");
       setSelectedIds(null);
     } finally {
       setIsSaving(false);

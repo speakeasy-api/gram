@@ -32,6 +32,7 @@ import { Bot, Boxes, Cpu, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
+import { toast } from "sonner";
 
 import { AssistantsAuditLog } from "./AssistantAuditLog";
 import { TriggersPanel } from "../triggers/Triggers";
@@ -297,6 +298,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
   const deleteAssistant = useAssistantsDeleteMutation({
     onSuccess: () => {
       void invalidateAllAssistantsList(queryClient);
+      toast.success("Assistant deleted");
     },
   });
 

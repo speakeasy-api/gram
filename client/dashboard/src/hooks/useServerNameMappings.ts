@@ -96,6 +96,7 @@ export function useServerNameMappings(): ServerNameMappings {
   // Mutation to delete an override
   const deleteMutation = useDeleteServerNameOverrideMutation({
     onSuccess: async () => {
+      toast.success("Override removed");
       await invalidateServerNamesList(queryClient);
     },
   });

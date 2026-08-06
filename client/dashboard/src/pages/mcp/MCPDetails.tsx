@@ -35,6 +35,7 @@ import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
+import { handleError } from "@/lib/errors";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { isNotFoundError } from "@/lib/route-errors";
 import { Toolset, useGroupedTools } from "@/lib/toolTypes";
@@ -952,6 +953,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         action: "toolset_update_failed",
         error: error.message,
       });
+      handleError(error, { title: "Failed to remove tools" });
     },
   });
 
@@ -1137,22 +1139,26 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           toolset={fullToolset}
           onAddTools={(toolUrns) => {
             void (async (toolUrns) => {
-              const currentUrns = fullToolset.toolUrns || [];
-              const newUrns = [...new Set([...currentUrns, ...toolUrns])];
+              try {
+                const currentUrns = fullToolset.toolUrns || [];
+                const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
-              await client.toolsets.updateBySlug({
-                slug: toolset.slug,
-                updateToolsetRequestBody: {
-                  toolUrns: newUrns,
-                },
-              });
+                await client.toolsets.updateBySlug({
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    toolUrns: newUrns,
+                  },
+                });
 
-              toast.success(
-                `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
-              );
+                toast.success(
+                  `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
+                );
 
-              await refetch();
-              void invalidateAllToolset(queryClient);
+                await refetch();
+                void invalidateAllToolset(queryClient);
+              } catch (error) {
+                handleError(error, { title: "Failed to add tools" });
+              }
             })(toolUrns);
           }}
         />
@@ -1372,9 +1378,10 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         slug: toolset.slug,
       });
     },
-    onError: () => {
+    onError: (error) => {
       // Discard staged changes
       setMcpSlug(toolset.mcpSlug || "");
+      handleError(error, { title: "Failed to update settings" });
     },
   });
 
@@ -1760,6 +1767,7 @@ export function OAuthDetailsModal({
   const removeOAuthMutation = useRemoveOAuthServerMutation({
     onSuccess: () => {
       void invalidateAllToolset(queryClient);
+      toast.success("OAuth connection removed");
       onClose();
     },
   });

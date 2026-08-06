@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
+import { toast } from "sonner";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
 import { useEnvironments } from "./useEnvironments";
 export function EnvironmentsRoot(): JSX.Element {
@@ -55,6 +56,7 @@ function EnvironmentsInner() {
         action: "environment_created",
         environment_slug: data.slug,
       });
+      toast.success("Environment created");
       routes.environments.environment.goTo(data.slug);
     },
     onError: (error) => {

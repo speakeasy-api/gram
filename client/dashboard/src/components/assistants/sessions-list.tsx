@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Text } from "@/components/ui/Text";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
@@ -139,6 +140,7 @@ export function AssistantSessionsList({
               onSuccess: () => {
                 void invalidateAllListChats(queryClient);
                 setSelectedChatId(null);
+                toast.success("Chat deleted");
               },
             },
           );

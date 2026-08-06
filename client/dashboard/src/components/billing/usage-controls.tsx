@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { handleError } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,9 @@ export const TopUpCTA = (): JSX.Element => {
       const link = await client.usage.createTopUpCheckout();
       if (!link) {
         telemetry.capture("topup_checkout_error", { error: "empty link" });
+        handleError(new Error("No checkout link returned"), {
+          title: "Failed to start checkout",
+        });
         return;
       }
       openSafeExternalUrl(link);
@@ -24,6 +28,7 @@ export const TopUpCTA = (): JSX.Element => {
       telemetry.capture("topup_checkout_error", {
         error: err instanceof Error ? err.message : "unknown",
       });
+      handleError(err, { title: "Failed to start checkout" });
     } finally {
       setBusy(false);
     }

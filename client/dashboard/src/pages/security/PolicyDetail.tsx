@@ -81,6 +81,7 @@ import {
 } from "react";
 import { useParams } from "react-router";
 import { useQueryState } from "nuqs";
+import { toast } from "sonner";
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
@@ -721,11 +722,13 @@ function PromptPolicyEditor({
     onSuccess: () => {
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
       void invalidateAllRiskListPolicies(queryClient);
+      toast.success("Policy created");
       routes.policyCenter.goTo();
     },
   });
@@ -3655,6 +3658,7 @@ export function StandardPolicyEditor({
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
@@ -3662,6 +3666,7 @@ export function StandardPolicyEditor({
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
+      toast.success("Policy created");
       routes.policyCenter.goTo();
     },
   });

@@ -659,6 +659,7 @@ function OrgDomainsInner() {
       setPendingIPs([]);
       setPendingIPsValid(true);
       setIsAllowlistExpanded(false);
+      toast.success("Domain added");
       setTimeout(() => {
         void domainRefetch();
       }, 2000);
@@ -672,6 +673,7 @@ function OrgDomainsInner() {
     onSuccess: async () => {
       setIsDeleteDomainDialogOpen(false);
       setDomainInput("");
+      toast.success("Domain removed");
       await invalidateAllListDomains(queryClient);
     },
   });
@@ -679,6 +681,7 @@ function OrgDomainsInner() {
   const updateDomainMutation = useUpdateDomainMutation({
     onSuccess: async () => {
       setIsEditAllowlistOpen(false);
+      toast.success("Allowlist saved");
       await invalidateAllListDomains(queryClient);
     },
     onError: (error) => {
