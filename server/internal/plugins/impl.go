@@ -2102,9 +2102,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
+		sharedPaths, err := sharedFilePaths(pluginInfos, cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate shared files").LogError(ctx, s.logger)
+		}
 		verifiedFiles := make(map[string][]byte)
 		_, hooksIntact := carryHooksSubtree(verifiedFiles, existingFiles, targetHooksConfigJSON, cfg.OrgName)
-		if carry(verifiedFiles, mcpPaths) && carryPlatformMCPSubtree(verifiedFiles, existingFiles) && hooksIntact {
+		if carry(verifiedFiles, mcpPaths) && carry(verifiedFiles, sharedPaths) && carryPlatformMCPSubtree(verifiedFiles, existingFiles) && hooksIntact {
 			return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
 		}
 	}
