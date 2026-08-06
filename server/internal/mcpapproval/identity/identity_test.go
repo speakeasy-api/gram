@@ -40,6 +40,46 @@ func TestResolve_RemoteURL(t *testing.T) {
 	require.False(t, got.VersionPinned, "a remote endpoint can never be pinned")
 }
 
+// Ownership lives at the registrable domain: comparing a full host against a
+// vendor's known domain would call every subdomain a mismatch.
+func TestResolve_RegistrableDomainDropsSubdomains(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("https://mcp.somevendor.io/sse")
+	require.Equal(t, "mcp.somevendor.io", got.Host)
+	require.Equal(t, "somevendor.io", got.RegistrableDomain)
+
+	// A multi-part public suffix must not be mistaken for a registrable domain.
+	uk := identity.Resolve("https://mcp.somevendor.co.uk/sse")
+	require.Equal(t, "somevendor.co.uk", uk.RegistrableDomain)
+}
+
+// No registrable domain exists for these, and empty must read as
+// "undeterminable" rather than as a mismatch.
+func TestResolve_RegistrableDomainEmptyWhenUndeterminable(t *testing.T) {
+	t.Parallel()
+
+	for _, ref := range []string{
+		"http://localhost:3000/sse",
+		"http://127.0.0.1:3000/sse",
+		"http://[::1]:3000/sse",
+	} {
+		got := identity.Resolve(ref)
+		require.Equal(t, identity.KindRemote, got.Kind, ref)
+		require.Empty(t, got.RegistrableDomain, "%s has no registrable domain", ref)
+	}
+}
+
+// ArtifactRef is the key everything else hangs off, so two endpoints that
+// differ only in percent-encoding must not collapse into one identity.
+func TestResolve_PercentEncodedPathsStayDistinct(t *testing.T) {
+	t.Parallel()
+
+	encoded := identity.Resolve("https://mcp.example.com/a%2Fb")
+	plain := identity.Resolve("https://mcp.example.com/a/b")
+	require.NotEqual(t, plain.ArtifactRef, encoded.ArtifactRef)
+}
+
 // Query strings carry per-install tokens and credentials embedded in userinfo
 // are secrets; neither belongs in an identity two installs should share.
 func TestResolve_RemoteURLCanonicalizesAwayQueryAndCredentials(t *testing.T) {

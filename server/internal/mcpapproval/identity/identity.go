@@ -12,9 +12,12 @@
 package identity
 
 import (
+	"net"
 	"net/url"
 	"path"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Kind classifies what a reference resolved to.
@@ -63,10 +66,19 @@ type Identity struct {
 	// meaningful against a pinned artifact.
 	VersionPinned bool
 
-	// Host is the registrable hostname for a remote endpoint, empty otherwise.
-	// Whether it belongs to the vendor it appears to belong to is a question
-	// for evidence gathering, not for this package.
+	// Host is the full lower-cased hostname for a remote endpoint, subdomain
+	// included, empty otherwise.
 	Host string
+
+	// RegistrableDomain is Host reduced to its effective TLD plus one label,
+	// so `mcp.somevendor.io` becomes `somevendor.io`. This is the part that
+	// says who owns the endpoint, and comparing a full host against a vendor's
+	// known domain would call every subdomain a mismatch.
+	//
+	// Empty when no registrable domain exists — an IP literal, `localhost`, or
+	// a hostname under no public suffix. Whether the owner is the vendor it
+	// appears to be remains a question for evidence gathering, not this package.
+	RegistrableDomain string
 
 	// Registry is the package index for a package reference, empty otherwise.
 	Registry Registry
@@ -82,13 +94,14 @@ type Identity struct {
 // unresolved is the identity for a reference that names no server we can
 // place. Shared so every failure path returns the same value.
 var unresolved = Identity{
-	Kind:           KindUnresolved,
-	ArtifactRef:    "",
-	VersionPinned:  false,
-	Host:           "",
-	Registry:       "",
-	PackageName:    "",
-	PackageVersion: "",
+	Kind:              KindUnresolved,
+	ArtifactRef:       "",
+	VersionPinned:     false,
+	Host:              "",
+	RegistrableDomain: "",
+	Registry:          "",
+	PackageName:       "",
+	PackageVersion:    "",
 }
 
 // npmLaunchers and pypiLaunchers are the single-token commands that fetch and
@@ -153,14 +166,17 @@ func absoluteHTTPURL(reference string) (*url.URL, bool) {
 // server share an artifact ref. A remote endpoint is never version-pinned:
 // nothing links a URL to a fixed revision of what serves it.
 func remoteIdentity(u *url.URL) Identity {
+	host := strings.ToLower(u.Hostname())
+
 	return Identity{
-		Kind:           KindRemote,
-		ArtifactRef:    "url:" + redactedURL(u),
-		VersionPinned:  false,
-		Host:           strings.ToLower(u.Hostname()),
-		Registry:       "",
-		PackageName:    "",
-		PackageVersion: "",
+		Kind:              KindRemote,
+		ArtifactRef:       "url:" + redactedURL(u),
+		VersionPinned:     false,
+		Host:              host,
+		RegistrableDomain: registrableDomain(host),
+		Registry:          "",
+		PackageName:       "",
+		PackageVersion:    "",
 	}
 }
 
@@ -175,7 +191,7 @@ func redactedURL(u *url.URL) string {
 		User:        nil,
 		Host:        strings.ToLower(u.Host),
 		Path:        u.Path,
-		RawPath:     "",
+		RawPath:     u.RawPath,
 		OmitHost:    false,
 		ForceQuery:  false,
 		RawQuery:    "",
@@ -184,6 +200,26 @@ func redactedURL(u *url.URL) string {
 	}
 
 	return canonical.String()
+}
+
+// registrableDomain reduces a hostname to its effective TLD plus one label,
+// which is the part that identifies who owns it.
+//
+// Returns empty for anything with no registrable domain — an IP literal, a
+// single-label host such as `localhost`, or a name under no known public
+// suffix. An empty result means "ownership undeterminable", which a caller
+// must treat as unknown rather than as a mismatch.
+func registrableDomain(host string) string {
+	if host == "" || net.ParseIP(host) != nil {
+		return ""
+	}
+
+	domain, err := publicsuffix.EffectiveTLDPlusOne(host)
+	if err != nil {
+		return ""
+	}
+
+	return domain
 }
 
 // resolveCommand extracts the package a stdio launch command runs.
@@ -398,13 +434,14 @@ func packageIdentity(spec string, registry Registry) Identity {
 	}
 
 	return Identity{
-		Kind:           KindPackage,
-		ArtifactRef:    ref,
-		VersionPinned:  isExactVersion(version),
-		Host:           "",
-		Registry:       registry,
-		PackageName:    name,
-		PackageVersion: version,
+		Kind:              KindPackage,
+		ArtifactRef:       ref,
+		VersionPinned:     isExactVersion(version),
+		Host:              "",
+		RegistrableDomain: "",
+		Registry:          registry,
+		PackageName:       name,
+		PackageVersion:    version,
 	}
 }
 
