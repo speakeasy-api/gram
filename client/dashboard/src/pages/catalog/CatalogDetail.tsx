@@ -188,10 +188,10 @@ export default function CatalogDetail(): JSX.Element {
           <div className="@container">
             <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-3">
               <div className="@3xl:col-span-2">
-                <Skeleton className="h-[400px] rounded-xl" />
+                <Skeleton className="h-[400px]" />
               </div>
               <div>
-                <Skeleton className="h-[200px] rounded-xl" />
+                <Skeleton className="h-[200px]" />
               </div>
             </div>
           </div>
@@ -256,25 +256,26 @@ export default function CatalogDetail(): JSX.Element {
             <div className="space-y-6 @3xl:col-span-2">
               {/* Header */}
               <div className="flex items-start gap-6">
-                <div className="bg-primary/5 flex h-24 w-24 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
+                <div className="bg-primary/5 flex h-24 w-24 shrink-0 items-center justify-center dark:bg-neutral-800">
                   {server.iconUrl ? (
                     <img
                       src={server.iconUrl}
                       alt={displayName}
-                      className="h-16 w-16 rounded-lg object-contain"
+                      className="h-16 w-16 object-contain"
                     />
                   ) : (
                     <ServerIcon className="text-muted-foreground h-12 w-12" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
+                  <Page.Eyebrow className="mb-2" />
                   <Stack
                     direction="horizontal"
                     gap={3}
                     align="center"
                     className="mb-2"
                   >
-                    <h1 className="text-2xl font-bold">{displayName}</h1>
+                    <h1 className="text-display-sm font-thin">{displayName}</h1>
                     {isOfficial && <Badge>Official</Badge>}
                     {versionMeta?.isLatest && (
                       <Badge variant="neutral">Latest</Badge>
@@ -537,7 +538,7 @@ function ToolCard({ tool }: { tool: Tool }) {
     tool.description && tool.description.length > firstSentence.length;
 
   return (
-    <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden rounded-lg p-3">
+    <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden p-3">
       <button
         onClick={() => {
           void (hasMoreContent && setIsExpanded(!isExpanded));

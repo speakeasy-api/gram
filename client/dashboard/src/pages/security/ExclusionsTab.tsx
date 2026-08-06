@@ -228,7 +228,7 @@ function ExclusionActionsMenu({ actions }: { actions: Action[] }): JSX.Element {
 
 function ExclusionsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
+    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 border">
       <div className="space-y-1 text-center">
         <Text className="font-medium">No exclusions yet</Text>
         <Text small muted>

@@ -77,7 +77,7 @@ export function ShadowMCPPolicyStatus({
   );
 
   return (
-    <div className="border-border bg-muted/30 flex max-w-2xs items-start gap-2 rounded-md border px-3 py-2">
+    <div className="border-border bg-muted/30 flex max-w-2xs items-start gap-2 border px-3 py-2">
       <Icon
         className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0"
         name={icon}

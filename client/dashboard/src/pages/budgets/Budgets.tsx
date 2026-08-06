@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -227,10 +227,11 @@ function StatusSummaryCards({
       : 0;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <MetricCardGroup>
       <MetricCard
         title="Spend vs budget"
         value={overview.totalSpendUsd}
+        tone="information"
         displayValue={`${compactUsd(overview.totalSpendUsd)} / ${compactUsd(overview.totalBudgetUsd)}`}
         format="number"
         subtext={`${spendPct}% of budgeted spend used across enabled rules`}
@@ -238,6 +239,7 @@ function StatusSummaryCards({
       <MetricCard
         title="Users over budget"
         value={overview.usersBreached}
+        tone={overview.usersBreached > 0 ? "destructive" : "neutral"}
         displayValue={`${overview.usersBreached} / ${overview.usersTotal}`}
         format="number"
         subtext={
@@ -249,6 +251,7 @@ function StatusSummaryCards({
       <MetricCard
         title="Rules needing attention"
         value={overview.rulesUnhealthy}
+        tone={overview.rulesUnhealthy > 0 ? "warning" : "neutral"}
         displayValue={`${overview.rulesUnhealthy} / ${overview.rulesTotal}`}
         format="number"
         subtext={
@@ -260,6 +263,7 @@ function StatusSummaryCards({
       <MetricCard
         title="Spend over budget"
         value={overview.spendOverBudgetUsd}
+        tone={overview.spendOverBudgetUsd > 0 ? "destructive" : "neutral"}
         displayValue={formatUsd(overview.spendOverBudgetUsd)}
         format="number"
         tooltip="Current spend beyond planned budget, summed across people over their individual limits."
@@ -269,7 +273,7 @@ function StatusSummaryCards({
             : "overages across individual limits"
         }
       />
-    </div>
+    </MetricCardGroup>
   );
 }
 

@@ -215,7 +215,7 @@ export function EnvironmentVariableRow({
             }}
             placeholder={`Display name for ${envVar.key}`}
             autoFocus
-            className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-5 w-full rounded border px-1.5 py-0 font-mono text-sm focus:ring-2 focus:outline-none"
+            className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-5 w-full border px-1.5 py-0 font-mono text-sm focus:ring-2 focus:outline-none"
           />
         ) : (
           <div className="group/header-edit flex h-6 w-full items-center gap-2">
@@ -274,7 +274,7 @@ export function EnvironmentVariableRow({
       <div className="flex items-center">
         <div
           className={cn(
-            "border-input bg-background flex h-9 items-center overflow-hidden rounded-md border",
+            "border-input bg-background flex h-9 items-center overflow-hidden border",
             "focus-within:ring-ring focus-within:ring-2",
           )}
         >
@@ -288,7 +288,7 @@ export function EnvironmentVariableRow({
           >
             <SelectTrigger
               tabIndex={-1}
-              className="bg-muted/50 h-full w-[90px] gap-0.5 rounded-none border-0 border-r font-mono text-xs uppercase shadow-none focus:ring-0 focus-visible:ring-0"
+              className="bg-muted/50 h-full w-[90px] gap-0.5 border-0 border-r font-mono text-xs uppercase shadow-none focus:ring-0 focus-visible:ring-0"
             >
               <span>
                 {MODE_OPTIONS.find((o) => o.value === envVar.state)?.label}

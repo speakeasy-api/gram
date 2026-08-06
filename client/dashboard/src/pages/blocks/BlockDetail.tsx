@@ -110,7 +110,7 @@ function BlockBody({ id }: { id: string | undefined }) {
       </Stack>
 
       {block.reason ? (
-        <div className="bg-muted/40 w-full rounded-md border p-4">
+        <div className="bg-muted/40 w-full border p-4">
           <Text small className="whitespace-pre-wrap text-center">
             {block.reason}
           </Text>

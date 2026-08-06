@@ -73,7 +73,7 @@ export function SidebarUserMenu(): JSX.Element {
         type="button"
         aria-label="Open account menu"
         onClick={() => setMenuOpen(true)}
-        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md p-1 text-left group-data-[collapsible=icon]:hidden"
+        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:hidden"
       >
         <Avatar className="size-7 shrink-0">
           <AvatarImage

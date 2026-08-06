@@ -493,7 +493,7 @@ export function CreateInstanceDialog({
                     setFailurePosture(value as FailurePosture)
                   }
                 >
-                  <label className="border-border flex cursor-pointer gap-3 rounded-md border p-3">
+                  <label className="border-border flex cursor-pointer gap-3 border p-3">
                     <RadioGroupItem value="fail_closed" />
                     <Stack gap={1}>
                       <Text className="font-medium">
@@ -504,7 +504,7 @@ export function CreateInstanceDialog({
                       </Text>
                     </Stack>
                   </label>
-                  <label className="border-warning-softest flex cursor-pointer gap-3 rounded-md border p-3">
+                  <label className="border-warning-softest flex cursor-pointer gap-3 border p-3">
                     <RadioGroupItem value="fail_open" />
                     <Stack gap={1}>
                       <Text className="font-medium">Fail open</Text>

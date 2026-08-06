@@ -49,10 +49,8 @@ export function SettingsDangerZone(): JSX.Element {
 
   return (
     <>
-      <div className="border-destructive/30 rounded-lg border p-6">
-        <Text variant="subheading" className="text-destructive mb-1">
-          Danger Zone
-        </Text>
+      <div className="border-destructive/30 border p-6">
+        <div className="text-eyebrow text-destructive mb-1">Danger Zone</div>
         <Text muted small className="mb-6">
           Permanently delete this project and all its data. This action cannot
           be undone.
@@ -88,7 +86,7 @@ export function SettingsDangerZone(): JSX.Element {
           <div className="space-y-4 py-4">
             <Text variant="body">
               Are you sure you want to delete the project{" "}
-              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                 {project.name}
               </code>
               ? This action cannot be undone.

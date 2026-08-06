@@ -65,8 +65,8 @@ export const UsageProgress = ({
   const includedProgress = (
     <div
       className={cn(
-        "bg-muted relative h-4 overflow-hidden rounded-md dark:bg-neutral-800",
-        anyOverage && "rounded-r-none",
+        "bg-muted relative h-4 overflow-hidden dark:bg-neutral-800",
+        anyOverage && "",
       )}
       style={{ width: `${includedWidth}%` }}
     >
@@ -81,7 +81,7 @@ export const UsageProgress = ({
 
   const overageProgress = anyOverage ? (
     <div
-      className="bg-muted relative h-4 overflow-hidden rounded-r-md dark:bg-neutral-800"
+      className="bg-muted relative h-4 overflow-hidden dark:bg-neutral-800"
       style={{ width: `${overageWidth}%` }}
     >
       <div

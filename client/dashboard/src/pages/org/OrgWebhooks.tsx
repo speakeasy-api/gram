@@ -67,7 +67,7 @@ function OrgWebhooksInner() {
       <Text muted small className="mb-6">
         Configure webhook delivery for various platform events.
       </Text>
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -113,7 +113,7 @@ function WebhooksDisabled() {
   const { session } = useSessionData();
 
   return (
-    <div className="border-border bg-card rounded-lg border p-4">
+    <div className="border-border bg-card border p-4">
       <Stack gap={4} align="center" justify="center">
         <Webhook className="text-muted-foreground h-10 w-10" />
         <div>

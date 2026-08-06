@@ -1,4 +1,10 @@
 import { formatChartLabel } from "@/components/chart/chartUtils";
+import {
+  ACCENT_RED,
+  OTHER_SERIES,
+  SERIES,
+  SEVERITY,
+} from "@/components/chart/palette";
 import type { ChartDataset } from "chart.js";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
@@ -7,20 +13,25 @@ type TimestampedLineDataset = ChartDataset<
   Array<{ x: number; y: number }>
 >;
 
+// Editorial severity-first ramp from the shared chart palette: the worst
+// category (secrets) takes the one red accent, the next tiers take the
+// severity oranges, the rest walk the neutral ink ramp (lightness repeats are
+// fine — lines read by legend label, not hue), and "custom" recedes to the
+// Other neutral.
 const RISK_CATEGORY_CHART_COLORS = [
-  { category: "secrets", color: "#60a5fa" },
-  { category: "financial", color: "#34d399" },
-  { category: "pii", color: "#f87171" },
-  { category: "government_ids", color: "#a78bfa" },
-  { category: "healthcare", color: "#facc15" },
-  { category: "prompt_policy", color: "#38bdf8" },
-  { category: "prompt_injection", color: "#22d3ee" },
-  { category: "off_policy", color: "#f472b6" },
-  { category: "shadow_mcp", color: "#a3e635" },
-  { category: "destructive_tool", color: "#818cf8" },
-  { category: "cli_destructive", color: "#fb7185" },
-  { category: "account_identity", color: "#fb923c" },
-  { category: "custom", color: "#94a3b8" },
+  { category: "secrets", color: ACCENT_RED },
+  { category: "financial", color: SEVERITY.high },
+  { category: "pii", color: SEVERITY.medium },
+  { category: "government_ids", color: SERIES[0]! },
+  { category: "healthcare", color: SERIES[1]! },
+  { category: "prompt_policy", color: SERIES[2]! },
+  { category: "prompt_injection", color: SERIES[3]! },
+  { category: "off_policy", color: SERIES[4]! },
+  { category: "shadow_mcp", color: SERIES[5]! },
+  { category: "destructive_tool", color: SERIES[1]! },
+  { category: "cli_destructive", color: SERIES[2]! },
+  { category: "account_identity", color: SERIES[3]! },
+  { category: "custom", color: OTHER_SERIES },
 ] satisfies ReadonlyArray<{ category: RuleCategory; color: string }>;
 
 const RISK_CATEGORY_CHART_COLOR_BY_CATEGORY = new Map<RuleCategory, string>(
@@ -104,7 +115,8 @@ export function buildRiskTrendChartData(
           y: series.get(timestamp) ?? 0,
         })),
         borderColor: color,
-        backgroundColor: `${color}1a`,
+        // No alpha area wash — the editorial style keeps line charts flat.
+        backgroundColor: "transparent",
         pointBackgroundColor: color,
         fill: false,
         tension: 0.45,

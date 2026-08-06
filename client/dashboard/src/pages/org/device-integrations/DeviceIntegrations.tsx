@@ -82,7 +82,7 @@ function ProviderGroup({
           {description}
         </Text>
       </Stack>
-      <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+      <div className="border-border bg-card divide-border divide-y overflow-hidden border">
         {providers.map((provider) => (
           <DeviceIntegrationConnectionRow
             key={provider.id}

@@ -1,4 +1,5 @@
 import { useQueryState } from "nuqs";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import type { MCPServerEntry } from "@/elements";
 import { recommended } from "@/elements/plugins";
 import { RequireScope } from "@/components/require-scope";
@@ -40,8 +41,7 @@ import {
 } from "@/lib/audit-log-format";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
 import {
-  ActionBadge,
-  ActionDot,
+  ActionIconTile,
   AuditFeedFooter,
   DateGroupHeader,
   FacetSelect,
@@ -214,7 +214,6 @@ function AuditLogRow({
   log,
   orgSlug,
   timestampMode,
-  isOdd,
   isHighlighted,
   rowRef,
   highlightMatch,
@@ -222,7 +221,6 @@ function AuditLogRow({
   log: AuditLog;
   orgSlug: string;
   timestampMode: "utc" | "local";
-  isOdd: boolean;
   isHighlighted?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
@@ -235,9 +233,8 @@ function AuditLogRow({
   const subjectLink = subjectHref(log, orgSlug);
 
   const rowContent = (
-    <div className="group flex items-start gap-3.5 px-4 py-2.5">
-      <ActionDot action={log.action} />
-      <ActionBadge action={log.action} />
+    <div className="group flex items-center gap-3 px-4 py-2.5">
+      <ActionIconTile action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <span>
           <StrongName>
@@ -252,7 +249,7 @@ function AuditLogRow({
           <button
             type="button"
             onClick={() => setDiffExpanded((v) => !v)}
-            className="ml-2 text-xs text-blue-500 hover:underline"
+            className="text-link-primary ml-2 text-xs hover:underline"
           >
             {diffExpanded ? "Hide diff ▴" : "Show diff ▾"}
           </button>
@@ -277,14 +274,11 @@ function AuditLogRow({
     return (
       <div ref={rowRef} className={cn(isHighlighted && HIGHLIGHTED_ROW_CLASS)}>
         <div
-          className={cn(
-            "rounded-t-lg border border-b-0",
-            isOdd ? "bg-muted/30" : "bg-background",
-          )}
+          className={cn("border border-b-0", "border-border bg-card border-b")}
         >
           {rowContent}
         </div>
-        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
+        <div className="bg-background border border-t-0 px-4 pt-2 pb-3">
           <StructuredDiff log={log} />
         </div>
       </div>
@@ -295,8 +289,8 @@ function AuditLogRow({
     <div
       ref={rowRef}
       className={cn(
-        "rounded-none transition-colors",
-        isOdd ? "bg-muted/30" : "bg-background",
+        "transition-colors",
+        "border-border bg-card border-b",
         isHighlighted && HIGHLIGHTED_ROW_CLASS,
       )}
     >
@@ -782,8 +776,9 @@ function OrgAuditLogsInner() {
     <div className="flex w-full flex-col gap-4">
       <InsightsConfig contextInfo={insightsContext} />
       <div>
-        <Heading variant="h4" className="mb-2">
-          Recent activity across your organization
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+          Audit Logs
         </Heading>
         <Text muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
@@ -848,7 +843,7 @@ function OrgAuditLogsInner() {
           <Text small muted>
             Timestamp
           </Text>
-          <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
+          <div className="bg-background flex h-8 items-center gap-2 border px-3">
             <Text
               small
               className={
@@ -876,7 +871,7 @@ function OrgAuditLogsInner() {
         </div>
       </div>
 
-      <div className="bg-background overflow-hidden rounded-lg border">
+      <div className="bg-background overflow-hidden border">
         {/* Search toolbar */}
         {!isLoading && !error && logs.length > 0 && (
           <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
@@ -884,17 +879,17 @@ function OrgAuditLogsInner() {
               {searchQuery ? (
                 <>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                       N
                     </kbd>
                     <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                       ⇧N
                     </kbd>
                     <span className="ml-0.5">results</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                       ESC
                     </kbd>
                     <span>clear</span>
@@ -903,23 +898,23 @@ function OrgAuditLogsInner() {
               ) : (
                 <>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                       J
                     </kbd>
                     <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                       K
                     </kbd>
                     <span className="ml-0.5">navigate</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                       G
                     </kbd>
                     <span>first</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                    <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                       ⇧G
                     </kbd>
                     <span>last</span>
@@ -940,12 +935,12 @@ function OrgAuditLogsInner() {
                 onChange={handleSearchChange}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
-                className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
+                className="w-56 py-1 pr-16 pl-7 text-xs"
               />
               {searchQuery || searchInputFocused ? (
                 searchMatchIndices.length > 0 ? (
                   <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
+                    <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
                     <span className="text-muted-foreground mx-0.5 text-[10px]">
@@ -954,14 +949,14 @@ function OrgAuditLogsInner() {
                     <div className="flex items-center">
                       <button
                         onClick={() => navigateToResult("prev")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                        className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Previous (Shift+N)"
                       >
                         <Icon name="chevron-up" className="size-2.5" />
                       </button>
                       <button
                         onClick={() => navigateToResult("next")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                        className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Next (N)"
                       >
                         <Icon name="chevron-down" className="size-2.5" />
@@ -970,7 +965,7 @@ function OrgAuditLogsInner() {
                   </div>
                 ) : (
                   <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
+                    <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
                     <span className="text-muted-foreground ml-0.5 text-[10px]">
@@ -980,7 +975,7 @@ function OrgAuditLogsInner() {
                 )
               ) : (
                 <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                  <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <span className="text-muted-foreground bg-muted px-1 py-0.5 font-mono text-[10px]">
                     /
                   </span>
                 </div>
@@ -1018,7 +1013,7 @@ function OrgAuditLogsInner() {
               {dateGroups.map((group) => (
                 <React.Fragment key={group.key}>
                   <DateGroupHeader date={group.date} mode={tsMode} />
-                  {group.logs.map((log, rowIndex) => {
+                  {group.logs.map((log) => {
                     const idx = logFlatIndices.get(log.id) ?? 0;
                     return (
                       <AuditLogRow
@@ -1026,7 +1021,6 @@ function OrgAuditLogsInner() {
                         log={log}
                         orgSlug={orgSlug ?? ""}
                         timestampMode={tsMode}
-                        isOdd={rowIndex % 2 === 1}
                         isHighlighted={idx === currentLogIndex}
                         rowRef={(el) => {
                           if (el) logRefs.current.set(idx, el);

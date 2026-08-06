@@ -193,7 +193,7 @@ export function RevealAllToggle({
         aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
         className={
           className ??
-          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors"
+          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 border px-3 text-sm transition-colors"
         }
       >
         {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
@@ -432,7 +432,7 @@ export function EventMatchDialog({
           </Dialog.Description>
         </Dialog.Header>
         {summary ? (
-          <div className="bg-muted/40 space-y-1 rounded-md border p-3">
+          <div className="bg-muted/40 space-y-1 border p-3">
             <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Why this was flagged
             </div>

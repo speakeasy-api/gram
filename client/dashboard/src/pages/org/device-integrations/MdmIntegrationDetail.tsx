@@ -451,7 +451,7 @@ function FleetSourceBreakdown() {
             key={provider.id}
             to={`../${provider.id}`}
             relative="path"
-            className="border-border bg-muted/40 hover:bg-muted flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors"
+            className="border-border bg-muted/40 hover:bg-muted flex items-center gap-2 border px-3 py-1.5 text-sm transition-colors"
           >
             <span className="font-medium">{provider.displayName}</span>
             <span className="text-muted-foreground tabular-nums">

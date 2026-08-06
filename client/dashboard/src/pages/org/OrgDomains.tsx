@@ -348,7 +348,7 @@ function DefaultMcpServerControl({
     );
   } else if (endpoints.length === 0) {
     content = (
-      <div className="border-border rounded-md border border-dashed p-4">
+      <div className="border-border border border-dashed p-4">
         <Text variant="body" className="font-medium">
           No MCP endpoints on this domain
         </Text>
@@ -505,7 +505,7 @@ function ChatGPTAppVerificationControl({
         of your custom domain.
       </Text>
       <div className="mt-3 max-w-xl space-y-3">
-        <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
+        <div className="bg-muted flex items-center gap-2 px-3 py-2">
           <code className="min-w-0 flex-1 text-xs break-all">
             {verificationURL}
           </code>
@@ -759,7 +759,7 @@ function OrgDomainsInner() {
         URL instead of the default platform domain.
       </Text>
       {domain?.domain ? (
-        <div className="border-border bg-card rounded-lg border p-4">
+        <div className="border-border bg-card border p-4">
           <Stack direction="horizontal" justify="space-between" align="start">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
@@ -944,7 +944,7 @@ function OrgDomainsInner() {
         </div>
       ) : (
         !domainIsLoading && (
-          <div className="border-border rounded-lg border border-dashed p-6">
+          <div className="border-border border border-dashed p-6">
             <Stack gap={2} align="center" justify="center">
               <Text variant="body" className="text-muted-foreground">
                 No custom domain configured
@@ -1002,7 +1002,7 @@ function OrgDomainsInner() {
                     ? "1 MCP endpoint will be deactivated:"
                     : `${impactedEndpoints.length} MCP endpoints will be deactivated:`}
                 </Text>
-                <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto rounded-md border px-6 py-2">
+                <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto border px-6 py-2">
                   {impactedEndpoints.map((endpoint) => (
                     <li key={endpoint.id}>
                       <Text variant="small">
@@ -1108,7 +1108,7 @@ function OrgDomainsInner() {
                 <span className="font-mono break-all">{subdomain}</span>{" "}
                 pointing to the following:
               </Text>
-              <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{CNAME_VALUE}</code>
                 <Button
                   aria-label={
@@ -1141,7 +1141,7 @@ function OrgDomainsInner() {
                 <span className="font-mono break-all">{txtName}</span> with the
                 following value:
               </Text>
-              <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{txtValue}</code>
                 <Button
                   aria-label={

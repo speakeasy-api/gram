@@ -21,7 +21,7 @@ export const ProductTierBadge = ({
 
   return (
     <div
-      className={`text-muted-foreground w-fit rounded-sm px-1 py-0.5 text-xs ${classes.bg} ${classes.text}`}
+      className={`text-muted-foreground w-fit px-1 py-0.5 text-xs ${classes.bg} ${classes.text}`}
     >
       {name}
     </div>

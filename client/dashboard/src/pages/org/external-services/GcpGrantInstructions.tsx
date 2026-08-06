@@ -65,7 +65,7 @@ function GrantValue({
       <Text small muted>
         {label}
       </Text>
-      <div className="bg-muted/50 flex items-center justify-between gap-2 rounded-lg p-3 font-mono text-sm">
+      <div className="bg-muted/50 flex items-center justify-between gap-2 p-3 font-mono text-sm">
         <code className="break-all">{value}</code>
         <CopyButton size="xs" text={value} tooltip={`Copy ${label}`} />
       </div>

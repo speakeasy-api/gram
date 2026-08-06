@@ -111,7 +111,7 @@ function SkillsComingSoon(): JSX.Element {
         discovery and improve performance.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+        <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
           <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
             <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
           </div>

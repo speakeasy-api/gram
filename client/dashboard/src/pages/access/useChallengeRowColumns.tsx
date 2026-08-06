@@ -167,7 +167,7 @@ export function useChallengeRowColumns(
             <TooltipTrigger asChild>
               <code
                 className={cn(
-                  "bg-muted min-w-0 truncate rounded px-1.5 py-0.5 font-mono text-xs",
+                  "bg-muted min-w-0 truncate px-1.5 py-0.5 font-mono text-xs",
                   rowFade(row),
                 )}
               >

@@ -30,7 +30,7 @@ export function SetupGuideCard({
   if (!guide || (!guide.openGuide && !guide.only)) return null;
 
   return (
-    <div className="bg-card border-border dark:bg-neutral-950 flex flex-col gap-2 rounded-lg border px-4 py-3 shadow-md">
+    <div className="bg-card border-border dark:bg-neutral-950 flex flex-col gap-2 border px-4 py-3 shadow-md">
       <Text variant="small" muted className="text-xs">
         This MCP server may require some additional setup.
       </Text>

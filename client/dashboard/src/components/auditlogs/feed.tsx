@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { getActionMeta } from "@/components/auditlogs/action-meta";
 import {
   getActionCategory,
   getActionColorConfig,
@@ -30,7 +31,7 @@ export function DateGroupHeader({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-3 px-4 py-2">
-      <span className="text-muted-foreground shrink-0 text-[11px] font-semibold tracking-wide uppercase">
+      <span className="text-eyebrow shrink-0">
         {formatDateHeader(date, mode)}
       </span>
       <div className="bg-border h-px flex-1" />
@@ -44,13 +45,39 @@ export function ActionBadge({ action }: { action: string }): React.JSX.Element {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-medium",
+        "inline-flex items-center px-1.5 py-0.5 font-mono text-[11px] font-medium",
         colors.bg,
         colors.text,
       )}
     >
       {formatAuditAction(action)}
     </span>
+  );
+}
+
+/**
+ * The bordered square icon tile that leads an audit row — same idiom as the
+ * project-home Activity Timeline, so clicking through from the timeline to
+ * the audit log lands on rows that read identically.
+ */
+export function ActionIconTile({
+  action,
+}: {
+  action: string;
+}): React.JSX.Element {
+  const meta = getActionMeta(action);
+  return (
+    <div className="border-border bg-card relative flex size-8 shrink-0 items-center justify-center border">
+      <meta.icon className="text-muted-foreground size-4" />
+      {meta.dot && (
+        <span
+          className={cn(
+            "absolute top-1 right-1 size-1.5 rounded-full",
+            meta.dot,
+          )}
+        />
+      )}
+    </div>
   );
 }
 

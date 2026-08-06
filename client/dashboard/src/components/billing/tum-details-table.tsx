@@ -251,7 +251,7 @@ function DetailGroupSection({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="bg-muted text-muted-foreground hover:text-foreground border-border dark:border-white/20 flex w-full cursor-pointer items-center gap-1.5 border-t px-4 py-1.5 text-xs transition-colors"
+        className="text-eyebrow hover:text-foreground border-border dark:border-white/20 flex w-full cursor-pointer items-center gap-1.5 border-t px-4 py-1.5 transition-colors"
       >
         <ChevronDown
           className={cn(
@@ -259,7 +259,7 @@ function DetailGroupSection({
             collapsed && "-rotate-90",
           )}
         />
-        <span className="font-medium">{group.heading}</span>
+        <span>{group.heading}</span>
         {group.note && (
           <SimpleTooltip tooltip={group.note}>
             <Info className="size-3 cursor-help" />
@@ -522,7 +522,7 @@ export function TumDetailsTable({
   );
 
   return (
-    <div className="border-border overflow-hidden rounded-lg border">
+    <div className="border-border overflow-hidden border">
       <div className="flex items-baseline gap-2 px-4 pt-3 pb-1">
         <span className="text-sm font-semibold">
           Token Usage Cumulative Breakdown
@@ -544,7 +544,7 @@ export function TumDetailsTable({
           </button>
         </div>
       </div>
-      <div className="text-muted-foreground flex items-center px-4 py-2 text-xs font-medium">
+      <div className="text-eyebrow flex items-center px-4 py-2">
         <span className="flex-1">Metric</span>
         <SimpleTooltip tooltip={totalTooltip}>
           <span className="w-24 cursor-help text-right">Total</span>

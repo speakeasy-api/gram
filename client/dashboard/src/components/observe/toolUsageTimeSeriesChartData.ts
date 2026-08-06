@@ -1,22 +1,14 @@
 import { formatChartLabel } from "@/components/chart/chartUtils";
+import { OTHER_SERIES, SERIES, withAlpha } from "@/components/chart/palette";
 import type { ChartDataset } from "chart.js";
 
-const DEFAULT_TIME_SERIES_COLORS = [
-  "#60a5fa",
-  "#fb923c",
-  "#34d399",
-  "#f87171",
-  "#a78bfa",
-  "#facc15",
-  "#22d3ee",
-  "#f472b6",
-  "#a3e635",
-];
+// The shared editorial series ramp (ink + stepped neutrals).
+const DEFAULT_TIME_SERIES_COLORS = SERIES;
 
 // Series beyond the palette fold into a single neutral "Other" bucket instead
 // of cycling colors — two series sharing a hue are indistinguishable.
 const OTHER_SERIES_LABEL = "Other";
-const OTHER_SERIES_COLOR = "#9ca3af";
+const OTHER_SERIES_COLOR = OTHER_SERIES;
 
 export type TimeSeriesDataset = ChartDataset<"bar", number[]>;
 
@@ -174,7 +166,7 @@ export function buildToolUsageTimeSeries<
       label: key,
       data,
       backgroundColor: color,
-      hoverBackgroundColor: color + "cc",
+      hoverBackgroundColor: withAlpha(color, 0.8),
       stack: "total",
       maxBarThickness: 32,
     };

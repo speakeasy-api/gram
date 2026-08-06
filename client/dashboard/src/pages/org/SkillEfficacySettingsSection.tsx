@@ -206,7 +206,7 @@ function SkillEfficacySettingsForm({
   };
 
   return (
-    <div className="border-border bg-card max-w-2xl rounded-lg border p-6">
+    <div className="border-border bg-card max-w-2xl border p-6">
       <Stack gap={6}>
         <Stack direction="horizontal" justify="space-between" align="center">
           <div>
@@ -257,7 +257,7 @@ function SkillEfficacySettingsForm({
           />
         </div>
 
-        <div className="bg-muted/40 rounded-md border p-4">
+        <div className="bg-muted/40 border p-4">
           <Text muted small>
             Daily caps reset at 00:00 UTC. The new-version burst bypasses the
             per-skill daily cap until exhausted, but it never bypasses the

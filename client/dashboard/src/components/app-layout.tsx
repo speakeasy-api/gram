@@ -131,7 +131,7 @@ const ImpersonationBanner = () => {
       </span>
       <button
         type="button"
-        className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
+        className="ml-2 bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
         onClick={exit}
       >
         {isDemo ? "Exit demo" : "Stop impersonating"}
@@ -157,7 +157,7 @@ const AppLayoutContent = ({
             </MembershipSyncGuard>
             <Modal
               closable
-              className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto rounded-sm p-0 2xl:w-2/3 2xl:max-w-[1000px]"
+              className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto p-0 2xl:w-2/3 2xl:max-w-[1000px]"
               layout="custom"
             />
           </GlobalInsightsWrapper>
@@ -221,7 +221,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
         </p>
         <button
           type="button"
-          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 rounded-md px-4 py-2 text-sm font-medium"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 px-4 py-2 text-sm font-medium"
           onClick={() => {
             void (async () => {
               await client.auth.logout();

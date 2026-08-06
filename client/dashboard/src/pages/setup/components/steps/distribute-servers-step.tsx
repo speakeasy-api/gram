@@ -362,7 +362,7 @@ export function DistributeServersStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Boxes className="text-foreground h-6 w-6" />
         </div>
       }
@@ -433,19 +433,15 @@ export function DistributeServersStep({
                       }
                     }}
                     className={cn(
-                      "flex min-h-[118px] items-start gap-3 rounded-lg border p-4 text-left transition-all",
+                      "flex min-h-[118px] items-start gap-3 border p-4 text-left transition-all",
                       isSelected && !distributed
                         ? "border-foreground bg-secondary"
                         : "border-border bg-card hover:border-foreground/30",
                     )}
                   >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-white">
                       {server.iconUrl ? (
-                        <img
-                          src={server.iconUrl}
-                          alt=""
-                          className="h-6 w-6 rounded"
-                        />
+                        <img src={server.iconUrl} alt="" className="h-6 w-6" />
                       ) : (
                         <ServerIcon className="h-5 w-5 text-neutral-600" />
                       )}
@@ -560,7 +556,7 @@ export function DistributeServersStep({
                   publishing them to your marketplace. This can take a moment.
                 </p>
                 {drawerError ? (
-                  <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 rounded-md border p-3 text-sm">
+                  <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 border p-3 text-sm">
                     <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                     <div>
                       <p className="font-medium">Couldn't add your servers</p>
@@ -600,7 +596,7 @@ export function DistributeServersStep({
                     <p className="text-muted-foreground text-xs">
                       Registers the marketplace for your own account.
                     </p>
-                    <div className="bg-muted/50 flex items-center justify-between gap-2 rounded-md border p-3">
+                    <div className="bg-muted/50 flex items-center justify-between gap-2 border p-3">
                       <code className="text-foreground truncate text-xs">
                         {marketplaceCommand}
                       </code>

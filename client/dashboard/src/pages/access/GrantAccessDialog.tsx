@@ -152,7 +152,7 @@ export function GrantAccessDialog({
 
         {member && !loadFailed && (
           <div className="space-y-4 py-2">
-            <div className="border-border flex items-center gap-3 rounded-md border p-3">
+            <div className="border-border flex items-center gap-3 border p-3">
               <Avatar className="h-9 w-9">
                 {member.photoUrl && (
                   <AvatarImage src={member.photoUrl} alt={member.name} />
@@ -244,7 +244,7 @@ function RoleSuggestionList({
           return (
             <li
               key={role.id}
-              className="border-border flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+              className="border-border flex items-center justify-between gap-3 border px-3 py-2"
             >
               <div className="min-w-0">
                 <Text variant="body" className="text-sm font-medium">

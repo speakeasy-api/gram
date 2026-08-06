@@ -312,7 +312,7 @@ function UserSessionsInner(): JSX.Element {
           </Page.Toolbar>
 
           {selectionEnabled && selectedIds.length > 0 && (
-            <div className="border-border bg-muted/30 flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border px-3 py-2">
               <Text small>{selectedIds.length} selected</Text>
               <div className="flex items-center gap-2">
                 <Button

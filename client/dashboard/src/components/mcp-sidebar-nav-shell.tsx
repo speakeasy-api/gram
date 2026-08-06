@@ -114,7 +114,7 @@ export function McpSidebarNavShell({
 
         {cardContent && (
           <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
-            <div className="bg-card border-border dark:bg-neutral-950 flex flex-col gap-3 rounded-lg border px-4 py-3 shadow-md">
+            <div className="bg-card border-border flex flex-col gap-3 border px-4 py-3">
               {cardContent}
             </div>
           </li>

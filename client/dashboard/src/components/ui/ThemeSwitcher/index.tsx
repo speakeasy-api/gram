@@ -1,12 +1,11 @@
 "use client";
 
-import { ReactNode, useId, useMemo } from "react";
+import { ReactNode, useId } from "react";
 import { cn } from "@/lib/utils";
 import { Moon, Sun } from "lucide-react";
 import { useIsMounted } from "@/components/ui/hooks/useIsMounted";
 import { useConfig } from "@/components/ui/hooks/useConfig";
 import { Theme } from "@/components/ui/context/theme";
-import { motion } from "motion/react";
 
 const THEMES: { key: Theme; icon: ReactNode }[] = [
   { key: "light", icon: <Sun /> },
@@ -28,27 +27,22 @@ export function ThemeSwitcher({
   const { theme, setTheme } = useConfig();
   const rId = useId();
 
-  const posX = useMemo(() => {
-    const themeIndex = THEMES.findIndex((opt) => opt.key === theme);
-    return 100 * themeIndex;
-  }, [theme]);
-
   const isVertical = orientation === "vertical";
-  const knobSizeRem = 2.125;
+  const segmentSizeRem = 2.125;
   const placeholderStyle = isVertical
     ? {
-        width: `${knobSizeRem}rem`,
-        height: `calc(${knobSizeRem}rem * ${THEMES.length} + 2px)`,
+        width: `calc(${segmentSizeRem}rem + 2px)`,
+        height: `calc(${segmentSizeRem}rem * ${THEMES.length} + 2px)`,
       }
     : {
-        width: `calc(${knobSizeRem}rem * ${THEMES.length} + 2px)`,
-        height: `${knobSizeRem}rem`,
+        width: `calc(${segmentSizeRem}rem * ${THEMES.length} + 2px)`,
+        height: `calc(${segmentSizeRem}rem + 2px)`,
       };
 
   if (!isMounted) return <div style={placeholderStyle} />;
 
   return (
-    <div className="relative h-fit w-fit overflow-hidden rounded-full border border-neutral-300 bg-neutral-100 p-0 dark:border-neutral-800/30 dark:bg-neutral-900">
+    <div className="border-border bg-background h-fit w-fit border p-0">
       <fieldset
         className={cn(
           "group m-0 flex",
@@ -80,11 +74,11 @@ export function ThemeSwitcher({
               <label
                 className={cn(
                   // Base
-                  "relative flex size-[2.125rem] cursor-pointer items-center justify-center rounded-full text-foreground opacity-50 transition-opacity duration-300 dark:text-neutral-300 dark:opacity-70",
+                  "text-muted-foreground relative flex size-[2.125rem] cursor-pointer items-center justify-center transition-colors duration-200",
                   // Checked
-                  "peer-checked:cursor-default peer-checked:!opacity-100",
+                  "peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:cursor-default",
                   // Hover
-                  "peer-interact:!opacity-100",
+                  "peer-interact:text-foreground peer-checked:peer-interact:text-primary-foreground",
                   // Focus
                   "peer-checked:!inset-ring-0 peer-focus-visible:inset-ring-2 peer-focus-visible:ring-foreground",
                   // Icon
@@ -99,21 +93,6 @@ export function ThemeSwitcher({
           );
         })}
       </fieldset>
-      <motion.div
-        initial={{
-          transform: isVertical
-            ? `translateY(${posX}%)`
-            : `translateX(${posX}%)`,
-        }}
-        animate={{
-          transform: isVertical
-            ? `translateY(${posX}%)`
-            : `translateX(${posX}%)`,
-        }}
-        transition={{ type: "spring", duration: 0.7, bounce: 0.3 }}
-        className="absolute top-0 left-0 z-[10] size-[2.125rem] rounded-full shadow-[0px_0px_4px_0px_rgba(0,0,0,0.10),0px_2px_1px_0px_#FFF_inset,0px_-2px_1px_0px_rgba(0,0,0,0.05)_inset] dark:shadow-[0px_2px_4px_0px_rgba(0,0,0,0.60),0px_2px_1px_0px_#282828_inset,0px_-2px_1px_0px_rgba(0,0,0,0.05)_inset]"
-        suppressHydrationWarning
-      />
     </div>
   );
 }

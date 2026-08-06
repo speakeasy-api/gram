@@ -59,7 +59,7 @@ export default function RequestAccess(): React.JSX.Element {
   return (
     <FullScreenPage contentClassName="max-w-md">
       <div className="flex w-full flex-col items-center gap-4 text-center">
-        <h1 className="text-xl font-semibold">Request Access</h1>
+        <h1 className="text-display-sm font-thin">Request Access</h1>
 
         {!isValidScope ? (
           <div className="flex flex-col items-center gap-4">
@@ -80,7 +80,7 @@ export default function RequestAccess(): React.JSX.Element {
             </p>
 
             {/* Scope info */}
-            <div className="bg-muted/25 w-full rounded-lg border px-4 py-3">
+            <div className="bg-muted/25 w-full border px-4 py-3">
               <Stack gap={2}>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">

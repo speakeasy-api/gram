@@ -73,7 +73,7 @@ function RoleActionsMenu({
               type="button"
               disabled={disabled}
               className={cn(
-                "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 open && "bg-accent text-foreground",
                 disabled && "cursor-not-allowed",
               )}
@@ -258,12 +258,12 @@ export function RolesTab(): JSX.Element {
         // subgrid spanning them, so cells align across rows. Description uses
         // minmax(0,1fr) (shrinks, absorbs slack); Members uses max-content
         // (sizes to the bounded facepile) — neither can overflow the table.
-        <div className="border-border mt-4 grid grid-cols-[max-content_minmax(0,24rem)_max-content_max-content_1fr_max-content] overflow-hidden rounded-lg border">
-          <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2.5 text-sm">
-            <div>Name</div>
-            <div>Description</div>
-            <div>Permissions</div>
-            <div>Members</div>
+        <div className="border-border mt-4 grid grid-cols-[max-content_minmax(0,24rem)_max-content_max-content_1fr_max-content] overflow-hidden border">
+          <div className="border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2.5">
+            <div className="text-eyebrow">Name</div>
+            <div className="text-eyebrow">Description</div>
+            <div className="text-eyebrow">Permissions</div>
+            <div className="text-eyebrow">Members</div>
             <div aria-hidden />
             <div className="sr-only">Actions</div>
           </div>
@@ -286,7 +286,7 @@ export function RolesTab(): JSX.Element {
         </div>
       )}
 
-      <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
+      <div className="border-border/50 bg-muted/30 mt-8 border px-4 py-3">
         <Text variant="subheading" className="mb-4">
           About System roles
         </Text>
@@ -294,7 +294,7 @@ export function RolesTab(): JSX.Element {
           <Badge
             variant="neutral"
             size="sm"
-            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
+            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
           >
             Member
           </Badge>
@@ -308,7 +308,7 @@ export function RolesTab(): JSX.Element {
           <Badge
             variant="neutral"
             size="sm"
-            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
+            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
           >
             Admin
           </Badge>

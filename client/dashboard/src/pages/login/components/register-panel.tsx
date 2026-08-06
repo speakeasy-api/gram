@@ -117,7 +117,7 @@ export function RegisterPanel(): JSX.Element {
             value={companyName}
             onChange={handleCompanyNameChange}
             placeholder="Acme Inc"
-            className="w-full rounded-md border border-[var(--input-edge)] bg-[var(--card)] px-3.5 py-[11px] text-[16px] text-black placeholder:text-[var(--muted)] placeholder:opacity-55 focus:border-[var(--focus)] focus:outline-none"
+            className="w-full border border-[var(--input-edge)] bg-[var(--card)] px-3.5 py-[11px] text-[16px] text-black placeholder:text-[var(--muted)] placeholder:opacity-55 focus:border-[var(--focus)] focus:outline-none"
             disabled={registerMutation.isPending}
           />
           <p className="text-[12px] text-[var(--muted)]">

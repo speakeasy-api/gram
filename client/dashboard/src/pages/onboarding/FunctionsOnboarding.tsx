@@ -18,10 +18,12 @@ export default function FunctionsOnboarding(): JSX.Element {
             {/* Header */}
             <Stack gap={3} className="mb-8">
               <Stack direction="horizontal" gap={3} align="center">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-emerald-500/10">
                   <CodeIcon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <Heading variant="h3">Add Custom Functions</Heading>
+                <Heading variant="h3" className="text-display-sm font-thin">
+                  Add Custom Functions
+                </Heading>
               </Stack>
               <Text muted>
                 Create custom tools using TypeScript functions. Functions let

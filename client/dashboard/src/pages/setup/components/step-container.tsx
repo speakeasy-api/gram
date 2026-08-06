@@ -36,9 +36,7 @@ export function StepContainer({
       {/* Header */}
       <div className="flex items-center gap-0">
         <div className="flex-shrink-0">{icon}</div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          {title}
-        </h1>
+        <h1 className="text-foreground text-display-sm font-thin">{title}</h1>
       </div>
       <p className="text-muted-foreground mt-2 text-sm">{description}</p>
 

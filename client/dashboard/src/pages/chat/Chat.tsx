@@ -49,17 +49,13 @@ import {
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
 import { useChatLaunch } from "@/lib/chat-launch";
-import {
-  CHAT_LANDING_GRADIENT,
-  CHAT_LANDING_GRADIENT_CLASS,
-} from "@/lib/chat-gradient";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRoutes } from "@/routes";
 
-// Shared pill-style icon button used by the page chrome (back affordances).
+// Shared square icon button used by the page chrome (back affordances).
 const ICON_BUTTON_CLASS =
-  "border-border text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1 rounded-full border px-2.5 py-1.5 transition-colors";
+  "border-border text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1 border px-2.5 py-1.5 transition-colors";
 
 /** Layout route for `/chat`; renders the index (home) or a conversation. */
 export function ChatRoot(): ReactElement {
@@ -76,7 +72,6 @@ export function ChatHome(): ReactElement {
   const routes = useRoutes();
   return (
     <div className="relative flex h-full flex-col overflow-y-auto">
-      <ChatLandingBackdrop />
       <div className="absolute top-4 left-4 z-10">
         <Link
           to={routes.home.href()}
@@ -87,32 +82,9 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </div>
-      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
         <ChatLanding autoFocusInput />
       </div>
-    </div>
-  );
-}
-
-/**
- * Decorative rainbow "powder burst" header for the full-page chat landing —
- * the Speakeasy brand rainbow, heavily blurred and masked so it fades out well
- * above the content. Purely ambient: aria-hidden + pointer-events-none, sat
- * behind everything, so it never gets in the way of the composer or list.
- */
-function ChatLandingBackdrop(): ReactElement {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[460px] overflow-hidden [mask-image:linear-gradient(to_bottom,black_30%,transparent_92%)]"
-    >
-      <div
-        className={cn(
-          "absolute top-[-160px] left-1/2 -translate-x-1/2",
-          CHAT_LANDING_GRADIENT_CLASS,
-        )}
-        style={{ background: CHAT_LANDING_GRADIENT }}
-      />
     </div>
   );
 }
@@ -255,8 +227,8 @@ export function ChatLanding({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h1
             className={cn(
-              "text-foreground font-semibold tracking-tight",
-              compact ? "text-xl" : "text-3xl",
+              "text-foreground font-display font-thin",
+              compact ? "text-2xl" : "text-4xl",
             )}
           >
             {greeting}
@@ -268,7 +240,7 @@ export function ChatLanding({
             e.preventDefault();
             submit();
           }}
-          className="border-border bg-card focus-within:border-foreground/30 relative rounded-2xl border px-4 py-3 shadow-sm transition-colors"
+          className="border-border bg-card focus-within:border-foreground/30 relative border px-4 py-3 transition-colors"
         >
           <input
             value={value}
@@ -299,7 +271,7 @@ export function ChatLanding({
                 {placeholder}
               </span>
               <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
-                <kbd className="border-border rounded border px-1.5 py-0.5 font-mono">
+                <kbd className="border-border border px-1.5 py-0.5 font-mono">
                   /
                 </kbd>
                 for suggestions
@@ -369,7 +341,7 @@ function SlashCommandMenu({
       id="ask-slash-menu"
       role="listbox"
       aria-label="Suggested prompts"
-      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border p-1 shadow-lg"
+      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto border p-1 shadow-lg"
     >
       {commands.map((command, index) => {
         const Icon = INSIGHTS_SUGGESTION_ICONS[command.icon ?? "sparkles"];
@@ -390,7 +362,7 @@ function SlashCommandMenu({
             className={cn(
               // `bg-accent`, not `bg-muted` — on the home page the menu sits
               // inside a muted card, where a muted highlight is invisible.
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors",
+              "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors",
               active ? "bg-accent" : "hover:bg-accent/60",
             )}
           >
@@ -737,7 +709,7 @@ function RecentRowIcon({
   }
 
   return (
-    <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
+    <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center border">
       <MessageCircle className="size-4" />
     </span>
   );
@@ -755,7 +727,7 @@ function RecentRow({
   // container (not a Link) so the pin button isn't nested inside an anchor; the
   // Link covers the icon + title, and the pin button is a sibling action.
   return (
-    <div className="group/row hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors">
+    <div className="group/row hover:bg-accent flex items-center gap-3 px-3 py-1.5 transition-colors">
       <Link
         to={routes.chat.conversation.href(chat.id)}
         className="flex min-w-0 flex-1 items-center gap-3"
@@ -806,7 +778,7 @@ function PinButton({
       aria-label={pinned ? "Unpin chat" : "Pin chat"}
       title={pinned ? "Unpin chat" : "Pin chat"}
       className={cn(
-        "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded p-1 transition-opacity",
+        "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 p-1 transition-opacity",
         pinned
           ? "text-foreground"
           : // Visible by default (touch has no hover to reveal it); only fade-until-hover
@@ -856,7 +828,7 @@ function ChatHomeSuggestions({
               key={suggestion.title}
               type="button"
               onClick={(event) => launchChat(suggestion, event.currentTarget)}
-              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
             >
               <SuggestionIcon className="size-4 shrink-0" />
               {suggestion.title}
@@ -1004,7 +976,10 @@ function ChatSurface(): ReactElement {
   // roomier height on the full page (via :host-context) without affecting the
   // compact docked panel — see CHAT_FULLPAGE_COMPOSER_CSS in insights-dock.
   return (
-    <div className="gram-chat-fullpage h-full overflow-hidden">
+    <div
+      data-radius="sharp"
+      className="gram-chat-fullpage h-full overflow-hidden"
+    >
       <Chat />
     </div>
   );

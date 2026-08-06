@@ -28,7 +28,7 @@ export default function OrgSkills(): JSX.Element {
                 Configure organization-wide skill capture and efficacy sampling.
               </Text>
 
-              <div className="border-border bg-card max-w-2xl rounded-lg border p-6">
+              <div className="border-border bg-card max-w-2xl border p-6">
                 <SkillContentUploadSetting />
               </div>
 

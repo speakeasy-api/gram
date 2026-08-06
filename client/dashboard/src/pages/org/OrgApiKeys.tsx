@@ -225,7 +225,7 @@ function OrgApiKeysInner() {
       ) : (
         <div
           role="status"
-          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 rounded-md border p-6"
+          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
         >
           <Text variant="body">
             {apiKeySearch ? "No matching API keys" : "No API keys yet"}
@@ -256,11 +256,11 @@ function OrgApiKeysInner() {
           </Dialog.Header>
           {newlyCreatedKey ? (
             <div className="space-y-4 py-4">
-              <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
+              <div className="text-foreground border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
                 You will not be able to see this token value again once you
                 close this dialog. Copy it now and store it securely.
               </div>
-              <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
                   aria-label={isCopied ? "API key copied" : "Copy API key"}

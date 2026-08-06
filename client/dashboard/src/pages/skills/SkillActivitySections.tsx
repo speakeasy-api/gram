@@ -131,7 +131,7 @@ export function SkillActivitySections({
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
+            <dl className="grid gap-px overflow-hidden border sm:grid-cols-2 lg:grid-cols-4">
               <Metric
                 label="Versions"
                 value={metricValue(skill.versionCount)}

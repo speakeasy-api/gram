@@ -159,7 +159,7 @@ function OrgLogsInner() {
         These power the insights and logs page on the platform.
       </Text>
       <LogDataRetentionBanner />
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>

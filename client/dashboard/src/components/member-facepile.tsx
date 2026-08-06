@@ -89,7 +89,7 @@ export function MemberFacepile({
           aria-label={label}
           // Stop the row's onRowClick from firing when opening the popover.
           onClick={(e) => e.stopPropagation()}
-          className="hover:bg-accent/40 -ml-1 flex w-fit cursor-pointer items-center rounded-full p-1 transition-colors"
+          className="hover:bg-accent/40 -ml-1 flex w-fit cursor-pointer items-center p-1 transition-colors"
         >
           {/* Grid overlap: each face sits in a track narrower than itself
               (auto-cols < avatar width), so faces overlap by a fixed amount and

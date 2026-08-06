@@ -660,7 +660,7 @@ function ClientStrategyChooser({
             type="button"
             disabled={disabled}
             onClick={() => onPick(opt.key)}
-            className={`border-border w-full rounded-md border p-3 text-left transition-colors ${
+            className={`border-border w-full border p-3 text-left transition-colors ${
               disabled
                 ? "cursor-not-allowed opacity-50"
                 : "hover:bg-muted/60 hover:border-foreground/30"
@@ -891,7 +891,7 @@ function FieldReadOnly({
         {label}
       </Text>
       <div
-        className={`bg-muted/40 border-border rounded-md border px-2 py-1.5 text-sm break-all ${
+        className={`bg-muted/40 border-border border px-2 py-1.5 text-sm break-all ${
           mono ? "font-mono" : ""
         }`}
       >
@@ -923,7 +923,7 @@ function Callout({
           : "border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
   return (
     <div
-      className={`rounded-md border px-3 py-2 text-sm ${toneClasses}`}
+      className={`border px-3 py-2 text-sm ${toneClasses}`}
       role={tone === "error" ? "alert" : undefined}
     >
       {children}

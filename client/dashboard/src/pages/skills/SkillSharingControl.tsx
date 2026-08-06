@@ -187,7 +187,7 @@ export function SkillSharingCardBlocks({
             <button
               type="button"
               disabled={!canWrite || pending}
-              className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span
                 className={cn(
@@ -204,7 +204,7 @@ export function SkillSharingCardBlocks({
               <DropdownMenuItem
                 key={option.value}
                 onSelect={() => handleSelect(option.value)}
-                className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+                className="group flex cursor-pointer items-start gap-2.5 p-2"
               >
                 {option.value === currentStatus ? (
                   <span

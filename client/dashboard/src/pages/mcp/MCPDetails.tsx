@@ -123,25 +123,25 @@ function MCPLoading() {
       <Page.Body fullWidth className="gap-0">
         <div className="mx-auto w-full max-w-[1270px] flex-1">
           <Stack gap={6} className="mb-4">
-            <div className="bg-muted/30 h-40 w-full animate-pulse rounded-xl" />
+            <div className="bg-muted/30 h-40 w-full animate-pulse" />
 
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="bg-muted/30 h-[116px] w-full animate-pulse rounded-lg"
+                  className="bg-muted/30 h-[116px] w-full animate-pulse"
                 />
               ))}
             </div>
 
-            <div className="bg-muted/30 h-64 w-full animate-pulse rounded-lg" />
+            <div className="bg-muted/30 h-64 w-full animate-pulse" />
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />
-              <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />
+              <div className="bg-muted/30 h-40 w-full animate-pulse" />
+              <div className="bg-muted/30 h-40 w-full animate-pulse" />
             </div>
 
-            <div className="bg-muted/30 h-48 w-full animate-pulse rounded-lg" />
+            <div className="bg-muted/30 h-48 w-full animate-pulse" />
           </Stack>
         </div>
       </Page.Body>
@@ -653,7 +653,7 @@ export function MCPStatusDropdown({
           <button
             type="button"
             disabled={!canWrite}
-            className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span
               className={cn(
@@ -672,7 +672,7 @@ export function MCPStatusDropdown({
               key={option.value}
               onSelect={() => handleSelect(option.value)}
               disabled={option.value === "public" && publicOptionUnavailable}
-              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+              className="group flex cursor-pointer items-start gap-2.5 p-2"
             >
               {option.value === currentStatus ? (
                 <span
@@ -1516,7 +1516,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               </Text>
               {!toolset.customDomainId ? (
                 <Input
-                  className="w-full rounded border px-2 py-1"
+                  className="w-full border px-2 py-1"
                   placeholder="Enter MCP Slug"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
@@ -1526,7 +1526,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                 />
               ) : (
                 <Input
-                  className="w-full rounded border px-2 py-1"
+                  className="w-full border px-2 py-1"
                   placeholder="Enter MCP Slug"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
@@ -1611,7 +1611,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       {/* Danger Zone */}
-      <div className="border-destructive/30 mt-8 rounded-lg border p-6">
+      <div className="border-destructive/30 mt-8 border p-6">
         <Text variant="subheading" className="text-destructive mb-1">
           Danger Zone
         </Text>
@@ -1645,7 +1645,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           </Dialog.Header>
           <div className="space-y-4 py-4">
             <Text variant="body">
-              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                 {toolset.name}
               </code>{" "}
               and all its configuration will be permanently deleted. Connected

@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
@@ -128,7 +128,7 @@ export function MCPOverviewTab({
       </div>
 
       {isLogsDisabled ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
+        <div className="flex flex-col items-center justify-center border p-12 text-center">
           <Text muted className="mb-1 block">
             Observability is not enabled
           </Text>
@@ -138,16 +138,17 @@ export function MCPOverviewTab({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
+          <MetricCardGroup>
             {isLoading && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
+                <Skeleton key={i} className="h-[116px] flex-1" />
               ))
             ) : (
               <>
                 <MetricCard
                   title="Tool calls"
                   value={summary?.totalToolCalls ?? 0}
+                  tone="information"
                   previousValue={comparison?.totalToolCalls}
                   format="compact"
                   comparisonLabel="vs previous period"
@@ -155,6 +156,11 @@ export function MCPOverviewTab({
                 <MetricCard
                   title="Failed calls"
                   value={summary?.failedToolCalls ?? 0}
+                  tone={
+                    (summary?.failedToolCalls ?? 0) > 0
+                      ? "destructive"
+                      : "neutral"
+                  }
                   previousValue={comparison?.failedToolCalls}
                   format="compact"
                   invertDelta
@@ -172,6 +178,7 @@ export function MCPOverviewTab({
                 <MetricCard
                   title="Avg latency"
                   value={summary?.avgLatencyMs ?? 0}
+                  tone="information"
                   previousValue={comparison?.avgLatencyMs}
                   format="ms"
                   invertDelta
@@ -179,7 +186,7 @@ export function MCPOverviewTab({
                 />
               </>
             )}
-          </div>
+          </MetricCardGroup>
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"
@@ -191,7 +198,7 @@ export function MCPOverviewTab({
           />
 
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
-            <div className="rounded-lg border p-5">
+            <div className="border p-5">
               <Heading variant="h5" className="mb-3">
                 Top tools by call count
               </Heading>
@@ -201,7 +208,7 @@ export function MCPOverviewTab({
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
             </div>
-            <div className="rounded-lg border p-5">
+            <div className="border p-5">
               <Heading variant="h5" className="mb-3">
                 Top tools by failure rate
               </Heading>

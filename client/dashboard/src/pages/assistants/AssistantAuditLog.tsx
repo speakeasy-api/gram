@@ -1,6 +1,5 @@
 import {
-  ActionBadge,
-  ActionDot,
+  ActionIconTile,
   AuditFeedFooter,
   DateGroupHeader,
   FacetSelect,
@@ -55,9 +54,8 @@ function AssistantAuditLogRow({
   const paramsTruncated = log.metadata?.["params_truncated"] === true;
 
   const rowContent = (
-    <div className="flex items-start gap-3.5 px-4 py-2.5">
-      <ActionDot action={log.action} />
-      <ActionBadge action={log.action} />
+    <div className="flex items-center gap-3 px-4 py-2.5">
+      <ActionIconTile action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <span>
           <strong className="text-foreground font-semibold">
@@ -81,7 +79,7 @@ function AssistantAuditLogRow({
           <button
             type="button"
             onClick={() => setParamsExpanded((v) => !v)}
-            className="ml-2 text-xs text-blue-500 hover:underline"
+            className="text-link-primary ml-2 text-xs hover:underline"
           >
             {paramsExpanded ? "Hide params ▴" : "Show params ▾"}
           </button>
@@ -98,14 +96,14 @@ function AssistantAuditLogRow({
       <div>
         <div
           className={cn(
-            "rounded-t-lg border border-b-0",
+            "border border-b-0",
             isOdd ? "bg-muted/30" : "bg-background",
           )}
         >
           {rowContent}
         </div>
-        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
-          <pre className="bg-muted/30 text-muted-foreground max-h-80 overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
+        <div className="bg-background border border-t-0 px-4 pt-2 pb-3">
+          <pre className="bg-muted/30 text-muted-foreground max-h-80 overflow-auto p-3 font-mono text-xs whitespace-pre-wrap">
             {params}
           </pre>
           {paramsTruncated && (
@@ -121,7 +119,7 @@ function AssistantAuditLogRow({
   return (
     <div
       className={cn(
-        "rounded-none transition-colors",
+        "transition-colors",
         isOdd ? "bg-muted/30" : "bg-background",
       )}
     >
@@ -212,7 +210,7 @@ export function AssistantsAuditLog(): React.JSX.Element {
         />
       </div>
 
-      <div className="bg-background overflow-hidden rounded-lg border">
+      <div className="bg-background overflow-hidden border">
         {isLoading ? (
           <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
             <Icon name="loader-circle" className="size-4 animate-spin" />

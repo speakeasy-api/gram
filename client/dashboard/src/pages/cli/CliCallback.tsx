@@ -159,7 +159,7 @@ function FailedScreen({ error }: { error: string }) {
   return (
     <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="mb-2 text-2xl font-bold text-red-600">Error</h1>
+        <h1 className="text-display-sm mb-2 font-thin text-red-600">Error</h1>
         <p className="text-gray-600">{error}</p>
       </div>
     </div>
@@ -170,7 +170,7 @@ function WaitScreen() {
   return (
     <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="mb-2 text-2xl font-bold">Redirecting...</h1>
+        <h1 className="text-display-sm mb-2 font-thin">Redirecting...</h1>
         <p className="text-gray-600">You will be redirected shortly</p>
       </div>
     </div>

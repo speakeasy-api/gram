@@ -319,7 +319,7 @@ function DeviceAgentConfigurationForm({
   };
 
   return (
-    <div className="border-border bg-card rounded-lg border p-6">
+    <div className="border-border bg-card border p-6">
       <Stack gap={6}>
         <div>
           <Text variant="body" className="font-medium">
@@ -506,7 +506,7 @@ function DeviceAgentConfigurationForm({
           </Field>
         )}
 
-        <div className="bg-muted/40 rounded-md border p-4">
+        <div className="bg-muted/40 border p-4">
           <Text muted small>
             After the first successful fetch, these settings override the same
             non-secret fields from local and MDM configuration. Device identity

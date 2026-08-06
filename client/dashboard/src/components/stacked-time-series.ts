@@ -3,21 +3,13 @@
 // match the chart legend). Kept in a non-component module so the panel
 // component file satisfies the react-refresh "only export components" rule.
 
+import { OTHER_SERIES, SERIES } from "@/components/chart/palette";
+
 // The chart series palette, shared with consumers that key row/dot colors to
-// the chart legend (e.g. the billing usage details table).
-export const CHART_COLORS = [
-  "#60a5fa", // blue
-  "#34d399", // emerald
-  "#f97316", // orange
-  "#a78bfa", // violet
-  "#fb7185", // rose
-  "#facc15", // yellow
-  "#38bdf8", // sky
-  "#c084fc", // purple
-  "#4ade80", // green
-  "#f472b6", // pink
-];
-export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
+// the chart legend (e.g. the billing usage details table). Aliases of the
+// shared editorial palette so the whole dashboard charts as one system.
+export const CHART_COLORS = SERIES;
+export const OTHER_COLOR = OTHER_SERIES; // the top-N remainder rollup
 
 // The base label of a top-N remainder rollup series (a collision with a real
 // group appends suffixes). The label is display-only: neutral OTHER_COLOR

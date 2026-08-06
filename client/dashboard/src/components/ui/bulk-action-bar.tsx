@@ -89,7 +89,7 @@ export function BulkActionBar({
       aria-hidden={!visible}
       style={{ left: leftOffsetPx + 16, height: heightPx }}
       className={cn(
-        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 rounded-lg border px-3 text-sm shadow-md",
+        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 border px-3 text-sm shadow-md",
         heightPx == null && "py-2",
         visible ? "visible" : "invisible",
       )}

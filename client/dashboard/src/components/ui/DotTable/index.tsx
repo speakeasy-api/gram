@@ -23,7 +23,7 @@ export function DotTable({
   return (
     <div
       className={cn(
-        "!border-foreground/10 w-full overflow-hidden rounded-xl border",
+        "!border-foreground/10 w-full overflow-hidden border",
         className,
       )}
     >

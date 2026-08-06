@@ -751,7 +751,7 @@ function AgentSessionsPageContent({
                 type="button"
                 onClick={clearAssistantFilter}
                 aria-label="Clear assistant filter"
-                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
+                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
               >
                 <Icon name="x" className="size-3" />
               </button>
@@ -873,7 +873,7 @@ function AgentSessionsPageContent({
                 >
                   Previous
                 </Button>
-                <span className="text-muted-foreground text-sm tabular-nums">
+                <span className="text-muted-foreground font-mono text-xs tabular-nums">
                   Page {Math.floor(offset / limit) + 1}
                   {total > 0 && ` of ${Math.ceil(total / limit)}`}
                 </span>

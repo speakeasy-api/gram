@@ -49,3 +49,28 @@ export function getGradientColors(label: string): {
     angle,
   };
 }
+
+/**
+ * Deterministic muted identity tint for avatars/initials: a soft brand-hue
+ * wash with a deep same-hue foreground. Solid (no gradient) and desaturated
+ * to sit inside the editorial palette.
+ */
+export function getIdentityTint(label: string): {
+  backgroundColor: string;
+  color: string;
+} {
+  const fnv1a = (str: string) => {
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      hash ^= str.charCodeAt(i);
+      hash +=
+        (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    return hash >>> 0;
+  };
+  const base = BRAND_HUES[fnv1a(label) % BRAND_HUES.length]!;
+  return {
+    backgroundColor: `hsl(${base.h}, ${Math.min(base.s, 30)}%, 90%)`,
+    color: `hsl(${base.h}, ${Math.min(base.s + 10, 45)}%, 28%)`,
+  };
+}

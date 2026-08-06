@@ -21,6 +21,7 @@ import { Bar } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ToggleButton } from "@/components/ui/ToggleButton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { AXIS, TOOLTIP, withAlpha } from "@/components/chart/palette";
 import { cn } from "@/lib/utils";
 import {
   CHART_COLORS,
@@ -133,9 +134,9 @@ function stackColor(
   return CHART_COLORS[index % CHART_COLORS.length]!;
 }
 
-// A 6-digit hex color with ~13% alpha, for de-emphasizing non-hovered series.
-function dimmed(hex: string): string {
-  return `${hex}22`;
+// A palette color at ~13% alpha, for de-emphasizing non-hovered series.
+function dimmed(color: string): string {
+  return withAlpha(color, 0.13);
 }
 
 export function StackedTimeSeriesPanel({
@@ -354,8 +355,8 @@ export function StackedTimeSeriesPanel({
   const isDark = theme === "dark";
 
   const chartOptions = useMemo<ChartOptions<"bar">>(() => {
-    const textColor = isDark ? "rgba(255, 255, 255, 0.85)" : "#666";
-    const gridColor = isDark ? "#666" : "rgba(0, 0, 0, 0.08)";
+    const textColor = isDark ? AXIS.faded : AXIS.label;
+    const gridColor = isDark ? AXIS.gridDark : AXIS.grid;
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -379,6 +380,7 @@ export function StackedTimeSeriesPanel({
         // legend below the chart replaces it (see the buttons in the JSX).
         legend: { display: false },
         tooltip: {
+          ...TOOLTIP,
           callbacks: {
             label: (item) =>
               `${item.dataset.label}: ${formatValue(Number(item.raw))}`,
@@ -405,7 +407,7 @@ export function StackedTimeSeriesPanel({
   }, [isDark, drillToBuckets, onSelectRange, formatValue, formatAxisValue]);
 
   return (
-    <div className="border-border rounded-lg border p-4">
+    <div className="border-border border p-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           {title}
@@ -473,17 +475,14 @@ export function StackedTimeSeriesPanel({
                     onMouseEnter={() => setFocusLabel(d.label)}
                     onMouseLeave={() => setFocusLabel(null)}
                     className={cn(
-                      "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs transition-colors",
+                      "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 px-2 py-0.5 text-xs transition-colors",
                       hidden
                         ? "text-muted-foreground/60 line-through"
                         : "text-muted-foreground",
                     )}
                   >
                     <span
-                      className={cn(
-                        "size-2.5 rounded-[3px]",
-                        hidden && "opacity-40",
-                      )}
+                      className={cn("size-2.5", hidden && "opacity-40")}
                       style={{
                         backgroundColor: d.base,
                       }}

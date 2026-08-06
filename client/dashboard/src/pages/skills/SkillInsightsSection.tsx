@@ -200,7 +200,7 @@ function InsightsContent({
           signal={insight.regressionSignal}
         />
       )}
-      <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="grid gap-px overflow-hidden border sm:grid-cols-2 xl:grid-cols-4">
         <InsightMetric
           label="30-day activations"
           value={formatCount(insight.metrics.activations)}
@@ -310,7 +310,7 @@ function ScoredSessions({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="overflow-hidden rounded-lg border"
+      className="overflow-hidden border"
     >
       <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-4 text-left">
         <span className="block">
@@ -675,10 +675,10 @@ function InsightsLoading(): JSX.Element {
     <div className="space-y-4" aria-label="Loading skill insights">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-28 rounded-lg" />
+          <Skeleton key={index} className="h-28" />
         ))}
       </div>
-      <Skeleton className="h-64 rounded-lg" />
+      <Skeleton className="h-64" />
       <SkeletonTable />
     </div>
   );

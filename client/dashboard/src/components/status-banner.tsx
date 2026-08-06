@@ -33,7 +33,7 @@ export function StatusBanner({
   return (
     <div
       className={cn(
-        "border-border/70 relative overflow-hidden rounded-xl border shadow-sm",
+        "border-border/70 relative overflow-hidden border shadow-sm",
         className,
       )}
     >

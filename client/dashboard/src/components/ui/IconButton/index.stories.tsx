@@ -37,7 +37,7 @@ const meta: Meta<typeof IconButton> = {
       control: { type: "select" },
       options: ["product", "marketing"],
       description:
-        "Context determines styling - product uses rounded corners, marketing uses full pills",
+        "Context determines styling - product uses corners, marketing uses full pills",
     },
   },
 };
@@ -276,7 +276,7 @@ export const Accessibility: Story = {
         <h3 className="mb-2 text-sm font-medium">
           🔍 TypeScript enforces accessibility
         </h3>
-        <pre className="rounded bg-muted p-2 text-xs">
+        <pre className="bg-muted p-2 text-xs">
           {`// ❌ TypeScript error - missing aria-label
 <IconButton icon={<PlusIcon />} variant="primary" />
 

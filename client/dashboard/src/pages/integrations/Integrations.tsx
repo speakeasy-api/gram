@@ -288,7 +288,7 @@ function IntegrationCard({
             {integration.packageImageAssetId && (
               <AssetImage
                 assetId={integration.packageImageAssetId}
-                className="h-8 w-8 rounded-md"
+                className="h-8 w-8"
               />
             )}
             <span>

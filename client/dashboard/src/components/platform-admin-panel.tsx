@@ -69,7 +69,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled || pending}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
         destructive
           ? "bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
           : "bg-foreground text-background hover:opacity-90"
@@ -93,7 +93,7 @@ function Section({
   children: React.ReactNode;
 }): ReactElement {
   return (
-    <div className="border-border bg-card rounded-lg border p-3">
+    <div className="border-border bg-card border p-3">
       <div className="mb-1 flex items-center gap-1.5">
         <Icon className="text-muted-foreground h-3.5 w-3.5" />
         <span className="text-foreground text-xs font-medium">{title}</span>
@@ -653,7 +653,7 @@ function OnboardingSection(): ReactElement {
         {sendEmail.data?.setupLink && (
           <p className="text-muted-foreground pt-1 text-[11px] break-all">
             Setup link:{" "}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
+            <code className="bg-muted px-1 py-0.5 font-mono text-[10px]">
               {sendEmail.data.setupLink}
             </code>
           </p>
@@ -710,7 +710,7 @@ function OrgOverrideSection(): ReactElement {
           </button>
           <button
             type="submit"
-            className="bg-foreground text-background inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium hover:opacity-90"
+            className="bg-foreground text-background inline-flex items-center px-2.5 py-1 text-[11px] font-medium hover:opacity-90"
           >
             Go to org
           </button>
