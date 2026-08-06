@@ -1,0 +1,37 @@
+server/internal/authz/provisioner_test.go
+  s_34233f620b8dad::t_d24c570cbc1e59 22,29
+server/internal/mcp/handle_get_server_proxy_test.go
+  s_34233f620b8dad::t_30f954b9532448 162
+server/internal/testenv/testcontainers.go
+  s_34233f620b8dad::t_2a2404198ed896 19,72-73,83-92
+  s_34233f620b8dad::t_ae8b829cbdc9cd 93-95
+server/internal/authz/demo_test.go
+  s_34233f620b8dad::t_a3cdf078cf968c 32,68
+server/internal/testenv/clickhouse.go
+  s_34233f620b8dad::t_2a2404198ed896 29
+server/internal/authz/engine.go
+  s_34233f620b8dad::t_07e92dde0aabf8 13,97-101
+  s_34233f620b8dad::t_d4f9b236b17c49 102-103
+server/internal/testenv/postgresql.go
+  s_34233f620b8dad::t_d4fc15d8aff783 53
+server/internal/authz/provisioner.go
+  s_34233f620b8dad::t_d24c570cbc1e59 24-25,37-40,62
+server/internal/testenv/redis.go
+  s_34233f620b8dad::t_2a2404198ed896 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7a4a6d09ba4e70a2f513dd490aa8eb27efb89bd4",
+  "prompts": {},
+  "sessions": {
+    "s_34233f620b8dad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb3af-21fb-7e50-b84d-eb4bdbafa9cc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
