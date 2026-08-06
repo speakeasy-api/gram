@@ -107,6 +107,22 @@ func NewSet(broker gcp.PublisherBroker, settings *pubsub.PublishSettings) *Set {
 	}
 }
 
+// Warm eagerly builds a publisher for every declared topic, so a broker that
+// cannot hand one back fails here — at boot, naming the topic — rather than
+// one outbox row at a time through a retry budget. On the emulator broker it
+// also reconciles each topic as a side effect, which is what creates them in
+// local dev before anything publishes. The publishers are cached, so warming
+// costs nothing that first use would not have.
+func (s *Set) Warm(ctx context.Context) error {
+	for _, topic := range All() {
+		if _, err := s.publisherFor(ctx, topic); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Publish sends an already-marshaled payload to the named topic. An undeclared
 // name yields ErrUnknownTopic without contacting Pub/Sub.
 func (s *Set) Publish(ctx context.Context, name string, data []byte, attrs map[string]string) gcp.PublishResult {

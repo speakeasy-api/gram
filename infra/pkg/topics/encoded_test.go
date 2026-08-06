@@ -143,6 +143,34 @@ func TestSetPublish_BrokerFailureIsRetryable(t *testing.T) {
 		"the topic is declared; the broker just could not be reached")
 }
 
+// TestSetWarm_BuildsEveryDeclaredTopic pins what Warm is for: one broker probe
+// per declared topic at boot, cached so first use pays nothing further.
+func TestSetWarm_BuildsEveryDeclaredTopic(t *testing.T) {
+	t.Parallel()
+
+	broker := &stubBroker{}
+	set := NewSet(broker, boundedSettings())
+	t.Cleanup(func() { _ = set.Stop(context.Background()) })
+
+	require.NoError(t, set.Warm(t.Context()))
+	require.Equal(t, len(All()), broker.calls, "every declared topic must be probed")
+
+	data, err := proto.Marshal(&pingv2.Message{})
+	require.NoError(t, err)
+	set.Publish(t.Context(), string(GramPingV2Message), data, nil)
+	require.Equal(t, len(All()), broker.calls, "publishing after Warm must reuse the warmed publisher")
+}
+
+func TestSetWarm_SurfacesBrokerFailure(t *testing.T) {
+	t.Parallel()
+
+	set := NewSet(&stubBroker{err: context.DeadlineExceeded}, nil)
+
+	err := set.Warm(t.Context())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, string(All()[0]), "the failure must name the topic it happened on")
+}
+
 func TestNoopPublisher(t *testing.T) {
 	t.Parallel()
 

@@ -1055,11 +1055,17 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	outboxPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
 	outboxPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
 
-	// No boot-time resolvability assertion is needed here: the topics registry
-	// is generated from the proto descriptors and imports every topic's Go
-	// package, so a topic that can be written to the outbox is resolvable by
-	// construction, and CI fails on registry drift.
+	// Registry consistency needs no boot-time assertion — the generated
+	// registry imports every topic's Go package, so declared topics resolve by
+	// construction. Broker reachability does: warming builds a publisher per
+	// declared topic now, so a broker that cannot hand one back (a
+	// misconfigured emulator, say) fails boot naming the topic instead of
+	// dead-lettering outbox rows one retry budget at a time. On the emulator
+	// this is also what reconciles the topics into existence.
 	outboxPublisher := topics.NewSet(psbroker, &outboxPublishSettings)
+	if err := outboxPublisher.Warm(ctx); err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to warm outbox topic publishers: %w", err)
+	}
 	pubs = append(pubs, labelledStop{label: "outbox", pub: outboxPublisher})
 
 	shutdown := func(ctx context.Context) error {
