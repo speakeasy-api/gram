@@ -27,7 +27,7 @@ import (
 // deviceAgentReleasesBaseURL is the public, unauthenticated bucket the
 // device-agent release pipeline publishes to (device-agent's release.yml,
 // release-pkg-macos job). The pkg itself has no "latest" alias there, same as
-// the raw daemon/CLI binaries — every consumer resolves the current version
+// the raw daemon/CLI binaries; every consumer resolves the current version
 // off releases.json and builds the versioned URL, which is what this handler
 // does server-side so docs/IT-admin instructions have one stable link.
 const deviceAgentReleasesBaseURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod"
@@ -131,7 +131,12 @@ func (s *Service) handleInstallDeviceAgentMacOS(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	decoder := json.NewDecoder(io.LimitReader(resp.Body, maxManifestSize))
+	// N is capped one byte over the limit so a body that is exactly
+	// maxManifestSize bytes doesn't spuriously read as truncated below;
+	// N only reaches 0 once genuinely more than maxManifestSize bytes
+	// have been consumed.
+	limited := &io.LimitedReader{R: resp.Body, N: maxManifestSize + 1}
+	decoder := json.NewDecoder(limited)
 
 	var manifest deviceAgentReleasesManifest
 	if err := decoder.Decode(&manifest); err != nil {
@@ -147,6 +152,16 @@ func (s *Service) handleInstallDeviceAgentMacOS(w http.ResponseWriter, r *http.R
 		}
 		span.SetStatus(codes.Error, "trailing data after manifest")
 		s.logger.ErrorContext(ctx, "device-agent releases manifest has trailing data after JSON object", attr.SlogError(err))
+		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+
+	// A body larger than maxManifestSize exhausts the LimitedReader; without
+	// this check that truncation is indistinguishable from a clean end of
+	// body, and the trailing-data check above would pass on truncated input.
+	if limited.N == 0 {
+		span.SetStatus(codes.Error, "manifest exceeds max size")
+		s.logger.ErrorContext(ctx, "device-agent releases manifest exceeds maximum size")
 		http.Error(w, "device-agent installer temporarily unavailable", http.StatusBadGateway)
 		return
 	}
