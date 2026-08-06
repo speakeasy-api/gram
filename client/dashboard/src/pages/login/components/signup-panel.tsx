@@ -7,7 +7,11 @@ import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
 
-const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9\s-_]+$/;
+// Mirrors the server's validOrgNameRegex, down to the literal space: the
+// server rejects every other whitespace character, and normalizeCompanyName
+// has already collapsed runs of whitespace to single spaces by the time this
+// runs.
+const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9 _-]+$/;
 const INVALID_ORG_NAME_MESSAGE =
   "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.";
 
@@ -52,9 +56,11 @@ export function SignUpPanel(): JSX.Element {
         created_via: "signup",
       });
 
-      // The org itself is created server-side during the auth callback: the
-      // name rides on the login request, gets stashed against the login nonce,
-      // and never appears in a redirect param or the address bar.
+      // The org itself is created server-side during the auth callback. The
+      // name rides on this one login request as a query param, is stashed
+      // against the login nonce, and stops there: it is not carried through
+      // the identity-provider round trip and is not on the URL the user lands
+      // on afterwards.
       window.location.assign(
         buildLoginRedirectURL(null, normalizeCompanyName(value.companyName)),
       );

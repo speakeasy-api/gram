@@ -504,7 +504,9 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	}
 
 	// Stash the name against the nonce so the callback can create the org
-	// inline, without it ever riding through a redirect param or the address bar.
+	// inline. It arrives as a query param on this request and goes no further:
+	// it is not encoded into the state param, so it does not travel through the
+	// identity provider or come back on the redirect.
 	if orgName != "" {
 		if err := s.nonceStore.Set(ctx, signupIntentKey(nonce), signupIntent{OrgName: orgName}, nonceTTL); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error storing signup intent").LogError(ctx, s.logger)

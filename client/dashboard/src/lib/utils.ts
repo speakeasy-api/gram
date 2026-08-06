@@ -141,6 +141,9 @@ export function buildLoginRedirectURL(
   if (redirectTo) url.searchParams.set("redirect", redirectTo);
   // Present only from the sign-up page. The server validates it, stashes it
   // against the login nonce, and creates the org during the auth callback.
+  // As a query param on a top-level navigation it is visible in the address
+  // bar, browser history, and access logs — acceptable for a company name,
+  // which is not a secret, and it goes no further than this request.
   if (orgName) url.searchParams.set("org_name", orgName);
   return url.toString();
 }

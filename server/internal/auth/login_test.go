@@ -171,8 +171,10 @@ func TestService_Login(t *testing.T) {
 		require.NoError(t, err)
 
 		nonce := nonceFromLocation(t, result.Location)
+		// No tag: the nonce store marshals with msgpack, which keys by the Go
+		// field name and ignores `json` tags, so the stored key is "OrgName".
 		var intent struct {
-			OrgName string `json:"org_name"`
+			OrgName string
 		}
 		require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
 		require.Equal(t, "Acme Inc", intent.OrgName)

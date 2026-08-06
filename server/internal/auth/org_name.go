@@ -79,8 +79,14 @@ func generateLegibleOrgName() string {
 	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
 }
 
-// validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and underscores.
-var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
+// validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and
+// underscores.
+//
+// A literal space, not `\s`: Go's `\s` is `[\t\n\f\r ]`, and this runs on an
+// unauthenticated endpoint, so the client's whitespace normalization is not a
+// control. A name carrying a newline would otherwise reach the org record, the
+// identity provider, and every log line that prints an org name.
+var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9 _-]+$`)
 
 // maxOrgNameLength bounds the org name. validOrgNameRegex constrains the
 // character set but not the length, and the signup path accepts this value on
