@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -46,6 +47,14 @@ type AuthorizationURLParams struct {
 	Scope           string
 	State           string
 	ScopesSupported []string
+
+	// LoginHint pre-fills the email field on the identity provider's screen.
+	// Optional; omitted from the URL when empty.
+	LoginHint string
+
+	// ScreenHint selects which AuthKit screen to land on. Only "sign-up" is
+	// used, and only while provider is "authkit". Omitted when empty.
+	ScreenHint string
 }
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
@@ -566,11 +575,63 @@ func (r *Resolver) InvalidateUserInfoCache(ctx context.Context, userID string) e
 	return nil
 }
 
-const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authorize"
+const workosAPIEndpoint = "https://api.workos.com"
 
-// BuildAuthorizationURL constructs the OIDC authorization URL that the
-// browser should be redirected to.
+// BuildAuthorizationURL constructs the OIDC authorization URL that the browser
+// should be redirected to.
+//
+// The two branches are not interchangeable. WorkOS serves
+// /user_management/authorize and has no `scope` parameter at all — extra OAuth
+// scopes go through provider_scopes. The local dev-idp shim serves /authorize
+// and does read `scope`, signing an id_token only when it contains "openid".
+// Each side is built to match what that server actually does.
 func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params AuthorizationURLParams) (*url.URL, error) {
+	// A client ID minted by WorkOS. Delegate to the SDK so the query string is
+	// exactly the documented parameter set, and so the rule that screen_hint is
+	// only valid alongside provider=authkit is enforced by the library rather
+	// than by us remembering it.
+	if strings.HasPrefix(r.idpClientID, "client_") {
+		// GetAuthorizationURL is pure string building — no API key, no network
+		// call — so a bare client carrying only the endpoint is enough.
+		client := &usermanagement.Client{
+			APIKey:     "",
+			HTTPClient: nil,
+			Endpoint:   workosAPIEndpoint,
+			JSONEncode: nil,
+		}
+
+		authURL, err := client.GetAuthorizationURL(usermanagement.GetAuthorizationURLOpts{
+			ClientID:            r.idpClientID,
+			RedirectURI:         params.CallbackURL,
+			Provider:            "authkit",
+			State:               params.State,
+			LoginHint:           params.LoginHint,
+			ScreenHint:          usermanagement.ScreenHint(params.ScreenHint),
+			CodeChallenge:       "",
+			CodeChallengeMethod: "",
+			ConnectionID:        "",
+			OrganizationID:      "",
+			DomainHint:          "",
+			ProviderScopes:      nil,
+		})
+		if err != nil {
+			r.logger.ErrorContext(ctx, "failed to build WorkOS authorization URL", attr.SlogError(err))
+			return nil, fmt.Errorf("build WorkOS authorization URL: %w", err)
+		}
+
+		// The SDK omits `scope` — WorkOS's reference for this endpoint does not
+		// list it, and points at provider_scopes instead. Kept anyway: not
+		// documented is not the same as verified ignored, it is what Gram has
+		// always sent on this path, and altering the shape of production
+		// authorization requests is not what this change is for.
+		q := authURL.Query()
+		q.Set("scope", "openid email profile")
+		authURL.RawQuery = q.Encode()
+
+		return authURL, nil
+	}
+
+	// The local dev-idp shim.
 	q := url.Values{}
 	q.Set("response_type", "code")
 	q.Set("client_id", r.idpClientID)
@@ -578,13 +639,14 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
-
-	authorizeBase := workosAuthorizeEndpoint
-	if !strings.HasPrefix(r.idpClientID, "client_") {
-		authorizeBase = r.idpBaseURL + "/authorize"
+	if params.LoginHint != "" {
+		q.Set("login_hint", params.LoginHint)
+	}
+	if params.ScreenHint != "" {
+		q.Set("screen_hint", params.ScreenHint)
 	}
 
-	authURL, err := url.Parse(fmt.Sprintf("%s?%s", authorizeBase, q.Encode()))
+	authURL, err := url.Parse(fmt.Sprintf("%s/authorize?%s", r.idpBaseURL, q.Encode()))
 	if err != nil {
 		r.logger.ErrorContext(ctx, "failed to parse OIDC authorization URL", attr.SlogError(err))
 		return nil, fmt.Errorf("parse OIDC authorization URL: %w", err)

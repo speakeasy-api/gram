@@ -520,6 +520,8 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		State:           state,
 		Scope:           "",
 		ScopesSupported: nil,
+		LoginHint:       "",
+		ScreenHint:      "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)
