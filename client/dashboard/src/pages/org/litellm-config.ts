@@ -30,6 +30,10 @@ export function buildLiteLLMGuardrailConfig(
         Gram-Project: os.environ/GRAM_PROJECT_SLUG
       extra_headers:
         - x-gram-session-id
+        - x-claude-code-session-id
+        - session-id
+        - thread-id
+        - x-session-id
       default_on: true
       streaming_end_of_stream_only: true
       fail_on_error: true

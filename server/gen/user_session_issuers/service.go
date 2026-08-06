@@ -148,6 +148,13 @@ type UpdateUserSessionIssuerPayload struct {
 	AuthnChallengeMode *string
 	// Issued user session lifetime, in hours.
 	SessionDurationHours *int
+	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
+	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
+	// 'open' admits any spec-valid document; 'disabled' admits none and stops
+	// advertising CIMD support. Omit to leave unchanged. Once set, the issuer can
+	// never return to the unset state — it can only be moved between explicit
+	// modes.
+	ClientIDMetadataAdmissionMode *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

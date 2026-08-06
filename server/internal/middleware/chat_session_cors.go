@@ -12,6 +12,7 @@ import (
 
 var chatSessionsAllowedRoutes = []string{
 	"/chat/completions",
+	"/chat/turnstream",
 	"/mcp",
 	"/rpc/chat.",
 	"/rpc/chatSessions.",

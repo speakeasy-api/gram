@@ -496,7 +496,7 @@ func validPKCEVerifier(verifier string) bool {
 		return false
 	}
 	return strings.IndexFunc(verifier, func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || strings.ContainsRune("-._~", r))
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && !strings.ContainsRune("-._~", r)
 	}) == -1
 }
 
@@ -505,6 +505,6 @@ func validPKCES256Challenge(challenge string) bool {
 		return false
 	}
 	return strings.IndexFunc(challenge, func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_')
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_'
 	}) == -1
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -17,9 +18,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -50,6 +57,8 @@ type testInstance struct {
 	service     *externalkeys.Service
 	credService *externalcredentials.Service
 	conn        *pgxpool.Pool
+	features    *productfeatures.Client
+	orgID       string
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -74,12 +83,53 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	// The database is cloned per test but Redis is shared across the package, so
+	// tests that kept the default organization id would also share the
+	// entitlement cache — one test toggling the feature would flake its parallel
+	// neighbours. external_keys.organization_id is a foreign key, so the row has
+	// to exist.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	orgID := "org_" + uuid.NewString()
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "External Keys Test Org",
+		Slug:        "extkeys-test-" + uuid.NewString(),
+		WorkosID:    conv.ToPGText(orgID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	authCtx.ActiveOrganizationID = orgID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
-	svc := externalkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)
-	credSvc := externalcredentials.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, gcpauth.NewResolver())
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	svc := externalkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, features)
+	// A stub resolver, not gcpauth.NewResolver: creating a GCP credential now
+	// resolves Gram's own identity to screen the impersonation target, so the real
+	// resolver would make this package's fixtures depend on ambient cloud
+	// credentials — passing or failing based on whether the developer happens to
+	// have gcloud ADC configured.
+	credSvc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpauth.NewStubResolver(), features, ratelimit.NewRedisStore(redisClient))
 
-	return ctx, &testInstance{service: svc, credService: credSvc, conn: conn}
+	ti := &testInstance{
+		service:     svc,
+		credService: credSvc,
+		conn:        conn,
+		features:    features,
+		orgID:       orgID,
+	}
+
+	// Both the keys service and the credential fixtures below are
+	// entitlement-gated, so every test would otherwise 403. Tests that assert the
+	// gate itself disable it again.
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	return ctx, ti
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -126,10 +176,7 @@ func createGcpIamCredential(t *testing.T, ctx context.Context, ti *testInstance,
 	cred, err := ti.credService.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &extcred.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      name,
-		ImpersonateServiceAccount: new("gram@customer.iam.gserviceaccount.com"),
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, cred)

@@ -158,8 +158,9 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
-// ListGlobalIssuers lists the global remote_session_issuers.
-func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListRemoteSessionIssuersResult, error) {
+// ListGlobalIssuers lists the global remote_session_issuers, each with the
+// global and tenant-owned client counts that decide whether it can be deleted.
+func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListGlobalRemoteSessionIssuersResult, error) {
 	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -179,25 +180,31 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 		return nil, oops.E(oops.CodeUnexpected, err, "list global remote session issuers").LogError(ctx, logger)
 	}
 
-	items := make([]*types.RemoteSessionIssuer, 0, len(rows))
+	items := make([]*adminrsgen.GlobalRemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, mv.BuildRemoteSessionIssuerView(row))
+		items = append(items, &adminrsgen.GlobalRemoteSessionIssuer{
+			Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+			GlobalClientCount: int(row.GlobalClientCount),
+			TenantClientCount: int(row.TenantClientCount),
+		})
 	}
 
 	var nextCursor *string
 	if len(rows) >= int(limit) {
-		c := rows[len(rows)-1].ID.String()
+		c := rows[len(rows)-1].RemoteSessionIssuer.ID.String()
 		nextCursor = &c
 	}
 
-	return &adminrsgen.ListRemoteSessionIssuersResult{
+	return &adminrsgen.ListGlobalRemoteSessionIssuersResult{
 		Items:      items,
 		NextCursor: nextCursor,
 	}, nil
 }
 
-// GetGlobalIssuer resolves a global remote_session_issuer by id.
-func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
+// GetGlobalIssuer resolves a global remote_session_issuer by id, with the same
+// client counts the listing carries so the detail view can describe a delete
+// without a second round trip.
+func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*adminrsgen.GlobalRemoteSessionIssuer, error) {
 	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -208,7 +215,7 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	issuer, err := repo.New(s.db).GetGlobalRemoteSessionIssuerByID(ctx, issuerID)
+	row, err := repo.New(s.db).GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx, issuerID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
@@ -216,7 +223,11 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	return mv.BuildRemoteSessionIssuerView(issuer), nil
+	return &adminrsgen.GlobalRemoteSessionIssuer{
+		Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+		GlobalClientCount: int(row.GlobalClientCount),
+		TenantClientCount: int(row.TenantClientCount),
+	}, nil
 }
 
 // UpdateGlobalIssuer patches a global remote_session_issuer.
@@ -377,7 +388,18 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 			return oops.E(oops.CodeUnexpected, err, "count tenant remote session clients").LogError(ctx, logger)
 		}
 		globalCount := clientCount - tenantCount
-		return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients: %d global, %d tenant-owned; delete the %d global client(s) here, tenant-owned clients must be removed by their owning organizations", globalCount, tenantCount, globalCount).LogError(ctx, logger)
+		// Name only the populations that actually block, so the message never
+		// tells an admin to "delete the 0 global clients". The platform catalog
+		// UI shows this verbatim, and an instruction that cannot be followed
+		// reads as a bug in the delete rather than a fact about the data.
+		switch {
+		case tenantCount == 0:
+			return oops.E(oops.CodeConflict, nil, "global remote session issuer has %d active global client(s); delete them here first", globalCount).LogError(ctx, logger)
+		case globalCount == 0:
+			return oops.E(oops.CodeConflict, nil, "global remote session issuer has %d active tenant-owned client(s); they must be removed by their owning organizations", tenantCount).LogError(ctx, logger)
+		default:
+			return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients: %d global, %d tenant-owned; delete the global client(s) here, tenant-owned clients must be removed by their owning organizations", globalCount, tenantCount).LogError(ctx, logger)
+		}
 	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionIssuer(ctx, issuerID)

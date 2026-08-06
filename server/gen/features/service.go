@@ -84,6 +84,9 @@ type GetProductFeaturesResult struct {
 	AiPlatformPushIntegrationsEnabled bool
 	// Whether the organization is eligible for the Gram Platform MCP capability
 	PlatformMcpEnabled bool
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.

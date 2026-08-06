@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 // TestExternalCredentials_CrossOrgIsolation verifies that a fully-granted admin
@@ -29,6 +31,10 @@ func TestExternalCredentials_CrossOrgIsolation(t *testing.T) {
 	otherOrg := *authCtx
 	otherOrg.ActiveOrganizationID = "org_other_" + uuid.NewString()
 	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &otherOrg), authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource))
+
+	// Entitle the other org too, so what follows tests the organization_id
+	// predicate rather than the entitlement gate short-circuiting ahead of it.
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, otherOrg.ActiveOrganizationID, productfeatures.FeatureCustomerManagedEncryptionKeys)
 
 	// The other org cannot read it.
 	_, err := ti.service.GetAwsIamCredential(otherCtx, &gen.GetAwsIamCredentialPayload{

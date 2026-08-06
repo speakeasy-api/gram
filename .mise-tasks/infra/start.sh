@@ -1,6 +1,49 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
 
+# Warn when a cached image's architecture differs from the Docker host's.
+# `compose up` never re-pulls a tag that already exists locally, so an image
+# pulled while DOCKER_DEFAULT_PLATFORM=linux/amd64 was exported keeps running
+# under emulation on every stack — on Apple Silicon an emulated Postgres
+# backend segfaults under load (exit code 2 → crash recovery → every daemon
+# fails its DB ping mid-boot). Warn-only: emulation mostly works, and a hard
+# fail would strand hosts that have no native variant. Digest-pinned images are
+# skipped because a re-pull cannot change what a digest points at.
+host_arch="$(docker version --format '{{.Server.Arch}}' 2>/dev/null)"
+if [ -n "$host_arch" ]; then
+    # Keep this advisory check to two daemon round-trips no matter how many
+    # images the stack declares: list local tags once, intersect with the
+    # compose images, then inspect the cached subset in a single call (its
+    # output lines map back to the input by position). A per-image inspect
+    # would add a slow serial round-trip per image on Docker Desktop.
+    local_tags="$(docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)"
+    cached_imgs=()
+    while IFS= read -r img; do
+        case "$img" in *@sha256:*) continue ;; esac
+        case "$img" in *:*) tag="$img" ;; *) tag="$img:latest" ;; esac
+        if grep -qxF "$tag" <<< "$local_tags"; then
+            cached_imgs+=("$img")
+        fi
+    done < <(docker compose config --images 2>/dev/null | sort -u)
+    # `docker pull` honors an exported DOCKER_DEFAULT_PLATFORM, so while it is
+    # set the pull just re-fetches the same foreign-arch variant and the
+    # warning would never clear — tell the user to unset it first.
+    fix_prefix=""
+    if [ -n "${DOCKER_DEFAULT_PLATFORM:-}" ]; then
+        fix_prefix="unset DOCKER_DEFAULT_PLATFORM, then "
+    fi
+    if [ "${#cached_imgs[@]}" -gt 0 ]; then
+        i=0
+        while IFS= read -r img_arch; do
+            img="${cached_imgs[$i]}"
+            i=$((i + 1))
+            if [ -n "$img_arch" ] && [ "$img_arch" != "$host_arch" ]; then
+                echo "⚠️  Cached image $img is $img_arch but this Docker host is $host_arch — it runs emulated and can crash under load. Fix: ${fix_prefix}docker pull $img" >&2
+            fi
+        done < <(docker image inspect "${cached_imgs[@]}" --format '{{.Architecture}}' 2>/dev/null)
+    fi
+fi
+
 # This worktree's own stack, first — with --remove-orphans. A pre-existing
 # worktree (and the main tree) still runs a gram-presidio container under its own
 # project that compose.yml no longer declares; removing it here, BEFORE asserting

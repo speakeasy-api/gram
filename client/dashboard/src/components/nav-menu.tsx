@@ -543,9 +543,19 @@ export function CollapsibleNavGroup({
 
 export function CollapsibleNavItem({
   item,
+  label,
   stage,
 }: {
   item: AppRoute;
+  // Display text override, when the group header already supplies the context
+  // the route title spells out (e.g. "Remote Identity Providers" under a
+  // "Platform Admin" header). Only the label changes: `useNavItem` still keys
+  // on the route title, which must stay unique across the sidebar because
+  // `registerRef` stores one element per id — two items sharing a title would
+  // overwrite each other and move the hover/active highlight to the wrong row.
+  // The title also remains what Recents and the command palette show, where
+  // there is no group header to disambiguate.
+  label?: string;
   stage?: ReleaseStage;
 }): React.JSX.Element {
   const navItem = useNavItem(item.title);
@@ -596,7 +606,7 @@ export function CollapsibleNavItem({
           )}
         >
           <span className={cn("truncate", isLoading && "nav-shimmer")}>
-            {item.title}
+            {label ?? item.title}
           </span>
           {item.title === "Billing" && <ProductTierBadge />}
           {(stage ?? item.stage) && (

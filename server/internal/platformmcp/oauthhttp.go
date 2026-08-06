@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
@@ -222,7 +223,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
-		if err := usersessions.ValidateRedirectURI(request.RedirectURI); err != nil {
+		if err := oauthwire.ValidateRedirectURI(request.RedirectURI); err != nil {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -264,7 +265,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			return
 		}
 		if idpError := r.URL.Query().Get("error"); idpError != "" {
-			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &usersessions.OAuthError{Code: idpError, Description: r.URL.Query().Get("error_description")})
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: idpError, Description: r.URL.Query().Get("error_description")})
 			return
 		}
 		idpCode := r.URL.Query().Get("code")
@@ -449,7 +450,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
-		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &usersessions.OAuthError{Code: "access_denied", Description: "user denied authorization"})
+		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "user denied authorization"})
 		return
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
@@ -705,10 +706,10 @@ func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) e
 
 func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, err error) {
 	if errors.Is(err, ErrUnavailable) {
-		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &usersessions.OAuthError{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
+		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
 		return
 	}
-	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &usersessions.OAuthError{Code: "access_denied", Description: "organization access is not available"})
+	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "organization access is not available"})
 }
 
 func writeTokenGateError(w http.ResponseWriter, err error) {
@@ -774,7 +775,7 @@ func writeOAuthError(w http.ResponseWriter, status int, code, description string
 }
 
 func writeRequestOAuthError(w http.ResponseWriter, status int, err error) {
-	var oauthError *usersessions.OAuthError
+	var oauthError *oauthwire.Error
 	if errors.As(err, &oauthError) {
 		writeOAuthError(w, status, oauthError.Code, oauthError.Description)
 		return
@@ -783,9 +784,9 @@ func writeRequestOAuthError(w http.ResponseWriter, status int, err error) {
 }
 
 func redirectOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
-	var oauthError *usersessions.OAuthError
+	var oauthError *oauthwire.Error
 	if !errors.As(err, &oauthError) {
-		oauthError = &usersessions.OAuthError{Code: "invalid_request", Description: "invalid request"}
+		oauthError = &oauthwire.Error{Code: "invalid_request", Description: "invalid request"}
 	}
 	http.Redirect(w, r, redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description), http.StatusFound)
 }

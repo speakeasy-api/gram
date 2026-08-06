@@ -61,10 +61,12 @@ import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
 import { TunneledMcp } from "./tunneledmcp.js";
+import { UnproxiedMcp } from "./unproxiedmcp.js";
 import { Usage } from "./usage.js";
 import { UserSessionClients } from "./usersessionclients.js";
 import { UserSessionConsents } from "./usersessionconsents.js";
 import { UserSessionIssuers } from "./usersessionissuers.js";
+import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
@@ -373,6 +375,11 @@ export class Gram extends ClientSDK {
     return (this._tunneledMcp ??= new TunneledMcp(this._options));
   }
 
+  private _unproxiedMcp?: UnproxiedMcp;
+  get unproxiedMcp(): UnproxiedMcp {
+    return (this._unproxiedMcp ??= new UnproxiedMcp(this._options));
+  }
+
   private _usage?: Usage;
   get usage(): Usage {
     return (this._usage ??= new Usage(this._options));
@@ -393,6 +400,12 @@ export class Gram extends ClientSDK {
   private _userSessionIssuers?: UserSessionIssuers;
   get userSessionIssuers(): UserSessionIssuers {
     return (this._userSessionIssuers ??= new UserSessionIssuers(this._options));
+  }
+
+  private _userSessionIssuersCimdClients?: UserSessionIssuersCimdClients;
+  get userSessionIssuersCimdClients(): UserSessionIssuersCimdClients {
+    return (this._userSessionIssuersCimdClients ??=
+      new UserSessionIssuersCimdClients(this._options));
   }
 
   private _userSessions?: UserSessions;

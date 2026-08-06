@@ -27,6 +27,11 @@ const (
 	// FeaturePlatformMCP enables the organization-level Platform MCP capability.
 	// The runtime also requires a separate rollout gate before admitting traffic.
 	FeaturePlatformMCP Feature = "platform_mcp"
+	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
+	// own cloud KMS keys: the external credentials Gram uses to reach them and,
+	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
+	// covers model provider API keys.
+	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
 )
 
 type FeatureCache struct {
