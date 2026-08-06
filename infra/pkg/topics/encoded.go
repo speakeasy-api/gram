@@ -81,10 +81,15 @@ type Set struct {
 	broker   gcp.PublisherBroker
 	settings *pubsub.PublishSettings
 
-	// mu guards only the map; each entry carries its own lock so one topic's
-	// construction never serialises another's.
+	// mu guards the map and the closed flag; each entry carries its own lock
+	// so one topic's construction never serialises another's.
 	mu         sync.Mutex
 	publishers map[Topic]*topicPublisher
+	// closed refuses publishers once Stop has begun. Without it, a publish
+	// racing Stop would repopulate the just-cleared map with a publisher
+	// nothing ever flushes, and its messages would sit in a buffer no
+	// shutdown knows about.
+	closed bool
 }
 
 // topicPublisher guards one topic's lazily built publisher. Construction is
@@ -105,6 +110,7 @@ func NewSet(broker gcp.PublisherBroker, settings *pubsub.PublishSettings) *Set {
 		settings:   settings,
 		mu:         sync.Mutex{},
 		publishers: make(map[Topic]*topicPublisher),
+		closed:     false,
 	}
 }
 
@@ -142,6 +148,12 @@ func (s *Set) Publish(ctx context.Context, name string, data []byte, attrs map[s
 
 func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublisher, error) {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		// Not permanent: the set is stopping because the process is, and the
+		// row will be retried by whichever process claims it next.
+		return nil, fmt.Errorf("publisher set is stopped: cannot publish to %s", topic)
+	}
 	tp, ok := s.publishers[topic]
 	if !ok {
 		tp = &topicPublisher{mu: sync.Mutex{}, pub: nil}
@@ -180,6 +192,7 @@ func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublish
 // and re-published on the next drain.
 func (s *Set) Stop(ctx context.Context) error {
 	s.mu.Lock()
+	s.closed = true
 	tps := make([]*topicPublisher, 0, len(s.publishers))
 	for _, tp := range s.publishers {
 		tps = append(tps, tp)

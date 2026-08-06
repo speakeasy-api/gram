@@ -181,6 +181,21 @@ func TestNoopPublisher(t *testing.T) {
 	require.NoError(t, pub.Stop(t.Context()))
 }
 
+// TestSetPublish_AfterStopFails pins the shutdown lifecycle: once Stop has
+// begun, a racing publish must fail rather than repopulate the cleared cache
+// with a publisher nothing ever flushes.
+func TestSetPublish_AfterStopFails(t *testing.T) {
+	t.Parallel()
+
+	broker := &stubBroker{}
+	set := NewSet(broker, boundedSettings())
+	require.NoError(t, set.Stop(context.Background()))
+
+	_, err := set.Publish(t.Context(), string(GramPingV2Message), []byte("x"), nil).Get(t.Context())
+	require.ErrorContains(t, err, "stopped")
+	require.Zero(t, broker.calls, "a stopped set must not open new publishers")
+}
+
 func TestSetStopIsSafeWithoutPublishers(t *testing.T) {
 	t.Parallel()
 
