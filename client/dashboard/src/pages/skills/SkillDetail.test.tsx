@@ -452,10 +452,18 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
   });
 
-  it("archives with the exact wrapper, navigates back, and invalidates all skill caches", async () => {
+  it("keeps the archive action legible on hover and archives the skill", async () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
     render(<SkillDetail />);
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    const archiveButton = screen.getByRole("button", { name: "Archive" });
+    expect(archiveButton).toHaveClass(
+      "bg-transparent",
+      "text-btn-destructive-secondary",
+      "hover:text-btn-destructive-secondary-hover",
+    );
+    expect(archiveButton).not.toHaveClass("hover:bg-btn-destructive-hover");
+
+    fireEvent.click(archiveButton);
     fireEvent.click(screen.getByRole("button", { name: "Archive skill" }));
 
     await waitFor(() => {
