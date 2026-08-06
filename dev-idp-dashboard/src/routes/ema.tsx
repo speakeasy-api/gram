@@ -6,64 +6,36 @@ export const Route = createFileRoute("/ema")({
 });
 
 /**
- * Sub-nav ordered by the shape of the flow rather than alphabetically: the
- * two things that exist (apps, resources), then the two policies over them
- * (who is assigned, who is trusted), then what to do with it and what came
- * out.
+ * Policy is the canvas — apps, users, resources and the assignments between
+ * them — so it is the landing page rather than an entry in this list. What
+ * remains are the two views that are not entity graphs: a way to exercise the
+ * flow, and a record of what came out.
  */
-const GROUPS: ReadonlyArray<{
-  title: string;
-  items: ReadonlyArray<{ to: string; label: string }>;
-}> = [
-  {
-    title: "Registry",
-    items: [
-      { to: "/ema/apps", label: "Apps" },
-      { to: "/ema/resources", label: "Resources" },
-    ],
-  },
-  {
-    title: "Policy",
-    items: [
-      { to: "/ema/assignments", label: "Assignments" },
-      { to: "/ema/trust-rules", label: "Trust rules" },
-    ],
-  },
-  {
-    title: "Exercise",
-    items: [
-      { to: "/ema/playground", label: "Playground" },
-      { to: "/ema/issued", label: "Issued grants" },
-    ],
-  },
+const ITEMS: ReadonlyArray<{ to: string; label: string }> = [
+  { to: "/ema", label: "Policy" },
+  { to: "/ema/playground", label: "Playground" },
+  { to: "/ema/issued", label: "Issued grants" },
 ];
 
 function EmaLayout() {
   return (
-    <div className="max-w-5xl mx-auto grid grid-cols-[200px_1fr] gap-8">
-      <nav className="flex flex-col gap-5">
-        {GROUPS.map((group) => (
-          <section key={group.title} className="flex flex-col gap-1">
-            <h3 className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-mono px-3 mb-1">
-              {group.title}
-            </h3>
-            {group.items.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "px-3 py-2 rounded-md text-sm transition-colors",
-                  "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-                )}
-                activeProps={{
-                  className:
-                    "bg-accent text-foreground hover:bg-accent hover:text-foreground",
-                }}
-              >
-                <span className="font-medium">{item.label}</span>
-              </Link>
-            ))}
-          </section>
+    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <nav className="inline-flex w-fit items-center gap-1 rounded-full bg-muted p-1">
+        {ITEMS.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            activeOptions={{ exact: item.to === "/ema" }}
+            className={cn(
+              "rounded-full px-3 py-1 text-sm transition-colors",
+              "text-foreground/60 hover:text-foreground",
+            )}
+            activeProps={{
+              className: "bg-background text-foreground hover:text-foreground",
+            }}
+          >
+            {item.label}
+          </Link>
         ))}
       </nav>
       <div className="min-w-0">

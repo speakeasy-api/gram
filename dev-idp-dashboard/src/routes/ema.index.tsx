@@ -1,7 +1,6 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { EmaCanvas } from "@/components/ema/EmaCanvas";
 
 export const Route = createFileRoute("/ema/")({
-  beforeLoad: () => {
-    throw redirect({ to: "/ema/apps" });
-  },
+  component: EmaCanvas,
 });
