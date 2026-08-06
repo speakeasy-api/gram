@@ -1,8 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { Heading } from "@/components/ui/heading";
-import type { Action } from "@/components/ui/more-actions";
+import { Heading } from "@/components/ui/Heading";
+import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
@@ -11,17 +11,16 @@ import {
   type RedeployDeploymentMutationVariables,
 } from "@gram/client/react-query/redeployDeployment.js";
 import { useMutationState } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Table,
-  TableProps,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Table, TableProps } from "@/components/ui/Table";
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";

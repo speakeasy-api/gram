@@ -2,6 +2,16 @@ import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 
+// Pulse MCP registry specifier for Figma's official remote MCP server.
+// Installing this catalog entry creates an unproxied MCP server (see
+// useRemoteMcpInstallWorkflow) instead of a Gram-proxied remote one, since
+// Speakeasy never needs to manage OAuth for it.
+const FIGMA_REGISTRY_SPECIFIER = "com.figma.mcp/mcp";
+
+export function isFigmaCatalogServer(server: PulseMCPServer): boolean {
+  return server.registrySpecifier === FIGMA_REGISTRY_SPECIFIER;
+}
+
 export function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
   const httpRemotes = server.remotes?.filter(
     (r) => r.transportType === "streamable-http",

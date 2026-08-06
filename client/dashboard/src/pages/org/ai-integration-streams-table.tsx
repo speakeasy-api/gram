@@ -1,21 +1,20 @@
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
 import { Activity, ChartLine, Clock3, MoreHorizontal } from "lucide-react";
 import type { AIIntegrationSchedule } from "./ai-integration-providers";
-import { ScheduleStatusBadge } from "./ai-integration-status-badge";
+import { ScheduleStatusBadge } from "@/components/schedule-status-badge";
 import {
   formatRelativeTime,
   type ScheduleRuntime,
@@ -57,9 +56,9 @@ export function AIIntegrationStreamsTable({
       render: (row) => (
         <Stack direction="horizontal" align="center" gap={1.5}>
           <Clock3 className="text-muted-foreground size-3.5 shrink-0" />
-          <Type muted small className="whitespace-nowrap">
+          <Text muted small className="whitespace-nowrap">
             {row.schedule.cadence}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -68,9 +67,9 @@ export function AIIntegrationStreamsTable({
       header: "Last synced",
       width: "110px",
       render: (row) => (
-        <Type muted small className="whitespace-nowrap">
+        <Text muted small className="whitespace-nowrap">
           {lastSyncedLabel(row)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -100,7 +99,7 @@ export function AIIntegrationStreamsTable({
       columns={columns}
       data={rows}
       rowKey={(row) => row.key}
-      noResultsMessage={<Type muted>No streams</Type>}
+      noResultsMessage={<Text muted>No streams</Text>}
     />
   );
 }
@@ -113,9 +112,9 @@ function NameCell({ row }: { row: AIIntegrationStreamRow }) {
     <SimpleTooltip
       tooltip={`${row.schedule.name} — ${row.schedule.description}`}
     >
-      <Type variant="small" className="w-fit font-mono text-xs font-medium">
+      <Text variant="small" className="w-fit font-mono text-xs font-medium">
         {stream}
-      </Type>
+      </Text>
     </SimpleTooltip>
   );
 }

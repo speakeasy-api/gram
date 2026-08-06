@@ -8,10 +8,31 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
+
+func BuildSkillFeedbackView(feedback repo.SkillFeedback) *gen.SkillFeedback {
+	return &gen.SkillFeedback{
+		ID:             feedback.ID.String(),
+		Source:         gen.SkillFeedbackSource(feedback.Source),
+		Outcome:        gen.SkillFeedbackOutcome(feedback.Outcome),
+		Note:           conv.FromPGText[string](feedback.Note),
+		SkillVersionID: conv.FromNullableUUID(feedback.SkillVersionID),
+		ReviewedAt:     conv.PtrEmpty(conv.FromPGTimestamptz(feedback.ReviewedAt)),
+		CreatedAt:      conv.FromPGTimestamptz(feedback.CreatedAt),
+	}
+}
+
+func BuildSkillFeedbackListView(rows []repo.SkillFeedback) []*gen.SkillFeedback {
+	result := make([]*gen.SkillFeedback, len(rows))
+	for i, row := range rows {
+		result[i] = BuildSkillFeedbackView(row)
+	}
+	return result
+}
 
 func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text) *types.Skill {
 	var latestVersionIDValue *string
@@ -26,6 +47,7 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 		Summary:         conv.FromPGText[string](skill.Summary),
 		SourceKind:      skill.SourceKind,
 		Classification:  skill.Classification,
+		Tags:            skillTagsOrEmpty(skill.Tags),
 		LatestVersionID: latestVersionIDValue,
 		VersionCount:    versionCount,
 		HasValidVersion: hasValidVersion,
@@ -36,6 +58,13 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 	}
+}
+
+func skillTagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {

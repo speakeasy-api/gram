@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	pkggen "github.com/speakeasy-api/gram/server/gen/packages"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -89,7 +90,7 @@ func TestDeploymentsService_GetDeployment_WithPackages(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Create a package in another project to avoid circular dependency
-	otherCtx := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	otherCtx := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 
 	// Upload asset for package creation
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))

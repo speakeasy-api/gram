@@ -204,6 +204,13 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		result.TokenEndpoint = authServerMeta.TokenEndpoint
 		result.RegistrationEndpoint = authServerMeta.RegistrationEndpoint
 		result.ScopesSupported = authServerMeta.ScopesSupported
+		if resourceMeta != nil && len(resourceMeta.ScopesSupported) > 0 {
+			// Protected-resource scopes describe the permissions accepted by
+			// this MCP server. Prefer them over the authorization server's
+			// potentially broader list, and retain them when the AS omits
+			// scopes_supported entirely.
+			result.ScopesSupported = resourceMeta.ScopesSupported
+		}
 
 		// If we have a registration endpoint, it's full MCP OAuth (2.1)
 		// Otherwise it's legacy OAuth 2.0

@@ -12,37 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillLatestClaudeUserMessagePromptID = `-- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = $2
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = $3::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = $1
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND $1::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != $1::text)
-`
-
-type BackfillLatestClaudeUserMessagePromptIDParams struct {
-	MessageID pgtype.Text
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) BackfillLatestClaudeUserMessagePromptID(ctx context.Context, arg BackfillLatestClaudeUserMessagePromptIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, backfillLatestClaudeUserMessagePromptID, arg.MessageID, arg.ChatID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countEmployeesForExternalOrg = `-- name: CountEmployeesForExternalOrg :one
 SELECT COUNT(DISTINCT user_id)::bigint
 FROM user_accounts
@@ -202,17 +171,19 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    $3::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
-    OR external_organization_id = $3
+    OR external_organization_id = $4
   )
-ORDER BY (external_organization_id = $3) DESC NULLS LAST
+ORDER BY (external_organization_id = $4) DESC NULLS LAST, updated_at DESC
 LIMIT 1
 `
 
 type GetProviderOrgBillingModeParams struct {
 	OrganizationID string
 	Provider       string
+	MatchAnyOrg    bool
 	ExternalOrgID  pgtype.Text
 }
 
@@ -222,11 +193,20 @@ type GetProviderOrgBillingModeParams struct {
 // provider org; a config with none applies provider-wide. Exact-org matches are
 // preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 // NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
-// Only one live config per (org, provider) can exist today, so the ordering is
-// defensive. Only configs with a non-null billing_mode are considered, so an
-// undeclared org returns no rows (treated as unknown upstream).
+// @match_any_org disables the org scoping entirely: Codex sessions carry no org
+// identity on any layer while codex_compliance configs always pin one, so for
+// them the provider-wide declaration applies regardless of config scope. Only
+// one live config per (org, provider) can exist today, so the ordering (with
+// updated_at as the tiebreak against historical duplicates) is defensive. Only
+// configs with a non-null billing_mode are considered, so an undeclared org
+// returns no rows (treated as unknown upstream).
 func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	row := q.db.QueryRow(ctx, getProviderOrgBillingMode,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.MatchAnyOrg,
+		arg.ExternalOrgID,
+	)
 	var billing_mode pgtype.Text
 	err := row.Scan(&billing_mode)
 	return billing_mode, err
@@ -329,7 +309,7 @@ type InsertShadowMCPBlockResultParams struct {
 	OrganizationID    string
 	RiskPolicyID      uuid.UUID
 	RiskPolicyVersion int64
-	ChatMessageID     uuid.UUID
+	ChatMessageID     uuid.NullUUID
 	Description       pgtype.Text
 	Match             pgtype.Text
 	Confidence        pgtype.Float8

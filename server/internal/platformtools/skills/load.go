@@ -112,6 +112,7 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		written, err := queries.RecordAssistantSkillObservation(writeCtx, assistantrepo.RecordAssistantSkillObservationParams{
+			AssistantID:    principal.AssistantID,
 			SessionID:      chatID.String(),
 			SkillVersionID: loaded.SkillVersionID,
 			ProjectID:      *authCtx.ProjectID,

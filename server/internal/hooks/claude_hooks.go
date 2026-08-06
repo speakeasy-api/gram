@@ -840,6 +840,43 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	if payload == nil {
 		return makeHookResult(ev.RawEventType), nil
 	}
+	// Spend gate runs before any risk-policy evaluation: an over-budget user
+	// gets tool calls denied even mid-turn, for native and MCP tools alike.
+	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+		auditReason := spendBlockReason("tool call", block)
+		userReason := auditReason
+		if payload.SessionID != nil {
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+		}
+		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
+			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+			userID := ev.Context.User.ID
+			userEmail := ev.Context.User.Email
+			asyncCtx := context.WithoutCancel(ctx)
+			// Resolve the owning user inside the goroutine so any DB lookup
+			// stays off the deny hot path.
+			go func() {
+				if userID == "" {
+					userID = s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID)
+				}
+				s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+					Provider:       "claude",
+					OrganizationID: ev.Context.OrganizationID,
+					ProjectID:      ev.Context.ProjectID,
+					Reason:         auditReason,
+					ToolName:       ev.ToolName,
+					UserID:         userID,
+					RiskPolicyID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+					ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				})
+			}()
+		}
+		return constructBlockResponse(payload.HookEventName, userReason), nil
+	}
 	if s.riskScanner != nil && ev.ConversationID != "" {
 		// Acknowledged warn is excluded from the enforcement block so it falls
 		// through to the shadow-MCP guard below: an ack clears the risk
@@ -1015,21 +1052,33 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	matched := matchCachedMCPEntry(entries, serverPrefix)
 	var detail string
-	switch {
-	case matched == nil:
-		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
-		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
-	case matched.URL == "" && matched.Command != "":
-		// Local stdio servers have no URL, so the Gram-hosted check above
-		// can't apply. Treat them as shadow MCPs until explicitly approved
-		// by command.
-		detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
-	case matched.URL == "" && matched.Command == "":
-		// Defensive: the parser populates either URL or Command for every
-		// real entry, but if a future format slips past it we'd rather
-		// fail closed with a clear reason than silently allow.
-		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
+	if policy.IsAllowAll() {
+		// Permit-by-default: only a blocked-list URL match denies. Servers
+		// missing from the inventory, local stdio servers, and unrecognizable
+		// entries are all allowed — the fail-closed reasons below are
+		// block_all concepts. Gram-hosted URLs stay allowed even if listed.
+		if matched != nil && matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
+			if blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, matched.URL); blocked {
+				detail = fmt.Sprintf("MCP server %q is blocked by policy (URL: %s)", serverPrefix, blockedURL)
+			}
+		}
+	} else {
+		switch {
+		case matched == nil:
+			detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
+		case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
+			detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+		case matched.URL == "" && matched.Command != "":
+			// Local stdio servers have no URL, so the Gram-hosted check above
+			// can't apply. Treat them as shadow MCPs until explicitly approved
+			// by command.
+			detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
+		case matched.URL == "" && matched.Command == "":
+			// Defensive: the parser populates either URL or Command for every
+			// real entry, but if a future format slips past it we'd rather
+			// fail closed with a clear reason than silently allow.
+			detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
+		}
 	}
 	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
@@ -1052,26 +1101,30 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return result, nil
 	}
 
-	if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
-		matchedURL, matchedCommand := "", ""
-		if matched != nil {
-			matchedURL = matched.URL
-			matchedCommand = matched.Command
+	// Bypass grants are a block_all concept: under allow-all the blocked-list
+	// membership above is the whole check.
+	if !policy.IsAllowAll() {
+		if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
+			matchedURL, matchedCommand := "", ""
+			if matched != nil {
+				matchedURL = matched.URL
+				matchedCommand = matched.Command
+			}
+			s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
+				attr.SlogEvent("claude_hook_policy_bypass_allow"),
+				attr.SlogToolName(rawToolName),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogValueAny(map[string]any{
+					"serverPrefix":   serverPrefix,
+					"matchedURL":     matchedURL,
+					"matchedCommand": matchedCommand,
+				}),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
 		}
-		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
-			attr.SlogEvent("claude_hook_policy_bypass_allow"),
-			attr.SlogToolName(rawToolName),
-			attr.SlogRiskPolicyID(policy.ID),
-			attr.SlogValueAny(map[string]any{
-				"serverPrefix":   serverPrefix,
-				"matchedURL":     matchedURL,
-				"matchedCommand": matchedCommand,
-			}),
-		)
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
-		return result, nil
 	}
 
 	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
@@ -1299,7 +1352,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 		OrganizationID:    metadata.GramOrgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: policy.Version,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Description:       pgtype.Text{String: description, Valid: description != ""},
 		Match:             pgtype.Text{String: match, Valid: match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},

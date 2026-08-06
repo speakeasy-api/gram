@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"time"
 )
@@ -28,6 +29,15 @@ func sessionMCPListCacheKey(sessionID string) string {
 // reuses across retries.
 func hookIdempotencyCacheKey(token string) string {
 	return fmt.Sprintf("hook:idempotency:%s", token)
+}
+
+// blockedPromptTelemetryCacheKey returns the Redis key that dedupes block
+// telemetry for clients that do not send a per-delivery idempotency key. The
+// deny response is still returned on every delivery; this only gates the
+// ClickHouse side-effect.
+func blockedPromptTelemetryCacheKey(provider, sessionID, prompt string) string {
+	digest := sha256.Sum256([]byte(provider + "\x00" + sessionID + "\x00" + prompt))
+	return fmt.Sprintf("hook:blocked-prompt:%x", digest)
 }
 
 // sessionAgentVariantCacheKey returns the Redis key for the agent variant

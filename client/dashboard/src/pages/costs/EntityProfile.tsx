@@ -1,22 +1,29 @@
 import { formatCost } from "@/lib/money";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Page } from "@/components/page-layout";
+import { Badge } from "@/components/ui/Badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ChevronLeft, Download, Home, Info, RotateCcw } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
 import { BreakdownBar } from "./BreakdownBar";
@@ -27,6 +34,7 @@ import {
   type Crumb,
   displayName,
   entityBadgeVariant,
+  formatWorkUnits,
   friendlyName,
   isAttributionDim,
   LABELS,
@@ -70,6 +78,44 @@ function buildCostCsv(
         ? (r.measures.cacheCreationInputTokens ?? 0)
         : (r.measures.totalToolCalls ?? 0),
       r.measures.totalTokens ?? 0,
+    ];
+  });
+  return toCsv(header, body);
+}
+
+// The efficiency lens's CSV — mirrors that table's columns. Per-unit cells are
+// empty (not 0) where a row has no scored work, matching the table's "—".
+function buildEfficiencyCsv(
+  rows: QueryRow[],
+  groupLabel: string,
+  groupBy: Dimension,
+): string {
+  const totalUnits = rows.reduce(
+    (sum, r) => sum + (r.measures.totalWorkUnits ?? 0),
+    0,
+  );
+  const header = [
+    groupLabel,
+    "Work Delivered",
+    "% Share",
+    "Cost Efficiency",
+    "Sessions",
+    "Token Efficiency",
+    "Total Cost",
+  ];
+  const body = rows.map((r) => {
+    const units = r.measures.totalWorkUnits ?? 0;
+    const scored = units > 0;
+    return [
+      displayName(groupBy, r.groupValue),
+      units.toFixed(1),
+      totalUnits > 0 && scored
+        ? ((units / totalUnits) * 100).toFixed(1)
+        : "0.0",
+      scored ? ((r.measures.scoredCost ?? 0) / units).toFixed(2) : "",
+      r.measures.totalChats ?? 0,
+      scored ? Math.round((r.measures.scoredTokens ?? 0) / units) : "",
+      (r.measures.totalCost ?? 0).toFixed(2),
     ];
   });
   return toCsv(header, body);
@@ -159,6 +205,18 @@ function HeaderStat({
   return <div className="flex flex-col">{inner}</div>;
 }
 
+// Walk up from `el` to the nearest ancestor that actually scrolls vertically.
+// The app shell scrolls an inner container (Page.Body / TabsContent), not the
+// window — callers that need the scrollport (sticky pinning, scroll-to-top)
+// must find that ancestor rather than assuming `window`.
+function findVerticalScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let root: HTMLElement | null = el?.parentElement ?? null;
+  while (root && !/auto|scroll/.test(getComputedStyle(root).overflowY)) {
+    root = root.parentElement;
+  }
+  return root;
+}
+
 // ── EntityProfile ───────────────────────────────────────────────────────────
 
 export type EntityProfileProps = {
@@ -171,6 +229,9 @@ export type EntityProfileProps = {
   // Whether this is an attribution lens: swaps the "Tool calls" hero stat for
   // "Tokens added" (cache-creation tokens), the meaningful measure for these cuts.
   cacheMetric: boolean;
+  // The efficiency lens: the hero and table read the work-units measures (work
+  // units delivered, cost per unit) instead of the activity measures.
+  efficiency: boolean;
   // Navigate up one ancestor. No-op at the root.
   onBack: () => void;
   // Jump straight back to the org root.
@@ -235,8 +296,9 @@ export type EntityProfileProps = {
   // The summary widgets row (trend chart, mix, KPIs), rendered above the table.
   widgets: ReactNode;
   // The stacked cost-over-time chart, rendered inside the breakdown section
-  // between the section heading and the table — it stacks by the same axis
-  // the top control bar selects, so it reads as part of the breakdown.
+  // between the axis/search controls and the table — it stacks by the same
+  // axis the section's control bar selects, so it reads as part of the
+  // breakdown.
   chart?: ReactNode;
   isLoading: boolean;
   isError: boolean;
@@ -252,6 +314,7 @@ export function EntityProfile({
   entity,
   collection,
   cacheMetric,
+  efficiency,
   onBack,
   onHome,
   projectName,
@@ -319,10 +382,7 @@ export function EntityProfile({
   useEffect(() => {
     const sentinel = pinSentinelRef.current;
     if (!sentinel) return;
-    let root: HTMLElement | null = sentinel.parentElement;
-    while (root && !/auto|scroll/.test(getComputedStyle(root).overflowY)) {
-      root = root.parentElement;
-    }
+    const root = findVerticalScrollParent(sentinel);
     const observer = new IntersectionObserver(
       ([entry]) => setPinned(entry ? !entry.isIntersecting : false),
       { root, threshold: 0 },
@@ -331,13 +391,68 @@ export function EntityProfile({
     return () => observer.disconnect();
   }, []);
 
+  // Drill navigation keeps the EntityProfile mounted and only swaps props, so
+  // the browser never resets scroll on its own. Jump back to the top of the
+  // scrollport whenever the drill path changes — otherwise a mid-table click
+  // lands the new profile still scrolled down, and it looks like nothing moved.
+  // useLayoutEffect so the reset lands before paint (no flash of mid-page).
+  const pathKey = path.map((c) => `${c.dim}:${c.value}`).join("/");
+  useLayoutEffect(() => {
+    const root = findVerticalScrollParent(pinSentinelRef.current);
+    if (root) root.scrollTop = 0;
+    else window.scrollTo(0, 0);
+  }, [pathKey]);
+
+  // The efficiency lens quotes the slice's work units where the cost lenses
+  // quote spend — the caption's grammar fits either ("… — 1,204.5 work units
+  // across 4 Models.").
   const caption = breakdownCaption({
     axisValue,
     groupBy,
     path,
-    costLabel: formatCost(stats.cost),
+    costLabel: efficiency
+      ? `${formatWorkUnits(stats.workUnits)} work delivered`
+      : formatCost(stats.cost),
     groupCount: isError ? 0 : rows.length,
   });
+
+  // The hero's third and fourth stats, by lens (the first two — cost and
+  // sessions — are universal).
+  function heroTrailingStats(): JSX.Element {
+    if (efficiency) {
+      const unitCost =
+        stats.workUnits > 0 ? stats.scoredCost / stats.workUnits : null;
+      return (
+        <>
+          <HeaderStat
+            label="Work delivered"
+            value={formatWorkUnits(stats.workUnits)}
+          />
+          <HeaderStat
+            label="Cost efficiency"
+            value={unitCost !== null ? formatCost(unitCost) : "—"}
+          />
+        </>
+      );
+    }
+    if (cacheMetric) {
+      return (
+        <>
+          <HeaderStat
+            label="Tokens added"
+            value={stats.cacheCreation.toLocaleString()}
+          />
+          <HeaderStat label="Tokens" value={stats.tokens.toLocaleString()} />
+        </>
+      );
+    }
+    return (
+      <>
+        <HeaderStat label="Tool calls" value={stats.tools.toLocaleString()} />
+        <HeaderStat label="Tokens" value={stats.tokens.toLocaleString()} />
+      </>
+    );
+  }
 
   // The "Back to …" label names the immediate parent with its own dimension's
   // labeling (the parent crumb is second-to-last on the path; the last crumb is
@@ -366,7 +481,9 @@ export function EntityProfile({
         run: () =>
           downloadCsv(
             `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
-            buildCostCsv(rows, groupLabel, groupBy),
+            efficiency
+              ? buildEfficiencyCsv(rows, groupLabel, groupBy)
+              : buildCostCsv(rows, groupLabel, groupBy),
           ),
       };
 
@@ -380,9 +497,12 @@ export function EntityProfile({
   // The default dimension table; replaced by `tableOverride` (the session list)
   // when one is supplied.
   const dimensionTable = isError ? (
-    <Type className="text-muted-foreground">Failed to load cost data.</Type>
+    <Text className="text-muted-foreground">Failed to load cost data.</Text>
   ) : (
     <CostTable
+      // Remount on a lens switch so the default sort (work units vs cost)
+      // re-applies instead of carrying the other lens's sort state over.
+      key={efficiency ? "efficiency" : "cost"}
       rows={rows}
       groupLabel={groupLabel}
       groupBy={groupBy}
@@ -391,6 +511,7 @@ export function EntityProfile({
       seriesByGroup={seriesByGroup}
       isLoading={isLoading}
       billingMode={billingMode}
+      efficiency={efficiency}
       emptyMessage={searchActive ? "No matches for your search." : undefined}
     />
   );
@@ -511,32 +632,19 @@ export function EntityProfile({
                 value={stats.sessions.toLocaleString()}
                 onClick={onViewSessions}
               />
-              {cacheMetric ? (
-                <HeaderStat
-                  label="Tokens added"
-                  value={stats.cacheCreation.toLocaleString()}
-                />
-              ) : (
-                <HeaderStat
-                  label="Tool calls"
-                  value={stats.tools.toLocaleString()}
-                />
-              )}
-              <HeaderStat
-                label="Tokens"
-                value={stats.tokens.toLocaleString()}
-              />
+              {heroTrailingStats()}
             </div>
           </div>
         </div>
       </div>
 
-      {/* The unified control bar sits under the headline numbers: search, the
-          axis track, table actions, and the page-scope dataset + range
-          controls. The axis re-cuts every visualization below it, and the
-          dataset/range scope every number on the page — so once scrolled past,
-          the bar pins to the top of the scrollport (the sentinel above drives
-          the pinned styling: a full-width blur band with a hairline). */}
+      {/* Page-scope controls sit under the headline numbers: dataset + range
+          shape every number on the page, and export/reset act on the current
+          view. Once scrolled past, the bar pins to the top of the scrollport
+          (the sentinel above drives the pinned styling: a full-width blur
+          band with a hairline). The breakdown axis track and row search live
+          with the chart/table below — not here — so they stay next to the
+          content they reshape. */}
       <div ref={pinSentinelRef} aria-hidden="true" className="h-px w-full" />
       <div
         className={cn(
@@ -546,14 +654,12 @@ export function EntityProfile({
         )}
       >
         <div className="mx-auto w-full max-w-7xl px-8 py-2">
-          <BreakdownBar
-            axisValue={axisValue}
-            axisOptions={axisOptions}
-            onAxisChange={onAxisChange}
-            searchValue={searchValue}
-            onSearchChange={onSearchChange}
-            searchPlaceholder={searchPlaceholder}
-            actions={
+          <Page.Toolbar>
+            <Page.Toolbar.Leading>
+              {datasetControl}
+              {rangePicker}
+            </Page.Toolbar.Leading>
+            <Page.Toolbar.Actions>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -573,14 +679,8 @@ export function EntityProfile({
                   Reset
                 </button>
               </div>
-            }
-            scopeControls={
-              <>
-                {datasetControl}
-                {rangePicker}
-              </>
-            }
-          />
+            </Page.Toolbar.Actions>
+          </Page.Toolbar>
         </div>
       </div>
 
@@ -589,12 +689,13 @@ export function EntityProfile({
         {/* The breakdown is its own section under the summary widgets, so it
             opens on a rule rather than floating off the last widget. The
             heading states the current cut ("Cost by Model") — echoing the lit
-            segment in the top control bar — with the caption saying what the
-            cut is doing in the user's own numbers. */}
+            segment in the control bar below — with the caption saying what
+            the cut is doing in the user's own numbers. Axis track + search
+            sit here, immediately above the chart/table they affect. */}
         <div className="border-border flex flex-col gap-3 border-t pt-6">
           <div className="flex flex-col gap-0.5">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold">
-              {breakdownTitle(axisValue, groupBy)}
+              {breakdownTitle(axisValue, groupBy, efficiency)}
               {/* No general "what is a breakdown" note — defining it in the
                   abstract read as jargon, and the caption below says it
                   against the slice actually on screen. The icon is left for
@@ -616,6 +717,14 @@ export function EntityProfile({
             </h2>
             <p className="text-muted-foreground text-xs">{caption}</p>
           </div>
+          <BreakdownBar
+            axisValue={axisValue}
+            axisOptions={axisOptions}
+            onAxisChange={onAxisChange}
+            searchValue={searchValue}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
+          />
           {chart}
           {tableOverride ?? dimensionTable}
         </div>

@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // validateAfterDefaults runs the production order — SetDefaults then
@@ -265,13 +267,13 @@ func TestRegistrationRequest_SetDefaults(t *testing.T) {
 }
 
 // assertOAuthError fails the test unless err unwraps to a
-// *OAuthError with the expected code and a description containing
+// *oauthwire.Error with the expected code and a description containing
 // the expected substring.
 func assertOAuthError(t *testing.T, err error, wantCode, wantDescriptionSubstr string) {
 	t.Helper()
 	require.Error(t, err)
-	var oauthErr *OAuthError
-	require.ErrorAs(t, err, &oauthErr, "expected *OAuthError, got %T (%v)", err, err)
+	var oauthErr *oauthwire.Error
+	require.ErrorAs(t, err, &oauthErr, "expected *oauthwire.Error, got %T (%v)", err, err)
 	assert.Equal(t, wantCode, oauthErr.Code)
 	assert.Contains(t, oauthErr.Description, wantDescriptionSubstr)
 }

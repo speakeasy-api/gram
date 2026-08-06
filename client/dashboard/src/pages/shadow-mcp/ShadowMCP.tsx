@@ -5,9 +5,10 @@ import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInvent
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
   eligibleShadowMCPAllowRulePolicies,
+  shadowMCPBlockingPolicyDisposition,
   shadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -47,6 +48,7 @@ export default function ShadowMCP(): JSX.Element {
     : shadowMCPPolicyState(policiesQuery.data?.policies);
   const shadowMCPPolicies: ShadowMCPPolicy[] =
     eligibleShadowMCPAllowRulePolicies(policiesQuery.data?.policies);
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   return (
     <Page>
@@ -65,7 +67,10 @@ export default function ShadowMCP(): JSX.Element {
             </Page.Section.Description>
             {policyDataReady ? (
               <Page.Section.CTA>
-                <ShadowMCPPolicyStatus policyState={policyState} />
+                <ShadowMCPPolicyStatus
+                  disposition={disposition}
+                  policyState={policyState}
+                />
               </Page.Section.CTA>
             ) : null}
             <Page.Section.Body>

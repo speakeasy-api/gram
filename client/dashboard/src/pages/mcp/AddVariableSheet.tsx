@@ -1,21 +1,21 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/Label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
 import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
-import { type ClipboardEvent, useCallback, useState } from "react";
+import { type ClipboardEvent, useCallback, useRef, useState } from "react";
 import { parseDotEnvPaste } from "./dotEnvUtils";
 import { EnvVarState } from "./environmentVariableUtils";
 
@@ -63,13 +63,19 @@ export function AddVariableSheet({
     { ...EMPTY_ENTRY },
   ]);
   const [error, setError] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileReadSeq = useRef(0);
 
   const resetForm = useCallback(() => {
+    fileReadSeq.current += 1;
     setEntries([{ ...EMPTY_ENTRY }]);
     setError(null);
+    setIsReadingFile(false);
   }, []);
 
   const handleSave = () => {
+    if (isReadingFile) return;
+
     const keyedEntries = entries.filter((e) => e.key.trim());
     if (keyedEntries.length === 0) return;
 
@@ -119,14 +125,10 @@ export function AddVariableSheet({
     setEntries((prev) => [...prev, { ...EMPTY_ENTRY }]);
   };
 
-  const handleDotEnvPaste = (
-    index: number,
-    event: ClipboardEvent<HTMLInputElement>,
-  ) => {
-    const parsed = parseDotEnvPaste(event.clipboardData.getData("text"));
-    if (!parsed) return;
+  const importDotEnvContents = (contents: string, index: number): boolean => {
+    const parsed = parseDotEnvPaste(contents);
+    if (!parsed) return false;
 
-    event.preventDefault();
     if (parsed.entries.length > 0) {
       const importedEntries = parsed.entries.map(({ key, value }) => ({
         key: key.toUpperCase(),
@@ -148,6 +150,47 @@ export function AddVariableSheet({
       );
     } else {
       setError(null);
+    }
+
+    return true;
+  };
+
+  const handleDotEnvPaste = (
+    index: number,
+    event: ClipboardEvent<HTMLInputElement>,
+  ) => {
+    const imported = importDotEnvContents(
+      event.clipboardData.getData("text"),
+      index,
+    );
+    if (imported) {
+      fileReadSeq.current += 1;
+      setIsReadingFile(false);
+      event.preventDefault();
+    }
+  };
+
+  const handleDotEnvFile = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+
+    const readSeq = ++fileReadSeq.current;
+    setIsReadingFile(true);
+
+    try {
+      const contents = await file.text();
+      if (readSeq !== fileReadSeq.current) return;
+
+      const imported = importDotEnvContents(contents, 0);
+      if (!imported) {
+        setError("No valid environment variable assignments found.");
+      }
+    } catch {
+      if (readSeq !== fileReadSeq.current) return;
+      setError("The selected .env file could not be read.");
+    } finally {
+      if (readSeq === fileReadSeq.current) {
+        setIsReadingFile(false);
+      }
     }
   };
 
@@ -321,7 +364,7 @@ export function AddVariableSheet({
         </div>
 
         <SheetFooter className="flex-row items-center justify-between border-t px-6 py-4">
-          <button className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors">
+          <label className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-2 text-sm transition-colors">
             <svg
               className="h-4 w-4"
               fill="none"
@@ -332,11 +375,24 @@ export function AddVariableSheet({
               <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
             Import .env
-          </button>
+            <input
+              type="file"
+              accept=".env,text/plain"
+              className="sr-only"
+              aria-label="Import .env file"
+              onChange={(event) => {
+                void handleDotEnvFile(event.currentTarget.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
           <span className="text-muted-foreground text-xs">
             or paste .env contents in Key input
           </span>
-          <Button onClick={handleSave} disabled={!hasValidEntry}>
+          <Button
+            onClick={handleSave}
+            disabled={!hasValidEntry || isReadingFile}
+          >
             Save
           </Button>
         </SheetFooter>

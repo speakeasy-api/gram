@@ -28,8 +28,11 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
+  Classifications,
   ListSkillsRequest,
   ListSkillsSecurity,
+  Sort,
+  SourceKinds,
 } from "../models/operations/listskills.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -196,6 +199,11 @@ export function setSkillsData(
     parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      search?: string | undefined;
+      sourceKinds?: Array<SourceKinds> | undefined;
+      classifications?: Array<Classifications> | undefined;
+      tags?: Array<string> | undefined;
+      sort?: Sort | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -214,6 +222,11 @@ export function invalidateSkills(
     [parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      search?: string | undefined;
+      sourceKinds?: Array<SourceKinds> | undefined;
+      classifications?: Array<Classifications> | undefined;
+      tags?: Array<string> | undefined;
+      sort?: Sort | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

@@ -8,12 +8,16 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
-func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyToken string) (*agent.GetPluginsPayload, error) {
+func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyToken string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string) (*agent.GetPluginsPayload, error) {
 	var email string
 	{
 		email = agentGetPluginsEmail
@@ -24,9 +28,23 @@ func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyTo
 			apikeyToken = &agentGetPluginsApikeyToken
 		}
 	}
+	var serialNumber *string
+	{
+		if agentGetPluginsSerialNumber != "" {
+			serialNumber = &agentGetPluginsSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentGetPluginsHostname != "" {
+			hostname = &agentGetPluginsHostname
+		}
+	}
 	v := &agent.GetPluginsPayload{}
 	v.Email = email
 	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
 
 	return v, nil
 }
@@ -41,6 +59,58 @@ func BuildListSyncedUsersPayload(agentListSyncedUsersSessionToken string) (*agen
 		}
 	}
 	v := &agent.ListSyncedUsersPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetConfigurationPayload builds the payload for the agent
+// getConfiguration endpoint from CLI flags.
+func BuildGetConfigurationPayload(agentGetConfigurationSessionToken string) (*agent.GetConfigurationPayload, error) {
+	var sessionToken *string
+	{
+		if agentGetConfigurationSessionToken != "" {
+			sessionToken = &agentGetConfigurationSessionToken
+		}
+	}
+	v := &agent.GetConfigurationPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdateConfigurationPayload builds the payload for the agent
+// updateConfiguration endpoint from CLI flags.
+func BuildUpdateConfigurationPayload(agentUpdateConfigurationBody string, agentUpdateConfigurationSessionToken string) (*agent.UpdateConfigurationPayload, error) {
+	var err error
+	var body UpdateConfigurationRequestBody
+	{
+		err = json.Unmarshal([]byte(agentUpdateConfigurationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      }\n   }'")
+		}
+		if body.Config == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("config", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentUpdateConfigurationSessionToken != "" {
+			sessionToken = &agentUpdateConfigurationSessionToken
+		}
+	}
+	v := &agent.UpdateConfigurationPayload{}
+	if body.Config != nil {
+		v.Config = make(map[string]any, len(body.Config))
+		for key, val := range body.Config {
+			tk := key
+			tv := val
+			v.Config[tk] = tv
+		}
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

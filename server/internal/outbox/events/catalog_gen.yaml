@@ -706,6 +706,60 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    audit_log.chat_analysis_settings_event_v1:
+        post:
+            description: Emitted when chat analysis settings are changed
+            operationId: audit_log.chat_analysis_settings_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
     audit_log.chat_session_event_v1:
         post:
             description: Emitted when a chat session is accessed
@@ -922,6 +976,60 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    audit_log.device_integration_event_v1:
+        post:
+            description: Emitted when changes to device integration configs are made
+            operationId: audit_log.device_integration_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
     audit_log.environment_event_v1:
         post:
             description: Emitted when changes to environments are made
@@ -1034,6 +1142,60 @@ webhooks:
         post:
             description: Emitted when changes to GCP KMS external keys are made
             operationId: audit_log.gcp_kms_key_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.litellm_instance_event_v1:
+        post:
+            description: Emitted when changes to LiteLLM instances are made
+            operationId: audit_log.litellm_instance_event_v1
             requestBody:
                 content:
                     application/json:
@@ -1250,6 +1412,60 @@ webhooks:
         post:
             description: Emitted when changes to customer model provider keys are made
             operationId: audit_log.model_provider_key_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.organization_device_agent_configuration_event_v1:
+        post:
+            description: Emitted when the organization's device-agent configuration is changed
+            operationId: audit_log.organization_device_agent_configuration_event_v1
             requestBody:
                 content:
                     application/json:
@@ -2272,6 +2488,60 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    audit_log.spend_rule_event_v1:
+        post:
+            description: Emitted when changes to spend rules are made
+            operationId: audit_log.spend_rule_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
     audit_log.template_event_v1:
         post:
             description: Emitted when changes to prompt templates are made
@@ -2488,6 +2758,60 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    audit_log.unproxied_mcp_server_event_v1:
+        post:
+            description: Emitted when changes to unproxied MCP servers are made
+            operationId: audit_log.unproxied_mcp_server_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
     audit_log.user_session_client_event_v1:
         post:
             description: Emitted when changes to user session clients are made
@@ -2600,6 +2924,60 @@ webhooks:
         post:
             description: Emitted when changes to user sessions are made
             operationId: audit_log.user_session_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.user_session_issuer_cimd_client_event_v1:
+        post:
+            description: Emitted when the CIMD client URLs a user session issuer admits are changed
+            operationId: audit_log.user_session_issuer_cimd_client_event_v1
             requestBody:
                 content:
                     application/json:

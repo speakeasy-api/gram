@@ -117,8 +117,13 @@ async function $do(
   const path = pathToFunc("/rpc/skills.list")();
 
   const query = encodeFormQuery({
+    "classifications": payload?.classifications,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "search": payload?.search,
+    "sort": payload?.sort,
+    "source_kinds": payload?.source_kinds,
+    "tags": payload?.tags,
   });
 
   const headers = new Headers(compactMap({

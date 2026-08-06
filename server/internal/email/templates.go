@@ -24,13 +24,15 @@ type TransactionalID string
 const (
 	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
 	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
-	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
 	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
 	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
 	// gosec's G101 name heuristic matches the "Cred" in "Credits"; these are
 	// Loops template ids like every other constant in this block, not secrets.
 	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "cmrpjavhw06x10j1dsxivfted" //nolint:gosec // template id, not a credential
 	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret" //nolint:gosec // template id, not a credential
+	transactionalIDCustomDomainUnhealthy              TransactionalID = "cmrvye9w306z30j1pnuldvunv"
+	transactionalIDWeeklyUsageSummary                 TransactionalID = "cms9749uv04e50jzdg9e1ji9u"
+	transactionalIDAccessRequest                      TransactionalID = "cmsfthjcy152o0jy3bgc22c77"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -65,11 +67,6 @@ var RegisteredTemplates = []Template{
 	EnterpriseAdminOnboarding{
 		SetupLink: "",
 	},
-	AccessRequestCreated{
-		RequesterEmail: "",
-		DisplayName:    "",
-		ApprovalURL:    "",
-	},
 	TumUsageThreshold{
 		OrganizationName: "",
 		ThresholdPercent: "",
@@ -96,5 +93,27 @@ var RegisteredTemplates = []Template{
 		OrganizationName: "",
 		ThresholdPercent: "",
 		Exhausted:        false,
+	},
+	CustomDomainUnhealthy{
+		Email:        "",
+		Domain:       "",
+		IssueMessage: "",
+		DomainLink:   "",
+	},
+	WeeklyUsageSummary{
+		OrganizationName:    "",
+		CycleEndDate:        "",
+		DaysRemaining:       "",
+		CycleElapsedPercent: "",
+		TotalTokens:         "",
+		PreviousTotalTokens: "",
+		TotalChangePercent:  "",
+		UsageTableHTML:      "",
+		ViewUsageURL:        "",
+	},
+	AccessRequest{
+		RequesterName:    "",
+		OrganizationName: "",
+		ManageAccessLink: "",
 	},
 }

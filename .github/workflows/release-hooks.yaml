@@ -12,6 +12,11 @@ on:
     paths:
       - "hooks/**"
       - ".goreleaser.hooks.yaml"
+      # The binary links the root module's dependencies, so a bump there can
+      # change it without touching hooks/. The gate job below decides whether
+      # the bump reached the binary.
+      - "go.mod"
+      - "go.sum"
   workflow_dispatch:
     inputs:
       bump:
@@ -28,8 +33,78 @@ concurrency:
   group: release-hooks
 
 jobs:
+  gate:
+    # Most root dependency bumps never reach the binary: they land in packages
+    # only the server imports. Releasing on every one of them would spend a
+    # version, a signed build, and a pin pull request on an identical binary,
+    # so the closure decides.
+    name: Decide whether to release
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          env: false
+      - name: Decide
+        id: decide
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
+            echo "Manual dispatch; releasing."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A force-push or a first push leaves no usable before-sha, and the
+          # push can carry more commits than HEAD's parent covers. The gate
+          # only ever suppresses a release, so an unknown range releases.
+          base="${BEFORE}"
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "No usable before-sha to diff against; releasing."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" "$GITHUB_SHA")
+
+          if printf '%s\n' "$changed" | grep -qE '^(hooks/|\.goreleaser\.hooks\.yaml$)'; then
+            echo "The hooks sources changed; releasing."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Only the module files changed. Intersecting the bumped module paths
+          # with the binary's own dependency closure also discards the non-module
+          # tokens the diff carries (require, go, the block parens).
+          go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' ./hooks/... | sort -u > "${RUNNER_TEMP}/linked-modules.txt"
+          git diff "$base" "$GITHUB_SHA" -- go.mod \
+            | sed -n 's/^[+-]\([^+-].*\)$/\1/p' \
+            | awk '{print $1}' | sort -u > "${RUNNER_TEMP}/bumped-modules.txt"
+          bumped=$(comm -12 "${RUNNER_TEMP}/bumped-modules.txt" "${RUNNER_TEMP}/linked-modules.txt")
+
+          if [ -z "$bumped" ]; then
+            echo "No bumped module is linked into the hooks binary; skipping the release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Linked modules bumped:"
+          printf '%s\n' "$bumped"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
   release:
     name: Release Speakeasy Hooks
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write # to push tags
@@ -42,7 +117,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: "go.mod"
           # Reference: https://github.com/actions/setup-go/issues/495
@@ -136,7 +211,7 @@ jobs:
           # be the bot's — the workflow token is read-only here, and pushes
           # made with it would not trigger the pin PR's own checks anyway.
           token: ${{ steps.bot-token.outputs.token }}
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: "go.mod"
           cache: false

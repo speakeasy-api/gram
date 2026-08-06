@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
-import { Button, Theme, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Theme } from "@/components/ui/context/theme";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { Check, Copy } from "lucide-react";
 import React, { useEffect } from "react";
 import {
@@ -50,6 +52,7 @@ export function CodeBlock({
   onCopy,
   preClassName,
   slots,
+  copyLabel = "code",
 }: {
   children: string;
   language?: string;
@@ -59,6 +62,7 @@ export function CodeBlock({
   onCopy?: () => void;
   preClassName?: string;
   slots?: Record<string, CodeBlockSlot>;
+  copyLabel?: string;
 }): React.JSX.Element {
   const { theme } = useMoonshineConfig();
   const hasSlots = !!slots && Object.keys(slots).length > 0;
@@ -219,7 +223,7 @@ export function CodeBlock({
             )}
           </Button.LeftIcon>
           <Button.Text className="sr-only">
-            {copied ? "Copied" : "Copy code"}
+            {copied ? `Copied ${copyLabel}` : `Copy ${copyLabel}`}
           </Button.Text>
         </Button>
       )}

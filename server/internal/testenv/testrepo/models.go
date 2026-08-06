@@ -96,13 +96,28 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type PublishOutboxDeadLetter struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	LastError      string
+	// created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
+	EnqueuedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}
+
 type RiskResult struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
 	OrganizationID      string
 	RiskPolicyID        uuid.UUID
 	RiskPolicyVersion   int64
-	ChatMessageID       uuid.UUID
+	ChatMessageID       uuid.NullUUID
+	ChatContentPartID   uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text

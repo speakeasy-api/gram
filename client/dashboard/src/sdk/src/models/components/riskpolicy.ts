@@ -54,6 +54,20 @@ export const RiskPolicyPolicyType = {
  */
 export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
 
+/**
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ */
+export const RiskPolicyShadowMcpDisposition = {
+  BlockAll: "block_all",
+  AllowAll: "allow_all",
+} as const;
+/**
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ */
+export type RiskPolicyShadowMcpDisposition = ClosedEnum<
+  typeof RiskPolicyShadowMcpDisposition
+>;
+
 export type RiskPolicy = {
   /**
    * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).
@@ -100,7 +114,7 @@ export type RiskPolicy = {
    */
   id: string;
   /**
-   * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.
+   * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.
    */
   messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
@@ -149,6 +163,10 @@ export type RiskPolicy = {
    */
   score: number;
   /**
+   * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+   */
+  shadowMcpDisposition?: RiskPolicyShadowMcpDisposition | undefined;
+  /**
    * Detection sources enabled for this policy.
    */
   sources: Array<string>;
@@ -186,6 +204,11 @@ export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniEnum<
 > = z.enum(RiskPolicyPolicyType);
 
 /** @internal */
+export const RiskPolicyShadowMcpDisposition$inboundSchema: z.ZodMiniEnum<
+  typeof RiskPolicyShadowMcpDisposition
+> = z.enum(RiskPolicyShadowMcpDisposition);
+
+/** @internal */
 export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
@@ -219,6 +242,9 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       scope_exempt: z.optional(z.string()),
       scope_include: z.optional(z.string()),
       score: z._default(z.number(), 5),
+      shadow_mcp_disposition: z.optional(
+        RiskPolicyShadowMcpDisposition$inboundSchema,
+      ),
       sources: z.array(z.string()),
       total_messages: z.optional(z.int()),
       updated_at: z.pipe(
@@ -248,6 +274,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "prompt_injection_rules": "promptInjectionRules",
         "scope_exempt": "scopeExempt",
         "scope_include": "scopeInclude",
+        "shadow_mcp_disposition": "shadowMcpDisposition",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",

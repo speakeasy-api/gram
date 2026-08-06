@@ -3,9 +3,11 @@ package remotesessions_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -81,11 +83,119 @@ func TestAdminRemoteSessions_ListAndGetGlobalIssuers(t *testing.T) {
 	list, err := ti.service.ListGlobalIssuers(ctx, &adminrsgen.ListGlobalIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, list.Items, 1)
-	require.Equal(t, created.ID, list.Items[0].ID)
+	require.Equal(t, created.ID, list.Items[0].Issuer.ID)
+	require.Equal(t, 0, list.Items[0].GlobalClientCount)
+	require.Equal(t, 0, list.Items[0].TenantClientCount)
 
 	got, err := ti.service.GetGlobalIssuer(ctx, &adminrsgen.GetGlobalIssuerPayload{ID: created.ID, SessionToken: nil})
 	require.NoError(t, err)
-	require.Equal(t, created.ID, got.ID)
+	require.Equal(t, created.ID, got.Issuer.ID)
+	require.Equal(t, 0, got.GlobalClientCount)
+	require.Equal(t, 0, got.TenantClientCount)
+}
+
+// The catalog reports the two blocker classes separately so a platform admin
+// can tell which blockers they can clear here (global clients) from the ones
+// only the owning organization can remove (tenant clients, which never appear
+// in ListGlobalClients). A single total would say a delete is blocked without
+// saying by whom.
+func TestAdminRemoteSessions_GlobalIssuerClientCountsSplitGlobalFromTenant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	adminCtx := withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "count-split"))
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateGlobalClient(adminCtx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "count-split-global",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+
+	seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, uuid.MustParse(issuer.ID), "count-split-tenant")
+
+	// A project-scoped client is the other arm of the tenant predicate
+	// (project_id NOT NULL rather than organization_id NOT NULL). Seeding one
+	// without an organization_id also covers the pre-backfill row shape.
+	require.NotNil(t, authCtx.ProjectID)
+	seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(issuer.ID), "count-split-project")
+
+	// A second platform issuer with its own clients. Without this the counts
+	// would pass even if the subqueries lost their `c.remote_session_issuer_id
+	// = i.id` correlation and counted every client in the table.
+	other, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "count-split-other"))
+	require.NoError(t, err)
+	_, err = ti.service.CreateGlobalClient(adminCtx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   other.ID,
+		ClientID:                "count-split-other-global",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+
+	list, err := ti.service.ListGlobalIssuers(adminCtx, &adminrsgen.ListGlobalIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, list.Items, 2)
+
+	counts := make(map[string][2]int, len(list.Items))
+	for _, item := range list.Items {
+		counts[item.Issuer.ID] = [2]int{item.GlobalClientCount, item.TenantClientCount}
+	}
+	require.Equal(t, [2]int{1, 2}, counts[issuer.ID], "one global client, two tenant clients (org-level and project-scoped)")
+	require.Equal(t, [2]int{1, 0}, counts[other.ID], "counts must not bleed between issuers")
+
+	got, err := ti.service.GetGlobalIssuer(adminCtx, &adminrsgen.GetGlobalIssuerPayload{ID: issuer.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, 1, got.GlobalClientCount)
+	require.Equal(t, 2, got.TenantClientCount)
+
+	gotOther, err := ti.service.GetGlobalIssuer(adminCtx, &adminrsgen.GetGlobalIssuerPayload{ID: other.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, 1, gotOther.GlobalClientCount)
+	require.Equal(t, 0, gotOther.TenantClientCount)
+}
+
+// A soft-deleted client stops blocking the delete, so it must stop being
+// counted too — otherwise the catalog reports a blocker that no longer exists.
+func TestAdminRemoteSessions_GlobalIssuerClientCountsExcludeDeleted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "count-deleted"))
+	require.NoError(t, err)
+
+	client, err := ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "count-deleted-global",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+
+	got, err := ti.service.GetGlobalIssuer(ctx, &adminrsgen.GetGlobalIssuerPayload{ID: issuer.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, 1, got.GlobalClientCount)
+
+	require.NoError(t, ti.service.DeleteGlobalClient(ctx, &adminrsgen.DeleteGlobalClientPayload{ID: client.ID, SessionToken: nil}))
+
+	got, err = ti.service.GetGlobalIssuer(ctx, &adminrsgen.GetGlobalIssuerPayload{ID: issuer.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, 0, got.GlobalClientCount)
 }
 
 func TestAdminRemoteSessions_GetGlobalIssuer_NotFound(t *testing.T) {
@@ -379,4 +489,77 @@ func TestAdminRemoteSessions_CreateGlobalClient_RejectsNonGlobalIssuer(t *testin
 		Audience:                nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestDeleteGlobalIssuer_BlockedByTenantClient proves the platform-admin delete
+// is blocked once a tenant attaches a client, and that the blocking client does
+// not appear in the global client listing — the invisible-blocker the enriched
+// 409 message calls out.
+func TestDeleteGlobalIssuer_BlockedByTenantClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	adminCtx := withAdmin(t, ctx)
+
+	globalIssuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "delete-guard-global"))
+	require.NoError(t, err)
+	issuerUUID := uuid.MustParse(globalIssuer.ID)
+
+	// A tenant (the caller's org) attaches a client to the platform issuer.
+	seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, issuerUUID, "delete-guard-tenant-client")
+
+	// The platform admin sees zero global clients...
+	list, err := ti.service.ListGlobalClients(adminCtx, &adminrsgen.ListGlobalClientsPayload{
+		RemoteSessionIssuerID: globalIssuer.ID,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, list.Items, "tenant clients never appear in the global client listing")
+
+	// ...yet the delete is correctly blocked by the tenant-held client.
+	err = ti.service.DeleteGlobalIssuer(adminCtx, &adminrsgen.DeleteGlobalIssuerPayload{
+		ID:           globalIssuer.ID,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	// The platform catalog shows this verbatim, so it must not instruct the
+	// admin to delete global clients when there are none to delete.
+	require.Contains(t, err.Error(), "tenant-owned")
+	require.NotContains(t, err.Error(), "0 global")
+}
+
+// The conflict names only the populations that actually block, so an admin is
+// never told to clear clients that do not exist.
+func TestDeleteGlobalIssuer_BlockedByGlobalClientOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "delete-guard-global-only"))
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "delete-guard-global-client",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteGlobalIssuer(ctx, &adminrsgen.DeleteGlobalIssuerPayload{
+		ID:           issuer.ID,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Contains(t, err.Error(), "delete them here first")
+	require.NotContains(t, err.Error(), "tenant-owned")
 }

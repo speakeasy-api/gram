@@ -74,7 +74,7 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 	require.NoError(t, err)
 	projectID := project.ID
 
-	authzEngine := authz.NewEngine(logger, db, chConn, rbacDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, db, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
 		tracer:        tp.Tracer("test"),
@@ -178,7 +178,8 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 			total_tool_calls, unique_tool_calls,
 			account_type, provider, billing_mode,
 			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
-			generation, is_active, hook_hostname
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
 		)
 		SELECT
 			toUUID(?) AS gram_project_id,
@@ -200,7 +201,10 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
 			toUInt8(0) AS generation, toUInt8(1) AS is_active,
-			'' AS hook_hostname
+			'' AS hook_hostname,
+			sumIfState(toFloat64(0), toUInt8(0)) AS total_work_units,
+			sumIfState(toFloat64(0), toUInt8(0)) AS scored_cost,
+			sumIfState(toInt64(0), toUInt8(0)) AS scored_tokens
 	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
 	require.NoError(t, err)
 }
@@ -225,7 +229,8 @@ func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID 
 			total_tool_calls, unique_tool_calls,
 			account_type, provider, billing_mode,
 			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
-			generation, is_active, hook_hostname
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
 		)
 		SELECT
 			toUUID(?) AS gram_project_id,
@@ -247,7 +252,10 @@ func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID 
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
 			toUInt8(0) AS generation, toUInt8(1) AS is_active,
-			'' AS hook_hostname
+			'' AS hook_hostname,
+			sumIfState(toFloat64(0), toUInt8(0)) AS total_work_units,
+			sumIfState(toFloat64(0), toUInt8(0)) AS scored_cost,
+			sumIfState(toInt64(0), toUInt8(0)) AS scored_tokens
 	`, projectID, timestamp.UnixNano(), tokens, tokens)
 	require.NoError(t, err)
 }

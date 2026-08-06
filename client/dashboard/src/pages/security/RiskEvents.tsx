@@ -5,7 +5,12 @@ import {
   type FilterValue,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
+import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
@@ -13,13 +18,16 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { History, Share2 } from "lucide-react";
+import { History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { useDismissFinding } from "./useDismissFinding";
+import { useSetupExclusionRule } from "./useSetupExclusionRule";
 import {
   CategoryLabel,
   EventMatchDialog,
@@ -29,9 +37,17 @@ import {
   RuleLabel,
   SeverityScore,
 } from "./risk-ui";
+import { isJudgeSource } from "./risk-utils";
 
+// Category and rule share one column, badge over rule title, matching the
+// findings table on the risk overview category drill-down. Judge findings own a
+// single rule whose name only restates the category, so they render the badge
+// alone rather than an empty Rule cell.
+//
+// Evidence gets the widest track: for judge findings it holds a sentence or two
+// of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[172px_minmax(0,0.9fr)_88px_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
+  "grid grid-cols-[28px_172px_minmax(0,1.3fr)_88px_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -66,6 +82,7 @@ export default function RiskEvents(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const containerRef = useRef<HTMLDivElement>(null);
+  const headerMeasure = useMeasuredHeight<HTMLDivElement>();
 
   const { values, setValue, clearValue, clearAll } =
     useFilterState(RISK_FILTERS);
@@ -241,6 +258,32 @@ export default function RiskEvents(): JSX.Element {
   const totalCount = resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const isInitialLoading = policiesLoading || resultsQuery.isLoading;
 
+  const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
+  const visibleResults = useMemo(
+    () => results.filter((r) => !isOptimisticallyDismissed(r.id)),
+    [results, isOptimisticallyDismissed],
+  );
+  const selection = useRowSelection(visibleResults, (r) => r.id);
+  const handleDismissSelected = useCallback(() => {
+    const toDismiss = selection.selectedItems;
+    if (toDismiss.length === 0) return;
+    dismiss(toDismiss);
+    selection.clear();
+  }, [selection, dismiss]);
+
+  const exclusionRule = useSetupExclusionRule();
+  const handleSetupExclusionSelected = useCallback(() => {
+    const selected = selection.selectedItems;
+    if (selected.length === 0) return;
+    // Deliberately doesn't clear the selection (unlike handleDismissSelected):
+    // a batch AI suggestion takes a few seconds, and clearing here would
+    // collapse the bulk bar mid-request, hiding the spinner on "Setup
+    // exclusion rule" with no visible feedback until the sheet opens. Leaving
+    // the selection also means Clear/retry still works if the sheet is
+    // cancelled.
+    exclusionRule.open(selected);
+  }, [selection, exclusionRule]);
+
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
@@ -285,6 +328,7 @@ export default function RiskEvents(): JSX.Element {
             {viewingInactivePolicy ? (
               <InactivePolicyNotice policyName={selectedPolicy?.name} />
             ) : null}
+            {exclusionRule.sheet}
             {resultsQuery.isFetching && results.length > 0 ? (
               <div className="bg-primary/20 h-1 shrink-0">
                 <div className="bg-primary h-full animate-pulse" />
@@ -293,8 +337,27 @@ export default function RiskEvents(): JSX.Element {
           </>
         }
         header={
-          <div className="min-w-[1200px]">
-            <RiskEventsHeader />
+          <div className="relative min-w-[1200px]">
+            <BulkActionBar
+              selectedCount={selection.selectedCount}
+              actions={[
+                {
+                  label: "Mark as false positive",
+                  onClick: handleDismissSelected,
+                },
+                {
+                  label: "Set up exclusion rule",
+                  onClick: handleSetupExclusionSelected,
+                },
+              ]}
+              loading={exclusionRule.isSuggesting}
+              leftOffsetPx={28}
+              heightPx={headerMeasure.height}
+            />
+            <RiskEventsHeader
+              selection={selection}
+              headerRef={headerMeasure.ref}
+            />
           </div>
         }
         footer={
@@ -326,11 +389,14 @@ export default function RiskEvents(): JSX.Element {
         <RiskEventsRows
           error={resultsQuery.error}
           isLoading={isInitialLoading}
-          results={results}
+          results={visibleResults}
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
+          selection={selection}
+          onDismiss={(r) => dismiss([r])}
+          onSetupExclusion={(r) => exclusionRule.open([r])}
         />
       </LogWorkbench>
     </RevealAllProvider>
@@ -364,21 +430,34 @@ function InactivePolicyNotice({
   );
 }
 
-function RiskEventsHeader() {
+function RiskEventsHeader({
+  selection,
+  headerRef,
+}: {
+  selection: RowSelection<RiskResult>;
+  headerRef: (node: HTMLDivElement | null) => void;
+}) {
   return (
     <div
+      ref={headerRef}
       className={cn(
         RISK_EVENTS_GRID,
         "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
       )}
     >
+      <div className="min-w-0">
+        <Checkbox
+          checked={selection.allState}
+          onCheckedChange={() => selection.toggleAll()}
+          aria-label="Select all loaded findings"
+        />
+      </div>
       <div className="min-w-0">Timestamp</div>
-      <div className="min-w-0">Category</div>
+      <div className="min-w-0">Category / Rule</div>
       <div className="min-w-0">Severity</div>
-      <div className="min-w-0">Rule</div>
       <div className="min-w-0">Session Name</div>
       <div className="min-w-0">User</div>
-      <div className="min-w-0">Match</div>
+      <div className="min-w-0">Evidence</div>
       <div className="min-w-0">Policy</div>
       <div className="flex min-w-0 justify-center">Actions</div>
     </div>
@@ -393,6 +472,9 @@ function RiskEventsRows({
   policyScoreById,
   scrollRef,
   onSelectChat,
+  selection,
+  onDismiss,
+  onSetupExclusion,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -401,11 +483,16 @@ function RiskEventsRows({
   policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
+  selection: RowSelection<RiskResult>;
+  onDismiss: (result: RiskResult) => void;
+  onSetupExclusion: (result: RiskResult) => void;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 52,
+    // Rows stack category over rule and can wrap two lines of rationale;
+    // measureElement corrects each row, this is just the pre-measure estimate.
+    estimateSize: () => 68,
     overscan: 12,
   });
 
@@ -472,6 +559,9 @@ function RiskEventsRows({
               policyName={policyNameById.get(result.policyId)}
               policyScore={policyScoreById.get(result.policyId)}
               onSelectChat={onSelectChat}
+              selection={selection}
+              onDismiss={onDismiss}
+              onSetupExclusion={onSetupExclusion}
             />
           </div>
         );
@@ -485,15 +575,20 @@ function RiskEventsRow({
   policyName,
   policyScore,
   onSelectChat,
+  selection,
+  onDismiss,
+  onSetupExclusion,
 }: {
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
   onSelectChat: (chatId: string | null) => void;
+  selection: RowSelection<RiskResult>;
+  onDismiss: (result: RiskResult) => void;
+  onSetupExclusion: (result: RiskResult) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
-  const isEventSource =
-    result.source === "llm_judge" || result.source === "prompt_injection";
+  const isEventSource = isJudgeSource(result.source);
 
   // A row click opens the chat only when the gesture both starts and ends inside
   // the row. This rejects the stray click Radix's outside-dismiss sends here:
@@ -502,21 +597,25 @@ function RiskEventsRow({
   // cell and would otherwise open the chat.
   const pointerDownInsideRef = useRef(false);
 
-  const handleShare = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!result.chatId) return;
-      const url = new URL(window.location.href);
-      url.searchParams.set("chat_id", result.chatId);
-      try {
-        await navigator.clipboard.writeText(url.toString());
-        toast.success("Link copied to clipboard");
-      } catch {
-        toast.error("Failed to copy link");
-      }
-    },
-    [result.chatId],
-  );
+  const handleShare = useCallback(async () => {
+    if (!result.chatId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("chat_id", result.chatId);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Failed to copy link");
+    }
+  }, [result.chatId]);
+
+  const rowActions: Action[] = [
+    ...(result.chatId
+      ? [{ label: "Copy link", onClick: () => void handleShare() }]
+      : []),
+    { label: "Mark as false positive", onClick: () => onDismiss(result) },
+    { label: "Set up exclusion rule", onClick: () => onSetupExclusion(result) },
+  ];
 
   return (
     <div
@@ -561,29 +660,39 @@ function RiskEventsRow({
         }
       }}
     >
+      <div className="min-w-0">
+        <Checkbox
+          checked={selection.isSelected(result.id)}
+          onCheckedChange={() => selection.toggle(result.id)}
+          aria-label="Select finding"
+        />
+      </div>
       <div className="text-muted-foreground min-w-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>
-      <div className="min-w-0 truncate">
+      <div className="flex min-w-0 flex-col gap-0.5">
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
+        <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
       <div className="min-w-0">
         <SeverityScore score={policyScore} />
       </div>
-      <div className="min-w-0 truncate">
-        <RuleLabel source={result.source} ruleId={result.ruleId} />
-      </div>
       <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
       <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
-      <div className="min-w-0 truncate">
+      {/* Judge rationale wraps to two lines, so this cell can't clip to one. */}
+      <div className={cn("min-w-0", !isEventSource && "truncate")}>
         {isShadowMCP && result.matchRedacted ? (
-          <span className="font-mono text-xs" title={result.matchRedacted}>
+          <span
+            className="block truncate font-mono text-xs"
+            title={result.matchRedacted}
+          >
             {result.matchRedacted}
           </span>
         ) : isEventSource ? (
           <EventMatchDialog
             resultId={result.id}
             matchRedacted={result.matchRedacted}
+            rationale={result.description}
           />
         ) : (
           <MaskedMatch
@@ -595,21 +704,12 @@ function RiskEventsRow({
       <div className="min-w-0 truncate" title={policyName}>
         {policyName ?? "-"}
       </div>
-      <div className="flex min-w-0 justify-center">
-        {result.chatId ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              void handleShare(e);
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
-            aria-label="Copy link to this event"
-            title="Copy link to this event"
-          >
-            <Share2 className="h-3 w-3" />
-          </button>
-        ) : null}
+      <div
+        className="flex min-w-0 justify-center"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <MoreActions actions={rowActions} />
       </div>
     </div>
   );

@@ -14,7 +14,6 @@ import (
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -24,11 +23,6 @@ const (
 	// publish spans.
 	pubsubOperationPublishLogs = "publish_telemetry_logs_pubsub"
 
-	// ShadowFlagDistinctID pins flag evaluation to a single constant identity
-	// so percentage rollouts collapse to all-or-nothing: the shadow dual-write
-	// is an infrastructure killswitch, not a per-user rollout.
-	ShadowFlagDistinctID = "global"
-
 	// publishAckAwaitTimeout bounds the detached goroutine that drains publish
 	// acks for one batch. The broker publish itself is bounded separately by
 	// PublishSettings.Timeout, configured where the telemetry publisher is
@@ -37,15 +31,14 @@ const (
 )
 
 // NewNoopLogPublisher returns an inert LogPublisher: a noop Pub/Sub
-// publisher, all flags off, and noop tracing/metrics. For the stub logger and
-// for tests and processes that do not exercise the shadow dual-write.
+// publisher and noop tracing/metrics. For the stub logger and for tests and
+// processes that do not exercise the shadow dual-write.
 func NewNoopLogPublisher(logger *slog.Logger) *LogPublisher {
 	return NewLogPublisher(
 		logger,
 		tracenoop.NewTracerProvider(),
 		metricnoop.NewMeterProvider(),
 		gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
-		&feature.InMemory{},
 	)
 }
 
@@ -58,7 +51,6 @@ type LogPublisher struct {
 	logger *slog.Logger
 	tracer trace.Tracer
 	pub    gcp.Publisher[*telemetryv1.LogRecord]
-	flags  feature.Provider
 
 	// drains tracks in-flight ack-drain goroutines so tests can await them
 	// deterministically (see WaitForPublishDrains in export_test.go).
@@ -67,27 +59,24 @@ type LogPublisher struct {
 
 // NewLogPublisher constructs a LogPublisher. Callers must always pass a
 // publisher — a real Pub/Sub publisher, gcp.NewNoopPublisher where the shadow
-// write is not wanted, or a mock in tests — and a feature provider. The meter
-// provider is currently unused (publish metrics were pulled pending a rethink)
-// but stays in the signature so reintroducing them is not a wiring change.
+// write is not wanted, or a mock in tests. The meter provider is currently
+// unused (publish metrics were pulled pending a rethink) but stays in the
+// signature so reintroducing them is not a wiring change.
 func NewLogPublisher(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	_ metric.MeterProvider,
 	pub gcp.Publisher[*telemetryv1.LogRecord],
-	flags feature.Provider,
 ) *LogPublisher {
 	inv.Require(
 		"telemetry log publisher",
 		"publisher set", pub != nil,
-		"feature provider set", flags != nil,
 	)
 
 	return &LogPublisher{
 		logger: logger.With(attr.SlogComponent("telemetry_log_publisher")),
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
 		pub:    pub,
-		flags:  flags,
 		drains: sync.WaitGroup{},
 	}
 }
@@ -95,7 +84,7 @@ func NewLogPublisher(
 // PublishLogs mirrors rows just written to telemetry_logs onto the shadow
 // topic. It is best-effort and non-blocking: it never blocks on broker acks
 // (results are drained on a detached goroutine) and must never affect the
-// ClickHouse write path. The flag check fails closed.
+// ClickHouse write path.
 func (p *LogPublisher) PublishLogs(ctx context.Context, rows []repo.InsertTelemetryLogParams) {
 	if len(rows) == 0 {
 		return
@@ -109,15 +98,6 @@ func (p *LogPublisher) PublishLogs(ctx context.Context, rows []repo.InsertTeleme
 	// PublishSettings.Timeout and publishAckAwaitTimeout bound the work
 	// instead.
 	ctx = context.WithoutCancel(ctx)
-
-	enabled, err := p.flags.IsFlagEnabledLocal(ctx, feature.FlagTelemetryLogsPubSubShadow, ShadowFlagDistinctID, nil, nil)
-	if err != nil {
-		p.logger.WarnContext(ctx, "failed to evaluate telemetry pubsub shadow flag", attr.SlogError(err))
-		return
-	}
-	if !enabled {
-		return
-	}
 
 	ctx, span := p.tracer.Start(ctx, "telemetry.publishLogs", trace.WithAttributes(
 		attr.TelemetryCHOperation(pubsubOperationPublishLogs),

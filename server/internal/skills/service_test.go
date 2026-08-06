@@ -471,6 +471,85 @@ func TestSkillsPaginationAndInvalidCursors(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestSkillsListSearchFiltersAndUpdatedPagination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	alpha := createSkill(t, ctx, ti, "alpha", "Alpha summary")
+	bravo := createSkill(t, ctx, ti, "bravo", "Bravo summary")
+	_, err := skillservice.CaptureSkillContent(ctx, ti.conn, ti.projectID, skillManifest("captured", "Captured summary", "body"))
+	require.NoError(t, err)
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: alpha.Skill.ID, Name: alpha.Skill.Name, DisplayName: "Alpha updated", Summary: alpha.Skill.Summary,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	first, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 1, Search: nil, SourceKinds: []string{"manual"}, Classifications: nil, Sort: "updated",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), first.TotalCount)
+	require.Equal(t, "alpha", first.Skills[0].Name)
+	require.NotNil(t, first.NextCursor)
+
+	second, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: first.NextCursor, Limit: 1, Search: nil, SourceKinds: []string{"manual"}, Classifications: nil, Sort: "updated",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), second.TotalCount)
+	require.Equal(t, "bravo", second.Skills[0].Name)
+	require.Nil(t, second.NextCursor)
+
+	search := "bravo summary"
+	searched, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 10, Search: &search, SourceKinds: nil, Classifications: nil, Sort: "name",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), searched.TotalCount)
+	require.Equal(t, "bravo", searched.Skills[0].Name)
+
+	captured, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 10, Search: nil, SourceKinds: []string{"captured"}, Classifications: []string{"custom"}, Sort: "name",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), captured.TotalCount)
+	require.Equal(t, "captured", captured.Skills[0].Name)
+
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: alpha.Skill.ID, Name: alpha.Skill.Name, DisplayName: "Alpha updated", Summary: alpha.Skill.Summary,
+		Tags: []string{"ops", "runbook", " ops "}, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	tagged, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 10, Search: nil, SourceKinds: nil, Classifications: nil, Tags: []string{"ops"}, Sort: "name",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tagged.TotalCount)
+	require.Equal(t, "alpha", tagged.Skills[0].Name)
+	require.Equal(t, []string{"ops", "runbook"}, tagged.Skills[0].Tags)
+	tags, err := ti.service.ListTags(ctx, &gen.ListTagsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, []string{"ops", "runbook"}, tags.Tags)
+
+	err = ti.service.Archive(ctx, &gen.ArchivePayload{
+		ID: bravo.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	empty, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: first.NextCursor, Limit: 1, Search: nil, SourceKinds: []string{"manual"}, Classifications: nil, Sort: "updated",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty.Skills)
+	require.Equal(t, int64(1), empty.TotalCount)
+}
+
 func TestSkillsReadAndWriteRBACExpansion(t *testing.T) {
 	t.Parallel()
 

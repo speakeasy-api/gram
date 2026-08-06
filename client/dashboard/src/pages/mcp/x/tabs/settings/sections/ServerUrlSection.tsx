@@ -5,15 +5,19 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "@/components/ui/field";
+} from "@/components/ui/Field";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
-} from "@/components/ui/input-group";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/InputGroup";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import {
+  invalidateRootMcpEndpointQueries,
+  useRootMcpEndpointMutation,
+} from "@/hooks/useRootMcpEndpoint";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
@@ -21,9 +25,11 @@ import type { CustomDomain } from "@gram/client/models/components/customdomain.j
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
-import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
-import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -127,9 +133,9 @@ export function ServerUrlSection({
       <SettingsSection.Panel>
         <SettingsSection.Body>
           {isLoadingEndpoints ? (
-            <Type muted small>
+            <Text muted small>
               Loading…
-            </Type>
+            </Text>
           ) : (
             <FieldGroup className="gap-6">
               {/* Hosted (platform) address: at most one. */}
@@ -174,6 +180,7 @@ export function ServerUrlSection({
                     endpoint={endpoint}
                     domains={availableDomains}
                     isLastEndpoint={endpoints.length === 1}
+                    canManageDomainRoot={canManageDomains}
                   />
                 ))}
                 {addingCustom && (
@@ -224,11 +231,13 @@ function AddressRow({
   endpoint,
   domains,
   isLastEndpoint,
+  canManageDomainRoot = false,
 }: {
   mcpServer: McpServer;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
+  canManageDomainRoot?: boolean;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -254,7 +263,7 @@ function AddressRow({
   const queryClient = useQueryClient();
   const update = useUpdateMcpEndpointMutation({
     onSuccess: async () => {
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address updated");
     },
     onError: (error) => {
@@ -267,7 +276,7 @@ function AddressRow({
   const remove = useDeleteMcpEndpointMutation({
     onSuccess: async () => {
       setConfirmRemoveOpen(false);
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address removed");
     },
     onError: (error) => {
@@ -284,6 +293,8 @@ function AddressRow({
   );
 
   const dirty = fullSlug !== endpoint.slug;
+  const rootMutation = useRootMcpEndpointMutation();
+  const [confirmRootOpen, setConfirmRootOpen] = useState(false);
 
   const customDomainLabel =
     endpoint.customDomainId &&
@@ -356,6 +367,45 @@ function AddressRow({
       </Stack>
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
+      {endpoint.customDomainId && (
+        <div className="flex flex-wrap items-center gap-2">
+          {endpoint.isDomainRoot && (
+            <Badge variant="success" background>
+              Domain root
+            </Badge>
+          )}
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={!canManageDomainRoot || rootMutation.isPending}
+            title={
+              canManageDomainRoot
+                ? undefined
+                : "Organization admin permission is required"
+            }
+            onClick={() => setConfirmRootOpen(true)}
+          >
+            <Button.Text>
+              {endpoint.isDomainRoot ? "Clear root" : "Set as domain root"}
+            </Button.Text>
+          </Button>
+        </div>
+      )}
+      <ConfirmDomainRootDialog
+        isOpen={confirmRootOpen}
+        isClear={!!endpoint.isDomainRoot}
+        domainLabel={customDomainLabel || "your custom domain"}
+        onClose={() => setConfirmRootOpen(false)}
+        onConfirm={() => {
+          setConfirmRootOpen(false);
+          if (endpoint.customDomainId) {
+            rootMutation.setRootMcpEndpoint(
+              endpoint.customDomainId,
+              endpoint.isDomainRoot ? undefined : endpoint.id,
+            );
+          }
+        }}
+      />
       <RemoveLastAddressDialog
         isOpen={confirmRemoveOpen}
         isLoading={remove.isPending}
@@ -363,6 +413,53 @@ function AddressRow({
         onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
       />
     </Field>
+  );
+}
+
+// Root mapping changes reroute live traffic on the custom domain, so both
+// setting (which replaces any existing root mapping) and clearing require
+// explicit confirmation, mirroring the last-address removal dialog.
+function ConfirmDomainRootDialog({
+  isOpen,
+  isClear,
+  domainLabel,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  isClear: boolean;
+  domainLabel: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-md">
+        <Dialog.Header>
+          <Dialog.Title>
+            {isClear
+              ? "Clear the domain root mapping?"
+              : "Route the domain root to this server?"}
+          </Dialog.Title>
+          <Dialog.Description>
+            {isClear
+              ? `Requests to https://${domainLabel}/ will stop routing to this MCP server. Its /mcp/ addresses keep working.`
+              : `Requests to https://${domainLabel}/ will be served by this MCP server, replacing any existing root mapping on the domain.`}
+          </Dialog.Description>
+        </Dialog.Header>
+        <Dialog.Footer>
+          <Button variant="secondary" onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant={isClear ? "destructive-primary" : "primary"}
+            onClick={onConfirm}
+          >
+            <Button.Text>{isClear ? "Clear root" : "Set as root"}</Button.Text>
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
@@ -444,7 +541,7 @@ function NewPlatformAddressRow({
           slug: fullSlug,
         },
       });
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();
     } catch (error) {
@@ -542,7 +639,7 @@ function NewCustomAddressRow({
           customDomainId: domainId,
         },
       });
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();
     } catch (error) {

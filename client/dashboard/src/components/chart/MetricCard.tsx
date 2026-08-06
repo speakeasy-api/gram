@@ -1,5 +1,6 @@
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
 import { Loader2 } from "lucide-react";
@@ -121,7 +122,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
               <div className="flex flex-col items-end gap-0.5">
                 <div
                   className={`flex items-center gap-1 text-xs font-medium ${
-                    isGood ? "text-emerald-600" : "text-red-500"
+                    isGood ? "text-success-foreground" : "text-destructive"
                   }`}
                 >
                   <Icon

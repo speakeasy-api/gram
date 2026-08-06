@@ -10,6 +10,10 @@ on:
   merge_group:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   id-token: write
   contents: read
@@ -218,7 +222,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           # The retag action only needs yq; skip the rest of the toolset and
@@ -258,7 +262,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -284,20 +288,7 @@ jobs:
       - name: Check formatting
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            from_ref=$(git merge-base "$BASE_SHA" HEAD)
-            echo "Checking files changed since merge base $from_ref"
-            args=(--from-ref "$from_ref" --to-ref HEAD)
-          else
-            echo "Checking all files"
-            args=(--all)
-          fi
-          if ! hk check "${args[@]}"; then
-            echo "::error::Formatting check failed. Run 'hk fix --all' locally and commit the result."
-            exit 1
-          fi
+        run: hk check --all
 
       - name: Prune PNPM store
         if: success()
@@ -368,7 +359,7 @@ jobs:
 
   docker-build-pystreams:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, pystreams-build-lint]
+    needs: [changes]
     if: needs.changes.outputs.pystreams == 'true'
     steps:
       - name: Checkout
@@ -426,12 +417,15 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
+    env:
+      RUNNER_TARGET: x86_64-unknown-linux-musl
+      RUNNER_BINARY_DIR: /tmp/runner-binary
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -439,6 +433,33 @@ jobs:
 
       - name: Prepare GitHub Actions environment
         run: mise run github
+
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update -qq -o Acquire::Languages=none
+          sudo apt-get install -y -qq --no-install-recommends musl-tools
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          target: ${{ env.RUNNER_TARGET }}
+          rust-src-dir: agents/runner
+          # Release-artifact build; the action's -D warnings default would
+          # diverge from the in-image fallback build.
+          rustflags: ""
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build assistant runner
+        run: |
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${{ env.RUNNER_TARGET }}
+          mkdir -p ${{ env.RUNNER_BINARY_DIR }}
+          cp agents/runner/target/${{ env.RUNNER_TARGET }}/release/gram-assistant-runner ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner
+
+      - name: Smoke test assistant runner binary
+        run: |
+          file -b ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
+            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
+          ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner --help
 
       - name: Generate preview tag
         id: assistant-preview-tag
@@ -465,35 +486,13 @@ jobs:
           fi
           echo "hash=$hash" >> "$GITHUB_OUTPUT"
 
-      - name: "[DEV] Create fly app"
-        id: assistantFlyCreateDev
-        shell: bash
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-          FLY_IMAGE: ${{ vars.FLY_ASSISTANT_IMAGE_DEV }}
-        run: |
-          mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_DEV }} \
-            --image $FLY_IMAGE \
-            --force
-
-      - name: "[PROD] Create fly app"
-        id: assistantFlyCreateProd
-        shell: bash
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-          FLY_IMAGE: ${{ vars.FLY_ASSISTANT_IMAGE_PROD }}
-        run: |
-          mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_PROD }} \
-            --image $FLY_IMAGE \
-            --force
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - name: Setup Docker builder
+        uses: useblacksmith/setup-docker-builder@a5256a73e30f09e37e3eceb8ca36043d17621d24 # v2.1.0
+        with:
+          cache-key: gram/assistant-runtime-image
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -541,74 +540,22 @@ jobs:
             type=sha,format=long
 
       - name: Build and push assistant runtime image to GCR
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        # Blacksmith fork of docker/build-push-action, paired with the
+        # setup-docker-builder step above: buildkit runs on a sticky-disk
+        # cache so the bun/lightpanda/apt layers persist across runs.
+        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2.3.0
         with:
           context: .
+          # build-contexts and build-args travel together: the arg switches the
+          # Dockerfile to the prebuilt path, the context provides the
+          # host-built binary.
+          build-contexts: runner-binary=${{ env.RUNNER_BINARY_DIR }}
+          build-args: RUNNER_SOURCE=runner-binary
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.assistantMetaGcr.outputs.tags }}
           labels: ${{ steps.assistantMetaGcr.outputs.labels }}
-
-      - name: "[DEV] Login to Fly registry"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: fly auth docker
-
-      - name: "[DEV] Extract assistant runtime metadata"
-        id: assistantMetaDev
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
-          tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
-            type=ref,event=tag
-            type=ref,event=pr
-            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
-            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
-
-      - name: "[DEV] Build and push assistant runtime image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          file: ./agents/runtime-image/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.assistantMetaDev.outputs.tags }}
-          labels: ${{ steps.assistantMetaDev.outputs.labels }}
-
-      - name: "[PROD] Login to Fly registry"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: fly auth docker
-
-      - name: "[PROD] Extract assistant runtime metadata"
-        id: assistantMetaProd
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
-          tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
-            type=ref,event=tag
-            type=ref,event=pr
-            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
-            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
-
-      - name: "[PROD] Build and push assistant runtime image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          file: ./agents/runtime-image/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.assistantMetaProd.outputs.tags }}
-          labels: ${{ steps.assistantMetaProd.outputs.labels }}
 
   otel-collector:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -619,7 +566,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -653,10 +600,10 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -678,7 +625,7 @@ jobs:
             type=sha,format=long
 
       - name: "[DEV] Build and push collector image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./otel-collector
           platforms: linux/amd64
@@ -715,7 +662,7 @@ jobs:
             type=sha,format=long
 
       - name: "[PROD] Build and push collector image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./otel-collector
           platforms: linux/amd64
@@ -760,7 +707,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -792,7 +739,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -859,14 +806,14 @@ jobs:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
           env: false
 
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@v1.15.6
+        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -877,7 +824,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@v1.15.6
+        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -924,8 +871,17 @@ jobs:
   atlas-push:
     name: Push migrations to Atlas Registry
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, server-build-lint]
-    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
+    # Preview environments pin AtlasMigration resources to the
+    # pr-<number>-<8-char head sha> tag, so this must run for every PR head
+    # commit regardless of changed paths (adding the preview label does not
+    # re-run the workflow). Pushing a dir whose content is unchanged from
+    # main deduplicates server-side into a tag alias of the existing
+    # registry version. Forks are excluded because they cannot read
+    # ATLAS_TOKEN, and a skipped job passes ci-gate while a failed one
+    # would not.
+    if: |
+      github.event_name != 'merge_group' &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
     permissions:
       contents: read
       pull-requests: write
@@ -969,7 +925,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1.15.6
+        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -977,7 +933,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1.15.6
+        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -997,7 +953,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1059,7 +1015,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1098,6 +1054,9 @@ jobs:
 
       - name: Build tunnel gateway
         run: mise run build:tunnel-gateway --readonly
+
+      - name: Test CI tooling
+        run: mise run test:ci
 
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -1152,7 +1111,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1181,15 +1140,15 @@ jobs:
             ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
           path: ${{ env.UV_CACHE_DIR }}
 
-      # TODO: re-enable once buf.yaml + infra/proto exist on main. The breaking
-      # check compares against origin/main, which has no protos until this
-      # scaffolding lands, so `buf breaking` fails with "no .proto files" on the
-      # bootstrap PR. Uncomment both steps in a follow-up after the initial merge.
-      # - name: Fetch main branch
-      #   run: git fetch --depth=1 origin main
-      #
-      # - name: Lint proto files
-      #   run: mise run lint:infra --against ".git#ref=origin/main"
+      - name: Fetch main branch
+        run: git fetch --depth=1 origin main
+
+      # buf breaking against main is what catches a wire-incompatible proto
+      # change (field renumbering, type change) that would corrupt already
+      # published messages — including outbox rows, which store marshaled bytes
+      # and republish them verbatim after a deploy.
+      - name: Lint proto files
+        run: mise run lint:infra --against ".git#ref=origin/main"
 
       - name: Install uv dependencies
         run: mise run install:uv --all-packages --locked
@@ -1218,7 +1177,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1273,7 +1232,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1327,7 +1286,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1370,7 +1329,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1413,9 +1372,16 @@ jobs:
         run: mise run git:porcelain
 
   server-test:
+    name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
+    strategy:
+      # Every shard should report, otherwise a single failure hides the state of
+      # the rest of the suite.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       GOMAXPROCS: 8
       # The runner VM is destroyed after the job, and the reaper is the one
@@ -1427,7 +1393,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1451,15 +1417,57 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+  # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
+  # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
+  # idempotent across runs. The test is build-tagged (demoseed_safety) so the
+  # sharded server-test job skips it; this job is its only runner and reports
+  # as its own required check so a failure is immediately attributable.
+  demo-seed-safety:
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    env:
+      GOMAXPROCS: 8
+      TESTCONTAINERS_RYUK_DISABLED: true
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Install Go deps
+        run: mise run install:go
+
+      - name: Test
+        run: mise run test:server -count=1 -tags=demoseed_safety ./internal/demoseed/...
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     # Build dashboard docker image when server OR client changes exist (needed for preview environments)
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -1468,7 +1476,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1615,17 +1623,16 @@ jobs:
 
   client-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1669,17 +1676,16 @@ jobs:
 
   client-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1721,7 +1727,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1766,7 +1772,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1866,7 +1872,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -1944,10 +1950,10 @@ jobs:
 
       - name: Set up Docker Buildx
         if: github.event.pull_request.user.login != 'dependabot[bot]'
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -2012,7 +2018,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
@@ -2044,6 +2050,60 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  # Scans the frontend for UI anti-patterns and "AI slop" tells (side-tab accent
+  # borders, gradient headings, bounce easing, AI-favourite color palettes, ...)
+  # using https://npmjs.com/package/impeccable.
+  #
+  # The tree is clean as of this check's introduction, so the whole frontend is
+  # scanned rather than just the PR diff — a full scan takes ~3 seconds and also
+  # catches regressions in files the PR did not touch. It is deliberately not
+  # path-filtered for the same reason.
+  #
+  # Rule waivers live in .impeccable/config.json (see `impeccable ignores --help`)
+  # or as inline `impeccable-disable-next-line <rule>` comments.
+  impeccable:
+    name: Detect UI anti-patterns
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    # The scan itself takes ~3s; this only guards against a hung npx install.
+    timeout-minutes: 5
+    env:
+      # Pin the CLI so a new release cannot turn a green PR red without a commit.
+      IMPECCABLE_VERSION: "3.4.0"
+      # puppeteer is an optional dependency only used for scanning live URLs. We
+      # scan files, so skip the ~150MB Chromium download.
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+    steps:
+      - name: Checkout source code
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Run impeccable
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          # `detect` exits 0 when clean and 2 when anti-patterns are found.
+          # GitHub runs this step with `-e`, so the non-zero exit has to be
+          # caught inline — otherwise the step aborts here and the findings are
+          # never summarised.
+          status=0
+          npx --yes "impeccable@${IMPECCABLE_VERSION}" detect --json \
+            client ts-framework functions > findings.json || status=$?
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then
+            echo "::error::impeccable exited with unexpected status $status"
+            cat findings.json || true
+            exit "$status"
+          fi
+
+          node .github/scripts/impeccable-summary.mjs findings.json
+
   # Gate job: aggregates all check results into a single required status check.
   # This allows domain-specific jobs to skip (via job-level `if`) without blocking
   # merge, since skipped jobs don't report a status to rulesets.
@@ -2056,6 +2116,7 @@ jobs:
       - format-check
       - server-build-lint
       - server-test
+      - demo-seed-safety
       - docker-build-server
       - docker-build-client
       - upload-dashboard-assets
@@ -2073,6 +2134,7 @@ jobs:
       - assistant-runtime-image
       - otel-collector
       - ts-framework-test
+      - impeccable
       - golang-migrate-clickhouse
       - lint-migrations
       - atlas-lint
@@ -2173,9 +2235,9 @@ jobs:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Build image (no push)
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: tunnel/Dockerfile

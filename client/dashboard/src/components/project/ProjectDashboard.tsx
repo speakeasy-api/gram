@@ -2,9 +2,9 @@ import { Link, useNavigate } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { DashboardCard } from "@/components/ui/dashboard-card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
+import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -24,7 +24,9 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Icon } from "@/components/ui/Icon";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Wand2 } from "lucide-react";
 import {
@@ -37,6 +39,7 @@ import {
   formatDateRangeLabel,
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
+import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
@@ -61,6 +64,28 @@ export function ProjectDashboard(): JSX.Element {
   const rangeLabel = useMemo(
     () => formatDateRangeLabel(dateRange, customRangeLabel),
     [dateRange, customRangeLabel],
+  );
+
+  // "View all" links carry the selected window so the destination opens on the
+  // same data the card summarized. The range is spelled out rather than left to
+  // the destination: every target reads the shared range/from/to/label params,
+  // but their default presets differ (7d here and on MCP & Tools, 30d on the
+  // employee and agent-session tables), so an absent param silently widens it.
+  const withRange = useCallback(
+    (href: string, extra?: Record<string, string>) => {
+      const params = new URLSearchParams(extra);
+      if (customRange) {
+        params.set("from", customRange.from.toISOString());
+        params.set("to", customRange.to.toISOString());
+        if (customRangeLabel) {
+          params.set("label", safeBase64Encode(customRangeLabel));
+        }
+      } else {
+        params.set("range", dateRange);
+      }
+      return `${href}?${params.toString()}`;
+    },
+    [customRange, customRangeLabel, dateRange],
   );
 
   const {
@@ -547,7 +572,11 @@ export function ProjectDashboard(): JSX.Element {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.employees.href()} />
+                      <ViewAllLink
+                        to={withRange(routes.employees.href(), {
+                          sort: "tokenCount:desc",
+                        })}
+                      />
                     </CardActions>
                   }
                 >
@@ -582,7 +611,7 @@ export function ProjectDashboard(): JSX.Element {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.href()} />
+                      <ViewAllLink to={withRange(routes.insights.href())} />
                     </CardActions>
                   }
                 >
@@ -628,17 +657,17 @@ export function ProjectDashboard(): JSX.Element {
                             }
                           />
                           <ViewAllLink
-                            to={
+                            to={withRange(
                               // no hooks data and no chat sessions
                               isProjectEmpty &&
-                              overview?.summary.totalChats === 0
+                                overview?.summary.totalChats === 0
                                 ? routes.insights.href()
                                 : // has hooks data but no chat sessions
                                   !isProjectEmpty &&
                                     overview?.summary.totalChats === 0
                                   ? routes.insights.href()
-                                  : routes.agentSessions.href()
-                            }
+                                  : routes.agentSessions.href(),
+                            )}
                           />
                         </CardActions>
                       }
@@ -681,7 +710,7 @@ export function ProjectDashboard(): JSX.Element {
 
                     <DashboardCard
                       title="Most Used Agents"
-                      tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by token volume in the selected period, identified from client metadata sent with each call."
+                      tooltip="Coding agents ranked by token volume in the selected period, identified from client metadata sent with each call."
                       action={
                         <CardActions>
                           <ExploreWithAIButton
@@ -698,7 +727,7 @@ export function ProjectDashboard(): JSX.Element {
                               })
                             }
                           />
-                          <ViewAllLink to={routes.insights.href()} />
+                          <ViewAllLink to={withRange(routes.insights.href())} />
                         </CardActions>
                       }
                     >
@@ -718,7 +747,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools ranked by the number of MCP calls they served in the selected period."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.href()} />
+                          <ViewAllLink to={withRange(routes.insights.href())} />
                         </CardActions>
                       }
                     >
@@ -736,7 +765,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.href()} />
+                          <ViewAllLink to={withRange(routes.insights.href())} />
                         </CardActions>
                       }
                     >

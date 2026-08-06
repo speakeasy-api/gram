@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
@@ -23,11 +24,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type stubTemporalRun struct{}
+type stubTemporalRun struct {
+	err   error
+	onGet func(context.Context) error
+}
 
-func (stubTemporalRun) Get(ctx context.Context, valuePtr any) error { return nil }
-func (stubTemporalRun) GetWithOptions(ctx context.Context, valuePtr any, options client.WorkflowRunGetOptions) error {
+func (s stubTemporalRun) Get(ctx context.Context, valuePtr any) error {
+	if s.err != nil {
+		return s.err
+	}
+	if s.onGet != nil {
+		return s.onGet(ctx)
+	}
 	return nil
+}
+func (s stubTemporalRun) GetWithOptions(ctx context.Context, valuePtr any, options client.WorkflowRunGetOptions) error {
+	return s.Get(ctx, valuePtr)
 }
 func (stubTemporalRun) GetID() string    { return "workflow" }
 func (stubTemporalRun) GetRunID() string { return "run" }
@@ -36,7 +48,15 @@ type stubTemporalClient struct {
 	registrationCalls int
 	deletionCalls     int
 	updateCalls       int
+	reconcileCalls    int
+	healthCheckCalls  int
 	lastDomain        string
+	lastOrganization  string
+	lastHealthCheckID uuid.UUID
+	lastReconcileID   uuid.UUID
+	reconcileStartErr error
+	reconcileErr      error
+	reconcile         func(context.Context, uuid.UUID) error
 }
 
 func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -46,19 +66,43 @@ func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, 
 func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.registrationCalls++
 	s.lastDomain = domain
-	return stubTemporalRun{}, nil
+	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, _ k8s.ProvisionerKind) (client.WorkflowRun, error) {
 	s.deletionCalls++
 	s.lastDomain = domain
-	return stubTemporalRun{}, nil
+	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.updateCalls++
 	s.lastDomain = domain
-	return stubTemporalRun{}, nil
+	return stubTemporalRun{err: nil, onGet: nil}, nil
+}
+
+func (s *stubTemporalClient) ExecuteCustomDomainReconcile(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error) {
+	s.reconcileCalls++
+	s.lastReconcileID = customDomainID
+	if s.reconcileStartErr != nil {
+		return nil, s.reconcileStartErr
+	}
+	return stubTemporalRun{
+		err: s.reconcileErr,
+		onGet: func(ctx context.Context) error {
+			if s.reconcile == nil {
+				return nil
+			}
+			return s.reconcile(ctx, customDomainID)
+		},
+	}, nil
+}
+
+func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
+	s.healthCheckCalls++
+	s.lastOrganization = organizationID
+	s.lastHealthCheckID = customDomainID
+	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
 type serviceTestInstance struct {
@@ -83,12 +127,12 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	temporal := &stubTemporalClient{}
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine, auditLogger)
 

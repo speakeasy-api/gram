@@ -1,21 +1,22 @@
 import { DetailHero } from "@/components/detail-hero";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import {
   SourceInfoRow,
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
@@ -37,7 +38,11 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
-import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -337,45 +342,45 @@ function OverviewTab({
           </Heading>
           <SourceInfoTable>
             <SourceInfoRow label="Display name">
-              <Type className="font-medium">
+              <Text className="font-medium">
                 {tunneledMcpServer?.name || "-"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Lifecycle">
-              <Type className="font-mono text-sm">
+              <Text className="font-mono text-sm">
                 {tunneledMcpServer?.status ?? "-"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Connection">
-              <Type className="font-mono text-sm">
+              <Text className="font-mono text-sm">
                 {tunneledMcpServer?.connectionStatus ?? "-"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Key prefix">
-              <Type className="font-mono text-sm">
+              <Text className="font-mono text-sm">
                 {tunneledMcpServer?.keyPrefix ?? "-"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Source ID">
               <span className="flex items-center justify-end gap-1">
-                <Type className="font-mono text-sm">
+                <Text className="font-mono text-sm">
                   {tunneledMcpServer?.id
                     ? `${tunneledMcpServer.id.slice(0, 8)}...`
                     : "-"}
-                </Type>
+                </Text>
                 {tunneledMcpServer?.id && (
-                  <CopyButton text={tunneledMcpServer.id} size="inline" />
+                  <CopyButton text={tunneledMcpServer.id} size="xs" />
                 )}
               </span>
             </SourceInfoRow>
             <SourceInfoRow label="Last seen">
-              <Type className="text-sm">{lastSeenAt}</Type>
+              <Text className="text-sm">{lastSeenAt}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Created">
-              <Type className="text-sm">{createdAt}</Type>
+              <Text className="text-sm">{createdAt}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Updated">
-              <Type className="text-sm">{updatedAt}</Type>
+              <Text className="text-sm">{updatedAt}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Linked MCP servers">
               {showLinkedCount ? (
@@ -387,7 +392,7 @@ function OverviewTab({
                   {linkedMcpServersCount}
                 </button>
               ) : (
-                <Type className="text-muted-foreground text-sm">-</Type>
+                <Text className="text-muted-foreground text-sm">-</Text>
               )}
             </SourceInfoRow>
           </SourceInfoTable>
@@ -421,9 +426,9 @@ function ConnectionsPanel({
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <Heading variant="h4">Connections</Heading>
-          <Type muted small>
+          <Text muted small>
             Live tunnel sessions from Redis
-          </Type>
+          </Text>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="neutral">
@@ -440,11 +445,11 @@ function ConnectionsPanel({
       {isLoading ? (
         <div className="rounded-md border border-dashed p-6 text-center">
           <Loader2 className="text-muted-foreground mx-auto mb-2 size-4 animate-spin" />
-          <Type muted>Loading live tunnel connections.</Type>
+          <Text muted>Loading live tunnel connections.</Text>
         </div>
       ) : connections.length === 0 ? (
         <div className="rounded-md border border-dashed p-6 text-center">
-          <Type muted>No live tunnel connections.</Type>
+          <Text muted>No live tunnel connections.</Text>
         </div>
       ) : (
         <div className="grid gap-3">
@@ -473,10 +478,10 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
     <div className="rounded-md border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <Type className="truncate text-sm font-medium">Tunnel agent</Type>
-          <Type muted small mono className="mt-1 truncate">
+          <Text className="truncate text-sm font-medium">Tunnel agent</Text>
+          <Text muted small mono className="mt-1 truncate">
             {connection.gatewaySessionId}
-          </Type>
+          </Text>
         </div>
         <Badge variant="neutral">
           <Badge.Text>
@@ -505,9 +510,9 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
       </div>
       {metadataEntries.length > 0 && (
         <div className="mt-4 border-t pt-3">
-          <Type muted small className="mb-2">
+          <Text muted small className="mb-2">
             Metadata
-          </Type>
+          </Text>
           <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm md:grid-cols-2">
             {metadataEntries.map(([key, value]) => (
               <InfoPair key={key} label={key} value={value} mono />
@@ -530,12 +535,12 @@ function InfoPair({
 }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
-      <Type muted small>
+      <Text muted small>
         {label}
-      </Type>
-      <Type small mono={mono} className="truncate text-right">
+      </Text>
+      <Text small mono={mono} className="truncate text-right">
         {value}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -594,9 +599,9 @@ function McpServersEmptyState({
   return (
     <div className="flex flex-col items-center py-12 text-center">
       <Server className="text-muted-foreground/50 mb-3 h-12 w-12" />
-      <Type muted className="mb-4">
+      <Text muted className="mb-4">
         No MCP servers are linked to this source yet.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         <Button
           variant="primary"
@@ -644,9 +649,18 @@ function SettingsTab({
   tunneledMcpServer: TunneledMcpServer;
   linkedMcpServers: McpServer[];
 }) {
+  // One mutation shared across the sections that write the same record. Its
+  // pending state serializes name and public-access edits so a concurrent
+  // update can't submit a stale display name and clobber the other change.
+  const update = useUpdateTunneledMcpServerMutation();
+
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      <NameSection tunneledMcpServer={tunneledMcpServer} />
+      <NameSection tunneledMcpServer={tunneledMcpServer} update={update} />
+      <PublicAccessSection
+        tunneledMcpServer={tunneledMcpServer}
+        update={update}
+      />
       <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
       <DangerZoneSection
         tunneledMcpServer={tunneledMcpServer}
@@ -656,10 +670,198 @@ function SettingsTab({
   );
 }
 
-function NameSection({
+type UpdateTunneledMcpMutation = ReturnType<
+  typeof useUpdateTunneledMcpServerMutation
+>;
+
+const PUBLIC_ACCESS_CONFIRM_PHRASE = "ALLOW PUBLIC ACCESS";
+
+function PublicAccessSection({
   tunneledMcpServer,
+  update,
 }: {
   tunneledMcpServer: TunneledMcpServer;
+  update: UpdateTunneledMcpMutation;
+}) {
+  const queryClient = useQueryClient();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPhrase, setConfirmPhrase] = useState("");
+
+  const allowPublic = tunneledMcpServer.allowPublic;
+
+  // Rethrow so a confirmation dialog can stay open on failure; a toast still
+  // surfaces the error.
+  const applyAllowPublic = async (next: boolean) => {
+    try {
+      await update.mutateAsync({
+        request: {
+          updateTunneledMcpServerForm: {
+            id: tunneledMcpServer.id,
+            name: tunneledMcpServer.name,
+            allowPublic: next,
+          },
+        },
+      });
+      await Promise.all([
+        invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      toast.success(
+        next
+          ? "Public anonymous access enabled"
+          : "Public anonymous access disabled",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update public access";
+      toast.error(message);
+      throw error instanceof Error ? error : new Error(message);
+    }
+  };
+
+  const handleConfirmEnable = async () => {
+    try {
+      await applyAllowPublic(true);
+    } catch {
+      // Keep the dialog open on failure so the user can retry; the error
+      // Alert inside it and the toast already surface the reason.
+      return;
+    }
+    setConfirmOpen(false);
+    setConfirmPhrase("");
+  };
+
+  const closeConfirm = (open: boolean) => {
+    setConfirmOpen(open);
+    if (!open) setConfirmPhrase("");
+  };
+
+  return (
+    <div className="rounded-lg border p-6">
+      <div className="mb-1 flex items-center gap-2">
+        <Text variant="subheading">Public Access</Text>
+        <ReleaseStageBadge stage="preview" />
+      </div>
+      <Text muted small className="mb-4 max-w-3xl">
+        When enabled, MCP servers fronting this source can be published with{" "}
+        <span className="font-medium">public</span> visibility, serving fully
+        anonymous callers with no login. Anyone who can reach the endpoint URL
+        can call every tool this source exposes. Leave this off unless the
+        upstream MCP server is safe to expose to the public internet.
+      </Text>
+
+      {allowPublic ? (
+        <Stack gap={3}>
+          <Alert variant="warning" dismissible={false}>
+            Public anonymous access is enabled. MCP servers fronting this source
+            may serve unauthenticated callers.
+          </Alert>
+          <RequireScope scope="mcp:write" level="component">
+            <Button
+              variant="secondary"
+              disabled={update.isPending}
+              onClick={() => void applyAllowPublic(false)}
+            >
+              {update.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Disabling</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Disable public access</Button.Text>
+              )}
+            </Button>
+          </RequireScope>
+        </Stack>
+      ) : (
+        <RequireScope scope="mcp:write" level="component">
+          <Button
+            variant="secondary"
+            disabled={update.isPending}
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Button.Text>Enable public access</Button.Text>
+          </Button>
+        </RequireScope>
+      )}
+
+      <Dialog open={confirmOpen} onOpenChange={closeConfirm}>
+        <Dialog.Content className="max-w-xl!">
+          <Dialog.Header>
+            <Dialog.Title>Enable public anonymous access?</Dialog.Title>
+            <Dialog.Description>
+              This lets anyone on the internet call this source's tools with no
+              authentication once an MCP server fronting it is set to public
+              visibility.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Alert variant="warning" dismissible={false}>
+            Only enable this for MCP servers that are safe to expose publicly.
+            Every tool, resource, and prompt becomes reachable without a login.
+          </Alert>
+          <Stack gap={2}>
+            <Text small muted>
+              Type{" "}
+              <span className="font-mono font-medium">
+                {PUBLIC_ACCESS_CONFIRM_PHRASE}
+              </span>{" "}
+              to confirm.
+            </Text>
+            <Input
+              value={confirmPhrase}
+              onChange={(value) => setConfirmPhrase(value)}
+              placeholder={PUBLIC_ACCESS_CONFIRM_PHRASE}
+            />
+            {update.isError && (
+              <Alert variant="error" dismissible={false}>
+                {update.error.message}
+              </Alert>
+            )}
+          </Stack>
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => closeConfirm(false)}
+              disabled={update.isPending}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button
+              variant="destructive-primary"
+              disabled={
+                confirmPhrase.trim() !== PUBLIC_ACCESS_CONFIRM_PHRASE ||
+                update.isPending
+              }
+              onClick={() => void handleConfirmEnable()}
+            >
+              {update.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Enabling</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Enable public access</Button.Text>
+              )}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </div>
+  );
+}
+
+function NameSection({
+  tunneledMcpServer,
+  update,
+}: {
+  tunneledMcpServer: TunneledMcpServer;
+  update: UpdateTunneledMcpMutation;
 }) {
   const [draft, setDraft] = useState(tunneledMcpServer.name);
 
@@ -668,7 +870,6 @@ function NameSection({
   }, [tunneledMcpServer.name]);
 
   const queryClient = useQueryClient();
-  const update = useUpdateTunneledMcpServerMutation();
 
   const dirty = draft.trim() !== tunneledMcpServer.name.trim();
   const saveDisabled = !dirty || draft.trim() === "" || update.isPending;
@@ -699,12 +900,12 @@ function NameSection({
 
   return (
     <div className="rounded-lg border p-6">
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         Display Name
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         Name shown in source listings, breadcrumbs, and linked MCP servers.
-      </Type>
+      </Text>
       <Stack gap={2}>
         <Input
           value={draft}
@@ -773,13 +974,13 @@ function TunnelKeySection({
     <div className="rounded-lg border p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Type variant="subheading" className="mb-1">
+          <Text variant="subheading" className="mb-1">
             Tunnel Key
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Current key prefix:{" "}
             <span className="font-mono">{tunneledMcpServer.keyPrefix}</span>
-          </Type>
+          </Text>
         </div>
         <RequireScope scope="mcp:write" level="component">
           <Button
@@ -794,9 +995,9 @@ function TunnelKeySection({
           </Button>
         </RequireScope>
       </div>
-      <Type muted small>
+      <Text muted small>
         Rotation replaces the key used by tunnel agents for this source.
-      </Type>
+      </Text>
 
       <Dialog open={rotateDialogOpen} onOpenChange={handleOpenChange}>
         <Dialog.Content className="max-w-xl!">
@@ -817,15 +1018,15 @@ function TunnelKeySection({
                 </code>
                 <CopyButton
                   text={rotatedKey.tunnelKey}
-                  size="icon-sm"
+                  size="sm"
                   tooltip="Copy tunnel key"
                 />
               </div>
               <div className="flex items-center gap-2">
                 <KeyRound className="text-muted-foreground h-4 w-4" />
-                <Type small muted>
+                <Text small muted>
                   Prefix: {rotatedKey.tunneledMcpServer.keyPrefix}
-                </Type>
+                </Text>
               </div>
               <Dialog.Footer>
                 <Button onClick={() => handleOpenChange(false)}>
@@ -895,13 +1096,13 @@ function DangerZoneSection({
 
   return (
     <div className="border-destructive/30 rounded-lg border p-6">
-      <Type variant="subheading" className="text-destructive mb-1">
+      <Text variant="subheading" className="text-destructive mb-1">
         Danger Zone
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         Deleting this source will also remove the linked MCP servers and their
         endpoints. This action cannot be undone.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         <Button
           variant="destructive-primary"

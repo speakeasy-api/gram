@@ -4,8 +4,8 @@ import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { Heading } from "@/components/ui/heading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Heading } from "@/components/ui/Heading";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { dateTimeFormatters } from "@/lib/dates";
 import { isNotFoundError, isUuidRouteParam } from "@/lib/route-errors";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,9 @@ import {
   useDeployment,
   useDeploymentSuspense,
 } from "@gram/client/react-query/deployment.js";
-import { Button, Separator, Skeleton } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Separator } from "@/components/ui/Separator";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   CheckIcon,
   DotIcon,

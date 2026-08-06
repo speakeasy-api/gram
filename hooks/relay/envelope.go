@@ -71,15 +71,16 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	base := agenthooks.EventOf(typed)
 	eventType := canonicalEventType(base)
 	data := &components.HookIngestData{
-		Mcp:            nil,
-		McpAttribution: nil,
-		McpInventory:   nil,
-		Message:        nil,
-		Notification:   nil,
-		Prompt:         nil,
-		Skill:          nil,
-		ToolCall:       nil,
-		Usage:          nil,
+		Mcp:               nil,
+		McpAttribution:    nil,
+		McpInventory:      nil,
+		Message:           nil,
+		Notification:      nil,
+		Prompt:            nil,
+		PromptAttachments: nil,
+		Skill:             nil,
+		ToolCall:          nil,
+		Usage:             nil,
 	}
 
 	switch ev := typed.(type) {
@@ -138,8 +139,13 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	payload := components.IngestRequestBody{
 		SchemaVersion: schemaVersion,
 		Source: components.HookIngestSource{
-			Adapter:        adapterSlug(base.Provider),
-			AdapterVersion: nil,
+			Adapter: adapterSlug(base.Provider),
+			// Doubles as the relay's capability marker: releases before this
+			// one left the field unset, so the server reads its absence as
+			// "this client cannot report MCP inventory" and degrades the
+			// codex meta-tool guard rather than denying traffic that works
+			// today (DNO-767).
+			AdapterVersion: optStr(BinaryVersion),
 			RawEventName:   optStr(base.NativeName),
 			Hostname:       optStr(hostname),
 			UserEmail:      nil,
@@ -336,6 +342,15 @@ func permissionTypeOf(base *agenthooks.Event) string {
 			return s
 		}
 	}
+	// OpenCode's permission frame carries the kind under "type".
+	if base.Provider == agenthooks.ProviderOpenCode {
+		if raw := base.RawField("input.type"); len(raw) > 0 {
+			var s string
+			if json.Unmarshal(raw, &s) == nil {
+				return s
+			}
+		}
+	}
 	return ""
 }
 
@@ -399,7 +414,8 @@ func skillNameOf(input json.RawMessage) string {
 func isEmptyData(d *components.HookIngestData) bool {
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil &&
-		len(d.McpAttribution) == 0 && len(d.McpInventory) == 0
+		len(d.McpAttribution) == 0 && len(d.McpInventory) == 0 &&
+		len(d.PromptAttachments) == 0
 }
 
 // optStr returns a pointer to s, or nil when s is empty so the field is

@@ -2,10 +2,11 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
@@ -96,18 +97,18 @@ export function ServerCard({
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <Type
+              <Text
                 variant="subheading"
                 as="div"
                 className="text-md group-hover:text-primary truncate transition-colors"
                 title={displayName}
               >
                 {displayName}
-              </Type>
+              </Text>
             </div>
-            <Type small muted className="truncate">
+            <Text small muted className="truncate">
               v{server.version}
-            </Type>
+            </Text>
           </div>
           <div className="flex items-baseline gap-1">
             {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
@@ -120,9 +121,9 @@ export function ServerCard({
         </div>
 
         {/* Description */}
-        <Type small muted className="mb-3 line-clamp-2">
+        <Text small muted className="mb-3 line-clamp-2">
           {server.description}
-        </Type>
+        </Text>
 
         {/* Footer row with stats and actions */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">

@@ -1,11 +1,11 @@
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { UnknownSkillActivation } from "@gram/client/models/components/unknownskillactivation.js";
 import { useUnknownSkillActivationsInfinite } from "@gram/client/react-query/unknownSkillActivations.js";
-import { Badge, type Column, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { type Column, Table } from "@/components/ui/Table";
 import { useState } from "react";
 
 const reasonLabels: Record<string, string> = {
@@ -15,35 +15,26 @@ const reasonLabels: Record<string, string> = {
 };
 
 export function UnknownSkillActivationsSection(): JSX.Element | null {
-  const [enabled, setEnabled] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const query = useUnknownSkillActivationsInfinite({ limit: 50 }, undefined, {
-    enabled,
     throwOnError: false,
   });
   const activations =
     query.data?.pages.flatMap((page) => page.result.activations) ?? [];
 
-  if (!enabled) {
+  if (query.isPending && !query.data) return null;
+  if (!query.error && activations.length === 0) return null;
+
+  if (!expanded && activations.length > 0) {
     return (
       <section
         className="space-y-3 pt-6"
         aria-labelledby="unknown-skills-title"
       >
         <UnknownActivationsHeading />
-        <Button variant="outline" onClick={() => setEnabled(true)}>
+        <Button variant="secondary" onClick={() => setExpanded(true)}>
           View unknown activations
         </Button>
-      </section>
-    );
-  }
-  if (query.isPending && !query.data) {
-    return (
-      <section
-        className="space-y-3 pt-6"
-        aria-label="Loading unknown activations"
-      >
-        <UnknownActivationsHeading />
-        <SkeletonTable />
       </section>
     );
   }
@@ -52,9 +43,9 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
       key: "skill",
       header: "Reported skill",
       render: (activation) => (
-        <Type small mono>
+        <Text small mono>
           {activation.skillName}
-        </Type>
+        </Text>
       ),
     },
     { key: "provider", header: "Provider", render: (row) => row.provider },
@@ -77,9 +68,9 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
       header: "Activated",
       width: "150px",
       render: (row) => (
-        <Type small muted title={dateTimeFormatters.full.format(row.seenAt)}>
+        <Text small muted title={dateTimeFormatters.full.format(row.seenAt)}>
           <HumanizeDateTime date={row.seenAt} />
-        </Type>
+        </Text>
       ),
     },
   ];
@@ -93,7 +84,7 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
             title="Unable to load unknown activations"
             error={query.error}
           />
-          <Button variant="outline" onClick={() => void query.refetch()}>
+          <Button variant="secondary" onClick={() => void query.refetch()}>
             Retry
           </Button>
         </div>
@@ -102,7 +93,7 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
           columns={columns}
           data={activations}
           rowKey={(row) => row.id}
-          noResultsMessage={<Type>No unknown activations found.</Type>}
+          noResultsMessage={<Text>No unknown activations found.</Text>}
         />
       )}
       {query.isFetchNextPageError && (
@@ -113,7 +104,7 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
       )}
       {query.hasNextPage && (
         <Button
-          variant="outline"
+          variant="secondary"
           disabled={query.isFetchingNextPage}
           onClick={() => void query.fetchNextPage()}
         >
@@ -131,12 +122,12 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
 function UnknownActivationsHeading(): JSX.Element {
   return (
     <div>
-      <Type id="unknown-skills-title" variant="subheading" as="h3">
+      <Text id="unknown-skills-title" variant="subheading" as="h3">
         Unknown activations
-      </Type>
-      <Type small muted>
+      </Text>
+      <Text small muted>
         Activations whose manifest could not be matched to one skill version.
-      </Type>
+      </Text>
     </div>
   );
 }

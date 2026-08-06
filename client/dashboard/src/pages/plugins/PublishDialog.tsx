@@ -1,7 +1,8 @@
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
-import { Dialog } from "@/components/ui/dialog";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Loader2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
@@ -264,8 +265,8 @@ export const PublishDialog = memo(function PublishDialog({
               </Dialog.Description>
               <Dialog.Description>
                 At least one user in your organization will need to be given
-                access to connect the generated repository with Claude, Cursor,
-                or Codex.
+                access to connect the generated repository with their coding
+                agents.
               </Dialog.Description>
             </>
           )}

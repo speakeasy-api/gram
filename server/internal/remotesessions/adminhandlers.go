@@ -46,9 +46,11 @@ func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.Auth
 	return authCtx, logger, nil
 }
 
-// orEmptySlice coalesces a nil slice to empty: the remote_session_issuers
-// *_supported columns are NOT NULL, and an explicit NULL in the INSERT bypasses
-// their empty-array default.
+// orEmptySlice coalesces a nil slice to empty. The remote_session_issuers
+// *_supported columns are NOT NULL: on INSERT an explicit NULL bypasses their
+// empty-array default, and on UPDATE it violates the constraint outright. All
+// four arrays are OPTIONAL in RFC 8414, so an upstream that omits one decodes
+// to a nil slice and reaches the write path routinely.
 func orEmptySlice(s []string) []string {
 	if s == nil {
 		return []string{}
@@ -156,8 +158,9 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
-// ListGlobalIssuers lists the global remote_session_issuers.
-func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListRemoteSessionIssuersResult, error) {
+// ListGlobalIssuers lists the global remote_session_issuers, each with the
+// global and tenant-owned client counts that decide whether it can be deleted.
+func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListGlobalRemoteSessionIssuersResult, error) {
 	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -177,25 +180,31 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 		return nil, oops.E(oops.CodeUnexpected, err, "list global remote session issuers").LogError(ctx, logger)
 	}
 
-	items := make([]*types.RemoteSessionIssuer, 0, len(rows))
+	items := make([]*adminrsgen.GlobalRemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, mv.BuildRemoteSessionIssuerView(row))
+		items = append(items, &adminrsgen.GlobalRemoteSessionIssuer{
+			Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+			GlobalClientCount: int(row.GlobalClientCount),
+			TenantClientCount: int(row.TenantClientCount),
+		})
 	}
 
 	var nextCursor *string
 	if len(rows) >= int(limit) {
-		c := rows[len(rows)-1].ID.String()
+		c := rows[len(rows)-1].RemoteSessionIssuer.ID.String()
 		nextCursor = &c
 	}
 
-	return &adminrsgen.ListRemoteSessionIssuersResult{
+	return &adminrsgen.ListGlobalRemoteSessionIssuersResult{
 		Items:      items,
 		NextCursor: nextCursor,
 	}, nil
 }
 
-// GetGlobalIssuer resolves a global remote_session_issuer by id.
-func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
+// GetGlobalIssuer resolves a global remote_session_issuer by id, with the same
+// client counts the listing carries so the detail view can describe a delete
+// without a second round trip.
+func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*adminrsgen.GlobalRemoteSessionIssuer, error) {
 	_, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -206,7 +215,7 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	issuer, err := repo.New(s.db).GetGlobalRemoteSessionIssuerByID(ctx, issuerID)
+	row, err := repo.New(s.db).GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx, issuerID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
@@ -214,7 +223,11 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	return mv.BuildRemoteSessionIssuerView(issuer), nil
+	return &adminrsgen.GlobalRemoteSessionIssuer{
+		Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+		GlobalClientCount: int(row.GlobalClientCount),
+		TenantClientCount: int(row.TenantClientCount),
+	}, nil
 }
 
 // UpdateGlobalIssuer patches a global remote_session_issuer.
@@ -334,10 +347,23 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 
 	txRepo := repo.New(dbtx)
 
+	// Take the advisory lock BEFORE the FOR UPDATE row lock below. Tenant client
+	// creation acquires the advisory lock first and then locks the issuer row via
+	// its client insert's FK KEY SHARE. Acquiring the row lock first here would
+	// invert that order and deadlock: this delete would hold the issuer row and
+	// wait for the advisory lock while a concurrent create holds the advisory lock
+	// and waits for the row. Same order on both paths (advisory, then row) avoids
+	// the cycle. The advisory lock also serializes the count-then-delete against
+	// every client writer, tenant and global alike, so a client cannot be inserted
+	// between the count and the delete.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Establish the issuer is global before counting clients or deleting, so a
 	// non-global id returns NotFound rather than probing client counts. FOR
-	// UPDATE locks the issuer row so a concurrent CreateGlobalClient can't
-	// insert a client between the count and the delete.
+	// UPDATE also serializes this delete against a concurrent CreateGlobalClient,
+	// which takes the same row lock.
 	if _, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
@@ -345,12 +371,35 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
+	// Count all clients as the fail-safe (a delete must never strand a live
+	// client), then split out the tenant-held ones. Tenant clients on a platform
+	// issuer are owned by projects and organizations; they never appear in
+	// ListGlobalRemoteSessionClientsByIssuerID, so a bare "delete the clients
+	// first" would point a platform admin at clients they cannot see or remove.
+	// Reporting the two counts distinctly tells them which blockers are theirs
+	// (the global clients) and which belong to tenants.
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "count remote session clients").LogError(ctx, logger)
 	}
 	if clientCount > 0 {
-		return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients; delete the clients first").LogError(ctx, logger)
+		tenantCount, err := txRepo.CountTenantRemoteSessionClientsByIssuerID(ctx, issuerID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "count tenant remote session clients").LogError(ctx, logger)
+		}
+		globalCount := clientCount - tenantCount
+		// Name only the populations that actually block, so the message never
+		// tells an admin to "delete the 0 global clients". The platform catalog
+		// UI shows this verbatim, and an instruction that cannot be followed
+		// reads as a bug in the delete rather than a fact about the data.
+		switch {
+		case tenantCount == 0:
+			return oops.E(oops.CodeConflict, nil, "global remote session issuer has %d active global client(s); delete them here first", globalCount).LogError(ctx, logger)
+		case globalCount == 0:
+			return oops.E(oops.CodeConflict, nil, "global remote session issuer has %d active tenant-owned client(s); they must be removed by their owning organizations", tenantCount).LogError(ctx, logger)
+		default:
+			return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients: %d global, %d tenant-owned; delete the global client(s) here, tenant-owned clients must be removed by their owning organizations", globalCount, tenantCount).LogError(ctx, logger)
+		}
 	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionIssuer(ctx, issuerID)
@@ -368,6 +417,97 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 	logGlobalMutation(ctx, logger, authCtx, "delete", "issuer", deleted.ID.String())
 
 	return nil
+}
+
+// FetchGlobalIssuerMetadata fetches an upstream issuer's RFC 8414 metadata
+// document and returns a draft suitable for CreateGlobalIssuer. Keyed by issuer
+// URL, so no record need exist and nothing is persisted.
+func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.FetchGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
+	_, logger, err := s.requirePlatformAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerURL := strings.TrimSpace(payload.Issuer)
+	if issuerURL == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
+	}
+
+	if !urls.IsAbsoluteHTTP(issuerURL) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
+	}
+
+	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	if err != nil {
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
+	}
+
+	return buildIssuerDraft(doc, issuerURL, warnings), nil
+}
+
+// RefreshGlobalIssuerMetadata re-reads an existing global issuer's RFC 8414
+// metadata document and persists the discovered values, returning the updated
+// issuer alongside any warnings.
+//
+// Like every other global mutation this records a structured-log line rather
+// than an auditlogs row, since audit_log.organization_id is NOT NULL and a
+// global issuer belongs to no organization.
+func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.RefreshGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
+	}
+
+	// Read outside the transaction: discovery below is an upstream HTTP call
+	// under a ten-second budget and must not hold a pooled connection. The
+	// update re-asserts this row's identity — for a global issuer, that both
+	// scope columns are still NULL — so a row that stopped being global aborts
+	// the write instead of being written through.
+	existing, err := repo.New(s.db).GetGlobalRemoteSessionIssuerByID(ctx, issuerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
+	}
+
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	if err != nil {
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	updated, err := repo.New(dbtx).UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer discovered metadata").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Recorded as "update", matching the remote_session_issuer.update audit
+	// action the project and org tiers emit for the same operation. The
+	// before/after state a refresh produced is visible in the row itself.
+	logGlobalMutation(ctx, logger, authCtx, "update", "issuer", updated.ID.String())
+
+	return &types.RemoteSessionIssuerRefresh{
+		Issuer:            mv.BuildRemoteSessionIssuerView(updated),
+		DiscoveryWarnings: warnings,
+	}, nil
 }
 
 // --- Global clients ---

@@ -1,0 +1,15 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "*",
+        "files": ["client/dashboard/src/main.tsx"],
+        "createdAt": "2026-07-29T15:25:48.973Z",
+        "reason": "Inter is the Speakeasy brand typeface"
+      }
+    ]
+  }
+}

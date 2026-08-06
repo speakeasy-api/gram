@@ -1,4 +1,6 @@
-import { Badge, Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
 import {
   ArrowRight,
   Boxes,
@@ -15,15 +17,15 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { useInsightsState } from "@/components/insights-context";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { SessionRow } from "@/components/sessions/SessionRow";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -48,7 +50,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useUserSessions } from "@gram/client/react-query/userSessions.js";

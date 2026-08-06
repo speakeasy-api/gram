@@ -99,7 +99,7 @@ VALUES (
     $5,
     $6
 )
-RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionClientParams struct {
@@ -134,6 +134,10 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 		&i.RedirectUris,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -195,7 +199,7 @@ VALUES (
     $3,
     $4
 )
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionIssuerParams struct {
@@ -220,10 +224,72 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const createUserSessionIssuerCimdClient = `-- name: CreateUserSessionIssuerCimdClient :one
+INSERT INTO user_session_issuer_cimd_clients (project_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT $1, iss.id, $2
+FROM user_session_issuers AS iss
+WHERE iss.id = $3
+  AND iss.project_id = $1
+  AND iss.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = user_session_issuer_cimd_clients.updated_at
+RETURNING id, project_id, user_session_issuer_id, client_id_metadata_uri, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
+`
+
+type CreateUserSessionIssuerCimdClientParams struct {
+	ProjectID           uuid.UUID
+	ClientIDMetadataUri string
+	UserSessionIssuerID uuid.UUID
+}
+
+type CreateUserSessionIssuerCimdClientRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	ClientIDMetadataUri string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	Inserted            bool
+}
+
+// Adds an issuer-specific allowed CIMD document URL. The SELECT source
+// scopes the write to a live issuer in the caller's project, so a bad
+// issuer id yields no rows (404) rather than an orphan write. Adding a URL
+// that is already live is idempotent via ON CONFLICT; adding one that was
+// previously soft-deleted inserts a fresh row, since the unique index
+// covers live rows only and the audit trail should show a new grant rather
+// than silently reviving an old one.
+//
+// `inserted` distinguishes the two so the caller only records an add event
+// for a real new grant. The DO UPDATE is a deliberate no-op write of the
+// existing updated_at: a genuine touch would misreport a re-add as a
+// modification, but ON CONFLICT still needs an action for RETURNING to
+// yield the row. `xmax = 0` is the standard test for "this row came from
+// the INSERT rather than the UPDATE".
+func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg CreateUserSessionIssuerCimdClientParams) (CreateUserSessionIssuerCimdClientRow, error) {
+	row := q.db.QueryRow(ctx, createUserSessionIssuerCimdClient, arg.ProjectID, arg.ClientIDMetadataUri, arg.UserSessionIssuerID)
+	var i CreateUserSessionIssuerCimdClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.Inserted,
 	)
 	return i, err
 }
@@ -267,7 +333,7 @@ WHERE issuer.id = $1
       AND toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
   )
-RETURNING issuer.id, issuer.project_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+RETURNING issuer.id, issuer.project_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type DeleteUserSessionIssuerParams struct {
@@ -287,6 +353,46 @@ func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSes
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteUserSessionIssuerCimdClient = `-- name: DeleteUserSessionIssuerCimdClient :one
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cimd.id = $1
+  AND iss.id = cimd.user_session_issuer_id
+  AND iss.project_id = $2
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+RETURNING cimd.id, cimd.project_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+`
+
+type DeleteUserSessionIssuerCimdClientParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The issuer must still be live. Soft-deleting an issuer leaves its CIMD
+// rows behind (the FK cascade only fires on a hard delete), and those rows
+// are already inert: admission requires a live issuer, and the list query
+// filters them out. Without this predicate the handler would soft-delete a
+// row and then fail looking up its issuer for the audit event, turning an
+// unreachable resource into a 500.
+func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg DeleteUserSessionIssuerCimdClientParams) (UserSessionIssuerCimdClient, error) {
+	row := q.db.QueryRow(ctx, deleteUserSessionIssuerCimdClient, arg.ID, arg.ProjectID)
+	var i UserSessionIssuerCimdClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -408,7 +514,7 @@ func (q *Queries) GetUserSessionByRefreshTokenHash(ctx context.Context, arg GetU
 }
 
 const getUserSessionClientByClientID = `-- name: GetUserSessionClientByClientID :one
-SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 WHERE cli.user_session_issuer_id = $1
   AND cli.client_id = $2
@@ -437,6 +543,10 @@ func (q *Queries) GetUserSessionClientByClientID(ctx context.Context, arg GetUse
 		&i.RedirectUris,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -446,7 +556,7 @@ func (q *Queries) GetUserSessionClientByClientID(ctx context.Context, arg GetUse
 }
 
 const getUserSessionClientByID = `-- name: GetUserSessionClientByID :one
-SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted, iss.project_id AS issuer_project_id
+SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE cli.id = $1 AND iss.project_id = $2 AND cli.deleted IS FALSE
@@ -457,26 +567,9 @@ type GetUserSessionClientByIDParams struct {
 	ProjectID uuid.UUID
 }
 
-type GetUserSessionClientByIDRow struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ClientID              string
-	ClientSecretHash      pgtype.Text
-	ClientName            string
-	RedirectUris          []string
-	ClientIDIssuedAt      pgtype.Timestamptz
-	ClientSecretExpiresAt pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
-	IssuerProjectID       uuid.UUID
-}
-
-func (q *Queries) GetUserSessionClientByID(ctx context.Context, arg GetUserSessionClientByIDParams) (GetUserSessionClientByIDRow, error) {
+func (q *Queries) GetUserSessionClientByID(ctx context.Context, arg GetUserSessionClientByIDParams) (UserSessionClient, error) {
 	row := q.db.QueryRow(ctx, getUserSessionClientByID, arg.ID, arg.ProjectID)
-	var i GetUserSessionClientByIDRow
+	var i UserSessionClient
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
@@ -487,11 +580,14 @@ func (q *Queries) GetUserSessionClientByID(ctx context.Context, arg GetUserSessi
 		&i.RedirectUris,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
-		&i.IssuerProjectID,
 	)
 	return i, err
 }
@@ -543,7 +639,7 @@ func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSess
 }
 
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -563,6 +659,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -572,7 +669,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 }
 
 const getUserSessionIssuerBySlug = `-- name: GetUserSessionIssuerBySlug :one
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -592,12 +689,74 @@ func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSes
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getUserSessionIssuerCimdClientByID = `-- name: GetUserSessionIssuerCimdClientByID :one
+SELECT cimd.id, cimd.project_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE cimd.id = $1
+  AND iss.project_id = $2
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+`
+
+type GetUserSessionIssuerCimdClientByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg GetUserSessionIssuerCimdClientByIDParams) (UserSessionIssuerCimdClient, error) {
+	row := q.db.QueryRow(ctx, getUserSessionIssuerCimdClientByID, arg.ID, arg.ProjectID)
+	var i UserSessionIssuerCimdClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const issuerAdmitsCimdClientURI = `-- name: IssuerAdmitsCimdClientURI :one
+SELECT EXISTS (
+  SELECT 1
+  FROM user_session_issuer_cimd_clients AS cimd
+  WHERE cimd.user_session_issuer_id = $1
+    AND cimd.client_id_metadata_uri = $2
+    AND cimd.deleted IS FALSE
+)
+`
+
+type IssuerAdmitsCimdClientURIParams struct {
+	UserSessionIssuerID uuid.UUID
+	ClientIDMetadataUri string
+}
+
+// Admission check for a presented CIMD client_id that missed the compile-time
+// preset catalog. Runs on the unauthenticated /authorize surface, so project
+// scoping is intentionally NOT applied — the issuer_id is the authoritative
+// scope, matching GetUserSessionClientByClientID. Served by the partial
+// unique index on (user_session_issuer_id, client_id_metadata_uri).
+//
+// Callers MUST bound the length of @client_id_metadata_uri before reaching
+// this query: the value is attacker-supplied and otherwise unbounded.
+func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmitsCimdClientURIParams) (bool, error) {
+	row := q.db.QueryRow(ctx, issuerAdmitsCimdClientURI, arg.UserSessionIssuerID, arg.ClientIDMetadataUri)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listUserSessionClientFacets = `-- name: ListUserSessionClientFacets :many
@@ -637,7 +796,7 @@ func (q *Queries) ListUserSessionClientFacets(ctx context.Context, projectID uui
 }
 
 const listUserSessionClientsByProjectID = `-- name: ListUserSessionClientsByProjectID :many
-SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE iss.project_id = $1
@@ -682,6 +841,10 @@ func (q *Queries) ListUserSessionClientsByProjectID(ctx context.Context, arg Lis
 			&i.RedirectUris,
 			&i.ClientIDIssuedAt,
 			&i.ClientSecretExpiresAt,
+			&i.ClientIDMetadataUri,
+			&i.ClientIDMetadataFetchedAt,
+			&i.ClientIDMetadataCacheExpiresAt,
+			&i.ClientIDMetadataEtag,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -776,8 +939,64 @@ func (q *Queries) ListUserSessionConsentsByProjectID(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listUserSessionIssuerCimdClientsByIssuerID = `-- name: ListUserSessionIssuerCimdClientsByIssuerID :many
+SELECT cimd.id, cimd.project_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE iss.project_id = $1
+  AND cimd.user_session_issuer_id = $2
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND ($3::uuid IS NULL OR cimd.id < $3::uuid)
+ORDER BY cimd.id DESC
+LIMIT $4
+`
+
+type ListUserSessionIssuerCimdClientsByIssuerIDParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	Cursor              uuid.NullUUID
+	LimitValue          int32
+}
+
+// Operator visibility into an issuer's custom CIMD URLs. Joins through
+// issuers for project scoping.
+func (q *Queries) ListUserSessionIssuerCimdClientsByIssuerID(ctx context.Context, arg ListUserSessionIssuerCimdClientsByIssuerIDParams) ([]UserSessionIssuerCimdClient, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerCimdClientsByIssuerID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSessionIssuerCimdClient
+	for rows.Next() {
+		var i UserSessionIssuerCimdClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.UserSessionIssuerID,
+			&i.ClientIDMetadataUri,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -808,6 +1027,7 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 			&i.AuthnChallengeMode,
 			&i.SessionDuration,
 			&i.Classification,
+			&i.ClientIDMetadataAdmissionMode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1108,7 +1328,7 @@ WHERE cli.id = $1
   AND iss.id = cli.user_session_issuer_id
   AND iss.project_id = $2
   AND cli.deleted IS FALSE
-RETURNING cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+RETURNING cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 `
 
 type RevokeUserSessionClientParams struct {
@@ -1129,6 +1349,10 @@ func (q *Queries) RevokeUserSessionClient(ctx context.Context, arg RevokeUserSes
 		&i.RedirectUris,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1324,17 +1548,23 @@ SET
     slug = COALESCE($1::text, slug),
     authn_challenge_mode = COALESCE($2::text, authn_challenge_mode),
     session_duration = COALESCE($3::interval, session_duration),
+    -- Omitting the mode keeps the stored value, including NULL. Once a
+    -- concrete mode is written the column can never return to NULL through
+    -- this endpoint: "never configured" is a one-way state, and the API
+    -- reports the resolved effective mode either way.
+    client_id_metadata_admission_mode = COALESCE($4::text, client_id_metadata_admission_mode),
     updated_at = clock_timestamp()
-WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
+WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateUserSessionIssuerParams struct {
-	Slug               pgtype.Text
-	AuthnChallengeMode pgtype.Text
-	SessionDuration    pgtype.Interval
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
+	Slug                          pgtype.Text
+	AuthnChallengeMode            pgtype.Text
+	SessionDuration               pgtype.Interval
+	ClientIDMetadataAdmissionMode pgtype.Text
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
 }
 
 func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSessionIssuerParams) (UserSessionIssuer, error) {
@@ -1342,6 +1572,7 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		arg.Slug,
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
+		arg.ClientIDMetadataAdmissionMode,
 		arg.ID,
 		arg.ProjectID,
 	)
@@ -1353,6 +1584,95 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertUserSessionClientFromCIMD = `-- name: UpsertUserSessionClientFromCIMD :one
+INSERT INTO user_session_clients (
+    project_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at,
+    client_id_metadata_uri,
+    client_id_metadata_fetched_at
+)
+VALUES (
+    (SELECT project_id FROM user_session_issuers WHERE id = $1),
+    $1,
+    $2,
+    NULL,
+    $3,
+    $4,
+    NULL,
+    $2,
+    clock_timestamp()
+)
+ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    redirect_uris = EXCLUDED.redirect_uris,
+    client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+    client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    updated_at = clock_timestamp()
+WHERE user_session_clients.client_secret_hash IS NULL
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertUserSessionClientFromCIMDParams struct {
+	UserSessionIssuerID uuid.UUID
+	ClientID            string
+	ClientName          string
+	RedirectUris        []string
+}
+
+// Lazy upsert for a client resolved from a Client ID Metadata Document at
+// authorize time. For CIMD rows the document URL IS the client_id, so the
+// conflict target is the same partial unique index that serves DCR lookups.
+// On refresh the mutable metadata (client_name, redirect_uris) and the fetch
+// stamp are replaced wholesale — the document is refetched on every
+// authorize.
+//
+// Two deliberate behaviors:
+//   - A soft-deleted row does not conflict (partial index), so revoking a
+//     CIMD client does not stick: the next authorize resolves the document
+//     again and inserts a fresh row. CIMD identity lives at the URL, and
+//     durable blocking is admission control's job, not revocation's.
+//   - The DO UPDATE is guarded so it can never touch a secret-bearing DCR
+//     row that happens to share the client_id: rewriting it would trip the
+//     client_id_metadata_uri CHECK constraints with an opaque 500. The
+//     guard makes such a collision surface as no-rows, which handlers
+//     already map to invalid_client.
+func (q *Queries) UpsertUserSessionClientFromCIMD(ctx context.Context, arg UpsertUserSessionClientFromCIMDParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, upsertUserSessionClientFromCIMD,
+		arg.UserSessionIssuerID,
+		arg.ClientID,
+		arg.ClientName,
+		arg.RedirectUris,
+	)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

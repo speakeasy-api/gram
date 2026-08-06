@@ -16,14 +16,16 @@ import (
 
 // Endpoints wraps the "chat" service endpoints.
 type Endpoints struct {
-	ListChats      goa.Endpoint
-	LoadChat       goa.Endpoint
-	GenerateTitle  goa.Endpoint
-	CreditUsage    goa.Endpoint
-	DeleteChat     goa.Endpoint
-	SetPinned      goa.Endpoint
-	SubmitFeedback goa.Endpoint
-	ListSources    goa.Endpoint
+	ListChats         goa.Endpoint
+	GetWorkUnitsTrend goa.Endpoint
+	LoadChat          goa.Endpoint
+	GenerateTitle     goa.Endpoint
+	CreditUsage       goa.Endpoint
+	DeleteChat        goa.Endpoint
+	SetPinned         goa.Endpoint
+	Summarize         goa.Endpoint
+	SubmitFeedback    goa.Endpoint
+	ListSources       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "chat" service with endpoints.
@@ -31,25 +33,29 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListChats:      NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		LoadChat:       NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		GenerateTitle:  NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		CreditUsage:    NewCreditUsageEndpoint(s, a.APIKeyAuth),
-		DeleteChat:     NewDeleteChatEndpoint(s, a.APIKeyAuth),
-		SetPinned:      NewSetPinnedEndpoint(s, a.APIKeyAuth),
-		SubmitFeedback: NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		ListSources:    NewListSourcesEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ListChats:         NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GetWorkUnitsTrend: NewGetWorkUnitsTrendEndpoint(s, a.APIKeyAuth),
+		LoadChat:          NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GenerateTitle:     NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		CreditUsage:       NewCreditUsageEndpoint(s, a.APIKeyAuth),
+		DeleteChat:        NewDeleteChatEndpoint(s, a.APIKeyAuth),
+		SetPinned:         NewSetPinnedEndpoint(s, a.APIKeyAuth),
+		Summarize:         NewSummarizeEndpoint(s, a.APIKeyAuth),
+		SubmitFeedback:    NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ListSources:       NewListSourcesEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
 // Use applies the given middleware to all the "chat" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListChats = m(e.ListChats)
+	e.GetWorkUnitsTrend = m(e.GetWorkUnitsTrend)
 	e.LoadChat = m(e.LoadChat)
 	e.GenerateTitle = m(e.GenerateTitle)
 	e.CreditUsage = m(e.CreditUsage)
 	e.DeleteChat = m(e.DeleteChat)
 	e.SetPinned = m(e.SetPinned)
+	e.Summarize = m(e.Summarize)
 	e.SubmitFeedback = m(e.SubmitFeedback)
 	e.ListSources = m(e.ListSources)
 }
@@ -98,6 +104,41 @@ func NewListChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJ
 			return nil, err
 		}
 		return s.ListChats(ctx, p)
+	}
+}
+
+// NewGetWorkUnitsTrendEndpoint returns an endpoint function that calls the
+// method "getWorkUnitsTrend" of service "chat".
+func NewGetWorkUnitsTrendEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetWorkUnitsTrendPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetWorkUnitsTrend(ctx, p)
 	}
 }
 
@@ -309,6 +350,41 @@ func NewSetPinnedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return nil, s.SetPinned(ctx, p)
+	}
+}
+
+// NewSummarizeEndpoint returns an endpoint function that calls the method
+// "summarize" of service "chat".
+func NewSummarizeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SummarizePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Summarize(ctx, p)
 	}
 }
 

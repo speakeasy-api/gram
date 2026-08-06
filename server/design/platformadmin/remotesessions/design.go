@@ -51,7 +51,7 @@ var _ = Service("adminRemoteSessions", func() {
 			security.SessionPayload()
 		})
 
-		Result(rsissuers.ListRemoteSessionIssuersResult)
+		Result(ListGlobalRemoteSessionIssuersResult)
 
 		HTTP(func() {
 			GET("/rpc/adminRemoteSessions.listGlobalIssuers")
@@ -78,7 +78,7 @@ var _ = Service("adminRemoteSessions", func() {
 			security.SessionPayload()
 		})
 
-		Result(rsissuers.RemoteSessionIssuer)
+		Result(GlobalRemoteSessionIssuer)
 
 		HTTP(func() {
 			GET("/rpc/adminRemoteSessions.getGlobalIssuer")
@@ -134,6 +134,52 @@ var _ = Service("adminRemoteSessions", func() {
 		Meta("openapi:operationId", "deleteGlobalRemoteSessionIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteGlobalIssuer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteGlobalRemoteSessionIssuer"}`)
+	})
+
+	Method("fetchGlobalIssuerMetadata", func() {
+		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.")
+
+		Payload(func() {
+			Attribute("issuer", String, "Issuer URL to fetch metadata for (e.g. https://login.linear.com).")
+			Required("issuer")
+			security.SessionPayload()
+		})
+
+		Result(rsissuers.RemoteSessionIssuerDraft)
+
+		HTTP(func() {
+			POST("/rpc/adminRemoteSessions.fetchGlobalIssuerMetadata")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "fetchGlobalRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchGlobalIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchGlobalRemoteSessionIssuerMetadata"}`)
+	})
+
+	Method("refreshGlobalIssuerMetadata", func() {
+		Description("Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(rsissuers.RemoteSessionIssuerRefresh)
+
+		HTTP(func() {
+			POST("/rpc/adminRemoteSessions.refreshGlobalIssuerMetadata")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshGlobalRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshGlobalIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshGlobalRemoteSessionIssuerMetadata"}`)
 	})
 
 	// --- Global clients ---
@@ -257,6 +303,30 @@ var _ = Service("adminRemoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteGlobalClient")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteGlobalRemoteSessionClient"}`)
 	})
+})
+
+// GlobalRemoteSessionIssuer is the platform-admin view of a global
+// remote_session_issuer: the record plus the two client counts that decide
+// whether it can be deleted. They are reported separately because only one of
+// them is actionable by the platform admin — global clients they can delete
+// here, tenant-owned clients they can neither see nor remove.
+var GlobalRemoteSessionIssuer = Type("GlobalRemoteSessionIssuer", func() {
+	Description("A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.")
+
+	Attribute("issuer", rsissuers.RemoteSessionIssuer, "The remote_session_issuer record.")
+	Attribute("global_client_count", Int, "Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.")
+	Attribute("tenant_client_count", Int, "Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.")
+
+	Required("issuer", "global_client_count", "tenant_client_count")
+})
+
+var ListGlobalRemoteSessionIssuersResult = Type("ListGlobalRemoteSessionIssuersResult", func() {
+	Description("Result type for the platform-administrator global issuer listing.")
+
+	Attribute("items", ArrayOf(GlobalRemoteSessionIssuer))
+	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
+
+	Required("items")
 })
 
 // CreateGlobalRemoteSessionClientForm is the global-client create form: like

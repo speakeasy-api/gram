@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -31,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1763,6 +1765,250 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TopToolsByCount:       toToolMetrics(toolsByCount),
 		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
 		IntervalSeconds:       intervalSeconds,
+	}, nil
+}
+
+// GetUnproxiedMcpServerUsage returns a best-effort daily tool-call count for
+// an unproxied MCP server, sourced from Shadow MCP's hook-reported traces
+// (trace_summaries) matched by canonicalized URL. Unlike GetObservabilityOverview,
+// this data isn't written by Gram's own proxy — an unproxied server's traffic
+// never passes through Gram — so coverage depends entirely on whether any
+// hook-instrumented session in this project has called this exact URL.
+func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUsagePayload) (*telem_gen.GetUnproxiedMcpServerUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerUsageResult{Buckets: []*telem_gen.UnproxiedMcpServerUsageBucket{}}, nil
+	}
+
+	rows, err := s.chRepo.GetUnproxiedMcpServerUsageTimeSeries(ctx, repo.GetUnproxiedMcpServerUsageTimeSeriesParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server usage").LogError(ctx, s.logger)
+	}
+
+	buckets := make([]*telem_gen.UnproxiedMcpServerUsageBucket, 0, len(rows))
+	for _, row := range rows {
+		buckets = append(buckets, &telem_gen.UnproxiedMcpServerUsageBucket{
+			Date:      row.BucketDate,
+			CallCount: int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerUsageResult{Buckets: buckets}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerToolUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerToolUsagePayload) (*telem_gen.GetUnproxiedMcpServerToolUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerToolUsageResult{Tools: []*telem_gen.UnproxiedMcpServerToolUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerToolUsage(ctx, repo.GetUnproxiedMcpServerToolUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server tool usage").LogError(ctx, s.logger)
+	}
+
+	tools := make([]*telem_gen.UnproxiedMcpServerToolUsageRow, 0, len(rows))
+	for _, row := range rows {
+		tools = append(tools, &telem_gen.UnproxiedMcpServerToolUsageRow{
+			ToolName:     row.ToolName,
+			CallCount:    int(row.CallCount),    //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+			FailureCount: int(row.FailureCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerToolUsageResult{
+		Tools:      tools,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUserUsagePayload) (*telem_gen.GetUnproxiedMcpServerUserUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerUserUsageResult{Users: []*telem_gen.UnproxiedMcpServerUserUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerUserUsage(ctx, repo.GetUnproxiedMcpServerUserUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server user usage").LogError(ctx, s.logger)
+	}
+
+	users := make([]*telem_gen.UnproxiedMcpServerUserUsageRow, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, &telem_gen.UnproxiedMcpServerUserUsageRow{
+			UserEmail:    row.UserEmail,
+			CallCount:    int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+			LastCalledAt: row.LastCalledAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerUserUsageResult{
+		Users:      users,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerClientUsagePayload) (*telem_gen.GetUnproxiedMcpServerClientUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerClientUsageResult{Clients: []*telem_gen.UnproxiedMcpServerClientUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerClientUsage(ctx, repo.GetUnproxiedMcpServerClientUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server client usage").LogError(ctx, s.logger)
+	}
+
+	clients := make([]*telem_gen.UnproxiedMcpServerClientUsageRow, 0, len(rows))
+	for _, row := range rows {
+		clients = append(clients, &telem_gen.UnproxiedMcpServerClientUsageRow{
+			Client:    row.Client,
+			CallCount: int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerClientUsageResult{
+		Clients:    clients,
+		NextCursor: conv.PtrEmpty(nextCursor),
 	}, nil
 }
 
@@ -3519,6 +3765,41 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetChatAnalysisVerdictsByChatIDs retrieves the newest published chat
+// analysis verdict per chat for one judge (e.g. work units). This is used by
+// the chat service to enrich chat responses from ClickHouse.
+func (s *Service) GetChatAnalysisVerdictsByChatIDs(ctx context.Context, organizationID string, projectID string, judge string, chatIDs []string) (map[string]repo.ChatAnalysisVerdict, error) {
+	if s.chRepo == nil {
+		return make(map[string]repo.ChatAnalysisVerdict), nil
+	}
+
+	result, err := s.chRepo.GetChatAnalysisVerdictsByChatIDs(ctx, repo.GetChatAnalysisVerdictsByChatIDsParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Judge:          judge,
+		ChatIDs:        chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get chat analysis verdicts by ids: %w", err)
+	}
+	return result, nil
+}
+
+// ListChatAnalysisVerdicts retrieves the newest published chat analysis
+// verdict per chat for one judge across a scoring-time window, oldest first.
+// This is used by the chat service to build work-units trend aggregates.
+func (s *Service) ListChatAnalysisVerdicts(ctx context.Context, arg repo.ListChatAnalysisVerdictsParams) ([]repo.ChatAnalysisVerdict, error) {
+	if s.chRepo == nil {
+		return nil, nil
+	}
+
+	result, err := s.chRepo.ListChatAnalysisVerdicts(ctx, arg)
+	if err != nil {
+		return nil, fmt.Errorf("list chat analysis verdicts: %w", err)
 	}
 	return result, nil
 }

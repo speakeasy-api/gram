@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -44,6 +45,57 @@ type mockGitHubPublisher struct {
 	createRepoErr   error
 	pushFilesErr    error
 	getRepoFilesErr error
+}
+
+func distributeTestSkill(t *testing.T, ctx context.Context, ti *testInstance, pluginID, name string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	skills := skillsrepo.New(ti.conn)
+	skill, err := skills.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID:   *authCtx.ProjectID,
+		Name:        name,
+		DisplayName: name,
+		Summary:     pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = skills.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content:          "---\nname: " + name + "\ndescription: d\n---\n\nbody\n",
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{},
+		Metadata:         []byte(`{}`),
+		SpecValid:        true,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  authCtx.UserID,
+		ProjectID:        *authCtx.ProjectID,
+		SkillID:          skill.ID,
+	})
+	require.NoError(t, err)
+	_, err = skills.CreateSkillDistribution(ctx, skillsrepo.CreateSkillDistributionParams{
+		PluginID:        uuid.NullUUID{UUID: uuid.MustParse(pluginID), Valid: true},
+		AssistantID:     uuid.NullUUID{},
+		PinnedVersionID: uuid.NullUUID{},
+		Channel:         "plugin",
+		CreatedByUserID: authCtx.UserID,
+		ProjectID:       *authCtx.ProjectID,
+		SkillID:         skill.ID,
+	})
+	require.NoError(t, err)
+}
+
+// skillFeedbackHooksKey reads the hooks key from a feature plugin's bundled
+// speakeasy.json — the deployment identity the stdio feedback server runs with.
+func skillFeedbackHooksKey(t *testing.T, files map[string][]byte, configPath string) string {
+	t.Helper()
+	require.Contains(t, files, configPath)
+	var config struct {
+		HooksAPIKey string `json:"hooks_api_key"`
+	}
+	require.NoError(t, json.Unmarshal(files[configPath], &config))
+	require.NotEmpty(t, config.HooksAPIKey)
+	return config.HooksAPIKey
 }
 
 func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
@@ -524,6 +576,31 @@ func TestPluginsService_AddPluginServer_RejectsMcpServerWithoutEndpoint(t *testi
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestPluginsService_AddPluginServer_UnproxiedBackedWithoutEndpointSucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unproxied Test"})
+	require.NoError(t, err)
+
+	// Unproxied servers are never proxied, so they never gain an
+	// mcp_endpoints row. AddPluginServer must not reject them for lacking one
+	// the way it would a remote- or toolset-backed server.
+	mcpServer := createTestUnproxiedMcpServer(t, ctx, ti.conn, "Unproxied Widget", mcpservers.VisibilityPublic)
+
+	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Unproxied Widget", server.DisplayName)
+	require.NotNil(t, server.McpServerID)
+	require.Equal(t, mcpServer.idStr, *server.McpServerID)
+}
+
 func TestPluginsService_RemovePluginServer_McpServerBacked(t *testing.T) {
 	t.Parallel()
 
@@ -845,6 +922,52 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 		"codex observability plugin slug %q not found among published files", *status.CodexObservabilityPlugin)
 }
 
+// An unproxied-backed server has no mcp_endpoints row (Gram never proxies
+// it), so ListPluginsWithMcpServersForProject must resolve it via its own
+// unproxied_mcp_servers URL rather than dropping it for lacking an endpoint
+// slug — otherwise a server that AddPluginServer successfully attaches
+// silently never appears in the published bundle.
+func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unproxied Publish Test"})
+	require.NoError(t, err)
+
+	mcpServer := createTestUnproxiedMcpServer(t, ctx, ti.conn, "Vendor Widget", mcpservers.VisibilityPublic)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	mcpConfig, ok := mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]
+	require.True(t, ok, ".mcp.json not found among published files")
+
+	var config struct {
+		MCPServers map[string]struct {
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(mcpConfig, &config))
+
+	server, ok := config.MCPServers["Vendor Widget"]
+	require.True(t, ok, "unproxied server missing from published .mcp.json")
+	require.Equal(t, "https://vendor.example.com/mcp", server.URL,
+		"unproxied server must publish its own vendor URL, not a Gram-hosted endpoint")
+	require.Empty(t, server.Headers,
+		"unproxied server must never carry Gram's API key (or any other Gram-managed credential): "+
+			"MCPURL points straight at the vendor, so any header here leaks a Gram credential to a third party")
+}
+
 // Reproduces the plugin_github_connections_installation_repo_key conflict:
 // project A publishes, gets soft-deleted (freeing its slug under the
 // partial projects_organization_id_slug_key index), and project B reuses
@@ -878,6 +1001,7 @@ func TestPluginsService_PublishPlugins_ReclaimsStaleConnectionFromDeletedProject
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
+
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
@@ -1026,7 +1150,6 @@ func TestPluginsService_PublishPlugins_McpServerBacked(t *testing.T) {
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
-
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
@@ -1099,6 +1222,7 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
+	distributeTestSkill(t, ctx, ti, plugin.ID, "key-test-skill")
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
@@ -1109,14 +1233,19 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	require.NoError(t, err)
 
 	var mcpKey, hooksKey *keysrepo.ApiKey
+	var mcpKeyCount, hooksKeyCount int
 	for i := range keys {
 		switch {
 		case strings.HasPrefix(keys[i].Name, "plugins-mcp-"):
 			mcpKey = &keys[i]
+			mcpKeyCount++
 		case strings.HasPrefix(keys[i].Name, "plugins-hooks-"):
 			hooksKey = &keys[i]
+			hooksKeyCount++
 		}
 	}
+	require.Equal(t, 1, mcpKeyCount)
+	require.Equal(t, 1, hooksKeyCount, "MCP and hooks generation must share one hooks candidate")
 	require.NotNil(t, mcpKey, "expected a plugins-mcp-* API key")
 	require.Contains(t, mcpKey.Scopes, "consumer")
 	require.True(t, strings.HasPrefix(mcpKey.KeyPrefix, "gram_local_"))
@@ -1130,6 +1259,19 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	require.NotNil(t, mcpJSON)
 	require.Contains(t, string(mcpJSON), "gram_local_")
 	require.NotContains(t, string(mcpJSON), "user_config")
+
+	feedbackKey := skillFeedbackHooksKey(t, mock.lastPushedFiles, "key-test/speakeasy.json")
+	require.Contains(t, feedbackKey, hooksKey.KeyPrefix)
+	require.NotContains(t, feedbackKey, mcpKey.KeyPrefix)
+	require.Contains(t, string(mcpJSON), "hooks/bootstrap.sh")
+	require.NotContains(t, string(mcpJSON), hooksKey.KeyPrefix, "the hooks key must not leak into the MCP config")
+
+	claudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	var hooksConfig struct {
+		HooksAPIKey string `json:"hooks_api_key"`
+	}
+	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[claudeObservability+"/speakeasy.json"], &hooksConfig))
+	require.Equal(t, hooksConfig.HooksAPIKey, feedbackKey, "MCP and hooks generation must reuse one hooks key")
 }
 
 func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.T) {
@@ -1206,6 +1348,7 @@ func TestPluginsService_PublishPlugins_NoOrphanedKeyOnGitHubFailure(t *testing.T
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
+	distributeTestSkill(t, ctx, ti, plugin.ID, "failed-publish-skill")
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.Error(t, err, "publish must fail when GitHub does")
@@ -1977,6 +2120,7 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
+	distributeTestSkill(t, ctx, ti, plugin.ID, "carry-hooks-skill")
 
 	input := plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
@@ -1991,6 +2135,9 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 
 	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
 	require.NotEmpty(t, hooksBefore, "first publish must emit hooks files")
+	feedbackKeyBefore := skillFeedbackHooksKey(t, mock.lastPushedFiles, "carry-hooks/speakeasy.json")
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
 
 	// Change the plugin set — an MCP-only change; hooksGeneratorVersion is untouched.
 	toolset2 := createTestToolset(t, ctx, ti.conn, "carry-toolset-2")
@@ -2010,6 +2157,8 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 
 	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
 	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
+	require.Equal(t, hooksKeysBefore+1, countPluginHooksKeys(t, ctx, ti.conn, orgID), "MCP regeneration with distributed skills mints one new hooks key")
+	require.NotEqual(t, feedbackKeyBefore, skillFeedbackHooksKey(t, mock.lastPushedFiles, "carry-hooks/speakeasy.json"), "regenerated MCP must use its fresh hooks key")
 }
 
 // phasedRolloutFixture creates a published project and rewinds its stored hooks

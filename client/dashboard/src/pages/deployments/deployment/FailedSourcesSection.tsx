@@ -1,11 +1,14 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/Checkbox";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
-import { Alert, Badge, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import {
   ChevronDown,
   ChevronRight,
@@ -32,11 +35,13 @@ const SOURCE_ICONS = {
   openapi: FileCode,
   function: Code,
   externalmcp: Server,
-  // Remote MCP servers are project-scoped, not deployment-bound, so they cannot
-  // appear in failed deployment sources — but the icon map must cover the full
-  // SourceType union for the indexed lookup at the call site to typecheck.
+  // Remote/tunneled/unproxied MCP servers are project-scoped, not
+  // deployment-bound, so they cannot appear in failed deployment sources —
+  // but the icon map must cover the full SourceType union for the indexed
+  // lookup at the call site to typecheck.
   remotemcp: Network,
   tunneledmcp: Network,
+  unproxiedmcp: Network,
 } as const;
 
 export function FailedSourcesSection({
@@ -135,6 +140,8 @@ export function FailedSourcesSection({
           case "remotemcp":
             break;
           case "tunneledmcp":
+            break;
+          case "unproxiedmcp":
             break;
         }
       }

@@ -1,23 +1,23 @@
 import { CodeBlock } from "@/components/code";
 import { InstallSteps } from "@/components/install-steps";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
-import { Button as MoonshineButton } from "@speakeasy-api/moonshine";
+import { Button as MoonshineButton } from "@/components/ui/Button";
 import {
   ArrowLeft,
   BookOpen,
@@ -26,6 +26,7 @@ import {
   Info,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
 
 const COWORK_DOCS_URL =
@@ -56,7 +57,8 @@ type Provider =
   | "copilot"
   | "gemini"
   | "glean"
-  | "bedrock";
+  | "bedrock"
+  | "opencode";
 
 const providers: {
   id: Provider;
@@ -78,6 +80,7 @@ const providers: {
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
   { id: "codex", label: "Codex", source: "codex", available: true },
+  { id: "opencode", label: "opencode", source: "opencode", available: true },
   { id: "copilot", label: "Copilot", source: "copilot", available: false },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
@@ -555,7 +558,7 @@ function CodexInstallContent({
           observability plugin specifically.
         </p>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           disabled={isDownloading}
           onClick={() => void handleDownloadInstallScript()}
@@ -639,15 +642,173 @@ function CodexInstallContent({
         <RelatedLinks
           links={[
             {
-              href: "https://developers.openai.com/codex/hooks",
+              href: "https://learn.chatgpt.com/docs/hooks",
               label: "Hooks Docs",
             },
             {
-              href: "https://developers.openai.com/codex/plugins/build",
+              href: "https://developers.openai.com/plugins/build/plugins",
               label: "Plugin Docs",
             },
           ]}
         />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * opencode install. opencode has no plugin-marketplace or deep-link concept
+ * (unlike Claude Code / Cursor / Codex), so the primary path is the
+ * server-generated observability ZIP (plugins.downloadObservabilityPlugin) —
+ * a self-contained `.opencode` plugin (`plugin/agenthooks.ts` + `speakeasy.json`
+ * + bootstrappers) with a freshly-minted hooks-scoped key already embedded,
+ * extracted straight into a repo's `.opencode/`. The manual CLI path
+ * (speakeasy-hooks install --provider=opencode) is kept as a fallback, plus
+ * connecting an MCP server through opencode's own `mcp` config block. The MCP
+ * snippet uses placeholders — grab the real name/URL from that server's own
+ * hosted install page.
+ */
+function OpencodeInstallContent(): JSX.Element {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
+
+  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`;
+
+  const mcpConfig = `{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "<server-name>": {
+      "type": "remote",
+      "enabled": true,
+      "url": "<mcp-server-url>",
+      "headers": {
+        "Authorization": "Bearer {env:MCP_SERVER_API_KEY}"
+      }
+    }
+  }
+}`;
+
+  const handleDownloadPlugin = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
+        {},
+      );
+      if (!resp.ok) {
+        toast.error(
+          resp.status === 403
+            ? "Downloading the observability plugin requires an org admin."
+            : "Failed to download observability plugin",
+        );
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Gram observability plugin as a ZIP — a self-contained{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            .opencode
+          </code>{" "}
+          plugin with a hooks-scoped API key already embedded (no CLI, no key to
+          export). Extract it into your repo's{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            .opencode/
+          </code>{" "}
+          (or{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            ~/.config/opencode/
+          </code>{" "}
+          for every repo) and opencode auto-discovers it on next start.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract:{" "}
+          <code className="bg-muted rounded px-1 py-0.5">
+            unzip observability-opencode.zip -d .opencode
+          </code>
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Prefer the CLI? Install the{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            speakeasy-hooks
+          </code>{" "}
+          binary:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installBinary}
+        </CodeBlock>
+        <p className="text-muted-foreground text-sm">
+          Then run it from your repo to render the same plugin into{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            .opencode/plugin/
+          </code>
+          :
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installCommand}
+        </CodeBlock>
+      </div>
+
+      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Merge an entry into the{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">mcp</code>{" "}
+          block of your project's{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            opencode.json
+          </code>
+          . Replace the placeholders with the name, URL, and auth token from
+          that server's own install page — that token is separate from the Gram
+          hooks credential.
+        </p>
+        <CodeBlock language="json" className="bg-background">
+          {mcpConfig}
+        </CodeBlock>
       </div>
     </div>
   );
@@ -914,6 +1075,7 @@ export function InstallInstructionsDialog({
                   pluginSlug={effectivePluginSlug}
                 />
               )}
+              {selected === "opencode" && <OpencodeInstallContent />}
             </div>
           </div>
         </div>
@@ -955,7 +1117,7 @@ export function InstallInstructionsButton(props: ContentProps): JSX.Element {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         <BookOpen className="h-4 w-4" />
         Install instructions
       </Button>

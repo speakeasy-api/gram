@@ -30,6 +30,21 @@ func BuildGetDomainPayload(domainsGetDomainSessionToken string) (*domains.GetDom
 	return v, nil
 }
 
+// BuildListDomainsPayload builds the payload for the domains listDomains
+// endpoint from CLI flags.
+func BuildListDomainsPayload(domainsListDomainsSessionToken string) (*domains.ListDomainsPayload, error) {
+	var sessionToken *string
+	{
+		if domainsListDomainsSessionToken != "" {
+			sessionToken = &domainsListDomainsSessionToken
+		}
+	}
+	v := &domains.ListDomainsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateDomainPayload builds the payload for the domains createDomain
 // endpoint from CLI flags.
 func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomainSessionToken string) (*domains.CreateDomainPayload, error) {
@@ -69,13 +84,7 @@ func BuildUpdateDomainPayload(domainsUpdateDomainBody string, domainsUpdateDomai
 	{
 		err = json.Unmarshal([]byte(domainsUpdateDomainBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ip_allowlist\": [\n         \"abc123\"\n      ]\n   }'")
-		}
-		if body.IPAllowlist == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ip_allowlist\": [\n         \"abc123\"\n      ],\n      \"openai_apps_challenge_token\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -84,15 +93,63 @@ func BuildUpdateDomainPayload(domainsUpdateDomainBody string, domainsUpdateDomai
 			sessionToken = &domainsUpdateDomainSessionToken
 		}
 	}
-	v := &domains.UpdateDomainPayload{}
+	v := &domains.UpdateDomainPayload{
+		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
+	}
 	if body.IPAllowlist != nil {
 		v.IPAllowlist = make([]string, len(body.IPAllowlist))
 		for i, val := range body.IPAllowlist {
 			v.IPAllowlist[i] = val
 		}
-	} else {
-		v.IPAllowlist = []string{}
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetRootMcpEndpointPayload builds the payload for the domains
+// setRootMcpEndpoint endpoint from CLI flags.
+func BuildSetRootMcpEndpointPayload(domainsSetRootMcpEndpointBody string, domainsSetRootMcpEndpointSessionToken string) (*domains.SetRootMcpEndpointPayload, error) {
+	var err error
+	var body SetRootMcpEndpointRequestBody
+	{
+		err = json.Unmarshal([]byte(domainsSetRootMcpEndpointBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_endpoint_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", body.CustomDomainID, goa.FormatUUID))
+		if body.McpEndpointID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_endpoint_id", *body.McpEndpointID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if domainsSetRootMcpEndpointSessionToken != "" {
+			sessionToken = &domainsSetRootMcpEndpointSessionToken
+		}
+	}
+	v := &domains.SetRootMcpEndpointPayload{
+		CustomDomainID: body.CustomDomainID,
+		McpEndpointID:  body.McpEndpointID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCheckHealthPayload builds the payload for the domains checkHealth
+// endpoint from CLI flags.
+func BuildCheckHealthPayload(domainsCheckHealthSessionToken string) (*domains.CheckHealthPayload, error) {
+	var sessionToken *string
+	{
+		if domainsCheckHealthSessionToken != "" {
+			sessionToken = &domainsCheckHealthSessionToken
+		}
+	}
+	v := &domains.CheckHealthPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

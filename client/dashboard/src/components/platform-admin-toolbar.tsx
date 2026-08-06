@@ -10,7 +10,8 @@ import {
   PlatformAdminInfoPanel,
   PlatformAdminOnboardingPanel,
 } from "./platform-admin-panel";
-import { Switch } from "./ui/switch";
+import { DevBadge } from "@/components/dev-badge";
+import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -29,11 +30,15 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
+const TOOLBAR_WIDTH_PX = 384;
+const TOOLBAR_VIEWPORT_GUTTER_PX = 24;
+const TOOLBAR_HORIZONTAL_MARGIN_PX = 32;
 
 // Shared className for the toolkit's top-level tabs. shrink-0 keeps tabs from
 // compressing; the tab bar scrolls horizontally when they overflow the panel.
@@ -227,8 +232,13 @@ function loadPosition(): { x: number; y: number } | null {
     const raw = localStorage.getItem(POSITION_KEY);
     if (raw) {
       const pos = JSON.parse(raw);
+      const renderedWidth = Math.min(
+        TOOLBAR_WIDTH_PX,
+        Math.max(0, window.innerWidth - TOOLBAR_HORIZONTAL_MARGIN_PX),
+      );
+      const maxX = Math.max(0, window.innerWidth - renderedWidth);
       return {
-        x: Math.max(0, Math.min(pos.x, window.innerWidth - 320)),
+        x: Math.max(0, Math.min(pos.x, maxX)),
         y: Math.max(0, Math.min(pos.y, window.innerHeight - 44)),
       };
     }
@@ -299,6 +309,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   const [platformAdmin, setPlatformAdmin] = useState(
     () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
   );
+  const [orgMemoryEnabled, setOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
   // Leftmost edge (px from viewport left) of any open right-anchored Sheet, or
   // null when none is open. Drives the shift that keeps the toolkit off panels'
   // footer buttons.
@@ -441,7 +452,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
         hasDragged.current = true;
       }
       const el = rootRef.current;
-      const w = el ? el.offsetWidth : 320;
+      const w = el ? el.offsetWidth : TOOLBAR_WIDTH_PX;
       const h = el ? el.offsetHeight : 50;
       const newX = Math.max(0, Math.min(window.innerWidth - w, e.clientX - ox));
       const newY = Math.max(
@@ -534,20 +545,23 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
     (s) => s.enabled,
   ).length;
 
-  // Slide left of an open right panel, clamped so the toolkit (w-80 = 320px)
+  // Slide left of an open right panel, clamped so the toolkit
   // stays on screen. Only applies in the default (un-dragged) position.
   const toolbarShift =
     pos === null && panelLeft !== null
       ? Math.max(
           0,
-          Math.min(window.innerWidth - panelLeft, window.innerWidth - 344),
+          Math.min(
+            window.innerWidth - panelLeft,
+            window.innerWidth - TOOLBAR_WIDTH_PX - TOOLBAR_VIEWPORT_GUTTER_PX,
+          ),
         )
       : 0;
 
   return createPortal(
     <div
       ref={rootRef}
-      className="pointer-events-auto fixed z-[99999] transition-transform duration-300 ease-out select-none"
+      className="pointer-events-auto fixed z-[99999] transition-transform duration-300 ease-out"
       style={
         pos
           ? { left: pos.x, top: pos.y }
@@ -561,7 +575,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
       }
     >
       <div className={`
-          w-80 rounded-xl border shadow-2xl backdrop-blur-md transition-all
+          w-96 max-w-[calc(100vw-2rem)] rounded-xl border shadow-2xl backdrop-blur-md transition-all
           duration-200
           ${state.enabled ? "bg-background/98 border-foreground/15 dark:border-foreground/15 dark:bg-gray-950/98" : "border-border bg-white/98 dark:bg-gray-950/98"}
         `}>
@@ -583,9 +597,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
             className="flex flex-1 cursor-grab items-center gap-2.5 active:cursor-grabbing"
           >
             <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              DEV
-            </span>
+            <DevBadge />
             <span className="text-muted-foreground text-xs font-semibold">
               Developer Toolkit
             </span>
@@ -593,13 +605,12 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
           <div className="ml-auto flex items-center gap-0.5">
             <button
               type="button"
-              onClick={() => {
-                if (hasDragged.current) {
-                  hasDragged.current = false;
-                  return;
-                }
-                setCollapsed((c) => !c);
-              }}
+              aria-label={
+                collapsed
+                  ? "Expand developer toolkit"
+                  : "Collapse developer toolkit"
+              }
+              onClick={() => setCollapsed((c) => !c)}
               className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-full p-1 transition-colors"
             >
               {collapsed ? (
@@ -710,8 +721,28 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
 
             {/* Features tab: RBAC enable/disable + product feature toggles */}
             {activeTab === "features" && (
-              <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+              <div className="max-h-[440px] space-y-3 overflow-y-auto px-3 py-3">
                 <PlatformAdminFeaturesPanel />
+                <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`h-1.5 w-1.5 rounded-full ${orgMemoryEnabled ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"}`}
+                    />
+                    <div>
+                      <div className="text-foreground text-xs font-medium">
+                        Org Memory dashboard
+                      </div>
+                      <div className="text-muted-foreground text-[10px]">
+                        Visible for this browser session
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={orgMemoryEnabled}
+                    onCheckedChange={setOrgMemoryEnabled}
+                    aria-label="Toggle Org Memory dashboard"
+                  />
+                </div>
               </div>
             )}
 

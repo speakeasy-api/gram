@@ -1,5 +1,251 @@
 # server
 
+## 1.4.0
+
+### Minor Changes
+
+- ca05169: Add an authenticated LiteLLM Generic Guardrail endpoint that enforces prompt policies before model calls and captures blocked prompts.
+- 7f4e1b8: Capture LiteLLM model responses with consistent per-call session and user attribution for asynchronous risk analysis.
+- 73b9590: Requests and approvals now understand allow-all shadow MCP policies. Approving a bypass request (from the approvals page or the inventory review flow) on an allow_all policy revokes the server URL's risk_policy:block grant — a project-wide unblock with no principal-scoped bypass grants. Revoking restores the block grant; denying leaves it untouched. The request status change is audited like every other bypass-request decision. The approval UIs skip the audience/policy pickers for these requests and explain that approval unblocks the server for everyone in the project.
+
+### Patch Changes
+
+- 798db6b: The project assistant can now distribute the skills it creates. `platform_distribute_skill` and `platform_undistribute_skill` attach a skill to a plugin or assistant and revoke it again, and `platform_list_plugins` resolves a plugin by name to the ID they take. All three reuse the same permissions, feature gating, and audit logging as the dashboard.
+- bd3aac6: Shadow MCP inventory and status surfaces are now disposition-aware. Under an allow-all policy the inventory reports servers as allowed by default and blocked only when a block rule lists them, the policy status banner explains the allow-by-default posture, and the primary per-server action flips from managing allow rules to Block Server / Unblock Server — which add and remove the policy's risk_policy:block grants through dedicated inventory endpoints.
+
+## 1.3.0
+
+### Minor Changes
+
+- 18bc769: Enforce allow-all shadow MCP policies in the hook path. Under an allow_all policy every non-Gram-hosted MCP server is permitted unless a risk_policy:block grant names its URL; bypass grants and the fail-closed inventory checks remain block_all concepts and are skipped. Projects are now limited to one enabled shadow MCP blocking policy so dispositions can never conflict at enforcement time.
+- becc03b: Add `shadow_mcp_blocked_urls` to risk policy create/update payloads. Allow-all shadow MCP policies carry a canonical blocked-URL list stored as `risk_policy:block` RBAC grants held by the all-users principal — the mirror of `shadow_mcp_allowed_urls`, which reconciles into `risk_policy:bypass` grants on block-all policies. The two lists are disposition-exclusive: blocked URLs are only valid on allow_all policies and allowed URLs only on block_all policies. Blocked URLs may name servers not yet observed in the project inventory (proactive blocking).
+
+### Patch Changes
+
+- 679d489: Let the project's managed assistant act on risk findings, not just read them.
+  Adds `platform_list_risk_exclusions` and `platform_create_risk_exclusion` for
+  suppressing a whole class of findings, plus
+  `platform_mark_risk_false_positive` and
+  `platform_unmark_risk_false_positive` for dismissing (and restoring)
+  specific findings. The writes go through the same risk service methods the
+  dashboard uses, so they stay gated on org admin and audited against the
+  invoking user. Exact and regex match values are fingerprinted before they reach
+  the model, so `platform_create_risk_exclusion` reuses an equivalent existing
+  exclusion rather than duplicating one the model had no way to recognise.
+
+  Also keeps the assistant's context from ballooning while it triages: the
+  agent-facing findings listing now defaults to 25 results and caps at 50
+  (a 200-row page was tens of thousands of tokens that stayed in context for the
+  rest of the turn), and the new `platform_get_risk_rule_breakdown` answers
+  "which rules fire most" in one small call instead of many large pages.
+
+- 6ca548f: Add the `chatgpt` and `chatgpt-work` sources to the product-surface taxonomy now that ChatGPT/Work compliance usage is admitted to the summaries. The compliance importer now routes Work rows to the `chatgpt-work` hook source (ChatGPT and unknown surfaces stay `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while the raw `codex.compliance.product` attribute is not, and summaries outlive the raw-row TTL. Also: a `chatgpt` chat source alias, ChatGPT/ChatGPT Work labels and the OpenAI mark in the dashboard label/icon maps and onboarding live-tail, broadened "OpenAI Compliance Logs" settings copy, and local seed fixtures emitting compliance-shaped `chatgpt:usage:metrics` rows for both products.
+- f8ff561: Codex-product compliance COSTS rows (`codex:usage:metrics`) now meter cost only. Their token counts previously rode on `gen_ai.usage.*` keys, which the ClickHouse agent-usage predicates sum on top of the Codex OTEL stream — the token source of truth — double counting token metering for orgs running both feeds. The raw counts are preserved under new `codex.compliance.*_tokens` attributes (summed by nothing) because the compliance feed also covers surfaces OTEL never sees (cloud-delegated tasks, GitHub code review); a future surface-partitioned metering pass can promote them. Parked non-Codex rows (`chatgpt:usage:metrics`) keep their `gen_ai.usage.*` token counts since the compliance feed is ChatGPT/Work's only usage source.
+- 62fce4c: Emit OpenTelemetry metrics for the device-integration sync pipeline: `gram.device_integration.sync.outcome` (sync runs by provider and outcome) and `gram.device_integration.sync.auto_pause` (schedules auto-paused after a streak of credential rejections). These back the sync-failure-rate and auto-pause monitors for the MDM integrations rollout.
+- 11b3586: Fix OAuth token exchanges failing with invalid_client against providers that strictly decode HTTP Basic credentials (e.g. Snowflake): client id and secret are now form-urlencoded before being placed in the Authorization header, per RFC 6749 §2.3.1.
+- d4d8de2: The project assistant can now create project skills from complete `SKILL.md` content. The new `platform_create_skill` tool uses the same validation, versioning, permissions, feature gating, and audit logging as manual skill creation.
+- 9161dc7: Internal data changes to the risk findings backfill tooling.
+- af439f5: Internal schema changes to the risk findings store.
+- 1dbad64: Internal data changes to risk finding ingestion.
+- ae3979c: Admit `chatgpt:usage` rows (ChatGPT/Work usage+spend from the OpenAI compliance COSTS import, previously retained but unread) into the agent-usage predicates of `attribute_metrics_summaries_mv` and `chat_session_summaries_mv`, via atomic MODIFY QUERY migrations. ChatGPT tokens now count toward tokens-under-management and appear in usage/cost analytics going forward, matching how Claude Chat (Anthropic Admin Analytics) and Cursor (Admin API) polled usage already bill. Applies to new rows only — previously parked rows are retained but not backfilled into the summaries. Also updates the stale MV comments that claimed no new `codex:usage` rows are written (the compliance import writes them, cost-only since the token double-count fix).
+- 3e1ad9e: Exclude unattributed authz challenges from the challenge buckets endpoint so the Challenges page pagination and totals match what is rendered
+- b131cea: Project assistant tool calls now render Claude-style: the assistant precedes each tool batch with a terse activity phrase ("Investigating failures in the last 30 days") which becomes the heading of a single collapsed tool group. Consecutive batches merge into one group whose heading advances (with shimmer) as the investigation progresses, groups never auto-expand, and the global thinking loader hides while a tool group is streaming. The dashboard output-channel guidance instructs the model to emit the phrase before every tool call.
+
+## 1.2.0
+
+### Minor Changes
+
+- c0395b5: Selectively extract high-value, reusable business memories from completed chats, omit semantic duplicates, and add an organization-admin corpus browser with semantic search, source-transcript navigation, and a complete content-scope tree with distinct-memory counts.
+- eed5e6a: Add a weekly usage summary email for customer billing contacts. Every Monday a Temporal sweep emails each organization's billing alert contact their tokens-under-management total for the active billing cycle, with a percent-change badge against the same elapsed point of the previous cycle. The TUM token components are now defined once in a `billing.TumComponents` registry that the ClickHouse billing measure and the email's total both derive from, so changes to the TUM definition propagate to billing and reporting in lockstep. Organizations with no usage in either compared window are skipped, and sends are deduplicated per organization and run date.
+- e9dc39b: Add `mcpRegistries.getSetupDocs`, which returns the published setup documentation for an upstream MCP server from the `github.com/speakeasy-api/mcp-setup-docs/go` catalog. A guide can be located by the upstream server's endpoint URL, by its registry specifier as returned by `listCatalog`, or by both at once. Matches from the two lookup keys are deduplicated by guide slug and returned in descending specificity, and each guide reports how it matched and which documented endpoint the lookup selected. Servers with no published guide return an empty list rather than an error.
+
+### Patch Changes
+
+- 59a371a: Saving an OpenAI app-submission verification token now reconciles the custom domain's ingress. Domains provisioned before the challenge feature shipped were missing the `/.well-known/openai-apps-challenge` route, so the token endpoint returned a 404 until an unrelated setting change rebuilt the ingress; setting or clearing the token now triggers that rebuild directly.
+- 1359212: Serve the hooks@0.3.12 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 9d0f259: The project assistant can now read the AI control plane product documentation. Two new managed-assistant tools, `platform_list_docs` and `platform_get_doc`, expose the ~110 pages under speakeasy.com/docs/ai-control-plane: the first returns the page index (built from the docs sitemap and cached hourly), the second returns one page's markdown along with its public permalink to cite. `platform_get_doc` only serves paths present in the index, so it reads documentation rather than acting as a general-purpose fetcher.
+- 92d743b: Serve the project-wide Risk Events listing from ClickHouse behind the new
+  `risk-list-from-clickhouse` per-org flag, keeping the same ordering, filters
+  and pagination behavior as before. Also fixes a pagination bug where the first
+  result after a page boundary was skipped.
+
+## 1.1.0
+
+### Minor Changes
+
+- 9373aea: Support OAuth Client ID Metadata Documents (CIMD) on the Gram Session OAuth authorization server, gated per organization behind the `gram-user-session-cimd` feature flag. MCP clients that identify themselves with a URL-shaped `client_id`, such as Claude Code and VS Code, can now complete the OAuth flow without Dynamic Client Registration, including loopback redirects on any port.
+- 3b66258: Custom domains can now route their root URL to a default MCP server. Pick one of the domain's MCP endpoints as the default and `https://your-domain.com/` serves that server directly — MCP clients connect at the root and browsers see the installation page — while renaming the endpoint's slug updates the routing automatically. Custom domains can also serve an OpenAI app-submission verification token at `/.well-known/openai-apps-challenge`, so ChatGPT app reviews can verify domain ownership without any changes on your site. Both settings live on the custom domain page; the default server can also be set from an MCP server's own settings.
+
+### Patch Changes
+
+- debaf8e: Shadow MCP inventory server names now resolve reliably after renames. Name updates written in quick succession could previously tie on their stored version and intermittently revert to an older observed name; versions are now stored at full nanosecond precision and each update is guaranteed to supersede the state it was based on.
+- 80b855f: Stop enumerating supported coding agents (Cursor, Claude Code, Codex, …) in Shadow MCP detector copy and other user-facing product strings. Prefer generic wording so new agents like opencode do not require list updates.
+
+## 1.0.0
+
+### Major Changes
+
+- 228f828: feat: evidence records carry per-device attestation strength
+
+  Pushed Drata/Vanta coverage records replace assignedUserAgentActive /
+  assignedUserAgentLastSeenAt with agentActive, agentAttestation, and
+  agentLastSeenAt. agentAttestation is "device" when the record is backed by
+  that machine's own agent heartbeat (matched on hardware serial) and "user"
+  when only its assigned user's, so a single push can carry both strengths
+  truthfully. Breaking for the customer-declared Drata/Vanta record schemas.
+
+### Minor Changes
+
+- 2822d51: `remoteSessionIssuers.get` can now look an identity provider up by its upstream issuer URL, returning the one the project would use (preferring project over organization over platform) or 404 when nothing describes that URL yet. The dashboard's automatic setup flows use it to decide whether to reuse an existing provider instead of scanning the provider list in the browser, which also lets them reuse platform-catalog providers for the first time.
+- b5f47cb: Auto-provision the Drata Custom Connection on connect. When an evidence-sink provider implements the new optional `Provisioner` capability, the connect flow creates its vendor-side object and stores the resulting ids, so the customer no longer hand-crafts it against the vendor API. Drata implements it: it find-or-creates the dedicated Custom Connection with the exact record schema and `required` list (omitting `agentLastSeenAt` so never-seen-agent records are never rejected), keyed on a deterministic name so a re-save reuses the connection instead of duplicating it. A new optional `workspace_id` field defaults to 1, and `connection_id` becomes optional — filled in automatically.
+- 5cfbb83: Expose MCP Client Metadata to Gram Functions tool calls
+- 5bf2d45: Select project skills as additional context for an individual Project Assistant turn.
+
+### Patch Changes
+
+- d5e1ea6: Fix three Drata evidence-push defects found running against the live API. The stranded-session sweep failed to decode the session listing (Drata returns numeric session ids inside a data/pagination envelope; the sweep decoded them as strings and misreported the failure via a bare-array fallback) — session ids now tolerate numbers or strings, a null/absent data field counts as an empty sweep, and the envelope's real decode error surfaces. An empty fleet now clears evidence by deleting records directly, because Drata refuses to complete a session with no records. Per-record schema-validation rejections hidden inside 2xx upload responses now fail the push instead of silently publishing a partial fleet.
+- 1d888d5: Add `message_created_at` and `assistant_id` columns to the ClickHouse
+  `risk_findings` table and stamp them at ingest from the chat-message
+  attribution lookup. `message_created_at` (defaulting to scan time for
+  pre-existing rows) will let the Risk Events listing sort and paginate by
+  event time from ClickHouse; `assistant_id` will power the assistant filter
+  without a cross-store join.
+- eca5c54: Fix three Vanta evidence-sink defects against the real CustomResource API, all verified live. Every pushed record now carries the required top-level `externalUrl` base field (an omission was rejected with 400). `agent_last_seen_at` is always sent — an empty string when no agent has ever reported, rather than omitted — because Vanta's console cannot author an optional-property schema, so a device-declared record schema marks every property required and an omitted field fails at sync. And the response check now matches Vanta's actual full-state PUT contract — 200 `{"success": true}` on a valid set, 4xx on any schema violation — instead of requiring an `accepted`/`rejected` accounting object the API never returns, which was failing every push.
+
+## 0.95.0
+
+### Minor Changes
+
+- b6d3a27: Add skill feedback metrics, grouped review evidence, and manually triggered suggestion analysis.
+- 703756b: Add `fetchMetadata` and `refreshMetadata` across all three remote identity provider tiers. `fetchMetadata` is keyed by issuer URL and persists nothing, as the pre-create step; `refreshMetadata` is keyed by issuer id and re-reads an existing provider's RFC 8414 document, persisting only discovered values (endpoints, the `*_supported` arrays, `client_id_metadata_document_supported`, and the documentation URLs) while leaving Gram's own behavior and display fields untouched. A "Refresh Discoverable Metadata" action is available from the Remote Identity Providers listing.
+- 4bf8450: Let tenants inherit and attach clients to platform (global) remote identity providers while the issuers themselves stay read-only, and keep tenant clients on a platform issuer fully manageable through the organization-admin surface. The dashboard renders the new `Platform` tier and resolves issuers by `project > organization > platform` precedence.
+- 725bfaa: Skill edit suggestions now support batch apply: select individual proposed changes and apply them together as a single new version. The batch controls moved from the per-change comment box to a control bar above the diff.
+- 4225015: Custom domains that stay unhealthy for over a week (7+ consecutive failed daily checks) are now automatically disabled: their routing and TLS certificate are removed, and the dashboard explains what went wrong and walks admins through fixing the issue and reverifying the domain. Gram-side check failures never count toward disabling.
+- b89c5ae: Custom-domain health checks go live: daily check results are now persisted and shown in organization settings, and organization admins receive an email the first time a domain turns unhealthy. This removes the observation-only dry-run mode used to validate detection accuracy in production.
+- 6f24919: Add Temporal scheduling for device integrations: a five-minute coordinator workflow fans out one child workflow per due sync (workflow-id deduped per org and sync), and a sync runner executes inventory pulls and evidence pushes. Inventory syncs upsert the MDM-reported fleet — resolving assigned emails to org members — and mark absent devices missing only in the transaction that records a fully completed snapshot, so a partial pull can never report unvisited devices as missing. Evidence pushes build the org's coverage snapshot and skip delivery when its digest matches the last successful push. Failures back off exponentially (capped at the schedule interval) and repeated credential rejections auto-pause the schedule; successes clear failure state by contract so recovered schedules render as healthy. Workflow and activity payloads carry sync ids only — credentials are decrypted inside the running activity and never enter Temporal history.
+- d3ad7d3: Add the device integrations framework: a capability-based provider registry (`InventorySource` for MDM fleet pulls, `EvidenceSink` for compliance evidence pushes) and a new `deviceIntegrations` management service. Organizations can connect a provider with secret credentials stored as an encrypted write-only document and non-secret settings kept readable, validated against the provider's declared field spec; credential rotation updates the config in place so synced device inventory is never orphaned. The service exposes provider discovery (credential specs drive dashboard form rendering), config CRUD with audit logging, a bounded test-connection probe through the SSRF-hardened guardian client, per-schedule state with distinct user-disable and system-auto-pause semantics, and agent-coverage reads: a bucketed summary (active / stale / no agent / no email / unresolved / missing, plus unmanaged agent users) and a paginated device listing, both computed as read-time joins between MDM inventory and the per-user agent heartbeat.
+
+  Settings updates merge per key with the stored document (omitted keys keep their values), credential rotation resets the schedules' sync execution state and pushed-snapshot digest, and audit before-snapshots are read inside the upsert transaction. The dashboard's OTel forwarding section is updated for a generated SDK type rename.
+
+- 3558aa7: Device integrations: enabling a connection (and "Sync now") triggers the
+  sync coordinator immediately instead of waiting for its next tick; the
+  configure sheet disables the connection test while the draft has unsaved
+  changes and explains that tests run against saved credentials; managed
+  device and schedule tables get properly spaced empty states; and the Iru
+  provider rejects the tenant console URL with an error naming the correct
+  API URL.
+- e123ec3: feat: accept and store device-agent hardware identity
+
+  agent.getPlugins now accepts optional Gram-Device-Serial and
+  Gram-Device-Hostname headers and records a per-device heartbeat alongside the
+  existing per-user one. Coverage is unchanged — this only builds the data the
+  device-level join will read.
+
+- 866a555: mig: add device_agent_device_syncs for per-device agent heartbeats
+
+  Sibling of device_agent_syncs, keyed on (organization_id, serial_number)
+  instead of email, plus the case-insensitive serial indexes both sides of the
+  coverage join will need. Schema only — nothing reads or writes the table yet.
+
+- 432d06c: feat: device-level agent coverage behind a rollout flag
+
+  Coverage can now match a device's hardware serial against per-device agent
+  heartbeats instead of its assigned-user email, falling back to email when no
+  serial match exists. Adds an `agent_other_device` bucket for "the user runs
+  the agent, just not on this machine", and an `attestation` field so clients
+  word the coverage claim to match the mode. Gated per org by the
+  `device-level-coverage` PostHog flag; evidence pushes stay user-level until
+  the sink field names change with them.
+
+- 8457c8a: Add the Drata evidence-sink provider to device integrations: pushes
+  per-device agent-coverage evidence into a customer's Drata workspace through
+  the Custom Connections API, using batched session uploads whose completion
+  atomically replaces the previous evidence set. Field names scope the
+  attestation to the assigned user (never "device monitored").
+- cda58dc: Remove the unused `replayed` field from the `RiskResult` API type. The flag was
+  denormalized from the scanned chat message onto every risk listing row but never
+  rendered by any consumer; dropping it shrinks the listing queries ahead of
+  serving the Risk Events page from ClickHouse.
+- efe9101: Add the Microsoft Intune inventory-source provider to device integrations:
+  Entra ID client-credentials auth (classifying Entra's 400 invalid_client
+  shape as a credential rejection), field-selected managed-device pulls via
+  Microsoft Graph with server-driven nextLink pagination (cursor validated to
+  stay on the Graph host), and mapping into the normalized managed-device
+  shape with emailAddress-then-UPN user attribution.
+- 48b13b7: Add the Iru (formerly Kandji) inventory-source provider to device
+  integrations: static bearer-token auth against the tenant API URL,
+  limit/offset-paginated device pulls mapped into the normalized managed-device
+  shape, and a connection test via a single-record page.
+- c5ca622: Add the Jamf Pro inventory-source provider to the device integrations framework, plus its dashboard presentation entry (Apple-fleet icon and console setup steps for minting the least-privilege API client). Organizations connect a Jamf Cloud tenant with an instance URL and least-privilege API Client credentials (an API Role with only "Read Computers"); the provider authenticates via the OAuth client-credentials grant with the token cached until expiry, pulls the computer inventory in stably ordered, section-filtered pages, and maps each device's serial, hostname, OS, assigned-user email, and last check-in into the managed-device store — preserving the full vendor record. Credential rejections, including tokens expiring mid-pull, classify as auth errors feeding the scheduler's auto-pause streak, and every API request carries the unique User-Agent header the Jamf Technology Partner Program requires.
+- 30cc54d: Ingest opencode observability events natively. The hook ingest pipeline recognizes the `opencode` source (`parseOpencodeHookEvent`), giving opencode events native event-name fidelity instead of a generic fallback, and counts opencode tool calls in the telemetry summaries. Per-turn token/cost usage rows are populated from the OpenCode turn-end usage forwarded by agenthooks v0.4.0.
+- df696de: Page the skills table and move its default search, filters, and sorting to the server.
+- ce74cd3: Paginate scored skill sessions, collapse their table by default, and link chats to the agent sessions explorer.
+- 3f11ea3: Remove the unused Redis-backed Shadow MCP access-rule and approval-request API in favor of risk policy bypass grants.
+- 86d4d18: Add a `shadow_mcp_disposition` field to risk policies. Shadow MCP blocking policies now carry a default disposition — `block_all` (the existing behavior, and the default) or `allow_all` — chosen at creation time. The disposition is immutable after create: switching posture requires deleting and recreating the policy.
+- d60dcf8: Review suggested skill edits one change at a time. A suggestion now proposes separate changes, each carrying its own summary and citing only the agent reports behind that change, so unrelated evidence no longer appears next to an edit. Applying a single change records a new version carrying only it and leaves the rest of the suggestion open against that version. Changes are stored as diffs, so they survive unrelated edits to the skill and are retired individually when they no longer apply.
+- c49af44: Add management APIs to list, approve, dismiss, and bulk approve skill edit suggestions.
+- 3f61966: Add the Vanta evidence-sink provider to device integrations: OAuth
+  client-credentials auth with a per-run token cache (Vanta allows one active
+  token per application), and per-device agent-coverage evidence pushed as a
+  full-state Custom Resource sync whose property names scope the attestation
+  to the assigned user. Rejected records fail the push loudly, since
+  full-state semantics would otherwise read them as departed devices.
+
+### Patch Changes
+
+- 8746659: Stop remote-session MCP requests from looping on a dead upstream refresh token. When an upstream token endpoint returns a definitive RFC 6749 `invalid_grant`, the stored session is now soft-deleted (compare-and-swapped on `updated_at` so a concurrent refresh or re-link is never clobbered) instead of being retried on every request. The next request establishes a fresh upstream session rather than replaying the dead grant.
+- d20126d: Stop asking MCP users to reconnect when several of their requests refresh an upstream token at the same time. Concurrent resolves for one subject all presented the same stored refresh token, so a provider that rotates single-use tokens honoured the first and rejected the rest, and every rejected caller was told to reconnect a session the winner had already repaired. Refresh is now single-flighted per (subject, remote session client) with a short Redis lock — losers wait for the winner's write and adopt its token instead of calling the provider — and the write itself is a compare-and-swap on `updated_at`, so a losing writer can no longer persist a refresh token the provider has already consumed.
+- 411844e: Plugin-scoped skill activations now record under the skill's canonical name, so the same skill attributes consistently across plugins instead of being rejected as invalid.
+- 7734a63: Chart skill activations by version across the rolling 30-day window.
+- 84e7f4f: Device integration syncs now record database rejections of vendor-supplied
+  row content (for example a device record whose name carries a Unicode NUL
+  escape that jsonb refuses) as visible, backed-off schedule failures instead
+  of retrying them as infrastructure errors, and URL-kind integration settings
+  are syntax-checked at save time.
+- 3f61966: fix: cancel stranded Drata sessions before pushing coverage evidence
+
+  Drata permits only one IN_PROGRESS upload session per custom-connection
+  resource, so a push that died mid-upload left a session that blocked every
+  later push. Each push now sweeps and cancels any stranded session before
+  opening its own.
+
+- 8c68e21: Add support for signing with GCP Cloud KMS keys, so a signing key's private half never leaves the key management service holding it. Groundwork only: no API or dashboard surface uses it yet.
+- 83ed7b1: Serve the hooks@0.3.7 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 77d707b: Serve the hooks@0.3.9 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 189bf8e: Explain that MCP connection access was restricted by the `mcp:connect` permission and link users to their organization's authorization challenges grant flow.
+- 9e3c281: Capture Claude Code prompt attachments from local transcripts and submit them on hook ingest. The server stores each attachment as a scannable `prompt_attachment` chat message with first-class prompt linkage and display-path metadata.
+- 8eafabf: Tunneled MCP servers can now be published with public visibility, letting anyone call them anonymously with no login. Turn on **Public Access** for a tunnel source, then set an MCP server fronting it to Public. Public tunneled servers expose every tool to the open internet, so a high-friction confirmation guards the toggle and the MCP server visibility control stays locked to Private until the source opts in.
+- dbd31a9: Honor URL-, stdio-, and whole-policy bypass grants during offline Shadow MCP scans, preventing approved servers from generating recurring findings.
+- 8880982: Polish trial-facing setup and administration surfaces: use current Speakeasy
+  branding on public install pages, return an empty custom-domain list without a
+  404, remove invalid DOM and SVG attributes, explain unavailable collection
+  installs, and focus observability setup on supported integrations.
+
+## 0.94.0
+
+### Minor Changes
+
+- f1d60da: Add a platform-admin surface for the chat analysis pipeline's per-organization settings. A new `adminChatAnalysis` management service (`getSettings` / `upsertWorkUnitsSettings`, session-only, gated on the platform-admin flag) reads and writes the organization's `chat_analysis_settings` row for the work-units judge, taking the same organization advisory lock the reservation transaction holds and recording before/after audit snapshots under the new `chat_analysis_settings` subject. The developer toolkit's Features tab gains a matching "Work Units Chat Analysis" section: an org-wide enable/disable control plus the daily evaluation cap, with a suggested cap prefilled when enabling an organization that never had one. A third method, `triggerAnalysis`, wakes the chat analysis coordinator of every project in the organization on demand — surfaced as a "Run now" button in the same section — so an admin can start a pass immediately instead of waiting for a chat write or the periodic sweep.
+- 861e650: Add on-demand LLM session summaries (`chat.summarize`) and pin controls on Agent Sessions: persisted summaries in the session side panel, pin/unpin on list rows and the detail sheet, and a Pinned filter.
+- e1b188a: `chat.load` now accepts a producer-scoped API key (`Gram-Key`) in addition to a dashboard session and a chat-session token, so backend integrations can pull chat transcripts programmatically without a browser session. Only a **direct** producer API key is treated as a first-party project credential: like the dashboard session (and the way RBAC already exempts API keys via `ShouldEnforce`), it can load any chat in its project, including chats owned by an external user. External-user callers and chat-session tokens stay owner-matched even when the token carries the minting key's `APIKeyID`, and the project/org boundary still applies. The dashboard's producer key-scope description now notes it can export chat transcripts, and the endpoint is added to the public SDK/docs allowlist so its API-key auth is captured in the published API docs.
+- ffae6fa: Add daily custom-domain routing and TLS certificate health checks in an observation-only first release: checks log their findings, including the admin notifications a future release will send, without persisting health state or emailing anyone yet. The dashboard groundwork for health warnings and a manual recheck ships alongside but stays dormant until observation ends.
+- cb9189c: Add Claude Opus 5 (`anthropic/claude-opus-5`) to the supported model catalog and make it the default for in-app chat and newly created assistants. Specialized judge, embedding, and other purpose-specific model selections remain unchanged.
+- 35fad1f: Add the schema foundation for device integrations — the framework that connects an organization to external device-management and compliance vendors. Three new tables: `device_integration_configs` (the audited, per-org, per-provider integration identity, with secret credentials as an encrypted write-only JSON blob and non-secret settings in readable jsonb), `device_integration_syncs` (scheduler state per config and schedule, modeled on `ai_integration_syncs` including the separate auto-paused vs user-disabled markers, plus a pushed-snapshot digest so evidence sinks can skip no-op pushes), and `mdm_devices` (the MDM-reported hardware inventory, keyed by config with both the raw MDM-reported user email and a resolved `users.id`, and a `missing_since` lifecycle instead of deletes). Also adds a case-insensitive `(organization_id, LOWER(email))` index to `device_agent_syncs`, the agent-heartbeat side of the upcoming coverage join.
+- 03b0c2e: Add platform-admin management of Gram's own platform-level external credentials (starting with the ambient GCP identity) via a new `adminExternalCredentials` API (create, read, update, delete) and an "External Services" section in the organization settings with a creation sheet and a per-credential detail page. Includes a live "who am I" Verify probe backed by a reusable `gcpauth` identity resolver.
+- 084cc71: Add Budgets v1: org-scoped per-person budget rules with CEL actor targeting over directory-synced attributes. A periodic Temporal evaluator sums each matched actor's LLM spend from ClickHouse against the rule's per-person limit for UTC calendar windows, records warning/breach events, and publishes circuit state to Redis. Rules with action=block deny the blocked user's Claude Code traffic (UserPromptSubmit and PreToolUse, before risk-policy scans) until the window resets. Rules are append-only version snapshots: editing archives the current version row and creates a successor (version + 1), and rules are archived — never deleted — so historical events always resolve to the exact config that fired them. In the dashboard, Budgets renders as a tab on the Costs page wired to the new `spendrules` management API (rule create/edit/archive, live actor preview, overview cards, events tab); the tab only appears when the `gram-budgets-page` PostHog flag is enabled, so the surface can be released to select users.
+
+### Patch Changes
+
+- 6801c36: Make Codex MCP tool calls joinable to their recorded provenance (DNO-604). Codex hook payloads carry no per-call tool-call id, so the recorded chat tool-call id (previously the tool name) and the telemetry trace id (previously derived from the session id) could never satisfy the shadow-MCP provenance join `trace_id = sha256(tool_call_id)[:16]` — every Codex MCP call fell back to `x-gram-toolset-id` signature validation. Both sides now derive from a shared `sessionID + "|" + toolName` key, which also moves Codex trace grouping from one-trace-per-session to one-trace-per-(session, tool): Tool Logs rows now carry the actual tool name instead of an arbitrary one per session. The canonical ingest path applies the same shared-key fallback for any sender that omits per-call tool ids.
+- 995ac90: Enabling an MCP server no longer fails when the project's Default plugin already lists a server under the same display name. The Default-plugin attach now picks the first available display name — the requested one, then a backend-id-suffixed variant — instead of letting the `(plugin_id, display_name)` unique index abort the enclosing transaction, so a same-named toolset attachment or a stale row can't block enablement. Deleting an MCP server also detaches it from its plugins (recording a `plugin:server_remove` audit event per detachment), releasing the display name for a replacement server.
+- 32df5c0: MCP servers backed by an external OAuth authorization server now serve RFC 8414 authorization-server metadata whose `issuer` matches the Gram resource URL, so spec-compliant OAuth clients no longer reject the document.
+- 52cc585: Serve the hooks@0.3.4 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 8fa329b: Serve the hooks@0.3.5 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- e6d11cd: Remove the unused Kubernetes Gateway API custom-domain provisioner. No environment ever enabled it and no cluster has the Gateway API CRDs installed; custom domains are provisioned exclusively through Ingress. This also unblocks the custom-domain health sweep, which failed while trying to list HTTPRoutes on clusters without the Gateway API.
+- 8bfe95d: Dashboard session tokens are now generated from 256 bits of `crypto/rand` entropy (base64url-encoded) instead of a v4 UUID. Session tokens are bearer credentials validated by a bare cache lookup, so they must be unguessable; a UUID carries only 122 bits of entropy in a recognizable, structured format and is not intended for use as a security token. Existing sessions remain valid, this only affects newly issued tokens.
+- 3f3e59e: Keep published plugin server names in sync when their MCP server is renamed.
+- dd0089e: Remove the `telemetry-logs-pubsub-shadow` PostHog killswitch from the telemetry Pub/Sub shadow dual-write; rows written to `telemetry_logs` are now always mirrored to the `gram-telemetry-v1-log-record` topic. The flag was evaluated locally with a constant distinct ID and no groups, which cannot satisfy a group-targeted release condition — evaluation failed on every batch and the fail-closed gate meant nothing was ever published (while emitting a warn log per batch). The publish path is already best-effort and non-blocking, so the extra killswitch added more failure surface than safety.
+
 ## 0.93.0
 
 ### Minor Changes

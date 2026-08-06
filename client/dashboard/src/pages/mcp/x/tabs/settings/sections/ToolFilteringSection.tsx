@@ -1,12 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldLabel } from "@/components/ui/Field";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useCreateGlobalToolVariationGroupMutation } from "@gram/client/react-query/createGlobalToolVariationGroup.js";
@@ -17,7 +17,7 @@ import {
   useToolVariationGroups,
 } from "@gram/client/react-query/toolVariationGroups.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -74,6 +74,7 @@ export function ToolFilteringSection({
           remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
           tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
           toolsetId: mcpServer.toolsetId ?? undefined,
+          unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
           environmentId: mcpServer.environmentId ?? undefined,
           visibility: mcpServer.visibility,
           toolVariationsGroupId: groupId ?? undefined,

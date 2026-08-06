@@ -161,7 +161,8 @@ SELECT
   e.observed_at,
   e.reserved_on,
   e.created_at AS evaluation_created_at,
-  e.attempts
+  e.attempts,
+  COALESCE(NULLIF(c.external_user_id, ''), c.user_id, '') AS author_id
 FROM chat_analysis_evaluations e
 JOIN projects p
   ON p.id = e.project_id
@@ -191,6 +192,7 @@ type GetChatAnalysisJudgeInputsRow struct {
 	ReservedOn          pgtype.Date
 	EvaluationCreatedAt pgtype.Timestamptz
 	Attempts            int32
+	AuthorID            string
 }
 
 // evaluation_created_at is the row's birth stamp, which no transition rewrites.
@@ -220,6 +222,7 @@ func (q *Queries) GetChatAnalysisJudgeInputs(ctx context.Context, arg GetChatAna
 			&i.ReservedOn,
 			&i.EvaluationCreatedAt,
 			&i.Attempts,
+			&i.AuthorID,
 		); err != nil {
 			return nil, err
 		}
@@ -229,6 +232,32 @@ func (q *Queries) GetChatAnalysisJudgeInputs(ctx context.Context, arg GetChatAna
 		return nil, err
 	}
 	return items, nil
+}
+
+const getChatAnalysisSettingForOrganizationJudge = `-- name: GetChatAnalysisSettingForOrganizationJudge :one
+SELECT organization_id, judge, enabled, daily_cap, created_at, updated_at
+FROM chat_analysis_settings
+WHERE organization_id = $1
+  AND judge = $2
+`
+
+type GetChatAnalysisSettingForOrganizationJudgeParams struct {
+	OrganizationID string
+	Judge          string
+}
+
+func (q *Queries) GetChatAnalysisSettingForOrganizationJudge(ctx context.Context, arg GetChatAnalysisSettingForOrganizationJudgeParams) (ChatAnalysisSetting, error) {
+	row := q.db.QueryRow(ctx, getChatAnalysisSettingForOrganizationJudge, arg.OrganizationID, arg.Judge)
+	var i ChatAnalysisSetting
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Judge,
+		&i.Enabled,
+		&i.DailyCap,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getChatAnalysisSettingsForProject = `-- name: GetChatAnalysisSettingsForProject :many
@@ -347,6 +376,37 @@ func (q *Queries) ListChatAnalysisCandidateChats(ctx context.Context, arg ListCh
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatAnalysisProjectsForOrganization = `-- name: ListChatAnalysisProjectsForOrganization :many
+SELECT id
+FROM projects
+WHERE organization_id = $1::text
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+// Live projects of an organization, read by the management API's manual
+// trigger: the coordinator workflow is keyed by project, so waking a whole
+// organization means signaling each of its projects.
+func (q *Queries) ListChatAnalysisProjectsForOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listChatAnalysisProjectsForOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -657,6 +717,17 @@ func (q *Queries) LoadReservedChatAnalysisEvaluations(ctx context.Context, arg L
 	return items, nil
 }
 
+const lockOrganizationChatAnalysisBudget = `-- name: LockOrganizationChatAnalysisBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('chat-analysis:' || $1::text, 0))
+`
+
+// Settings updates share the reservation lock so their audit snapshots and the
+// budgets observed by reservations both describe committed state.
+func (q *Queries) LockOrganizationChatAnalysisBudget(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationChatAnalysisBudget, organizationID)
+	return err
+}
+
 const lockProjectOrganizationChatAnalysisBudget = `-- name: LockProjectOrganizationChatAnalysisBudget :exec
 SELECT pg_advisory_xact_lock(hashtextextended('chat-analysis:' || p.organization_id, 0))
 FROM projects p
@@ -812,6 +883,52 @@ func (q *Queries) ResetStaleChatAnalysisReservations(ctx context.Context, arg Re
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertChatAnalysisSettingForOrganizationJudge = `-- name: UpsertChatAnalysisSettingForOrganizationJudge :one
+INSERT INTO chat_analysis_settings (
+  organization_id,
+  judge,
+  enabled,
+  daily_cap
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4
+)
+ON CONFLICT (organization_id, judge) DO UPDATE
+SET enabled = excluded.enabled,
+    daily_cap = excluded.daily_cap,
+    updated_at = clock_timestamp()
+RETURNING organization_id, judge, enabled, daily_cap, created_at, updated_at
+`
+
+type UpsertChatAnalysisSettingForOrganizationJudgeParams struct {
+	OrganizationID string
+	Judge          string
+	Enabled        bool
+	DailyCap       int32
+}
+
+func (q *Queries) UpsertChatAnalysisSettingForOrganizationJudge(ctx context.Context, arg UpsertChatAnalysisSettingForOrganizationJudgeParams) (ChatAnalysisSetting, error) {
+	row := q.db.QueryRow(ctx, upsertChatAnalysisSettingForOrganizationJudge,
+		arg.OrganizationID,
+		arg.Judge,
+		arg.Enabled,
+		arg.DailyCap,
+	)
+	var i ChatAnalysisSetting
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Judge,
+		&i.Enabled,
+		&i.DailyCap,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertChatAnalysisSettingsForJudge = `-- name: UpsertChatAnalysisSettingsForJudge :one

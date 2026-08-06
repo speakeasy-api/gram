@@ -6,14 +6,15 @@ import {
   ChevronDown,
   Search,
 } from "lucide-react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
 
 function ProviderIcon({
@@ -102,8 +103,7 @@ export function ConnectIdpStep({
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
         },
       },
     );

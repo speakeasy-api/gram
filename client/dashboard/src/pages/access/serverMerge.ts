@@ -15,7 +15,7 @@
  * is the only place that decides which id a mcp_servers row contributes.
  */
 
-interface ServerTool {
+export interface ServerTool {
   id: string;
   name: string;
   type: string;
@@ -36,10 +36,19 @@ export interface Server {
   mcpSlug?: string;
   tools: ServerTool[];
   /**
-   * Remote/tunneled backends resolve their tools at call time, so they cannot
-   * be individually permissioned in the "Specific tools" picker.
+   * Remote/tunneled backends resolve their tools at call time, so they carry no
+   * deploy-time tool list.
    */
   dynamicTools: boolean;
+  /**
+   * True for servers backed by a remote MCP server (they have a
+   * remote_mcp_server_id). Only these carry stored tool metadata — the
+   * `listToolMetadata` endpoint rejects everything else — so the "Specific
+   * tools" picker fetches their tools from the metadata table on demand.
+   * Tunneled-backed dynamic servers are false here: they cannot be
+   * individually permissioned and stay a non-selectable row.
+   */
+  remoteBacked: boolean;
 }
 
 export interface ServerGroup {
@@ -55,6 +64,8 @@ export interface McpServerRow {
   name?: string | undefined;
   slug?: string | undefined;
   toolsetId?: string | undefined;
+  /** Present only for remote-MCP-backed servers; absent for tunneled ones. */
+  remoteMcpServerId?: string | undefined;
 }
 
 /** See the GRANT ID INVARIANT at the top of this file. */
@@ -76,7 +87,9 @@ export function mcpServerDisplayName(row: McpServerRow): string {
  * - toolset-backed rows whose toolset entry is absent (e.g. filtered out for
  *   having no visible tools) are added with empty tools, still grantable at
  *   the server level;
- * - remote/tunneled rows are added with `dynamicTools: true`.
+ * - remote/tunneled rows are added with `dynamicTools: true`, with
+ *   `remoteBacked` set only for remote-MCP-backed rows (tunneled ones cannot
+ *   carry tool metadata).
  * Does not mutate the input groups; groups left with no servers are dropped.
  */
 export function mergeMcpServersIntoGroups(
@@ -110,6 +123,7 @@ export function mergeMcpServersIntoGroups(
       mcpSlug: undefined,
       tools: [],
       dynamicTools: !row.toolsetId,
+      remoteBacked: !!row.remoteMcpServerId,
     });
   }
 

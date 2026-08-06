@@ -1,5 +1,29 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// The design system ships semantic font-size utilities (`text-body-md`,
+// `text-heading-lg`, …) that tailwind-merge does not know about, so without
+// this extension it treats them as unrelated to `text-sm` and friends and
+// keeps both when they conflict.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [
+        {
+          text: [
+            (value: string) =>
+              ["heading", "body", "codeline", "display"].some((element) =>
+                value.includes(element),
+              ) &&
+              ["xs", "sm", "md", "lg", "xl", "2xl"].some((element) =>
+                value.includes(element),
+              ),
+          ],
+        },
+      ],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
@@ -12,6 +36,18 @@ export function cn(...inputs: ClassValue[]): string {
 // displays, anything operator-facing.
 export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
+}
+
+// Base URL for the dashboard's SDK calls. In dev the dashboard and the server
+// listen on different ports (and worktrees remap both), so every SDK call is
+// cross-origin — and because the requests carry custom headers (gram-project,
+// gram-session, …) each one pays a CORS preflight that the server never lets
+// the browser cache. Vite proxies /rpc (and /chat, /mcp, …) to the server, so
+// pointing the SDK at the dashboard's own origin in dev makes the calls
+// same-origin and the preflights disappear. In prod the dashboard is served
+// from the server's origin, so getServerURL() is already same-origin.
+export function getApiBaseURL(): string {
+  return import.meta.env.DEV ? window.location.origin : getServerURL();
 }
 
 // tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label

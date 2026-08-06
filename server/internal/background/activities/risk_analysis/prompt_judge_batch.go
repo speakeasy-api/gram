@@ -144,6 +144,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
 	for _, idx := range indices {
 		msg := messages[idx]
+		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
@@ -155,7 +156,8 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 
 		publishResults = append(publishResults, a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
 			RequestId:         new(requestID.String()),
-			ChatMessageId:     new(msg.ID.String()),
+			ChatMessageId:     chatMessageID,
+			ContentPartId:     contentPartID,
 			ProjectId:         new(args.ProjectID.String()),
 			OrganizationId:    &args.OrganizationID,
 			RiskPolicyId:      new(args.RiskPolicyID.String()),

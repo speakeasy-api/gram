@@ -251,9 +251,13 @@ ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
 -- provider org; a config with none applies provider-wide. Exact-org matches are
 -- preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 -- NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
--- Only one live config per (org, provider) can exist today, so the ordering is
--- defensive. Only configs with a non-null billing_mode are considered, so an
--- undeclared org returns no rows (treated as unknown upstream).
+-- @match_any_org disables the org scoping entirely: Codex sessions carry no org
+-- identity on any layer while codex_compliance configs always pin one, so for
+-- them the provider-wide declaration applies regardless of config scope. Only
+-- one live config per (org, provider) can exist today, so the ordering (with
+-- updated_at as the tiebreak against historical duplicates) is defensive. Only
+-- configs with a non-null billing_mode are considered, so an undeclared org
+-- returns no rows (treated as unknown upstream).
 SELECT billing_mode
 FROM ai_integration_configs
 WHERE organization_id = @organization_id
@@ -262,11 +266,12 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    @match_any_org::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
     OR external_organization_id = @external_org_id
   )
-ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST
+ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST, updated_at DESC
 LIMIT 1;
 
 -- name: GetDeviceOwner :one
@@ -313,22 +318,6 @@ WHERE project_id = sqlc.arg(project_id)
   )
 ORDER BY created_at DESC
 LIMIT 1;
-
--- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = sqlc.arg(chat_id)
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = sqlc.arg(project_id)::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = sqlc.arg(message_id)
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND sqlc.arg(message_id)::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != sqlc.arg(message_id)::text);
 
 -- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (

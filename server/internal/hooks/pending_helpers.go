@@ -81,6 +81,32 @@ func (s *Service) claimHookIdempotency(ctx context.Context, token string, replay
 	return claimed
 }
 
+func (s *Service) claimBlockedPromptTelemetry(ctx context.Context, payload *gen.ClaudePayload) bool {
+	if payload == nil || payload.SessionID == nil || payload.Prompt == nil {
+		return true
+	}
+	sessionID := strings.TrimSpace(*payload.SessionID)
+	prompt := strings.TrimSpace(*payload.Prompt)
+	if sessionID == "" || prompt == "" {
+		return true
+	}
+
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), blockedPromptTelemetryCacheKey("claude", sessionID, prompt), hookIdempotencyTTL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "blocked prompt telemetry guard failed; persisting anyway",
+			attr.SlogEvent("blocked_prompt_telemetry_guard_failed"),
+			attr.SlogError(err),
+		)
+		return true
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "skipping duplicate blocked prompt telemetry",
+			attr.SlogEvent("blocked_prompt_telemetry_duplicate"),
+		)
+	}
+	return claimed
+}
+
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
 	// Use atomic RPUSH operation to append to the list

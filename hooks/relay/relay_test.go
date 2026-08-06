@@ -552,6 +552,71 @@ func TestCodexSessionEndRelaysCanonicalLifecycle(t *testing.T) {
 	require.Equal(t, "sess-codex-end", *last.Session.ID)
 }
 
+// TestOpenCodeStopRelaysFinalMessage covers the assistant-message path for
+// opencode: the shim splices the transcript's final assistant text into the
+// session.idle input as finalMessage, and it must reach the server as
+// assistant.responded, or transcripts show only tool calls. The prompt is
+// delivered first so the stop event never triggers the runner's
+// prompt-backfill, which keys off machine-global session markers and would
+// make the event count depend on prior runs.
+func TestOpenCodeStopRelaysFinalMessage(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	prompt := []byte(`{"seq":1,"hook":"chat.message","input":{},"output":{"message":{"sessionID":"ses_oc_stop"},"parts":[{"type":"text","text":"hi"}]}}`)
+	payload := []byte(`{"seq":2,"hook":"session.idle","input":{"sessionID":"ses_oc_stop","finalMessage":"final answer"},"output":null}`)
+
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, prompt)
+	require.Equal(t, 1, fs.count())
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, payload)
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeAssistantResponded, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "ses_oc_stop", *last.Session.ID)
+	require.NotNil(t, last.Data)
+	require.NotNil(t, last.Data.Message)
+	require.NotNil(t, last.Data.Message.Text)
+	require.Equal(t, "final answer", *last.Data.Message.Text)
+	require.NotNil(t, last.Data.Message.Role)
+	require.Equal(t, "assistant", *last.Data.Message.Role)
+}
+
+// TestOpenCodeToolErrorRelaysToolFailed covers the failed-tool path for
+// opencode: tool.execute.after does not fire on error, so the shim forwards
+// the error-state tool part from message.part.updated and it must reach the
+// server as tool.failed. The prompt is delivered first so the tool-error
+// event never triggers the runner's prompt-backfill, which keys off
+// machine-global session markers and would make the event count depend on
+// prior runs.
+func TestOpenCodeToolErrorRelaysToolFailed(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	prompt := []byte(`{"seq":1,"hook":"chat.message","input":{},"output":{"message":{"sessionID":"ses_oc_err"},"parts":[{"type":"text","text":"hi"}]}}`)
+	payload := []byte(`{"seq":2,"hook":"message.part.updated","input":{"part":{"id":"prt-1","sessionID":"ses_oc_err","messageID":"msg-1","type":"tool","callID":"call-1","tool":"read","state":{"status":"error","input":{"filePath":"/tmp/missing.txt"},"error":"File not found"}}},"output":null}`)
+
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, prompt)
+	require.Equal(t, 1, fs.count())
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, payload)
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeToolFailed, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "ses_oc_err", *last.Session.ID)
+	require.NotNil(t, last.Data)
+	require.NotNil(t, last.Data.ToolCall)
+	require.NotNil(t, last.Data.ToolCall.Name)
+	require.Equal(t, "read", *last.Data.ToolCall.Name)
+	require.Equal(t, "File not found", last.Data.ToolCall.Error)
+}
+
 func TestStopEventsRemainPerTurn(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
@@ -631,6 +696,31 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWritePluginOpenCodeRendersShim(t *testing.T) {
+	dir := t.TempDir()
+	err := WritePlugin(t.Context(), "opencode", dir, PluginConfig{
+		ServerURL:    "https://gram.test",
+		ProjectSlug:  "default",
+		OrgID:        "org-1",
+		HooksAPIKey:  "shared-key",
+		BrowserLogin: false,
+		BinaryPath:   "/tmp/speakeasy-hooks",
+	})
+	require.NoError(t, err)
+
+	shim, err := os.ReadFile(filepath.Join(dir, ".opencode", "plugin", "agenthooks.ts"))
+	require.NoError(t, err)
+	require.Contains(t, string(shim), `"/tmp/speakeasy-hooks"`)
+	require.Contains(t, string(shim), "--config="+filepath.Join(dir, configFileName))
+	require.Contains(t, string(shim), "--provider=opencode")
+
+	var cfg FileConfig
+	b, err := os.ReadFile(filepath.Join(dir, configFileName))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &cfg))
+	require.Equal(t, "https://gram.test", cfg.ServerURL)
 }
 
 func TestClaudeConfigChangeIsRelayed(t *testing.T) {
@@ -1326,11 +1416,12 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 }
 
 func TestMCPInventoryRedactionMasksSignedURLCredentials(t *testing.T) {
-	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&channel=eng")
+	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&oauth_signature=oauth-secret&channel=eng")
 	require.True(t, ok)
 	require.NotContains(t, got, "short")
 	require.NotContains(t, got, "aws-secret")
 	require.NotContains(t, got, "aws-credential")
+	require.NotContains(t, got, "oauth-secret", "prefixed OAuth signature params must redact")
 	require.Contains(t, got, "channel=eng", "non-secret query parameters must survive")
 
 	command := redactCommand("npx -y mcp-remote https://mcp.example.com/sse?X-Goog-Signature=goog-secret&channel=eng")
@@ -1471,4 +1562,138 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 
 	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
+}
+
+// TestParseCodexMCPInventory: the guard uses this snapshot to decide whether a
+// tool call routes to a Gram-hosted server, so a stdio server must surface its
+// full command and a disabled server must not appear at all — a disabled entry
+// left in the list would vouch for a call that routed somewhere else.
+func TestParseCodexMCPInventory(t *testing.T) {
+	// Verbatim `codex mcp list --json` from the shipped 0.146 build (server
+	// names and the disabled entry are ours; every key, the null-heavy
+	// transport fields, and the auth_status values are as Codex emitted them).
+	entries := parseCodexMCPInventory([]byte(`[
+	  {
+	    "name": "everything",
+	    "enabled": true,
+	    "disabled_reason": null,
+	    "transport": {
+	      "type": "stdio",
+	      "command": "npx",
+	      "args": ["-y", "@modelcontextprotocol/server-everything"],
+	      "env": null,
+	      "env_vars": [],
+	      "cwd": null
+	    },
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "unsupported"
+	  },
+	  {
+	    "name": "remote_example",
+	    "enabled": true,
+	    "disabled_reason": null,
+	    "transport": {
+	      "type": "streamable_http",
+	      "url": "https://mcp.example.test/mcp",
+	      "bearer_token_env_var": null,
+	      "http_headers": null,
+	      "env_http_headers": null
+	    },
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "o_auth"
+	  },
+	  {
+	    "name": "disabled_example",
+	    "enabled": false,
+	    "disabled_reason": null,
+	    "transport": {"type": "stdio", "command": "npx", "args": [], "env": null, "env_vars": [], "cwd": null},
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "unsupported"
+	  }
+	]`))
+
+	require.Len(t, entries, 2)
+	require.Equal(t, "everything", entries[0].Name)
+	require.Equal(t, "npx -y @modelcontextprotocol/server-everything", entries[0].Command)
+	require.Empty(t, entries[0].URL)
+	require.Equal(t, "remote_example", entries[1].Name)
+	require.Equal(t, "https://mcp.example.test/mcp", entries[1].URL)
+	require.Empty(t, entries[1].Command)
+
+	require.Empty(t, parseCodexMCPInventory([]byte("not json")))
+	require.Empty(t, parseCodexMCPInventory(nil))
+}
+
+// TestEnvelopeReportsBinaryVersion: the server reads adapter_version's presence
+// as "this relay can report MCP inventory" and degrades the codex meta-tool
+// shadow-MCP guard without it. Dropping this field would silently disable that
+// enforcement for every user rather than failing visibly.
+func TestEnvelopeReportsBinaryVersion(t *testing.T) {
+	previous := BinaryVersion
+	t.Cleanup(func() { BinaryVersion = previous })
+	BinaryVersion = "9.9.9"
+
+	payload := buildEnvelope(&agenthooks.PromptEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "UserPromptSubmit",
+			Session:    agenthooks.SessionInfo{ID: "s1"},
+		},
+		Prompt: "hello",
+	}, "host")
+
+	require.NotNil(t, payload.Source.AdapterVersion)
+	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
+}
+
+// TestCodexSessionStartRelaysMCPInventoryFromSessionCWD: Codex merges managed,
+// user and project config layers, and resolves the project layer relative to
+// the working directory — so the inventory must be listed from the session's
+// cwd, not the hook host's. Getting this wrong yields a snapshot missing the
+// session's real servers, and the shadow-MCP guard then denies meta-tool reads
+// of servers that are in fact Gram-hosted. Mirrors the Claude coverage.
+func TestCodexSessionStartRelaysMCPInventoryFromSessionCWD(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake codex executable uses a POSIX shell")
+	}
+
+	binDir := t.TempDir()
+	// Only the `mcp` invocation records its cwd: SessionStart also shells out
+	// to `codex app-server` for identity, and letting that write would race the
+	// assertion with the hook host's directory.
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(
+		"#!/bin/sh\n"+
+			"if [ \"$1\" = \"mcp\" ]; then\n"+
+			"  pwd > \"$FAKE_CODEX_CWD_FILE\"\n"+
+			"  printf '%s\\n' \"$FAKE_CODEX_MCP_LIST\"\n"+
+			"  exit 0\n"+
+			"fi\n"+
+			"exit 1\n"), 0o700))
+	t.Setenv("PATH", binDir)
+	cwdFile := filepath.Join(t.TempDir(), "cwd")
+	t.Setenv("FAKE_CODEX_CWD_FILE", cwdFile)
+	t.Setenv("FAKE_CODEX_MCP_LIST",
+		`[{"name":"gram","enabled":true,"transport":{"type":"streamable_http","url":"https://app.example.test/mcp"}}]`)
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	cwd := t.TempDir()
+	payload := []byte(`{"session_id":"sess-codex-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	require.NotNil(t, fs.last().Data)
+	require.Len(t, fs.last().Data.McpInventory, 1)
+	require.Equal(t, "gram", *fs.last().Data.McpInventory[0].ServerName)
+
+	invocationCWD, err := os.ReadFile(cwdFile)
+	require.NoError(t, err)
+	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)),
+		"codex mcp list must run from the session cwd so the project config layer resolves")
 }

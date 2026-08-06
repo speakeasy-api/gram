@@ -53,6 +53,16 @@ func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAtt
 	return params
 }
 
+// LogObserver is notified after a batch of telemetry log rows is written to
+// telemetry_logs. Observers receive the caller's batch before per-org
+// feature-flag filtering, so a row is not a guarantee that it was persisted.
+// Implementations must be cheap; heavy work should be throttled or dispatched
+// asynchronously. Staged rows (LogBulkStaging) are not observed — they only
+// reach telemetry_logs later, via promotion.
+type LogObserver interface {
+	OnTelemetryLogsWritten(ctx context.Context, params []LogParams)
+}
+
 type Logger struct {
 	shutdownCtx       func() context.Context
 	logger            *slog.Logger
@@ -61,6 +71,7 @@ type Logger struct {
 	toolIOLogsEnabled FeatureChecker
 	users             *UserInfoResolver
 	logPublisher      *LogPublisher
+	observers         []LogObserver
 }
 
 func NewLogger(
@@ -91,7 +102,14 @@ func NewLogger(
 		toolIOLogsEnabled: toolIOLogsEnabled,
 		users:             users,
 		logPublisher:      logPublisher,
+		observers:         nil,
 	}
+}
+
+// AddObserver registers a LogObserver. Not safe to call concurrently with
+// logging — register observers during wiring, before traffic flows.
+func (l *Logger) AddObserver(obs LogObserver) {
+	l.observers = append(l.observers, obs)
 }
 
 // NewStub returns a Logger with feature checks hard-wired to disabled. Log
@@ -107,6 +125,7 @@ func NewStub(logger *slog.Logger) *Logger {
 		toolIOLogsEnabled: disabled,
 		users:             nil,
 		logPublisher:      NewNoopLogPublisher(logger),
+		observers:         nil,
 	}
 }
 
@@ -161,11 +180,24 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 }
 
 func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
-	logParams := l.buildBulkParams(ctx, params)
+	return l.logBulk(ctx, l.shutdownCtx(), params)
+}
+
+// LogBulkBounded respects the caller's context for every part of the write.
+func (l *Logger) LogBulkBounded(ctx context.Context, params []LogParams) error {
+	return l.logBulk(ctx, ctx, params)
+}
+
+func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params []LogParams) error {
+	logParams := l.buildBulkParams(ctx, writeCtx, params)
 	if len(logParams) == 0 {
+		if err := writeCtx.Err(); err != nil {
+			return fmt.Errorf("prepare telemetry logs: %w", err)
+		}
 		return nil
 	}
-	err := repo.New(l.chConn).InsertTelemetryLogs(l.detachedWriteContext(ctx), logParams)
+	writeCtx = trace.ContextWithSpan(writeCtx, trace.SpanFromContext(ctx))
+	err := repo.New(l.chConn).InsertTelemetryLogs(writeCtx, logParams)
 	if err != nil {
 		return fmt.Errorf("insert telemetry logs: %w", err)
 	}
@@ -175,6 +207,9 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	// rejected. Best-effort and non-blocking.
 	l.logPublisher.PublishLogs(ctx, logParams)
 
+	for _, obs := range l.observers {
+		obs.OnTelemetryLogsWritten(ctx, params)
+	}
 	return nil
 }
 
@@ -184,7 +219,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 // scrubbing, and hydration as LogBulk, so a promoted row is byte-identical to
 // what a direct insert would have produced apart from the patched attribution.
 func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
-	logParams := l.buildBulkParams(ctx, params)
+	logParams := l.buildBulkParams(ctx, l.shutdownCtx(), params)
 	if len(logParams) == 0 {
 		return nil
 	}
@@ -203,12 +238,10 @@ func (l *Logger) detachedWriteContext(ctx context.Context) context.Context {
 	return trace.ContextWithSpan(l.shutdownCtx(), trace.SpanFromContext(ctx))
 }
 
-func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {
+func (l *Logger) buildBulkParams(ctx context.Context, operationCtx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {
 	if len(params) == 0 {
 		return nil
 	}
-
-	shutdownCtx := l.shutdownCtx()
 
 	logParams := make([]repo.InsertTelemetryLogParams, 0, len(params))
 	logsEnabledByOrg := make(map[string]bool)
@@ -218,7 +251,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo
 		enabled, ok := logsEnabledByOrg[param.ToolInfo.OrganizationID]
 		if !ok {
 			var err error
-			enabled, err = l.logsEnabled(shutdownCtx, param.ToolInfo.OrganizationID)
+			enabled, err = l.logsEnabled(operationCtx, param.ToolInfo.OrganizationID)
 			if err != nil || !enabled {
 				logsEnabledByOrg[param.ToolInfo.OrganizationID] = false
 				continue
@@ -231,7 +264,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo
 
 		toolIOEnabled, ok := toolIOLogsEnabledByOrg[param.ToolInfo.OrganizationID]
 		if !ok {
-			toolIOEnabled = l.checkToolIOLogsEnabled(shutdownCtx, param.ToolInfo.OrganizationID)
+			toolIOEnabled = l.checkToolIOLogsEnabled(operationCtx, param.ToolInfo.OrganizationID)
 			toolIOLogsEnabledByOrg[param.ToolInfo.OrganizationID] = toolIOEnabled
 		}
 
@@ -249,7 +282,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo
 			}
 		}
 
-		param = l.hydrateUserInfo(shutdownCtx, param)
+		param = l.hydrateUserInfo(operationCtx, param)
 
 		logParam, err := buildTelemetryLogParams(param)
 		if err != nil {
@@ -347,14 +380,17 @@ func parseAttributesWithExplicitResources(attrs map[attr.Key]any, explicitResour
 	spanAttrs := make(map[attr.Key]any)
 	resourceAttrs := make(map[attr.Key]any)
 	maps.Copy(resourceAttrs, explicitResourceAttrs)
+	explicitProvider, providerIsString := attrs[attr.GenAIProviderNameKey].(string)
+	inferModelProvider := !providerIsString || strings.TrimSpace(explicitProvider) == ""
+	if inferModelProvider {
+		if model, ok := attrs[attr.GenAIRequestModelKey].(string); ok {
+			spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
+		}
+	}
 
 	for k, v := range attrs {
-		// if there's an attribute related to a Gen AI request we want
-		// to infer the model provider for insights
-		if k == attr.GenAIRequestModelKey {
-			if model, ok := v.(string); ok {
-				spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
-			}
+		if k == attr.GenAIProviderNameKey && inferModelProvider {
+			continue
 		}
 
 		if _, ok := ResourceAttributeKeys[k]; ok {

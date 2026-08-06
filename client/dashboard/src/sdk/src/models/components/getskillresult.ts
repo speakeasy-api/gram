@@ -17,7 +17,7 @@ import {
 import { SkillVersion, SkillVersion$inboundSchema } from "./skillversion.js";
 
 /**
- * An active skill and its derived latest version.
+ * An active skill and its current version.
  */
 export type GetSkillResult = {
   /**
@@ -37,7 +37,7 @@ export type GetSkillResult = {
    */
   latestVersion?: SkillVersion | undefined;
   /**
-   * Daily activations in the adoption window.
+   * Daily activations by attributed version in the adoption window.
    */
   sightingTimeline: Array<SkillSightingTimelinePoint>;
   /**
