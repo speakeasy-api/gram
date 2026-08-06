@@ -75,6 +75,25 @@ describe("redirectToLoginOnUnauthorized", () => {
     );
   });
 
+  it("still redirects when the browser blocks storage access", async () => {
+    const { assign, redirectToLoginOnUnauthorized } =
+      await loadModule("/acme/toolsets");
+    for (const name of ["localStorage", "sessionStorage"]) {
+      Object.defineProperty(window, name, {
+        configurable: true,
+        get: () => {
+          throw new DOMException("Storage disabled", "SecurityError");
+        },
+      });
+    }
+
+    redirectToLoginOnUnauthorized();
+
+    expect(assign).toHaveBeenCalledWith(
+      `/login?redirect=${encodeURIComponent("/acme/toolsets")}`,
+    );
+  });
+
   it("redirects once even when several queries fail together", async () => {
     const { assign, redirectToLoginOnUnauthorized } =
       await loadModule("/acme/toolsets");

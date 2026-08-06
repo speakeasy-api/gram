@@ -27,6 +27,17 @@ function createStorage(): Storage {
   };
 }
 
+function blockStorageAccess(): void {
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    Object.defineProperty(window, name, {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Storage disabled", "SecurityError");
+      },
+    });
+  }
+}
+
 describe("clearStorageForLogout", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -86,5 +97,12 @@ describe("clearStorageForLogout", () => {
     expect(window.localStorage.getItem("pylon_user_display_name")).toBeNull();
     expect(window.sessionStorage.getItem("pylon_user_email")).toBeNull();
     expect(window.localStorage.getItem("unrelated")).toBe("value");
+  });
+
+  it("degrades to a no-op when the browser blocks storage access", () => {
+    blockStorageAccess();
+
+    expect(() => clearStorageForLogout()).not.toThrow();
+    expect(() => clearLegacyUserStorage()).not.toThrow();
   });
 });

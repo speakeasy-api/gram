@@ -12,6 +12,19 @@ function shouldPreserveLocalStorageKey(key: string) {
 }
 
 /**
+ * Merely reading `window.localStorage` / `window.sessionStorage` throws a
+ * `SecurityError` when the browser blocks persistence (cookies/site data
+ * disabled, sandboxed frames). Both cleanup functions run on paths that must
+ * survive that — auth initialization and the 401 login redirect — and blocked
+ * storage means nothing was persisted anyway, so each storage degrades to a
+ * no-op independently.
+ */
+const STORAGE_ACCESSORS = [
+  () => window.localStorage,
+  () => window.sessionStorage,
+];
+
+/**
  * Removes user-identifying values written by older dashboard versions.
  *
  * This runs during auth initialization as well as session teardown so users
@@ -20,19 +33,23 @@ function shouldPreserveLocalStorageKey(key: string) {
 export function clearLegacyUserStorage(): void {
   if (typeof window === "undefined") return;
 
-  for (const storage of [window.localStorage, window.sessionStorage]) {
-    for (const key of LEGACY_USER_STORAGE_KEYS) {
-      storage.removeItem(key);
+  for (const getStorage of STORAGE_ACCESSORS) {
+    try {
+      const storage = getStorage();
+      for (const key of LEGACY_USER_STORAGE_KEYS) {
+        storage.removeItem(key);
+      }
+    } catch {
+      // Storage blocked — nothing persisted, nothing to remove.
     }
   }
 }
 
 export function clearStorageForLogout(): void {
-  const local = typeof window !== "undefined" ? window.localStorage : undefined;
-  const session =
-    typeof window !== "undefined" ? window.sessionStorage : undefined;
+  if (typeof window === "undefined") return;
 
-  if (local) {
+  try {
+    const local = window.localStorage;
     const preserved = new Map<string, string>();
 
     for (let i = 0; i < local.length; i++) {
@@ -50,7 +67,13 @@ export function clearStorageForLogout(): void {
     for (const [key, value] of preserved) {
       local.setItem(key, value);
     }
+  } catch {
+    // Storage blocked — nothing persisted, nothing to clear.
   }
 
-  session?.clear();
+  try {
+    window.sessionStorage.clear();
+  } catch {
+    // Storage blocked — nothing persisted, nothing to clear.
+  }
 }
