@@ -619,7 +619,10 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = nil
-		ctx, instance := newTestAuthService(t, userInfo)
+		// This path actually provisions an org, so it needs the harness that
+		// wires a WorkOS client and backfills the user's workos_id — the admin
+		// grant inside persistProvisionedOrganization requires one.
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -702,7 +705,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = nil
-		ctx, instance := newTestAuthService(t, userInfo)
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "/?disposition=assistants", "Acme Inc")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
