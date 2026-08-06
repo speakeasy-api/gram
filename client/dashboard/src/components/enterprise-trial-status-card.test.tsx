@@ -41,27 +41,24 @@ describe("EnterpriseTrialStatusCard", () => {
   it("renders the active trial status", () => {
     render(<EnterpriseTrialStatusCard />);
 
-    expect(
-      screen.getByRole("group", {
-        name: "Enterprise trial: Day 1 of 14, 14 days left",
-      }),
-    ).toBeTruthy();
-    expect(screen.getByText("TRIAL")).toBeTruthy();
+    expect(screen.getByText("Trial")).toBeTruthy();
     expect(screen.getByText("Day 1/14")).toBeTruthy();
-    expect(screen.getByText("14 days left")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("progressbar", { name: "Day 1 of 14" })
-        .getAttribute("aria-valuenow"),
-    ).toBe("0");
+    expect(screen.getByText("13 days left")).toBeTruthy();
+    const progressBar = screen.getByRole("progressbar", {
+      name: "Day 1 of 14",
+    });
+    expect(progressBar.getAttribute("aria-valuenow")).toBe("7.14");
+    expect(progressBar.firstElementChild?.getAttribute("style")).toBe(
+      "width: 7.14%;",
+    );
   });
 
-  it("uses singular copy when one day remains", () => {
+  it("shows zero days left on the final trial day", () => {
     vi.setSystemTime(new Date("2026-08-18T00:00:00.000Z"));
 
     render(<EnterpriseTrialStatusCard />);
 
-    expect(screen.getByText("1 day left")).toBeTruthy();
+    expect(screen.getByText("0 days left")).toBeTruthy();
   });
 
   it("renders nothing without an enterprise trial", () => {
@@ -85,7 +82,7 @@ describe("EnterpriseTrialStatusCard", () => {
 
     const { container } = render(<EnterpriseTrialStatusCard />);
 
-    expect(screen.getByText("1 day left")).toBeTruthy();
+    expect(screen.getByText("0 days left")).toBeTruthy();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
@@ -102,23 +99,25 @@ describe("EnterpriseTrialStatusCard", () => {
     });
 
     expect(screen.getByText("Day 2/14")).toBeTruthy();
-    expect(screen.getByText("13 days left")).toBeTruthy();
+    expect(screen.getByText("12 days left")).toBeTruthy();
   });
 
-  it("uses compact card padding when the sidebar is collapsed", () => {
-    const { container } = render(<EnterpriseTrialStatusCard />);
+  it("visually advances the elapsed-time bar", () => {
+    vi.setSystemTime(new Date("2026-08-07T00:00:00.000Z"));
+
+    render(<EnterpriseTrialStatusCard />);
 
     expect(
-      container.firstElementChild?.classList.contains(
-        "group-data-[collapsible=icon]:[&>div]:p-2",
-      ),
-    ).toBe(true);
+      screen
+        .getByRole("progressbar", { name: "Day 3 of 14" })
+        .firstElementChild?.getAttribute("style"),
+    ).toBe("width: 21.43%;");
   });
 
   it("opens the Sales conversation safely in a new tab", () => {
     render(<EnterpriseTrialStatusCard />);
 
-    const salesLink = screen.getByRole("link", { name: "Talk to Sales" });
+    const salesLink = screen.getByRole("link", { name: "Talk to sales" });
     expect(salesLink.getAttribute("href")).toBe(
       "https://www.speakeasy.com/talk-to-us",
     );

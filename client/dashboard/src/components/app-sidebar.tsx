@@ -305,8 +305,8 @@ export function AppSidebar({
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
-        <EnterpriseTrialStatusCard />
         <div className="mb-2 flex flex-col gap-1.5">
+          <EnterpriseTrialStatusCard />
           <OnboardingResumeButton />
           <InsightsDockResumeButton />
           <SidebarFooterAction
