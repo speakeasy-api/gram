@@ -166,7 +166,10 @@ export function NavGroupProvider({
     });
   }, [target]);
 
-  // Compute highlight position (with post-accordion delay)
+  // Compute highlight position (with post-accordion delay). openGroups is a
+  // dependency so toggling a group re-evaluates the highlight once the
+  // accordion settles — collapsing the active group hides its highlighted row,
+  // and the suppressed ResizeObserver below won't fire again after the window.
   React.useEffect(() => {
     const remaining = suppressUntilRef.current - Date.now();
     if (remaining > 0) {
@@ -174,7 +177,7 @@ export function NavGroupProvider({
       return () => clearTimeout(timer);
     }
     computeRect();
-  }, [computeRect]);
+  }, [computeRect, openGroups]);
 
   // Recompute on layout changes, but skip during accordion
   React.useEffect(() => {

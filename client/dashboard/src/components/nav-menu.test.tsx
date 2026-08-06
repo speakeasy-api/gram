@@ -230,7 +230,7 @@ describe("NavGroupProvider group expansion", () => {
   });
 
   it("collapses a chevron-expanded group again on second chevron click", () => {
-    render(<Groups />);
+    const { rerender } = render(<Groups />);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Connect" }));
     screen.getByText("Sources");
@@ -239,8 +239,9 @@ describe("NavGroupProvider group expansion", () => {
     expect(screen.queryByText("Sources")).toBeNull();
 
     // A group collapsed by hand is no longer "explicit": navigating into a
-    // different group must not resurrect it.
-    render(<Groups activeGroup="Observe" />);
+    // different group on the same provider must not resurrect it.
+    rerender(<Groups activeGroup="Observe" />);
+    screen.getByText("Costs");
     expect(screen.queryByText("Sources")).toBeNull();
   });
 
