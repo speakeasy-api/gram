@@ -360,6 +360,10 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
+	// A session can exist before organization selection during login. Unlike
+	// sessionless or API-key requests, RBAC still applies and PrepareContext
+	// installs zero grants. Mirror that effective set so dashboard gates remain
+	// closed until registration or organization selection completes.
 	if acPre.ActiveOrganizationID == "" {
 		return &gen.ListUserGrantsResult{Grants: nil}, nil
 	}

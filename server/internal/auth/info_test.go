@@ -423,6 +423,38 @@ func TestService_Info(t *testing.T) {
 	})
 }
 
+func TestService_Info_OrganizationlessSessionContinuesLogin(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.UserID = "organizationless-info-user"
+	userInfo.Email = "organizationless-info@example.com"
+	userInfo.Organizations = nil
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+	session := sessions.Session{
+		SessionID:            t.Name(),
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
+		WorkOSSessionID:      "",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	authedCtx, err := instance.authorizer.Authorize(t.Context(), session.SessionID, sessionScheme)
+	require.NoError(t, err)
+	grants, ok := authz.GrantsFromContext(authedCtx)
+	require.True(t, ok)
+	require.Empty(t, grants)
+
+	result, err := instance.service.Info(authedCtx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.Equal(t, session.SessionID, result.SessionToken)
+	require.Empty(t, result.ActiveOrganizationID)
+	require.Equal(t, userInfo.UserID, result.UserID)
+	require.Empty(t, result.Organizations)
+}
+
 func TestService_Info_ProjectFiltering(t *testing.T) {
 	t.Parallel()
 
