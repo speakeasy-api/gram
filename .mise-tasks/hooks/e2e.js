@@ -229,14 +229,9 @@ let cachedCodexBinary = null;
 async function resolveCodexBinary() {
   if (cachedCodexBinary) return cachedCodexBinary;
 
-  const onPath = await runProcess(
-    "sh",
-    ["-lc", "command -v codex || true"],
-    {},
-  );
-  const found = (onPath.stdout || "").trim().split("\n")[0];
-  if (found) {
-    cachedCodexBinary = found;
+  const onPath = await codexOnPath();
+  if (onPath) {
+    cachedCodexBinary = onPath;
     return cachedCodexBinary;
   }
 
@@ -263,6 +258,29 @@ async function resolveCodexBinary() {
     "codex binary not found. Looked on PATH and in the managed install, " +
       "the unified ChatGPT app, the ChatGPT editor extensions, and Codex.app.",
   );
+}
+
+// PATH is walked here rather than shelled out to. The harness spawns codex
+// with its own environment, so the probe has to resolve against that same
+// PATH — a login shell reads a different profile and would miss a binary the
+// harness can actually spawn, silently falling through to another candidate.
+// Walking it also puts the PATH hit through the same X_OK check every other
+// candidate gets, so a non-executable or shell-only "codex" cannot be cached
+// as the spawn command.
+async function codexOnPath() {
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    // An empty entry means the working directory; a relative codex is not
+    // something the harness should drive.
+    if (!path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, "codex");
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // try the next PATH entry
+    }
+  }
+  return null;
 }
 
 // Both path segments carry versions, so they are globbed. Sorted newest-first
