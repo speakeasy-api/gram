@@ -9,6 +9,32 @@ import { useEffect, useState } from "react";
 
 const SALES_URL = "https://www.speakeasy.com/talk-to-us";
 
+const BLACK_PROGRESS_CLASS = "bg-[var(--color-base-black)]";
+const DEEP_GREEN_PROGRESS_CLASS = "bg-[var(--color-brand-c)]";
+const ORANGE_PROGRESS_CLASS = "bg-[var(--color-brand-ruby)]";
+const RED_PROGRESS_CLASS = "bg-[var(--color-brand-swift)]";
+
+function getTrialProgressColorClass(
+  dayNumber: number,
+  totalDays: number,
+): string {
+  const progress = dayNumber / totalDays;
+
+  if (progress <= 2 / 7) {
+    return BLACK_PROGRESS_CLASS;
+  }
+
+  if (progress <= 4 / 7) {
+    return DEEP_GREEN_PROGRESS_CLASS;
+  }
+
+  if (progress <= 6 / 7) {
+    return ORANGE_PROGRESS_CLASS;
+  }
+
+  return RED_PROGRESS_CLASS;
+}
+
 export function EnterpriseTrialStatusCard(): React.ReactNode {
   const { enterpriseTrial } = useSession();
   const [now, setNow] = useState(() => new Date());
@@ -64,6 +90,10 @@ export function EnterpriseTrialStatusCard(): React.ReactNode {
     Math.min((status.dayNumber / status.totalDays) * 100, 100).toFixed(2),
   );
   const progressLabel = `Day ${status.dayNumber} of ${status.totalDays}`;
+  const progressColorClass = getTrialProgressColorClass(
+    status.dayNumber,
+    status.totalDays,
+  );
 
   return (
     <div className="border-border/60 rounded-lg border bg-card p-3 shadow-sm group-data-[collapsible=icon]:hidden">
@@ -88,7 +118,7 @@ export function EnterpriseTrialStatusCard(): React.ReactNode {
           >
             <div
               aria-hidden="true"
-              className="bg-foreground h-full rounded-full"
+              className={`h-full rounded-full ${progressColorClass}`}
               style={{ width: `${progressValue}%` }}
             />
           </div>

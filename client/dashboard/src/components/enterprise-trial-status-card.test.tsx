@@ -114,6 +114,32 @@ describe("EnterpriseTrialStatusCard", () => {
     ).toBe("width: 21.43%;");
   });
 
+  it("changes the brand color as the trial progresses", () => {
+    const colorByDay = [
+      [1, "bg-[var(--color-base-black)]"],
+      [5, "bg-[var(--color-brand-c)]"],
+      [9, "bg-[var(--color-brand-ruby)]"],
+      [13, "bg-[var(--color-brand-swift)]"],
+    ] as const;
+
+    for (const [day, colorClass] of colorByDay) {
+      vi.setSystemTime(
+        new Date(
+          activeTrial.startedAt.getTime() + (day - 1) * 24 * 60 * 60 * 1000,
+        ),
+      );
+      const { unmount } = render(<EnterpriseTrialStatusCard />);
+
+      expect(
+        screen
+          .getByRole("progressbar")
+          .firstElementChild?.classList.contains(colorClass),
+      ).toBe(true);
+
+      unmount();
+    }
+  });
+
   it("hides the card when the sidebar is collapsed", () => {
     const { container } = render(<EnterpriseTrialStatusCard />);
 
