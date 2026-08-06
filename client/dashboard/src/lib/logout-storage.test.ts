@@ -52,7 +52,7 @@ describe("clearStorageForLogout", () => {
     window.sessionStorage.clear();
   });
 
-  it("preserves the theme while clearing user-scoped local storage", () => {
+  it("preserves theme and favorites while clearing user-scoped local storage", () => {
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
     window.localStorage.setItem(
       "gram:org-favorites:<ORG_ID>",
@@ -68,9 +68,9 @@ describe("clearStorageForLogout", () => {
     expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
       "light",
     );
-    expect(
-      window.localStorage.getItem("gram:org-favorites:<ORG_ID>"),
-    ).toBeNull();
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
     expect(window.localStorage.getItem("gram:recents:<USER_ID>")).toBeNull();
     expect(window.localStorage.getItem("preferredProject")).toBeNull();
     expect(window.localStorage.getItem("pylon_user_email")).toBeNull();

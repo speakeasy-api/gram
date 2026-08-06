@@ -1,6 +1,12 @@
-import { PREFERRED_THEME_STORAGE_KEY } from "@/lib/local-storage-keys";
+import {
+  PREFERRED_THEME_STORAGE_KEY,
+  PROJECT_FAVORITES_STORAGE_PREFIX,
+} from "@/lib/local-storage-keys";
 
 const PRESERVED_LOCAL_STORAGE_KEYS = new Set([PREFERRED_THEME_STORAGE_KEY]);
+// Favorites hold only opaque project UUIDs keyed by org id — nothing
+// dereferenceable without an authenticated session — so they survive logout.
+const PRESERVED_LOCAL_STORAGE_PREFIXES = [PROJECT_FAVORITES_STORAGE_PREFIX];
 
 const LEGACY_USER_STORAGE_KEYS = [
   "pylon_user_email",
@@ -8,7 +14,10 @@ const LEGACY_USER_STORAGE_KEYS = [
 ];
 
 function shouldPreserveLocalStorageKey(key: string) {
-  return PRESERVED_LOCAL_STORAGE_KEYS.has(key);
+  return (
+    PRESERVED_LOCAL_STORAGE_KEYS.has(key) ||
+    PRESERVED_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
 }
 
 /**
