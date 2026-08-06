@@ -1,0 +1,21 @@
+server/internal/access/impl.go
+  s_0cf3a174e4a7ca::t_3337265e67ba2c 363-366
+server/internal/auth/info_test.go
+  s_0cf3a174e4a7ca::t_3337265e67ba2c 426-457
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a253eae0b1ba2aa72424df5ab89c6f9d372b6b9b",
+  "prompts": {},
+  "sessions": {
+    "s_0cf3a174e4a7ca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd7ad-4198-74d0-8626-b1726133398c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
