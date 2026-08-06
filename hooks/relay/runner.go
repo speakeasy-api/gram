@@ -130,13 +130,19 @@ func (r *Relay) Login(ctx context.Context, force bool) error {
 // unauthenticated case.
 func NewRunner(cfg Config) *agenthooks.Runner {
 	r := NewRelay(cfg)
-	runner := agenthooks.New(agenthooks.WithPolicy(agenthooks.Policy{
+	opts := []agenthooks.Option{agenthooks.WithPolicy(agenthooks.Policy{
 		Fail:            agenthooks.FailOpen,
 		Unsupported:     agenthooks.Degrade,
 		AskFallback:     agenthooks.FallbackNoDecision,
 		ContinuationCap: 0,
 		Timeout:         0,
-	}))
+	})}
+	// The nil check must stay on the concrete pointer: wrapping a nil
+	// *telemetry.Recorder in the option's interface would make it non-nil.
+	if rec := newTelemetryRecorder(r); rec != nil {
+		opts = append(opts, agenthooks.WithTelemetry(rec))
+	}
+	runner := agenthooks.New(opts...)
 
 	runner.OnPromptSubmitted(r.onPrompt)
 	runner.OnToolPre(r.onToolPre)
