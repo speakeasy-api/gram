@@ -18,8 +18,8 @@ FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf100
 
 FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS sandbox-deps
 WORKDIR /sandbox
-COPY agents/runtime-image/sandbox/package.json ./
-RUN bun install --production
+COPY agents/runtime-image/sandbox/package.json agents/runtime-image/sandbox/bun.lock ./
+RUN bun install --production --frozen-lockfile
 
 # Workaround for oven-sh/bun#9911: playwright-core's bundled `ws` shim is
 # missing 'upgrade'/'unexpected-response' events on bun, which breaks
