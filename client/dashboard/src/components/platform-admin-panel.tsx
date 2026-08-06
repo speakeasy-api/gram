@@ -27,7 +27,6 @@ import {
   KeyRound,
   Loader2,
   Mail,
-  Webhook,
 } from "lucide-react";
 import { ComponentType, ReactElement, useState } from "react";
 import { toast } from "sonner";
@@ -218,21 +217,6 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.AuthzChallengeLogging
-            ? mutError?.message
-            : undefined
-        }
-      />
-
-      <FeatureToggle
-        label="Webhooks"
-        description="Unlocks the Webhooks page for this organization (Svix-backed event delivery). While disabled, members see the preview gate."
-        icon={Webhook}
-        featureName={FeatureName.Webhooks}
-        enabled={features.webhooks}
-        isPending={isPending && pendingFeature === FeatureName.Webhooks}
-        onToggle={handleToggle}
-        error={
-          pendingFeature === FeatureName.Webhooks
             ? mutError?.message
             : undefined
         }

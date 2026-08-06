@@ -242,7 +242,6 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ToolIoLogsEnabled:                    isEnabled(FeatureToolIOLogs),
 		SessionCaptureEnabled:                isEnabled(FeatureSessionCapture),
 		AuthzChallengeLoggingEnabled:         isEnabled(FeatureAuthzChallengeLogging),
-		Webhooks:                             isEnabled(FeatureWebhooks),
 		SsoEnabled:                           isEnabled(FeatureSSO),
 		ScimEnabled:                          isEnabled(FeatureSCIM),
 		HooksBrowserLoginEnabled:             isEnabled(FeatureHooksBrowserLogin),
