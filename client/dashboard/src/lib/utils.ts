@@ -147,8 +147,13 @@ export function buildLoginRedirectURL(
   // which is not a secret, and it goes no further than this request.
   if (orgName) url.searchParams.set("org_name", orgName);
   // Also sign-up only. The server turns this into WorkOS's `login_hint`, which
-  // pre-fills the email field on the hosted AuthKit screen. Never stored —
-  // it lives for one request and is gone.
+  // pre-fills the email field on the hosted AuthKit screen. Gram never writes
+  // it to Redis or the database.
+  //
+  // It does land in request logs, though: the logger records full URLs, so
+  // like `email` on agent.getPlugins this address reaches log sinks. Tracked
+  // in AGE-3125, which covers both endpoints — the fixes differ, since this
+  // hand-off is a top-level navigation and cannot use a header.
   if (email) url.searchParams.set("email", email);
   return url.toString();
 }
