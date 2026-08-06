@@ -129,6 +129,31 @@ func (q *Queries) CountSkillPromptInjectionResults(ctx context.Context, arg Coun
 	return count, err
 }
 
+const countSkillScanRecords = `-- name: CountSkillScanRecords :one
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.name = $2
+`
+
+type CountSkillScanRecordsParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+}
+
+// Test-only fixture: counts every recorded scan of a version of the named
+// skill, findings and clean records alike. This is the coverage question -
+// "was this content ever judged" - which CountSkillPromptInjectionResults
+// cannot answer because it filters to found rows.
+func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanRecordsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkillScanRecords, arg.ProjectID, arg.SkillName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
 INSERT INTO organization_metadata (
     id,

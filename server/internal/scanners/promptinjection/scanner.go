@@ -3,6 +3,7 @@ package promptinjection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -62,12 +63,10 @@ func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
 	return &Scanner{classifier: classifier, logger: logger}
 }
 
+// Scan fails open: a judge that cannot reach a verdict yields no findings, so
+// an outage never turns into a blocked message on the gating path.
 func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
-	if text == "" && !msg.HasContent() {
-		return nil, nil
-	}
-
-	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+	findings, err := s.ScanStrict(ctx, text, orgID, projectID, userID, msg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi judge scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
@@ -75,8 +74,24 @@ func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID strin
 		)
 		return nil, nil
 	}
-	if len(results) != 1 {
+	return findings, nil
+}
+
+// ScanStrict reports a judge failure instead of failing open. Callers that
+// record whether a scan happened need to tell "judged clean" apart from "never
+// judged" - collapsing the two writes down a durable claim that content is
+// clean on the strength of an outage.
+func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
+	if text == "" && !msg.HasContent() {
 		return nil, nil
+	}
+
+	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+	if err != nil {
+		return nil, fmt.Errorf("pi judge classify: %w", err)
+	}
+	if len(results) != 1 {
+		return nil, fmt.Errorf("pi judge returned %d results for 1 message", len(results))
 	}
 
 	if f := s.findingFromResult(text, results[0]); f != nil {

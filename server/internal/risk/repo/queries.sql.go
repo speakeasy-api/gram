@@ -2309,36 +2309,6 @@ type InsertRiskResultsParams struct {
 	DeadLetterReason  pgtype.Text
 }
 
-const insertSkillPromptInjectionResults = `-- name: InsertSkillPromptInjectionResults :exec
-INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
-SELECT p.project_id, p.organization_id, p.id, p.version, $1, 'prompt_injection', TRUE, $2::text, $3::text, $4::text, $5::double precision
-FROM risk_policies p
-WHERE p.project_id = $6 AND p.enabled IS TRUE AND p.deleted IS FALSE AND 'prompt_injection' = ANY (p.sources)
-`
-
-type InsertSkillPromptInjectionResultsParams struct {
-	SkillVersionID uuid.NullUUID
-	RuleID         string
-	Description    string
-	Match          string
-	Confidence     float64
-	ProjectID      uuid.UUID
-}
-
-// Records one finding per enabled policy that subscribes to prompt injection,
-// anchored on the captured skill version rather than a chat message.
-func (q *Queries) InsertSkillPromptInjectionResults(ctx context.Context, arg InsertSkillPromptInjectionResultsParams) error {
-	_, err := q.db.Exec(ctx, insertSkillPromptInjectionResults,
-		arg.SkillVersionID,
-		arg.RuleID,
-		arg.Description,
-		arg.Match,
-		arg.Confidence,
-		arg.ProjectID,
-	)
-	return err
-}
-
 const linkChatUserAccountForTest = `-- name: LinkChatUserAccountForTest :exec
 UPDATE chats
 SET user_account_id = $1
@@ -4455,6 +4425,54 @@ func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRisk
 	return items, nil
 }
 
+const recordSkillPromptInjectionScan = `-- name: RecordSkillPromptInjectionScan :exec
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, $1, $2::text, $3::boolean, $4::text, $5::text, $6::text, $7::double precision
+FROM risk_policies p
+WHERE p.project_id = $8
+  AND p.enabled IS TRUE
+  AND p.deleted IS FALSE
+  AND 'prompt_injection' = ANY (p.sources)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM risk_results rr
+    WHERE rr.skill_version_id = $1
+      AND rr.risk_policy_id = p.id
+  )
+`
+
+type RecordSkillPromptInjectionScanParams struct {
+	SkillVersionID uuid.NullUUID
+	Source         string
+	Found          bool
+	RuleID         pgtype.Text
+	Description    pgtype.Text
+	Match          pgtype.Text
+	Confidence     pgtype.Float8
+	ProjectID      uuid.UUID
+}
+
+// Records one row per enabled prompt-injection policy that has not yet scanned
+// this skill version, anchored on the version rather than a chat message.
+// Called for a completed judgement whether or not it found anything: a
+// found = FALSE row is the coverage record that separates "judged clean" from
+// "never judged", mirroring how the chat batch path writes empty result rows.
+// A judge failure records nothing, leaving the version eligible for a later
+// scan rather than silently passing as clean.
+func (q *Queries) RecordSkillPromptInjectionScan(ctx context.Context, arg RecordSkillPromptInjectionScanParams) error {
+	_, err := q.db.Exec(ctx, recordSkillPromptInjectionScan,
+		arg.SkillVersionID,
+		arg.Source,
+		arg.Found,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Confidence,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const refreshAccountIdentityFindingMatch = `-- name: RefreshAccountIdentityFindingMatch :execrows
 UPDATE risk_results rr
 SET description = $1, match = $2
@@ -4593,6 +4611,41 @@ WHERE id = $1
 func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
 	return err
+}
+
+const skillVersionNeedsPromptInjectionScan = `-- name: SkillVersionNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM risk_policies p
+  WHERE p.project_id = $1
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = $2
+        AND rr.risk_policy_id = p.id
+    )
+)
+`
+
+type SkillVersionNeedsPromptInjectionScanParams struct {
+	ProjectID      uuid.UUID
+	SkillVersionID uuid.NullUUID
+}
+
+// True when some enabled prompt-injection policy has no recorded scan of this
+// skill version yet. Drives the scan gate: no such policy means judging the
+// content would produce nothing storable, and an already-recorded scan must
+// not be repeated (content is immutable per version, so the verdict cannot
+// change). A policy enabled after capture has no row, so it reports true and
+// the version becomes eligible again.
+func (q *Queries) SkillVersionNeedsPromptInjectionScan(ctx context.Context, arg SkillVersionNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillVersionNeedsPromptInjectionScan, arg.ProjectID, arg.SkillVersionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const softDeleteRiskPolicyEvalReview = `-- name: SoftDeleteRiskPolicyEvalReview :one

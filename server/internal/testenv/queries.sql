@@ -365,3 +365,15 @@ WHERE s.project_id = @project_id
   AND s.name = @skill_name
   AND rr.source = 'prompt_injection'
   AND rr.found IS TRUE;
+
+-- name: CountSkillScanRecords :one
+-- Test-only fixture: counts every recorded scan of a version of the named
+-- skill, findings and clean records alike. This is the coverage question -
+-- "was this content ever judged" - which CountSkillPromptInjectionResults
+-- cannot answer because it filters to found rows.
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.name = @skill_name;
