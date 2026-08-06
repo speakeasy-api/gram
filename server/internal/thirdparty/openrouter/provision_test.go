@@ -125,6 +125,7 @@ func TestProvisionAPIKey_BackfillsPlaintextKey(t *testing.T) {
 	encryptionClient := testenv.NewEncryptionClient(t)
 	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, encryptionClient)
 
+	require.NoError(t, provisioner.BackfillAPIKeyEncryption(ctx))
 	apiKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 	require.NoError(t, err)
 	require.Equal(t, "sk-or-legacy", apiKey)
