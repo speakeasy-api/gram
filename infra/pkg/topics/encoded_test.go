@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
@@ -105,7 +108,18 @@ func TestSetPublish_DoesNotDecodePayloads(t *testing.T) {
 	// Field 1, length-delimited, with the length byte truncated.
 	corrupt := []byte{0x0A, 0xFF}
 
-	require.NotNil(t, set.Publish(t.Context(), string(GramPingV2Message), corrupt, nil))
+	_, err := set.Publish(t.Context(), string(GramPingV2Message), corrupt, nil).Get(t.Context())
+
+	// The failure must come from the wire, not from a decode: a client-side
+	// parse check would reject the corrupt bytes immediately, before the
+	// unreachable endpoint had a chance to. A transport error is proof the
+	// payload was handed over untouched.
+	require.Error(t, err, "the unreachable endpoint must fail the publish")
+	require.Truef(t,
+		status.Code(err) == codes.Unavailable ||
+			status.Code(err) == codes.DeadlineExceeded ||
+			errors.Is(err, context.DeadlineExceeded),
+		"expected a transport failure from the unreachable endpoint, not a client-side rejection: %v", err)
 	require.Equal(t, 1, broker.calls, "the payload must reach the publisher without a decode standing in the way")
 }
 
