@@ -98,20 +98,16 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 }
 
 // scanCapturedSkillVersion judges a newly captured skill version for prompt
-// injection and records any finding. Runs synchronously on the upload
-// response path, so every failure - judge error or insert error - is logged
-// and swallowed: capture has already succeeded by the time this runs, and a
-// scanning problem must never turn that into a failed upload.
+// injection and records any finding. Capture has already committed by the
+// time this runs, so a scanning failure is logged and swallowed rather than
+// turned into a failed upload. Scan itself never returns an error - it drops
+// findings on a judge failure - so only the insert needs handling here.
 //
 // ponytail: synchronous judge call on the upload path; move off-request if
 // upload latency shows up in traces.
 func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *contextvalues.AuthContext, skillVersionID uuid.UUID, content string) {
 	msg := judgemessage.New(message.PromptAttachment, "", content)
-	findings, err := s.piScanner.Scan(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
-	if err != nil {
-		s.logger.WarnContext(ctx, "scan captured skill version for prompt injection", attr.SlogError(err))
-		return
-	}
+	findings, _ := s.piScanner.Scan(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
 	if len(findings) == 0 {
 		return
 	}
