@@ -35,9 +35,6 @@ trackedFiles:
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessDeleteShadowMCPInventoryPolicyBypass.ts: {}
-  src/funcs/accessDisableRBAC.ts: {}
-  src/funcs/accessEnableRBAC.ts: {}
-  src/funcs/accessGetRBACStatus.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
@@ -425,6 +422,7 @@ trackedFiles:
   src/funcs/skillsListFeedback.ts: {}
   src/funcs/skillsListSuggestionFeedback.ts: {}
   src/funcs/skillsListSuggestions.ts: {}
+  src/funcs/skillsListTags.ts: {}
   src/funcs/skillsListUnknownActivations.ts: {}
   src/funcs/skillsListVersions.ts: {}
   src/funcs/skillsRestoreVersion.ts: {}
@@ -898,6 +896,7 @@ trackedFiles:
   src/models/components/listskillsresult.ts: {}
   src/models/components/listskillsuggestionfeedbackresult.ts: {}
   src/models/components/listskillsuggestionsresult.ts: {}
+  src/models/components/listskilltagsresult.ts: {}
   src/models/components/listskillversionsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listspendruleeventsresult.ts: {}
@@ -1034,7 +1033,6 @@ trackedFiles:
   src/models/components/queryresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
-  src/models/components/rbacstatus.ts: {}
   src/models/components/recordskillresult.ts: {}
   src/models/components/redeemrequestbody.ts: {}
   src/models/components/redeemresponsebody.ts: {}
@@ -1467,7 +1465,6 @@ trackedFiles:
   src/models/operations/denyriskpolicybypassrequest.ts: {}
   src/models/operations/detachserverfromcollection.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
-  src/models/operations/disablerbac.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
   src/models/operations/dismissskillsuggestion.ts: {}
@@ -1475,7 +1472,6 @@ trackedFiles:
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
-  src/models/operations/enablerbac.ts: {}
   src/models/operations/enablewebhooks.ts: {}
   src/models/operations/ensuremanagedassistant.ts: {}
   src/models/operations/enterdemo.ts: {}
@@ -1537,7 +1533,6 @@ trackedFiles:
   src/models/operations/getprojectmetricssummary.ts: {}
   src/models/operations/getprojectoverview.ts: {}
   src/models/operations/getpublishstatus.ts: {}
-  src/models/operations/getrbacstatus.ts: {}
   src/models/operations/getremotemcpserver.ts: {}
   src/models/operations/getremotemcpserverheader.ts: {}
   src/models/operations/getremotesessionclient.ts: {}
@@ -1676,6 +1671,7 @@ trackedFiles:
   src/models/operations/listskills.ts: {}
   src/models/operations/listskillsuggestionfeedback.ts: {}
   src/models/operations/listskillsuggestions.ts: {}
+  src/models/operations/listskilltags.ts: {}
   src/models/operations/listskillversions.ts: {}
   src/models/operations/listspendruleactorattributes.ts: {}
   src/models/operations/listspendruleevents.ts: {}
@@ -2020,12 +2016,10 @@ trackedFiles:
   src/react-query/deviceIntegrationProviders.ts: {}
   src/react-query/deviceIntegrationSchedules.core.ts: {}
   src/react-query/deviceIntegrationSchedules.ts: {}
-  src/react-query/disableRBAC.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
   src/react-query/dismissSkillSuggestion.ts: {}
   src/react-query/distributeSkill.ts: {}
-  src/react-query/enableRBAC.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
   src/react-query/enterDemo.ts: {}
@@ -2307,8 +2301,6 @@ trackedFiles:
   src/react-query/publishPlugins.ts: {}
   src/react-query/publishStatus.core.ts: {}
   src/react-query/publishStatus.ts: {}
-  src/react-query/rbacStatus.core.ts: {}
-  src/react-query/rbacStatus.ts: {}
   src/react-query/redeployDeployment.ts: {}
   src/react-query/refreshGlobalRemoteSessionIssuerMetadata.ts: {}
   src/react-query/refreshOrganizationRemoteSession.ts: {}
@@ -2482,6 +2474,8 @@ trackedFiles:
   src/react-query/skillSuggestionFeedback.ts: {}
   src/react-query/skillSuggestions.core.ts: {}
   src/react-query/skillSuggestions.ts: {}
+  src/react-query/skillTags.core.ts: {}
+  src/react-query/skillTags.ts: {}
   src/react-query/skillVersions.core.ts: {}
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
@@ -2773,7 +2767,7 @@ examples:
         application/json: {"content": "<value>", "id": "104f5927-f9aa-409a-86bf-44c0840df1ef"}
       responses:
         "200":
-          application/json: {"created_skill": true, "created_version": true, "skill": {"classification": "<value>", "created_at": "2024-08-08T21:51:24.554Z", "display_name": "Haven.Morar32", "has_valid_version": true, "id": "8efe7fe2-2883-4364-ac53-724a85f9e654", "name": "<value>", "project_id": "3905e984-9fa4-4329-b718-85f9ba073020", "seen_count": 115197, "source_kind": "<value>", "updated_at": "2025-12-03T10:35:10.200Z", "version_count": 945826}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-09-24T06:04:07.980Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "b0ac1a92-6523-4258-ae53-fed55482cfaf", "metadata": {"key": "<value>", "key1": "<value>"}, "raw_sha256": "<value>", "seen_count": 34366, "skill_id": "506b16a6-9645-4f91-923e-6eb8af1756c7", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+          application/json: {"created_skill": true, "created_version": true, "skill": {"classification": "<value>", "created_at": "2024-08-08T21:51:24.554Z", "display_name": "Haven.Morar32", "has_valid_version": true, "id": "8efe7fe2-2883-4364-ac53-724a85f9e654", "name": "<value>", "project_id": "3905e984-9fa4-4329-b718-85f9ba073020", "seen_count": 115197, "source_kind": "<value>", "tags": [], "updated_at": "2025-12-03T10:35:10.200Z", "version_count": 945826}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-09-24T06:04:07.980Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "b0ac1a92-6523-4258-ae53-fed55482cfaf", "metadata": {"key": "<value>", "key1": "<value>"}, "raw_sha256": "<value>", "seen_count": 34366, "skill_id": "506b16a6-9645-4f91-923e-6eb8af1756c7", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -3478,7 +3472,7 @@ examples:
         application/json: {"content": "<value>"}
       responses:
         "200":
-          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2024-01-13T21:05:53.029Z", "display_name": "Rogelio69", "has_valid_version": true, "id": "2e459553-2788-40d9-9e7f-cb880cd0af9b", "name": "<value>", "project_id": "ed4b5d13-e447-4362-b38c-56e022bbde92", "seen_count": 91660, "source_kind": "<value>", "updated_at": "2024-03-04T07:12:28.139Z", "version_count": 10884}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2024-02-08T17:49:00.730Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "6cc0e78a-6a20-4ed4-bfe0-3715423123bb", "metadata": {}, "raw_sha256": "<value>", "seen_count": 819902, "skill_id": "230cdb0e-343f-4b0b-b323-5520def4b85d", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2024-01-13T21:05:53.029Z", "display_name": "Rogelio69", "has_valid_version": true, "id": "2e459553-2788-40d9-9e7f-cb880cd0af9b", "name": "<value>", "project_id": "ed4b5d13-e447-4362-b38c-56e022bbde92", "seen_count": 91660, "source_kind": "<value>", "tags": [], "updated_at": "2024-03-04T07:12:28.139Z", "version_count": 10884}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2024-02-08T17:49:00.730Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "6cc0e78a-6a20-4ed4-bfe0-3715423123bb", "metadata": {}, "raw_sha256": "<value>", "seen_count": 819902, "skill_id": "230cdb0e-343f-4b0b-b323-5520def4b85d", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -4847,7 +4841,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5080,7 +5074,7 @@ examples:
           id: "3600ba92-a629-4238-b118-2374ee531ccc"
       responses:
         "200":
-          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "has_valid_version": true, "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
+          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "has_valid_version": true, "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "tags": [], "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6413,6 +6407,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listSkillTags:
+    speakeasy-default-list-skill-tags:
+      responses:
+        "200":
+          application/json: {"tags": ["<value 1>", "<value 2>"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listSkillVersions:
     speakeasy-default-list-skill-versions:
       parameters:
@@ -6434,7 +6437,7 @@ examples:
           sort: "name"
       responses:
         "200":
-          application/json: {"skills": [{"classification": "<value>", "created_at": "2025-12-01T14:04:14.090Z", "display_name": "Ted_Medhurst44", "has_valid_version": false, "id": "a629e09f-919e-4d88-8c05-cebb47ad66a9", "latest_version_id": "77214f80-c570-4870-b5c3-21f19e9fee9e", "name": "<value>", "project_id": "e35c924f-8388-4d55-a06c-1f5093920091", "seen_count": 708579, "source_kind": "<value>", "updated_at": "2025-12-29T20:39:39.995Z", "version_count": 665804}], "total_count": 708579}
+          application/json: {"skills": [{"classification": "<value>", "created_at": "2025-12-01T14:04:14.090Z", "display_name": "Ted_Medhurst44", "has_valid_version": false, "id": "a629e09f-919e-4d88-8c05-cebb47ad66a9", "latest_version_id": "77214f80-c570-4870-b5c3-21f19e9fee9e", "name": "<value>", "project_id": "e35c924f-8388-4d55-a06c-1f5093920091", "seen_count": 708579, "source_kind": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2025-12-29T20:39:39.995Z", "version_count": 665804}], "total_count": 708579}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7055,7 +7058,7 @@ examples:
         application/json: {"id": "abd88044-ee7b-4382-bfce-afb4cdd1570d", "version_id": "05e4bdd7-6dd2-4afe-a3d0-74ac1f748cee"}
       responses:
         "200":
-          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2025-11-22T21:23:32.157Z", "display_name": "Waldo_Runolfsson", "has_valid_version": false, "id": "ee09c63c-6cca-44d6-8683-709a5655abe1", "name": "<value>", "project_id": "7c07d8f8-e4f5-4f94-b312-8f42bd676dd9", "seen_count": 153726, "source_kind": "<value>", "updated_at": "2026-07-06T19:46:51.845Z", "version_count": 359073}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2025-06-21T22:34:08.324Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "1f9da039-752d-4779-a0d8-c382db765440", "metadata": {}, "raw_sha256": "<value>", "seen_count": 765170, "skill_id": "20010ced-1a50-46dd-bbe8-9898b7ac1727", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2025-11-22T21:23:32.157Z", "display_name": "Waldo_Runolfsson", "has_valid_version": false, "id": "ee09c63c-6cca-44d6-8683-709a5655abe1", "name": "<value>", "project_id": "7c07d8f8-e4f5-4f94-b312-8f42bd676dd9", "seen_count": 153726, "source_kind": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2026-07-06T19:46:51.845Z", "version_count": 359073}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2025-06-21T22:34:08.324Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "1f9da039-752d-4779-a0d8-c382db765440", "metadata": {}, "raw_sha256": "<value>", "seen_count": 765170, "skill_id": "20010ced-1a50-46dd-bbe8-9898b7ac1727", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8175,10 +8178,10 @@ examples:
   updateSkill:
     speakeasy-default-update-skill:
       requestBody:
-        application/json: {"display_name": "Kennedy24", "id": "5ad39359-acba-4ff3-904b-3242f20370ba", "name": "<value>"}
+        application/json: {"display_name": "Kennedy24", "id": "5ad39359-acba-4ff3-904b-3242f20370ba", "name": "<value>", "tags": ["<value 1>", "<value 2>"]}
       responses:
         "200":
-          application/json: {"classification": "<value>", "created_at": "2024-01-07T01:45:50.347Z", "display_name": "Norma83", "has_valid_version": false, "id": "773db674-64d7-4196-9645-07f32d236cfa", "name": "<value>", "project_id": "fbbefcde-8905-4f51-80f3-ee6b3bb662e6", "seen_count": 574354, "source_kind": "<value>", "updated_at": "2025-09-30T20:45:41.117Z", "version_count": 628989}
+          application/json: {"classification": "<value>", "created_at": "2024-01-07T01:45:50.347Z", "display_name": "Norma83", "has_valid_version": false, "id": "773db674-64d7-4196-9645-07f32d236cfa", "name": "<value>", "project_id": "fbbefcde-8905-4f51-80f3-ee6b3bb662e6", "seen_count": 574354, "source_kind": "<value>", "tags": [], "updated_at": "2025-09-30T20:45:41.117Z", "version_count": 628989}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

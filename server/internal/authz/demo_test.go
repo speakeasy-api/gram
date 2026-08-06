@@ -12,8 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-func rbacAlwaysDisabled(context.Context, string) (bool, error) { return false, nil }
-
 func demoTestCtx(t *testing.T) context.Context {
 	t.Helper()
 
@@ -31,7 +29,7 @@ func TestPrepareContext_demoOrgGetsReadOnlyGrants(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	ctx, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
@@ -67,7 +65,7 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	ctx, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
@@ -75,18 +73,4 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	// The demo branch wins over the admin-override allScopeGrants branch.
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_demo"}))
 	require.Error(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
-}
-
-func TestShouldEnforce_demoOrgEnforcedDespiteDisabledFeature(t *testing.T) {
-	t.Parallel()
-
-	ctx := demoTestCtx(t)
-	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysDisabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
-
-	enforce, err := engine.ShouldEnforce(ctx)
-	require.NoError(t, err)
-	require.True(t, enforce)
 }

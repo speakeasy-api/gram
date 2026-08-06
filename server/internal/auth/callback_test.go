@@ -300,7 +300,7 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthService(t, userInfo)
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, "/?disposition=assistants")
 

@@ -48,7 +48,7 @@ const testState = vi.hoisted(() => ({
 vi.mock("@/components/filters", () => ({
   defineFilters: <T,>(value: T) => value,
   useFilterState: () => ({
-    values: { sourceKind: [], classification: [] },
+    values: { sourceKind: [], classification: [], tags: [] },
     setValue: vi.fn(),
     clearValue: vi.fn(),
     clearAll: vi.fn(),
@@ -192,6 +192,14 @@ vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
     refetch: testState.insightsRefetch,
   }),
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
+}));
+vi.mock("@gram/client/react-query/skillTags.js", () => ({
+  useSkillTags: () => ({
+    data: { tags: [] },
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  invalidateAllSkillTags: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   useUnknownSkillActivationsInfinite: () => ({
@@ -355,6 +363,7 @@ function makeSkills(count: number): Array<Record<string, unknown>> {
     summary: "Example skill",
     sourceKind: "manual",
     classification: "custom",
+    tags: [],
     latestVersionId: `version_${index}`,
     versionCount: 1,
     seenCount: 0,

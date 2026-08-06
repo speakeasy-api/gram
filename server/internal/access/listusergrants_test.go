@@ -7,7 +7,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -179,31 +178,6 @@ func TestService_ListGrants_NonEnterpriseLoadsEffectiveGrants(t *testing.T) {
 	require.Equal(t, string(authz.ScopeProjectRead), result.Grants[0].Scope)
 	require.Len(t, result.Grants[0].Selectors, 1)
 	require.Equal(t, "project_non_enterprise", result.Grants[0].Selectors[0].ResourceID)
-}
-
-func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
-
-	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.NoError(t, err)
-	require.Len(t, result.Grants, len(expectedFullAccessScopes))
-
-	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
-	for _, grant := range result.Grants {
-		byScope[grant.Scope] = grant
-	}
-
-	for _, scope := range expectedFullAccessScopes {
-		grant, ok := byScope[scope]
-		require.True(t, ok)
-		require.Nil(t, grant.Selectors)
-	}
 }
 
 func TestService_ListGrants_WithoutSessionReturnsFullAccess(t *testing.T) {
