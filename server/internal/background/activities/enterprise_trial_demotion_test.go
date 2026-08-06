@@ -193,6 +193,8 @@ func TestDemoteExpiredEnterpriseTrials_DemoteSkipsTrialConvertedAfterListing(t *
 	trial, err := ti.trials.GetEnterpriseTrial(ctx, orgID)
 	require.NoError(t, err)
 	require.False(t, trial.DemotedAt.Valid)
+
+	require.Empty(t, ti.provisioner.disabled, "a trial that converted keeps its keys")
 }
 
 // Temporal retries a failed activity, so a second demotion of the same trial
@@ -223,8 +225,9 @@ func TestDemoteExpiredEnterpriseTrials_DemoteIsIdempotent(t *testing.T) {
 	require.Equal(t, after, again)
 }
 
-// The keys are locked down first on purpose: a stamped demoted_at drops the row
-// out of the next sweep, so a failed lockdown would never be retried.
+// The lockdown runs inside the demotion transaction on purpose: a stamped
+// demoted_at drops the row out of the next sweep, so a lockdown that failed
+// after the commit would never be retried.
 func TestDemoteExpiredEnterpriseTrials_KeyLockdownFailureLeavesTrialArmed(t *testing.T) {
 	t.Parallel()
 

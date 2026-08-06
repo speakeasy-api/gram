@@ -54,16 +54,6 @@ type DemoteExpiredEnterpriseTrialArgs struct {
 }
 
 func (d *DemoteExpiredEnterpriseTrials) Demote(ctx context.Context, args DemoteExpiredEnterpriseTrialArgs) error {
-	// Lock the platform keys down before demoted_at is stamped. A stamped row
-	// drops out of the next sweep, so a demotion that committed first would
-	// leave a failed lockdown with nothing to retry it. In the other order the
-	// worst case is one more hour of access on a key that can no longer spend.
-	for _, keyType := range openrouter.AllKeyTypes {
-		if err := d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType); err != nil {
-			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
-		}
-	}
-
 	dbtx, err := d.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin enterprise trial demotion: %w", err)
@@ -82,6 +72,16 @@ func (d *DemoteExpiredEnterpriseTrials) Demote(ctx context.Context, args DemoteE
 		return nil
 	case err != nil:
 		return fmt.Errorf("mark enterprise trial demoted: %w", err)
+	}
+
+	// The stamp above holds a row lock until this transaction ends, so a
+	// conversion cannot land while the keys go down. A failure here rolls the
+	// stamp back and leaves the trial armed for the next sweep, which a lockdown
+	// after the commit would not get: a stamped row drops out of the sweep.
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType); err != nil {
+			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
+		}
 	}
 
 	organization, err := tx.DemoteOrganizationToFree(ctx, args.OrganizationID)

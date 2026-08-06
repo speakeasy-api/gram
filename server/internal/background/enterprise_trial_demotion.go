@@ -25,8 +25,8 @@ const (
 	enterpriseTrialDemotionActivityTimeout    = 30 * time.Second
 
 	// A trial expires 14 days after signup, so an hour of extra access costs
-	// little and the tick is cheap: one indexed scan that returns nothing on
-	// almost every run.
+	// little and the tick is cheap: the table holds one row per trial signup
+	// ever, and the scan returns nothing on almost every run.
 	enterpriseTrialDemotionScheduleInterval = time.Hour
 
 	// The sweep walks organizations one at a time, so this bounds a burst of
