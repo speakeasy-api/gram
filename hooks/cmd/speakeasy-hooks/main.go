@@ -5,8 +5,9 @@
 //
 // Invocation contract (baked into generated provider configs):
 //
-//	speakeasy-hooks agenthooks run --provider=claude-code   # hook event on stdin
-//	speakeasy-hooks login [--force] [--config=<path>]        # interactive sign-in
+//	speakeasy-hooks agenthooks client --provider=claude-code # hook event on stdin, via the hook server
+//	speakeasy-hooks login [--force] [--config=<path>]         # interactive sign-in
+//	speakeasy-hooks server --config=<path>                    # hook server, for external supervision
 //
 // The server URL, project slug, and org id come from the GRAM_HOOKS_* env vars
 // injected by the generated config, falling back to the production defaults.
@@ -17,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/gram/hooks/relay"
@@ -40,6 +42,15 @@ func main() {
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
+		case "server":
+			// Friendly alias for external supervision (e.g. speakeasyd):
+			// `speakeasy-hooks server --config=<path>` is rewritten to
+			// `speakeasy-hooks --config=<path> agenthooks server` and falls
+			// through to the agenthooks dispatch below. The rewrite is what
+			// keeps this thin — everything else (socket bind, singleton
+			// lock, idle shutdown, telemetry flush) is agenthooks' server
+			// mode.
+			os.Args = serverAliasArgs(os.Args)
 		case "drain":
 			// Replays the offline payload spool (see relay/drain.go). Takes
 			// no arguments — spool entries carry their own deployment
@@ -65,12 +76,36 @@ func main() {
 
 	// The install packaging points the hook command at the plugin's
 	// speakeasy.json via --config. Read the deployment flags without mutating
-	// argv: agenthooks tolerates unknown flags, and its --async re-exec
-	// forwards argv to the detached worker, which must keep --config.
+	// argv: agenthooks tolerates unknown flags, and the client mode re-execs
+	// self as the hook server with the pre-sentinel argv, which must keep
+	// --config.
 	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[1:])
 	cfg := relay.LoadConfig(flagCfg)
 
 	agenthooks.Main(relay.NewRunner(cfg))
+}
+
+// serverAliasArgs rewrites `speakeasy-hooks server <flags>` into the argv the
+// agenthooks sentinel dispatch expects. Only --config stays ahead of the
+// sentinel: the pre-sentinel flags define the server identity clients
+// rendezvous on (a hash of executable path + pre-sentinel argv), and the
+// installed hook commands carry exactly `--config=<path>` there — a
+// supervised server must present the identical --config value to be the
+// server those clients find. Every other flag (e.g. --idle-timeout) follows
+// the mode verb, where agenthooks parses it without affecting identity.
+func serverAliasArgs(args []string) []string {
+	out := make([]string, 0, len(args)+2)
+	out = append(out, args[0])
+	var post []string
+	for _, a := range args[2:] {
+		if strings.HasPrefix(a, "--config=") {
+			out = append(out, a)
+		} else {
+			post = append(post, a)
+		}
+	}
+	out = append(out, "agenthooks", "server")
+	return append(out, post...)
 }
 
 // runInstall renders a provider plugin package that drives this binary. It
