@@ -5973,6 +5973,24 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_id_id_key
 ON platform_mcp_catalog_registrations (project_id, id);
 
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_organization_project_idx
+ON platform_mcp_catalog_registrations (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_organization_connection_all_idx
+ON platform_mcp_catalog_registrations (organization_id, connection_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_remote_server_idx
+ON platform_mcp_catalog_registrations (project_id, remote_mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_session_issuer_idx
+ON platform_mcp_catalog_registrations (project_id, user_session_issuer_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_mcp_server_idx
+ON platform_mcp_catalog_registrations (project_id, mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_mcp_endpoint_idx
+ON platform_mcp_catalog_registrations (project_id, mcp_endpoint_id);
+
 CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_organization_connection_idx
 ON platform_mcp_catalog_registrations (organization_id, connection_id, connection_generation)
 WHERE deleted IS FALSE;
@@ -6014,6 +6032,12 @@ ON platform_mcp_operation_receipts (organization_id, project_id, connection_id, 
 
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_expires_at_idx
 ON platform_mcp_operation_receipts (expires_at);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_organization_connection_idx
+ON platform_mcp_operation_receipts (organization_id, connection_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_project_registration_idx
+ON platform_mcp_operation_receipts (project_id, registration_id);
 
 -- Setup handoffs use an opaque hash. The authenticated dashboard rechecks all
 -- bound state before redeeming one; no bearer URL or provider secret is stored.
@@ -6059,6 +6083,15 @@ WHERE redeemed_at IS NULL AND invalidated_at IS NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_expires_at_idx
 ON platform_mcp_setup_handoffs (expires_at);
 
+CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_organization_project_idx
+ON platform_mcp_setup_handoffs (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_organization_connection_idx
+ON platform_mcp_setup_handoffs (organization_id, connection_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_project_registration_idx
+ON platform_mcp_setup_handoffs (project_id, registration_id);
+
 -- Readiness is mutable current evidence for one exact connection generation,
 -- registration, and opaque provider-authorization state.
 CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
@@ -6098,3 +6131,9 @@ ON platform_mcp_readiness (registration_id, checked_at DESC);
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_expires_at_idx
 ON platform_mcp_readiness (expires_at)
 WHERE expires_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_project_idx
+ON platform_mcp_readiness (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_connection_idx
+ON platform_mcp_readiness (organization_id, connection_id);
