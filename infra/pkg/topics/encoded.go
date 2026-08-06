@@ -45,10 +45,12 @@ var ErrUnknownTopic = errors.New("unknown pubsub topic")
 // Set is the real implementation; NoopPublisher is the seam for binaries and
 // tests with no Pub/Sub client, mirroring gcp.Publisher and gcp.NoopPublisher.
 type Publisher interface {
-	// Publish sends data to the topic named by name, verbatim. The attributes
-	// map is merged under the derived content-type and schema markers, and
-	// trace context is not injected from ctx — a stored message carries its
-	// producer's trace context in attrs. See gcp.EncodedPublisher.
+	// Publish sends data to the topic named by name, verbatim. The slice is
+	// retained until the returned result resolves and must not be modified by
+	// the caller until then. The attributes map is merged under the derived
+	// content-type and schema markers, and trace context is not injected from
+	// ctx — a stored message carries its producer's trace context in attrs.
+	// See gcp.EncodedPublisher.
 	Publish(ctx context.Context, name string, data []byte, attrs map[string]string) gcp.PublishResult
 	Stop(ctx context.Context) error
 }

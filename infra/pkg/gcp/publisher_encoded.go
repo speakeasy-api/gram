@@ -16,12 +16,15 @@ import (
 // a value is in hand: it derives the bytes itself and cannot be handed a
 // payload that was never an M.
 type EncodedPublisher interface {
-	// PublishEncoded publishes data untouched. The attributes map is merged
-	// under the derived content-type and schema markers, and trace context is
-	// deliberately NOT injected from ctx: a stored message carries its
-	// producer's trace context in attributes, and injecting here would
-	// reparent it onto the republisher's trace, breaking the
-	// producer-to-subscriber link.
+	// PublishEncoded publishes data untouched. The slice is retained by the
+	// client's asynchronous batching until the returned result resolves, and
+	// is deliberately not copied — payloads run to megabytes and the caller
+	// holding bytes it does not reuse is the norm — so the caller must not
+	// modify data until then. The attributes map is merged under the derived
+	// content-type and schema markers, and trace context is deliberately NOT
+	// injected from ctx: a stored message carries its producer's trace
+	// context in attributes, and injecting here would reparent it onto the
+	// republisher's trace, breaking the producer-to-subscriber link.
 	PublishEncoded(ctx context.Context, data []byte, attributes map[string]string) PublishResult
 	// Stop flushes buffered messages and releases the publisher's resources.
 	Stop(ctx context.Context) error
