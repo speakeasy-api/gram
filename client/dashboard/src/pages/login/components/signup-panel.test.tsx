@@ -90,6 +90,41 @@ describe("SignUpPanel", () => {
     ).toBe(true);
   });
 
+  // Only [a-z0-9] survives Slugify, so the floor counts those and nothing
+  // else. "A" and "A-" both yield a one-character slug; "-----" yields none.
+  it.each(["A", "A-", "-----", "___", "- _ -"])(
+    "rejects %j, which cannot make a usable slug",
+    async (input) => {
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.type(screen.getByLabelText("Company name"), input);
+
+      expect(
+        await screen.findByText(/at least 2 letters or numbers/i),
+      ).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: /start trial/i })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+    },
+  );
+
+  it.each(["Ab", "3M", "-a1-"])("accepts %j", async (input) => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.type(screen.getByLabelText("Company name"), input);
+
+    expect(screen.queryByText(/at least 2 letters or numbers/i)).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: /start trial/i })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
   it("hands off to the login endpoint with the company name", async () => {
     const assign = vi
       .spyOn(window.location, "assign")

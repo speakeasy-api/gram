@@ -5,10 +5,9 @@ import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
 
-// Mirrors the server's validOrgNameRegex, down to the literal space: the
-// server rejects every other whitespace character, and normalizeCompanyName
-// has already collapsed runs of whitespace to single spaces by the time this
-// runs.
+// Mirrors the server's validOrgNameRegex, literal space included: the server
+// rejects every other whitespace character, and normalizeCompanyName has
+// already collapsed runs of whitespace by the time this runs.
 const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9 _-]+$/;
 const INVALID_ORG_NAME_MESSAGE =
   "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.";
@@ -18,17 +17,27 @@ const INVALID_ORG_NAME_MESSAGE =
 // round trip.
 const MAX_ORG_NAME_LENGTH = 100;
 
+// The name becomes the org's URL slug, and Slugify
+// (server/internal/auth/orgslug) keeps only [a-z0-9] — so this is a floor on
+// the slug, not on what the user typed. Counting anything else would let "A-"
+// through as two characters and produce the one-character slug "a", and
+// "-----" through as five and produce none at all.
+const MIN_ORG_NAME_SLUG_CHARS = 2;
+const SHORT_ORG_NAME_MESSAGE = `Company name must contain at least ${MIN_ORG_NAME_SLUG_CHARS} letters or numbers`;
+
+function countSlugChars(value: string): number {
+  return value.replace(/[^a-zA-Z0-9]/g, "").length;
+}
+
 // Pasted names often carry a non-breaking space, which JavaScript's `\s`
 // accepts and the server's Go regex does not.
 function normalizeCompanyName(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-// Mirrors the server's validateSignupEmail: a length bound, exactly one `@`
-// with both sides non-empty, and no whitespace. Deliberately not an RFC 5322
-// grammar — the identity provider is authoritative and the user can change
-// this on the very next screen, so a stricter rule here could only reject
-// addresses WorkOS would have accepted.
+// Mirrors the server's validateSignupEmail. WorkOS verifies the address and
+// the user can edit it on the next screen, so this only catches typos before
+// the redirect.
 const MAX_EMAIL_LENGTH = 254;
 
 function validateEmail(value: string): string | undefined {
@@ -50,9 +59,11 @@ function validateCompanyName(value: string): string | undefined {
   if (normalized.length > MAX_ORG_NAME_LENGTH) {
     return `Company name must be ${MAX_ORG_NAME_LENGTH} characters or fewer`;
   }
-  return VALID_ORG_NAME_REGEX.test(normalized)
-    ? undefined
-    : INVALID_ORG_NAME_MESSAGE;
+  if (!VALID_ORG_NAME_REGEX.test(normalized)) return INVALID_ORG_NAME_MESSAGE;
+  if (countSlugChars(normalized) < MIN_ORG_NAME_SLUG_CHARS) {
+    return SHORT_ORG_NAME_MESSAGE;
+  }
+  return undefined;
 }
 
 /** First error string for a field, or undefined. */
