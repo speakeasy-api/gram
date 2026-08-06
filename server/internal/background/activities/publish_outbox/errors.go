@@ -5,29 +5,27 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // isPermanent reports whether a publish failure is worth retrying. A permanent
 // failure is dead-lettered immediately instead of burning its retry budget.
 //
-// Two markers rather than one: oops.Permanent is the repo-wide convention and
-// covers failures this package raises, while gcp.ErrUnknownTopic comes from
-// infra/, which cannot import server/internal/oops (Go internal visibility —
-// same module, different subtree).
-//
-// An unknown topic counts as permanent because a topic missing from the
-// registry will not appear in it without a deploy, and a deploy re-reads the
-// row anyway. Everything else that reaches here (Pub/Sub unavailable, deadline
-// exceeded, quota) is transient by nature: the relay talks to a single service
-// over the network, so there is no equivalent of Svix's permanent 4xx.
+// Only failures this package marks with oops.Permanent qualify. Notably,
+// topics.ErrUnknownTopic is NOT permanent: writers validate topic names
+// against the same generated registry, so an unknown topic at publish time
+// means this drainer's binary predates the writer's — a rolling deploy in
+// progress. Retrying carries the row across the skew window; a drainer that
+// stays stale anyway still dead-letters it through the attempts cap.
+// Everything else that reaches here (Pub/Sub unavailable, deadline exceeded,
+// quota) is transient by nature: the relay talks to a single service over the
+// network, so there is no equivalent of Svix's permanent 4xx.
 func isPermanent(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	return errors.Is(err, oops.ErrPermanent) || errors.Is(err, gcp.ErrUnknownTopic)
+	return errors.Is(err, oops.ErrPermanent)
 }
 
 // unmarshalAttributes decodes the stored Pub/Sub attribute map. A row with an

@@ -17,10 +17,6 @@ import (
 // consumer that wants a subset of the webhook stream has to filter on this.
 const eventTypeAttribute = "event_type"
 
-func init() {
-	RegisterTopic(&webhooksv1.Event{})
-}
-
 // PublishWebhookEvent enqueues a customer-facing webhook event.
 //
 // THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
