@@ -114,6 +114,39 @@ func TestDiscoverTopicBindings_NestedMessageGoName(t *testing.T) {
 	require.Equal(t, "TestTopicsV1OuterInner", bindings[0].ConstName)
 }
 
+// TestDiscoverTopicBindings_RejectsConstNameCollisions covers two distinct
+// proto names that flatten onto one Go identifier. Generation must refuse with
+// an error naming both, rather than emit duplicate constants that break the
+// build of every binary linking the registry.
+func TestDiscoverTopicBindings_RejectsConstNameCollisions(t *testing.T) {
+	t.Parallel()
+
+	var embedded descriptorpb.FileDescriptorSet
+	require.NoError(t, proto.Unmarshal(gen.Descriptors, &embedded))
+
+	set := &descriptorpb.FileDescriptorSet{File: append(embedded.GetFile(), &descriptorpb.FileDescriptorProto{
+		Name:       new("test/topics/v1/collide.proto"),
+		Package:    new("test.topics.v1"),
+		Syntax:     new("proto3"),
+		Dependency: []string{"gcp/pubsub/v1/options.proto"},
+		Options:    &descriptorpb.FileOptions{GoPackage: new("example.com/gen/test/topics/v1;topicsv1")},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name:       new("Bar"),
+				NestedType: []*descriptorpb.DescriptorProto{{Name: new("Baz"), Options: topicOptions(t)}},
+			},
+			{Name: new("BarBaz"), Options: topicOptions(t)},
+		},
+	})}
+	raw, err := proto.Marshal(set)
+	require.NoError(t, err)
+
+	_, err = DiscoverTopicBindings(raw)
+	require.ErrorContains(t, err, "TestTopicsV1BarBaz")
+	require.ErrorContains(t, err, "test.topics.v1.Bar.Baz")
+	require.ErrorContains(t, err, "test.topics.v1.BarBaz")
+}
+
 func TestDiscoverTopicBindings_SortedByProtoName(t *testing.T) {
 	t.Parallel()
 

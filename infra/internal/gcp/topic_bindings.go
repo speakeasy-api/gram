@@ -70,6 +70,19 @@ func DiscoverTopicBindings(descriptorBytes []byte) ([]TopicBinding, error) {
 		return bindings[i].ProtoFullName < bindings[j].ProtoFullName
 	})
 
+	// constNameFor flattens dots without a separator, so distinct proto names
+	// can collapse onto one identifier — nested "a.v1.Bar.Baz" and top-level
+	// "a.v1.BarBaz" both become AV1BarBaz. Left undetected, generation emits
+	// duplicate constants: still valid template output, so the break would only
+	// surface as a compile error in the generated file.
+	constOwner := make(map[string]string, len(bindings))
+	for _, binding := range bindings {
+		if other, taken := constOwner[binding.ConstName]; taken {
+			return nil, fmt.Errorf("topics %s and %s both generate the constant %s; rename one of the messages", other, binding.ProtoFullName, binding.ConstName)
+		}
+		constOwner[binding.ConstName] = binding.ProtoFullName
+	}
+
 	return bindings, nil
 }
 
