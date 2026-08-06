@@ -57696,6 +57696,18 @@ components:
         - tier
         - label
         - total_calls
+    EnterpriseTrial:
+      type: object
+      properties:
+        ends_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - started_at
+        - ends_at
     Environment:
       type: object
       properties:
@@ -60464,6 +60476,10 @@ components:
       properties:
         active_organization_id:
           type: string
+        enterprise_trial:
+          allOf:
+            - $ref: '#/components/schemas/EnterpriseTrial'
+          nullable: true
         gram_account_type:
           type: string
         has_active_subscription:
@@ -60497,6 +60513,7 @@ components:
         - gram_account_type
         - has_active_subscription
         - whitelisted
+        - enterprise_trial
     IngestHookPayload:
       type: object
       properties:

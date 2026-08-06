@@ -12,8 +12,14 @@ import {
   OrganizationEntry$inboundSchema,
 } from "./organizationentry.js";
 
+export type EnterpriseTrial = {
+  endsAt: Date;
+  startedAt: Date;
+};
+
 export type InfoResponseBody = {
   activeOrganizationId: string;
+  enterpriseTrial: EnterpriseTrial | null;
   gramAccountType: string;
   /**
    * Whether the organization has an active billing subscription
@@ -33,12 +39,46 @@ export type InfoResponseBody = {
 };
 
 /** @internal */
+export const EnterpriseTrial$inboundSchema: z.ZodMiniType<
+  EnterpriseTrial,
+  unknown
+> = z.pipe(
+  z.object({
+    ends_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+    started_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "ends_at": "endsAt",
+      "started_at": "startedAt",
+    });
+  }),
+);
+
+export function enterpriseTrialFromJSON(
+  jsonString: string,
+): SafeParseResult<EnterpriseTrial, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => EnterpriseTrial$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EnterpriseTrial' from JSON`,
+  );
+}
+
+/** @internal */
 export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   InfoResponseBody,
   unknown
 > = z.pipe(
   z.object({
     active_organization_id: z.string(),
+    enterprise_trial: z.nullable(z.lazy(() => EnterpriseTrial$inboundSchema)),
     gram_account_type: z.string(),
     has_active_subscription: z.boolean(),
     is_admin: z.boolean(),
@@ -53,6 +93,7 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "active_organization_id": "activeOrganizationId",
+      "enterprise_trial": "enterpriseTrial",
       "gram_account_type": "gramAccountType",
       "has_active_subscription": "hasActiveSubscription",
       "is_admin": "isAdmin",

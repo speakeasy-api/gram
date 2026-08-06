@@ -86,6 +86,11 @@ type EnterDemoResult struct {
 	SessionCookie string
 }
 
+type EnterpriseTrial struct {
+	StartedAt string
+	EndsAt    string
+}
+
 // InfoPayload is the payload type of the auth service info method.
 type InfoPayload struct {
 	SessionToken *string
@@ -104,8 +109,9 @@ type InfoResult struct {
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
-	Whitelisted   bool
-	Organizations []*OrganizationEntry
+	Whitelisted     bool
+	EnterpriseTrial *EnterpriseTrial
+	Organizations   []*OrganizationEntry
 	// The authentication session
 	SessionToken string
 	// The authentication session

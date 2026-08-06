@@ -1434,6 +1434,17 @@ func EncodeInfoError(encoder func(context.Context, http.ResponseWriter) goahttp.
 	}
 }
 
+// marshalAuthEnterpriseTrialToEnterpriseTrialResponseBody builds a value of
+// type *EnterpriseTrialResponseBody from a value of type *auth.EnterpriseTrial.
+func marshalAuthEnterpriseTrialToEnterpriseTrialResponseBody(v *auth.EnterpriseTrial) *EnterpriseTrialResponseBody {
+	res := &EnterpriseTrialResponseBody{
+		StartedAt: v.StartedAt,
+		EndsAt:    v.EndsAt,
+	}
+
+	return res
+}
+
 // marshalAuthOrganizationEntryToOrganizationEntryResponseBody builds a value
 // of type *OrganizationEntryResponseBody from a value of type
 // *auth.OrganizationEntry.

@@ -11,6 +11,13 @@ actions:
   - target: $.components.schemas.Error
     update:
       x-speakeasy-name-override: ServiceError
+  - target: $.components.schemas.InfoResponseBody.properties.enterprise_trial['$ref']
+    remove: true
+  - target: $.components.schemas.InfoResponseBody.properties.enterprise_trial
+    update:
+      allOf:
+        - $ref: "#/components/schemas/EnterpriseTrial"
+      nullable: true
   - target: $.paths.*[?(@.operationId=='uploadOpenAPIv3Asset' || @.operationId=='uploadFunctions' || @.operationId=='uploadImage')]
     update:
       requestBody:
