@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -142,6 +143,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
 		remoteSessionsService,
+		ratelimit.NewRedisStore(redisClient),
 	)
 
 	return ctx, &testInstance{

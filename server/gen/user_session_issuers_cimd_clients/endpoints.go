@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	ListPresets                       goa.Endpoint
 	CreateUserSessionIssuerCimdClient goa.Endpoint
+	VerifyURL                         goa.Endpoint
 	ListUserSessionIssuerCimdClients  goa.Endpoint
 	GetUserSessionIssuerCimdClient    goa.Endpoint
 	DeleteUserSessionIssuerCimdClient goa.Endpoint
@@ -31,6 +32,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		ListPresets:                       NewListPresetsEndpoint(s, a.APIKeyAuth),
 		CreateUserSessionIssuerCimdClient: NewCreateUserSessionIssuerCimdClientEndpoint(s, a.APIKeyAuth),
+		VerifyURL:                         NewVerifyURLEndpoint(s, a.APIKeyAuth),
 		ListUserSessionIssuerCimdClients:  NewListUserSessionIssuerCimdClientsEndpoint(s, a.APIKeyAuth),
 		GetUserSessionIssuerCimdClient:    NewGetUserSessionIssuerCimdClientEndpoint(s, a.APIKeyAuth),
 		DeleteUserSessionIssuerCimdClient: NewDeleteUserSessionIssuerCimdClientEndpoint(s, a.APIKeyAuth),
@@ -42,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListPresets = m(e.ListPresets)
 	e.CreateUserSessionIssuerCimdClient = m(e.CreateUserSessionIssuerCimdClient)
+	e.VerifyURL = m(e.VerifyURL)
 	e.ListUserSessionIssuerCimdClients = m(e.ListUserSessionIssuerCimdClients)
 	e.GetUserSessionIssuerCimdClient = m(e.GetUserSessionIssuerCimdClient)
 	e.DeleteUserSessionIssuerCimdClient = m(e.DeleteUserSessionIssuerCimdClient)
@@ -163,6 +166,65 @@ func NewCreateUserSessionIssuerCimdClientEndpoint(s Service, authAPIKeyFn securi
 			return nil, err
 		}
 		return s.CreateUserSessionIssuerCimdClient(ctx, p)
+	}
+}
+
+// NewVerifyURLEndpoint returns an endpoint function that calls the method
+// "verifyURL" of service "userSessionIssuersCimdClients".
+func NewVerifyURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyURLPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyURL(ctx, p)
 	}
 }
 

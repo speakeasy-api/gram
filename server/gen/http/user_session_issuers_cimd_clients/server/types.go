@@ -25,6 +25,13 @@ type CreateUserSessionIssuerCimdClientRequestBody struct {
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 }
 
+// VerifyURLRequestBody is the type of the "userSessionIssuersCimdClients"
+// service "verifyURL" endpoint HTTP request body.
+type VerifyURLRequestBody struct {
+	// The https URL to probe.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+}
+
 // ListPresetsResponseBody is the type of the "userSessionIssuersCimdClients"
 // service "listPresets" endpoint HTTP response body.
 type ListPresetsResponseBody struct {
@@ -36,10 +43,27 @@ type ListPresetsResponseBody struct {
 // endpoint HTTP response body.
 type CreateUserSessionIssuerCimdClientResponseBody struct {
 	Client *UserSessionIssuerCimdClientResponseBody `form:"client" json:"client" xml:"client"`
-	// Set when Gram could not fetch or validate the document at this URL. The
-	// entry was still saved; the URL will be admitted, but a client presenting it
-	// will fail at authorization time until the document is reachable and valid.
-	ProbeWarning *string `form:"probe_warning,omitempty" json:"probe_warning,omitempty" xml:"probe_warning,omitempty"`
+}
+
+// VerifyURLResponseBody is the type of the "userSessionIssuersCimdClients"
+// service "verifyURL" endpoint HTTP response body.
+type VerifyURLResponseBody struct {
+	// True when the document was fetched and passed every check the authorization
+	// server applies. A client presenting this URL will not be rejected for its
+	// document.
+	Verified bool `form:"verified" json:"verified" xml:"verified"`
+	// Why the probe ended as it did.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// Status the document endpoint returned; omitted when no response was received.
+	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+	// Stable machine label for the rule that rejected the document, e.g.
+	// client_id_mismatch. Set only for invalid_url and invalid_document.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Human-readable explanation, safe to display to the operator.
+	Detail string `form:"detail" json:"detail" xml:"detail"`
+	// The document's client_name, set only when verified. Lets an operator confirm
+	// the URL names the client they intended.
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
 }
 
 // ListUserSessionIssuerCimdClientsResponseBody is the type of the
@@ -434,6 +458,196 @@ type CreateUserSessionIssuerCimdClientUnexpectedResponseBody struct {
 // "userSessionIssuersCimdClients" service "createUserSessionIssuerCimdClient"
 // endpoint HTTP response body for the "gateway_error" error.
 type CreateUserSessionIssuerCimdClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLUnauthorizedResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "unauthorized" error.
+type VerifyURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLForbiddenResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "forbidden" error.
+type VerifyURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLBadRequestResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "bad_request" error.
+type VerifyURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLNotFoundResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "not_found" error.
+type VerifyURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLConflictResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "conflict" error.
+type VerifyURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLUnsupportedMediaResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "unsupported_media" error.
+type VerifyURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLInvalidResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "invalid" error.
+type VerifyURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLInvariantViolationResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "invariant_violation" error.
+type VerifyURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLUnexpectedResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "unexpected" error.
+type VerifyURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLGatewayErrorResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "gateway_error" error.
+type VerifyURLGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1082,11 +1296,23 @@ func NewListPresetsResponseBody(res *usersessionissuerscimdclients.ListCimdClien
 // body from the result of the "createUserSessionIssuerCimdClient" endpoint of
 // the "userSessionIssuersCimdClients" service.
 func NewCreateUserSessionIssuerCimdClientResponseBody(res *usersessionissuerscimdclients.CreateUserSessionIssuerCimdClientResult) *CreateUserSessionIssuerCimdClientResponseBody {
-	body := &CreateUserSessionIssuerCimdClientResponseBody{
-		ProbeWarning: res.ProbeWarning,
-	}
+	body := &CreateUserSessionIssuerCimdClientResponseBody{}
 	if res.Client != nil {
 		body.Client = marshalTypesUserSessionIssuerCimdClientToUserSessionIssuerCimdClientResponseBody(res.Client)
+	}
+	return body
+}
+
+// NewVerifyURLResponseBody builds the HTTP response body from the result of
+// the "verifyURL" endpoint of the "userSessionIssuersCimdClients" service.
+func NewVerifyURLResponseBody(res *usersessionissuerscimdclients.VerifyCimdURLResult) *VerifyURLResponseBody {
+	body := &VerifyURLResponseBody{
+		Verified:   res.Verified,
+		Outcome:    res.Outcome,
+		HTTPStatus: res.HTTPStatus,
+		Reason:     res.Reason,
+		Detail:     res.Detail,
+		ClientName: res.ClientName,
 	}
 	return body
 }
@@ -1420,6 +1646,156 @@ func NewCreateUserSessionIssuerCimdClientUnexpectedResponseBody(res *goa.Service
 // endpoint of the "userSessionIssuersCimdClients" service.
 func NewCreateUserSessionIssuerCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateUserSessionIssuerCimdClientGatewayErrorResponseBody {
 	body := &CreateUserSessionIssuerCimdClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLUnauthorizedResponseBody(res *goa.ServiceError) *VerifyURLUnauthorizedResponseBody {
+	body := &VerifyURLUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLForbiddenResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLForbiddenResponseBody(res *goa.ServiceError) *VerifyURLForbiddenResponseBody {
+	body := &VerifyURLForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLBadRequestResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLBadRequestResponseBody(res *goa.ServiceError) *VerifyURLBadRequestResponseBody {
+	body := &VerifyURLBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLNotFoundResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLNotFoundResponseBody(res *goa.ServiceError) *VerifyURLNotFoundResponseBody {
+	body := &VerifyURLNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLConflictResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLConflictResponseBody(res *goa.ServiceError) *VerifyURLConflictResponseBody {
+	body := &VerifyURLConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "verifyURL" endpoint of the
+// "userSessionIssuersCimdClients" service.
+func NewVerifyURLUnsupportedMediaResponseBody(res *goa.ServiceError) *VerifyURLUnsupportedMediaResponseBody {
+	body := &VerifyURLUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLInvalidResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLInvalidResponseBody(res *goa.ServiceError) *VerifyURLInvalidResponseBody {
+	body := &VerifyURLInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "verifyURL" endpoint of the
+// "userSessionIssuersCimdClients" service.
+func NewVerifyURLInvariantViolationResponseBody(res *goa.ServiceError) *VerifyURLInvariantViolationResponseBody {
+	body := &VerifyURLInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLUnexpectedResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLUnexpectedResponseBody(res *goa.ServiceError) *VerifyURLUnexpectedResponseBody {
+	body := &VerifyURLUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "userSessionIssuersCimdClients"
+// service.
+func NewVerifyURLGatewayErrorResponseBody(res *goa.ServiceError) *VerifyURLGatewayErrorResponseBody {
+	body := &VerifyURLGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1908,6 +2284,19 @@ func NewCreateUserSessionIssuerCimdClientPayload(body *CreateUserSessionIssuerCi
 	return v
 }
 
+// NewVerifyURLPayload builds a userSessionIssuersCimdClients service verifyURL
+// endpoint payload.
+func NewVerifyURLPayload(body *VerifyURLRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuerscimdclients.VerifyURLPayload {
+	v := &usersessionissuerscimdclients.VerifyURLPayload{
+		ClientIDMetadataURI: *body.ClientIDMetadataURI,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListUserSessionIssuerCimdClientsPayload builds a
 // userSessionIssuersCimdClients service listUserSessionIssuerCimdClients
 // endpoint payload.
@@ -1960,6 +2349,15 @@ func ValidateCreateUserSessionIssuerCimdClientRequestBody(body *CreateUserSessio
 	}
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateVerifyURLRequestBody runs the validations defined on
+// VerifyURLRequestBody
+func ValidateVerifyURLRequestBody(body *VerifyURLRequestBody) (err error) {
+	if body.ClientIDMetadataURI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_uri", "body"))
 	}
 	return
 }

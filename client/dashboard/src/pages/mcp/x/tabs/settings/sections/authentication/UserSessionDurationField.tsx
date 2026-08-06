@@ -136,7 +136,7 @@ export function UserSessionDurationField({
             ))}
           </SelectContent>
         </Select>
-        <RequireScope scope="mcp:write" level="component">
+        <RequireScope scope="project:write" level="component">
           <Button
             variant="primary"
             size="md"
