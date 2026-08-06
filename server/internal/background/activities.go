@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
 	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
@@ -76,6 +77,10 @@ type Publishers struct {
 	// publisher on it (see risk_analysis.batchOnlyFindingSources).
 	RiskFindings  gcp.Publisher[*riskv1.Finding]
 	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
+	// Outbox publishes whatever the publish_outbox table holds. It resolves its
+	// topic per message rather than being bound to one, because the destination
+	// is a property of the row and not of this wiring.
+	Outbox gcp.RawPublisher
 }
 
 type Activities struct {
@@ -142,6 +147,7 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
@@ -317,6 +323,7 @@ func NewActivities(
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
@@ -708,6 +715,25 @@ func (a *Activities) RelayOutboxEvents(ctx context.Context, args []*outbox_relay
 		return fmt.Errorf("relay outbox events: %w", err)
 	}
 	return nil
+}
+
+// DrainPublishOutbox claims, publishes and settles one batch in a single
+// activity. Keeping it fused is deliberate: splitting claim from publish would
+// put message bodies into workflow history.
+func (a *Activities) DrainPublishOutbox(ctx context.Context) (publish_outbox.DrainResult, error) {
+	result, err := a.publishOutbox.Drain(ctx)
+	if err != nil {
+		return publish_outbox.DrainResult{}, fmt.Errorf("drain publish outbox: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) GCPublishOutboxDeadLetters(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
+	n, err := a.publishOutbox.DeleteDeadLetters(ctx, cutoff, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("gc publish outbox dead letters: %w", err)
+	}
+	return n, nil
 }
 
 func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {

@@ -17,7 +17,6 @@ import (
 	bgactivitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	outboxrepo "github.com/speakeasy-api/gram/server/internal/outbox/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -109,13 +108,13 @@ func seedOrg(t *testing.T, conn *pgxpool.Pool, svixAppID string, webhooksEnabled
 func seedOutboxEntry(t *testing.T, conn *pgxpool.Pool, orgID, eventType string, payload []byte) int64 {
 	t.Helper()
 	ctx := t.Context()
-	row, err := outboxrepo.New(conn).InsertOutboxEntry(ctx, outboxrepo.InsertOutboxEntryParams{
+	id, err := testrepo.New(conn).SeedOutboxEntry(ctx, testrepo.SeedOutboxEntryParams{
 		OrganizationID: orgID,
 		EventType:      eventType,
 		Payload:        payload,
 	})
 	require.NoError(t, err)
-	return row.ID
+	return id
 }
 
 // enableWebhooksFeature enables the webhooks feature flag for an org in the DB.
