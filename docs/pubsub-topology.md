@@ -27,6 +27,8 @@ flowchart LR
   t_gram_risk_v1_prompt_injection_analysis(["gram-risk-v1-prompt-injection-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_policy_analysis(["gram-risk-v1-prompt-policy-analysis<br/>(topic)"]):::topic
   t_gram_telemetry_v1_log_record(["gram-telemetry-v1-log-record<br/>(topic)"]):::topic
+  t_gram_webhooks_v1_event(["gram-webhooks-v1-event<br/>(topic)"]):::topic
+  t_gram_webhooks_v1_svix_relay_dlq(["gram-webhooks-v1-svix-relay-dlq<br/>(dlq)"]):::dlq
   s_gram_ping_v2_processor["gram-ping-v2-processor<br/>(sub)"]:::sub
   s_gram_ping_v2_py_processor["gram-ping-v2-py-processor<br/>(sub)"]:::sub
   s_gram_risk_v1_custom_rules_analyzer["gram-risk-v1-custom-rules-analyzer<br/>(sub)"]:::sub
@@ -36,6 +38,7 @@ flowchart LR
   s_gram_risk_v1_prompt_injection_analyzer["gram-risk-v1-prompt-injection-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_prompt_policy_analyzer["gram-risk-v1-prompt-policy-analyzer<br/>(sub)"]:::sub
   s_gram_telemetry_v1_noop["gram-telemetry-v1-noop<br/>(sub)"]:::sub
+  s_gram_webhooks_v1_svix_relay["gram-webhooks-v1-svix-relay<br/>(sub)"]:::sub
 
   p0[/"📤<br/>server/internal/ping/publisher.go"/]:::go
   p0 --> t_gram_ping_v2_message
@@ -68,6 +71,8 @@ flowchart LR
   t_gram_risk_v1_prompt_injection_analysis --> s_gram_risk_v1_prompt_injection_analyzer
   t_gram_risk_v1_prompt_policy_analysis --> s_gram_risk_v1_prompt_policy_analyzer
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
+  t_gram_webhooks_v1_event --> s_gram_webhooks_v1_svix_relay
+  s_gram_webhooks_v1_svix_relay -. dead-letter .-> t_gram_webhooks_v1_svix_relay_dlq
   c10[\"📥<br/>server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
   s_gram_ping_v2_processor --> c10
   c11[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
@@ -104,6 +109,8 @@ flowchart LR
 | [`gram-risk-v1-prompt-injection-analysis`](../infra/proto/gram/risk/v1/prompt_injection_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_prompt_injection.go`](../server/internal/background/activities/risk_analysis/scan_prompt_injection.go) |
 | [`gram-risk-v1-prompt-policy-analysis`](../infra/proto/gram/risk/v1/prompt_policy_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/prompt_judge_batch.go`](../server/internal/background/activities/risk_analysis/prompt_judge_batch.go) |
 | [`gram-telemetry-v1-log-record`](../infra/proto/gram/telemetry/v1/log_record.proto) | topic | 7d | [`server/internal/telemetry/log_publisher.go`](../server/internal/telemetry/log_publisher.go) |
+| [`gram-webhooks-v1-event`](../infra/proto/gram/webhooks/v1/event.proto) | topic | 7d | — |
+| [`gram-webhooks-v1-svix-relay-dlq`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | DLQ | — | — |
 
 ## Subscriptions
 
@@ -118,9 +125,12 @@ flowchart LR
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-webhooks-v1-svix-relay`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | `gram-webhooks-v1-event` | 1m | `gram-webhooks-v1-svix-relay-dlq` | — |
 
 ## Notes
 
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
+- Topic `gram-webhooks-v1-event` has no publisher in `server/` or `pystreams/`.
+- Subscription `gram-webhooks-v1-svix-relay` has no consumer in `server/` or `pystreams/`.
 

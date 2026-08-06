@@ -27,6 +27,8 @@ catalog:
   typescript: 7.0.2
   vite: ^8.1.5
 
+autoInstallPeers: false
+
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:

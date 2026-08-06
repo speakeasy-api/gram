@@ -219,7 +219,7 @@ type CreateGlobalIssuerResponseBody struct {
 // ListGlobalIssuersResponseBody is the type of the "adminRemoteSessions"
 // service "listGlobalIssuers" endpoint HTTP response body.
 type ListGlobalIssuersResponseBody struct {
-	Items []*RemoteSessionIssuerResponseBody `form:"items" json:"items" xml:"items"`
+	Items []*GlobalRemoteSessionIssuerResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -227,52 +227,16 @@ type ListGlobalIssuersResponseBody struct {
 // GetGlobalIssuerResponseBody is the type of the "adminRemoteSessions" service
 // "getGlobalIssuer" endpoint HTTP response body.
 type GetGlobalIssuerResponseBody struct {
-	// The remote_session_issuer id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level issuers.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Project-unique slug.
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Issuer URL; matches the iss claim.
-	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
-	// Optional display name; null when unset.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional logo asset id; null when unset.
-	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
-	// URL of OAuth client setup documentation shown when creating clients.
-	// Manually set, not RFC 8414; null when unset.
-	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
-	// Upstream authorization endpoint.
-	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
-	// Upstream token endpoint.
-	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
-	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
-	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
-	// Upstream JWKS URI; null when not advertised.
-	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// RFC 8414 service_documentation; developer documentation for the issuer. Null
-	// when not advertised.
-	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
-	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
-	// advertised.
-	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
-	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
-	// When true, may unlock OIDC-aware behaviour.
-	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
-	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
-	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount int `form:"global_client_count" json:"global_client_count" xml:"global_client_count"`
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount int `form:"tenant_client_count" json:"tenant_client_count" xml:"tenant_client_count"`
 }
 
 // UpdateGlobalIssuerResponseBody is the type of the "adminRemoteSessions"
@@ -2780,6 +2744,21 @@ type DeleteGlobalClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GlobalRemoteSessionIssuerResponseBody is used to define fields on response
+// body types.
+type GlobalRemoteSessionIssuerResponseBody struct {
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount int `form:"global_client_count" json:"global_client_count" xml:"global_client_count"`
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount int `form:"tenant_client_count" json:"tenant_client_count" xml:"tenant_client_count"`
+}
+
 // RemoteSessionIssuerResponseBody is used to define fields on response body
 // types.
 type RemoteSessionIssuerResponseBody struct {
@@ -2925,73 +2904,34 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 // NewListGlobalIssuersResponseBody builds the HTTP response body from the
 // result of the "listGlobalIssuers" endpoint of the "adminRemoteSessions"
 // service.
-func NewListGlobalIssuersResponseBody(res *adminremotesessions.ListRemoteSessionIssuersResult) *ListGlobalIssuersResponseBody {
+func NewListGlobalIssuersResponseBody(res *adminremotesessions.ListGlobalRemoteSessionIssuersResult) *ListGlobalIssuersResponseBody {
 	body := &ListGlobalIssuersResponseBody{
 		NextCursor: res.NextCursor,
 	}
 	if res.Items != nil {
-		body.Items = make([]*RemoteSessionIssuerResponseBody, len(res.Items))
+		body.Items = make([]*GlobalRemoteSessionIssuerResponseBody, len(res.Items))
 		for i, val := range res.Items {
 			if val == nil {
 				body.Items[i] = nil
 				continue
 			}
-			body.Items[i] = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(val)
+			body.Items[i] = marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody(val)
 		}
 	} else {
-		body.Items = []*RemoteSessionIssuerResponseBody{}
+		body.Items = []*GlobalRemoteSessionIssuerResponseBody{}
 	}
 	return body
 }
 
 // NewGetGlobalIssuerResponseBody builds the HTTP response body from the result
 // of the "getGlobalIssuer" endpoint of the "adminRemoteSessions" service.
-func NewGetGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *GetGlobalIssuerResponseBody {
+func NewGetGlobalIssuerResponseBody(res *adminremotesessions.GlobalRemoteSessionIssuer) *GetGlobalIssuerResponseBody {
 	body := &GetGlobalIssuerResponseBody{
-		ID:                                res.ID,
-		ProjectID:                         res.ProjectID,
-		OrganizationID:                    res.OrganizationID,
-		Slug:                              res.Slug,
-		Issuer:                            res.Issuer,
-		Name:                              res.Name,
-		LogoAssetID:                       res.LogoAssetID,
-		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
-		AuthorizationEndpoint:             res.AuthorizationEndpoint,
-		TokenEndpoint:                     res.TokenEndpoint,
-		RegistrationEndpoint:              res.RegistrationEndpoint,
-		JwksURI:                           res.JwksURI,
-		ServiceDocumentation:              res.ServiceDocumentation,
-		OpPolicyURI:                       res.OpPolicyURI,
-		OpTosURI:                          res.OpTosURI,
-		Oidc:                              res.Oidc,
-		Passthrough:                       res.Passthrough,
-		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		GlobalClientCount: res.GlobalClientCount,
+		TenantClientCount: res.TenantClientCount,
 	}
-	if res.ScopesSupported != nil {
-		body.ScopesSupported = make([]string, len(res.ScopesSupported))
-		for i, val := range res.ScopesSupported {
-			body.ScopesSupported[i] = val
-		}
-	}
-	if res.GrantTypesSupported != nil {
-		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
-		for i, val := range res.GrantTypesSupported {
-			body.GrantTypesSupported[i] = val
-		}
-	}
-	if res.ResponseTypesSupported != nil {
-		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
-		for i, val := range res.ResponseTypesSupported {
-			body.ResponseTypesSupported[i] = val
-		}
-	}
-	if res.TokenEndpointAuthMethodsSupported != nil {
-		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
-		for i, val := range res.TokenEndpointAuthMethodsSupported {
-			body.TokenEndpointAuthMethodsSupported[i] = val
-		}
+	if res.Issuer != nil {
+		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
 	}
 	return body
 }

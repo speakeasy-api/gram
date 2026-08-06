@@ -16,6 +16,11 @@ UPDATE chat_messages
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = @slug
+WHERE id = @id;
+
 -- name: UpdateRiskResultCreatedAt :exec
 UPDATE risk_results
 SET created_at = @created_at

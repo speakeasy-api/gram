@@ -60,6 +60,9 @@ type Service interface {
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
+	// Request access to a scope by sending an email notification to organization
+	// administrators.
+	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
 	// Returns whether RBAC is currently enabled for the current organization.
 	GetRBACStatus(context.Context, *GetRBACStatusPayload) (res *RBACStatus, err error)
 	// Enable RBAC for the current organization. Seeds default grants for system
@@ -99,7 +102,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [24]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [25]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "requestAccess", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -478,6 +481,29 @@ type ListUserGrantsResult struct {
 type RBACStatus struct {
 	// Whether RBAC enforcement is currently enabled for this organization.
 	RbacEnabled bool
+}
+
+// RequestAccessPayload is the payload type of the access service requestAccess
+// method.
+type RequestAccessPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The scope being requested.
+	Scope string
+	// Optional resource ID the scope applies to.
+	ResourceID *string
+	// Optional human-readable name for the resource (e.g. project name, MCP server
+	// name).
+	ResourceName *string
+	// Optional message from the requester explaining why they need access.
+	Message *string
+}
+
+// RequestAccessResult is the result type of the access service requestAccess
+// method.
+type RequestAccessResult struct {
+	// Number of administrators who were notified.
+	SentToCount int
 }
 
 // ResolveChallengePayload is the payload type of the access service

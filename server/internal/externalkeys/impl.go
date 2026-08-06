@@ -29,16 +29,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	auth            *auth.Auth
+	authz           *authz.Engine
+	audit           *audit.Logger
+	productFeatures *productfeatures.Client
 }
 
 var (
@@ -53,17 +55,47 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	productFeatures *productfeatures.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("externalkeys"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalkeys"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalkeys"),
+		logger:          logger,
+		db:              db,
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		audit:           auditLogger,
+		productFeatures: productFeatures,
 	}
+}
+
+// requireOrgAccess resolves the auth context and enforces both gates every
+// handler needs: the RBAC scope and the customer-managed-keys entitlement.
+// External keys and the external credentials that reach them are one feature, so
+// they sit behind one entitlement — gating only the credentials would leave the
+// keys themselves reachable by an organization that was never sold them.
+func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, s.logger, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, logger, err
+	}
+
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+	if err != nil {
+		return nil, logger, oops.E(oops.CodeUnexpected, err, "error checking customer managed keys entitlement").LogError(ctx, logger)
+	}
+	if !enabled {
+		return nil, logger, oops.E(oops.CodeForbidden, nil, "customer-managed encryption keys are not enabled for this organization")
+	}
+
+	return authCtx, logger, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -81,14 +113,10 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateAwsKmsKey(ctx context.Context, payload *gen.CreateAwsKmsKeyPayload) (*gen.AwsKmsKey, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
@@ -163,14 +191,10 @@ func (s *Service) CreateAwsKmsKey(ctx context.Context, payload *gen.CreateAwsKms
 }
 
 func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKmsKeyPayload) (*gen.AwsKmsKey, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -262,14 +286,10 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 }
 
 func (s *Service) CreateGcpKmsKey(ctx context.Context, payload *gen.CreateGcpKmsKeyPayload) (*gen.GcpKmsKey, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
@@ -344,14 +364,10 @@ func (s *Service) CreateGcpKmsKey(ctx context.Context, payload *gen.CreateGcpKms
 }
 
 func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKmsKeyPayload) (*gen.GcpKmsKey, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -462,14 +478,10 @@ func (s *Service) ListGcpKmsKeys(ctx context.Context, payload *gen.ListGcpKmsKey
 // listKeys returns the org's key summaries, optionally filtered to a single
 // provider (invalid pgtype.Text = no filter).
 func (s *Service) listKeys(ctx context.Context, provider pgtype.Text) (*gen.ListExternalKeysResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	if err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	rows, err := repo.New(s.db).ListExternalKeys(ctx, repo.ListExternalKeysParams{
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -485,14 +497,10 @@ func (s *Service) listKeys(ctx context.Context, provider pgtype.Text) (*gen.List
 }
 
 func (s *Service) GetAwsKmsKey(ctx context.Context, payload *gen.GetAwsKmsKeyPayload) (*gen.AwsKmsKey, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	if err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -514,14 +522,10 @@ func (s *Service) GetAwsKmsKey(ctx context.Context, payload *gen.GetAwsKmsKeyPay
 }
 
 func (s *Service) GetGcpKmsKey(ctx context.Context, payload *gen.GetGcpKmsKeyPayload) (*gen.GcpKmsKey, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	if err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -562,14 +566,10 @@ func (s *Service) DeleteGcpKmsKey(ctx context.Context, payload *gen.DeleteGcpKms
 // the new key must be re-pointed by the JWKS layer (AGE-2869 / AGE-2870).
 // Nothing references external_keys today, so this is safe for now.
 func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	id, err := uuid.Parse(rawID)
 	if err != nil {

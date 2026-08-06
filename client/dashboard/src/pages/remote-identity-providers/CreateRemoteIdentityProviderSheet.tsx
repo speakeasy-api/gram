@@ -35,6 +35,7 @@ import {
   deriveSlugFromUrl,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { useIssuerDiscovery } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { buildCreateIssuerForm } from "./issuerSettingsForm";
 
 // Sentinel for the "no project" (organizational) selection. Radix Select treats
 // the empty string specially, so we use an explicit value and map it back to an
@@ -159,36 +160,17 @@ export function CreateRemoteIdentityProviderSheet({
       request: {
         createIssuerRequestBody: {
           projectId: projectId === ORGANIZATIONAL ? undefined : projectId,
-          slug: slug.trim(),
-          issuer: issuerUrl.trim(),
-          name: name.trim() || undefined,
-          clientSetupDocumentationUrl:
-            clientSetupDocumentationUrl.trim() || undefined,
-          authorizationEndpoint: authorizationEndpoint.trim() || undefined,
-          tokenEndpoint: tokenEndpoint.trim() || undefined,
-          registrationEndpoint: registrationEndpoint.trim() || undefined,
-          jwksUri: jwksUri.trim() || undefined,
-          // RFC 8414 metadata arrays are NOT NULL server-side. Forward what
-          // discovery returned, or empty arrays when the operator typed
-          // everything by hand.
-          scopesSupported: discoveredSnapshot?.scopesSupported ?? [],
-          grantTypesSupported: discoveredSnapshot?.grantTypesSupported ?? [],
-          responseTypesSupported:
-            discoveredSnapshot?.responseTypesSupported ?? [],
-          tokenEndpointAuthMethodsSupported:
-            discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
-          // CIMD support is parsed during discovery and persisted here so the
-          // issuer can offer the CIMD client type. Defaults false when the
-          // operator skipped Discover and typed the endpoints by hand.
-          clientIdMetadataDocumentSupported:
-            discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
-          // RFC 8414 documentation URLs are discovery-only — there are no form
-          // inputs for them. Undefined when the operator skipped Discover or the
-          // issuer advertised nothing usable.
-          serviceDocumentation:
-            discoveredSnapshot?.serviceDocumentation || undefined,
-          opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
-          opTosUri: discoveredSnapshot?.opTosUri || undefined,
+          ...buildCreateIssuerForm({
+            name,
+            slug,
+            clientSetupDocumentationUrl,
+            issuerUrl,
+            authorizationEndpoint,
+            tokenEndpoint,
+            registrationEndpoint,
+            jwksUri,
+            discoveredSnapshot,
+          }),
         },
       },
     });

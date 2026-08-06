@@ -1563,3 +1563,137 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
 }
+
+// TestParseCodexMCPInventory: the guard uses this snapshot to decide whether a
+// tool call routes to a Gram-hosted server, so a stdio server must surface its
+// full command and a disabled server must not appear at all — a disabled entry
+// left in the list would vouch for a call that routed somewhere else.
+func TestParseCodexMCPInventory(t *testing.T) {
+	// Verbatim `codex mcp list --json` from the shipped 0.146 build (server
+	// names and the disabled entry are ours; every key, the null-heavy
+	// transport fields, and the auth_status values are as Codex emitted them).
+	entries := parseCodexMCPInventory([]byte(`[
+	  {
+	    "name": "everything",
+	    "enabled": true,
+	    "disabled_reason": null,
+	    "transport": {
+	      "type": "stdio",
+	      "command": "npx",
+	      "args": ["-y", "@modelcontextprotocol/server-everything"],
+	      "env": null,
+	      "env_vars": [],
+	      "cwd": null
+	    },
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "unsupported"
+	  },
+	  {
+	    "name": "remote_example",
+	    "enabled": true,
+	    "disabled_reason": null,
+	    "transport": {
+	      "type": "streamable_http",
+	      "url": "https://mcp.example.test/mcp",
+	      "bearer_token_env_var": null,
+	      "http_headers": null,
+	      "env_http_headers": null
+	    },
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "o_auth"
+	  },
+	  {
+	    "name": "disabled_example",
+	    "enabled": false,
+	    "disabled_reason": null,
+	    "transport": {"type": "stdio", "command": "npx", "args": [], "env": null, "env_vars": [], "cwd": null},
+	    "startup_timeout_sec": null,
+	    "tool_timeout_sec": null,
+	    "auth_status": "unsupported"
+	  }
+	]`))
+
+	require.Len(t, entries, 2)
+	require.Equal(t, "everything", entries[0].Name)
+	require.Equal(t, "npx -y @modelcontextprotocol/server-everything", entries[0].Command)
+	require.Empty(t, entries[0].URL)
+	require.Equal(t, "remote_example", entries[1].Name)
+	require.Equal(t, "https://mcp.example.test/mcp", entries[1].URL)
+	require.Empty(t, entries[1].Command)
+
+	require.Empty(t, parseCodexMCPInventory([]byte("not json")))
+	require.Empty(t, parseCodexMCPInventory(nil))
+}
+
+// TestEnvelopeReportsBinaryVersion: the server reads adapter_version's presence
+// as "this relay can report MCP inventory" and degrades the codex meta-tool
+// shadow-MCP guard without it. Dropping this field would silently disable that
+// enforcement for every user rather than failing visibly.
+func TestEnvelopeReportsBinaryVersion(t *testing.T) {
+	previous := BinaryVersion
+	t.Cleanup(func() { BinaryVersion = previous })
+	BinaryVersion = "9.9.9"
+
+	payload := buildEnvelope(&agenthooks.PromptEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "UserPromptSubmit",
+			Session:    agenthooks.SessionInfo{ID: "s1"},
+		},
+		Prompt: "hello",
+	}, "host")
+
+	require.NotNil(t, payload.Source.AdapterVersion)
+	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
+}
+
+// TestCodexSessionStartRelaysMCPInventoryFromSessionCWD: Codex merges managed,
+// user and project config layers, and resolves the project layer relative to
+// the working directory — so the inventory must be listed from the session's
+// cwd, not the hook host's. Getting this wrong yields a snapshot missing the
+// session's real servers, and the shadow-MCP guard then denies meta-tool reads
+// of servers that are in fact Gram-hosted. Mirrors the Claude coverage.
+func TestCodexSessionStartRelaysMCPInventoryFromSessionCWD(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake codex executable uses a POSIX shell")
+	}
+
+	binDir := t.TempDir()
+	// Only the `mcp` invocation records its cwd: SessionStart also shells out
+	// to `codex app-server` for identity, and letting that write would race the
+	// assertion with the hook host's directory.
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(
+		"#!/bin/sh\n"+
+			"if [ \"$1\" = \"mcp\" ]; then\n"+
+			"  pwd > \"$FAKE_CODEX_CWD_FILE\"\n"+
+			"  printf '%s\\n' \"$FAKE_CODEX_MCP_LIST\"\n"+
+			"  exit 0\n"+
+			"fi\n"+
+			"exit 1\n"), 0o700))
+	t.Setenv("PATH", binDir)
+	cwdFile := filepath.Join(t.TempDir(), "cwd")
+	t.Setenv("FAKE_CODEX_CWD_FILE", cwdFile)
+	t.Setenv("FAKE_CODEX_MCP_LIST",
+		`[{"name":"gram","enabled":true,"transport":{"type":"streamable_http","url":"https://app.example.test/mcp"}}]`)
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	cwd := t.TempDir()
+	payload := []byte(`{"session_id":"sess-codex-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	require.NotNil(t, fs.last().Data)
+	require.Len(t, fs.last().Data.McpInventory, 1)
+	require.Equal(t, "gram", *fs.last().Data.McpInventory[0].ServerName)
+
+	invocationCWD, err := os.ReadFile(cwdFile)
+	require.NoError(t, err)
+	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)),
+		"codex mcp list must run from the session cwd so the project config layer resolves")
+}

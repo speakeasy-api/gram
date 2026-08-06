@@ -136,6 +136,9 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 	if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{
 		UserID:         authCtx.UserID,
 		OrganizationID: authCtx.ActiveOrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "",
 	}); err != nil {
 		if isAuthorizationDenied(err) {
 			return nil, oops.C(oops.CodeForbidden)
@@ -150,8 +153,10 @@ func lifecycleResult(admission Admission, lifecycle Lifecycle) *gen.PlatformMCPL
 	ready := false
 	for _, connection := range lifecycle.Connections {
 		item := &gen.PlatformMCPConnection{
-			ID:    connection.ID,
-			Ready: connection.Ready,
+			ID:             connection.ID,
+			Ready:          connection.Ready,
+			AuthorizedAt:   nil,
+			ReauthorizedAt: nil,
 		}
 		if connection.AuthorizedAt != nil {
 			value := connection.AuthorizedAt.UTC().Format(time.RFC3339)
@@ -168,6 +173,7 @@ func lifecycleResult(admission Admission, lifecycle Lifecycle) *gen.PlatformMCPL
 	result := &gen.PlatformMCPLifecycle{
 		Admission:            admissionString(admission),
 		ReasonCode:           lifecycleReason(admission, lifecycle),
+		DefaultProjectID:     nil,
 		MarketplacePublished: lifecycle.MarketplacePublished,
 		Connections:          connections,
 		Authorized:           len(connections) > 0,

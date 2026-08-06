@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -576,6 +577,42 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}, nil
 }
 
+// EnterDemo points the current session at the shared read-only demo
+// organization. Any authenticated user may enter — the demo org has no
+// membership rows, so downstream request auth and grant resolution rely on
+// carve-outs keyed off constants.DemoOrganizationID.
+func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) (res *gen.EnterDemoResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "demo organization is not available").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
+	}
+	if orgMetadata.DisabledAt.Valid {
+		return nil, oops.E(oops.CodeNotFound, nil, "demo organization is not available")
+	}
+
+	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
+	}
+	existingSession.ActiveOrganizationID = constants.DemoOrganizationID
+	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
+	}
+
+	return &gen.EnterDemoResult{
+		SessionToken:  *authCtx.SessionID,
+		SessionCookie: *authCtx.SessionID,
+	}, nil
+}
+
 func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *gen.LogoutResult, err error) {
 	// Clears cookie and invalidates session
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -609,10 +646,29 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
 	}
 
-	// For admins overriding into a foreign org (one not in their own membership list),
-	// return only that org to avoid overloaded returns. When admins are in one of their
-	// own orgs, return all real memberships so the org-switcher works normally.
-	if userInfo.Admin {
+	// Sessions in the shared demo org: append the demo org alongside real
+	// memberships (there is no membership row for it), so the dashboard can
+	// resolve the active org AND still offer the user's own orgs to exit to.
+	// A failed lookup is an error, not a silent omission — without the entry
+	// the dashboard cannot resolve the active org or offer an exit.
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
+		orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
+		}
+		userInfo.Organizations = append(userInfo.Organizations, sessions.Organization{
+			ID:                 orgMeta.ID,
+			Name:               orgMeta.Name,
+			Slug:               orgMeta.Slug,
+			WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
+			UserWorkspaceSlugs: nil,
+			SSOEnabled:         orgMeta.SsoEnabled.Bool,
+			SCIMEnabled:        orgMeta.ScimEnabled.Bool,
+		})
+	} else if userInfo.Admin {
+		// For admins overriding into a foreign org (one not in their own membership list),
+		// return only that org to avoid overloaded returns. When admins are in one of their
+		// own orgs, return all real memberships so the org-switcher works normally.
 		inOwnOrg := false
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {

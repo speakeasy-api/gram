@@ -34,6 +34,10 @@ type Client struct {
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
+	// ListTags Doer is the HTTP client used to make requests to the listTags
+	// endpoint.
+	ListTagsDoer goahttp.Doer
+
 	// ListSuggestions Doer is the HTTP client used to make requests to the
 	// listSuggestions endpoint.
 	ListSuggestionsDoer goahttp.Doer
@@ -125,6 +129,7 @@ func NewClient(
 		RestoreVersionDoer:         doer,
 		UpdateDoer:                 doer,
 		ListDoer:                   doer,
+		ListTagsDoer:               doer,
 		ListSuggestionsDoer:        doer,
 		ListFeedbackDoer:           doer,
 		TriggerSuggestionDoer:      doer,
@@ -265,6 +270,30 @@ func (c *Client) List() goa.Endpoint {
 		resp, err := c.ListDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTags returns an endpoint that makes HTTP requests to the skills service
+// listTags server.
+func (c *Client) ListTags() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTagsRequest(c.encoder)
+		decodeResponse = DecodeListTagsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTagsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTagsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listTags", err)
 		}
 		return decodeResponse(resp)
 	}

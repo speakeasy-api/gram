@@ -97,6 +97,11 @@ func ResolveShadowMCPInventoryRequestAccessPath() string {
 	return "/rpc/access.resolveShadowMCPInventoryRequest"
 }
 
+// RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.
+func RequestAccessAccessPath() string {
+	return "/rpc/access.requestAccess"
+}
+
 // GetRBACStatusAccessPath returns the URL path to the access service getRBACStatus HTTP endpoint.
 func GetRBACStatusAccessPath() string {
 	return "/rpc/access.getRBACStatus"

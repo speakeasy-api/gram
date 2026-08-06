@@ -1242,6 +1242,7 @@ UPDATE skills
 SET name = @name,
     display_name = @display_name,
     summary = sqlc.narg(summary)::text,
+    tags = @tags,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
@@ -1349,7 +1350,19 @@ WHERE project_id = @project_id
   AND (
     COALESCE(cardinality(@classifications::text[]), 0) = 0
     OR classification = ANY(@classifications::text[])
+  )
+  AND (
+    COALESCE(cardinality(@tags::text[]), 0) = 0
+    OR tags && @tags::text[]
   );
+
+-- name: ListDistinctSkillTags :many
+SELECT DISTINCT tag::text AS tag
+FROM skills s
+CROSS JOIN LATERAL unnest(s.tags) AS tag
+WHERE s.project_id = @project_id
+  AND s.archived_at IS NULL
+ORDER BY tag;
 
 -- name: ListSkills :many
 SELECT
@@ -1380,6 +1393,10 @@ SELECT
         COALESCE(cardinality(@classifications::text[]), 0) = 0
         OR counted.classification = ANY(@classifications::text[])
       )
+      AND (
+        COALESCE(cardinality(@tags::text[]), 0) = 0
+        OR counted.tags && @tags::text[]
+      )
   )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
@@ -1409,6 +1426,10 @@ WHERE s.project_id = @project_id
   AND (
     COALESCE(cardinality(@classifications::text[]), 0) = 0
     OR s.classification = ANY(@classifications::text[])
+  )
+  AND (
+    COALESCE(cardinality(@tags::text[]), 0) = 0
+    OR s.tags && @tags::text[]
   )
   AND (
     (
@@ -2251,6 +2272,15 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])
   AND state = 'reserved'
   AND claim_token IS NULL;
+
+-- name: BackdateReservedSkillEfficacyEvaluationsFixture :execrows
+-- Test-only fixture: age a project's reserved rows past a recovery lease so a
+-- test can make staleness deterministic instead of retrying a sweep that
+-- recovers rows cumulatively.
+UPDATE skill_efficacy_evaluations
+SET updated_at = updated_at - @backdate_by::interval
+WHERE project_id = @project_id
+  AND state = 'reserved';
 
 -- name: ClearSkillEfficacyClaimTokenFixture :execrows
 -- Test-only fixture for a reservation written before claim_token existed.

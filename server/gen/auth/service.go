@@ -23,6 +23,8 @@ type Service interface {
 	Login(context.Context, *LoginPayload) (res *LoginResult, err error)
 	// Switches the authentication scope to a different organization.
 	SwitchScopes(context.Context, *SwitchScopesPayload) (res *SwitchScopesResult, err error)
+	// Switches the current session into the shared read-only demo organization.
+	EnterDemo(context.Context, *EnterDemoPayload) (res *EnterDemoResult, err error)
 	// Logs out the current user by clearing their session.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
 	// Register a new org for a user with their session information.
@@ -51,7 +53,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"callback", "login", "switchScopes", "logout", "register", "info"}
+var MethodNames = [7]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -65,6 +67,19 @@ type CallbackPayload struct {
 type CallbackResult struct {
 	// The URL to redirect to after authentication
 	Location string
+	// The authentication session
+	SessionToken string
+	// The authentication session
+	SessionCookie string
+}
+
+// EnterDemoPayload is the payload type of the auth service enterDemo method.
+type EnterDemoPayload struct {
+	SessionToken *string
+}
+
+// EnterDemoResult is the result type of the auth service enterDemo method.
+type EnterDemoResult struct {
 	// The authentication session
 	SessionToken string
 	// The authentication session

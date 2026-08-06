@@ -4250,6 +4250,244 @@ func DecodeResolveShadowMCPInventoryRequestResponse(decoder func(*http.Response)
 	}
 }
 
+// BuildRequestAccessRequest instantiates a HTTP request object with method and
+// path set to call the "access" service "requestAccess" endpoint
+func (c *Client) BuildRequestAccessRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RequestAccessAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "requestAccess", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRequestAccessRequest returns an encoder for requests sent to the
+// access requestAccess server.
+func EncodeRequestAccessRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.RequestAccessPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "requestAccess", "*access.RequestAccessPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRequestAccessRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "requestAccess", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRequestAccessResponse returns a decoder for responses returned by the
+// access requestAccess endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeRequestAccessResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRequestAccessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RequestAccessResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			res := NewRequestAccessResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RequestAccessUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RequestAccessForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RequestAccessBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RequestAccessNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RequestAccessConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RequestAccessUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RequestAccessInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RequestAccessInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+				}
+				err = ValidateRequestAccessInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+				}
+				return nil, NewRequestAccessInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RequestAccessUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+				}
+				err = ValidateRequestAccessUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+				}
+				return nil, NewRequestAccessUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "requestAccess", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RequestAccessGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "requestAccess", err)
+			}
+			err = ValidateRequestAccessGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "requestAccess", err)
+			}
+			return nil, NewRequestAccessGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "requestAccess", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRBACStatusRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "getRBACStatus" endpoint
 func (c *Client) BuildGetRBACStatusRequest(ctx context.Context, v any) (*http.Request, error) {
