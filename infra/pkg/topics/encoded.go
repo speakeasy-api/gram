@@ -42,7 +42,7 @@ import (
 var ErrUnknownTopic = errors.New("unknown pubsub topic")
 
 // Publisher publishes already-marshaled payloads to topics named at runtime.
-// Set is the real implementation; NoopPublisher is the seam for binaries and
+// Mux is the real implementation; NoopPublisher is the seam for binaries and
 // tests with no Pub/Sub client, mirroring gcp.Publisher and gcp.NoopPublisher.
 type Publisher interface {
 	// Publish sends data to the topic named by name, verbatim. The slice is
@@ -56,7 +56,7 @@ type Publisher interface {
 }
 
 var (
-	_ Publisher = (*Set)(nil)
+	_ Publisher = (*Mux)(nil)
 	_ Publisher = (*NoopPublisher)(nil)
 )
 
@@ -71,13 +71,13 @@ func (n *NoopPublisher) Publish(context.Context, string, []byte, map[string]stri
 
 func (n *NoopPublisher) Stop(context.Context) error { return nil }
 
-// Set holds one publisher per topic, built on first use.
+// Mux routes each publish to a per-topic publisher, built on first use.
 //
 // Publishers are created lazily rather than up front because a caller choosing
 // topics at runtime has no way to know which ones it will use, and opening a
 // publisher for every declared topic would create client state for topics it
 // never touches.
-type Set struct {
+type Mux struct {
 	broker   gcp.PublisherBroker
 	settings *pubsub.PublishSettings
 
@@ -102,10 +102,10 @@ type topicPublisher struct {
 	pub gcp.EncodedPublisher
 }
 
-// NewSet returns a lazily populated set of topic publishers. settings, when
+// NewMux returns a lazily populated mux of topic publishers. settings, when
 // non-nil, is applied to every publisher it opens.
-func NewSet(broker gcp.PublisherBroker, settings *pubsub.PublishSettings) *Set {
-	return &Set{
+func NewMux(broker gcp.PublisherBroker, settings *pubsub.PublishSettings) *Mux {
+	return &Mux{
 		broker:     broker,
 		settings:   settings,
 		mu:         sync.Mutex{},
@@ -120,9 +120,9 @@ func NewSet(broker gcp.PublisherBroker, settings *pubsub.PublishSettings) *Set {
 // also reconciles each topic as a side effect, which is what creates them in
 // local dev before anything publishes. The publishers are cached, so warming
 // costs nothing that first use would not have.
-func (s *Set) Warm(ctx context.Context) error {
+func (m *Mux) Warm(ctx context.Context) error {
 	for _, topic := range All() {
-		if _, err := s.publisherFor(ctx, topic); err != nil {
+		if _, err := m.publisherFor(ctx, topic); err != nil {
 			return err
 		}
 	}
@@ -132,13 +132,13 @@ func (s *Set) Warm(ctx context.Context) error {
 
 // Publish sends an already-marshaled payload to the named topic. An undeclared
 // name yields ErrUnknownTopic without contacting Pub/Sub.
-func (s *Set) Publish(ctx context.Context, name string, data []byte, attrs map[string]string) gcp.PublishResult {
+func (m *Mux) Publish(ctx context.Context, name string, data []byte, attrs map[string]string) gcp.PublishResult {
 	topic, ok := Lookup(name)
 	if !ok {
 		return gcp.NewErrPublishResult(fmt.Errorf("%w: %s", ErrUnknownTopic, name))
 	}
 
-	pub, err := s.publisherFor(ctx, topic)
+	pub, err := m.publisherFor(ctx, topic)
 	if err != nil {
 		return gcp.NewErrPublishResult(err)
 	}
@@ -146,20 +146,20 @@ func (s *Set) Publish(ctx context.Context, name string, data []byte, attrs map[s
 	return pub.PublishEncoded(ctx, data, attrs)
 }
 
-func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublisher, error) {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		// Not permanent: the set is stopping because the process is, and the
+func (m *Mux) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublisher, error) {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		// Not permanent: the mux is stopping because the process is, and the
 		// row will be retried by whichever process claims it next.
-		return nil, fmt.Errorf("publisher set is stopped: cannot publish to %s", topic)
+		return nil, fmt.Errorf("publisher mux is stopped: cannot publish to %s", topic)
 	}
-	tp, ok := s.publishers[topic]
+	tp, ok := m.publishers[topic]
 	if !ok {
 		tp = &topicPublisher{mu: sync.Mutex{}, pub: nil}
-		s.publishers[topic] = tp
+		m.publishers[topic] = tp
 	}
-	s.mu.Unlock()
+	m.mu.Unlock()
 
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
@@ -175,7 +175,7 @@ func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublish
 	// surfaces here too. Marking those permanent would dead-letter a
 	// perfectly valid row over a blip or a shutdown; caching them would make
 	// the blip last forever.
-	pub, err := newPublisher(ctx, s.broker, topic, s.settings)
+	pub, err := newPublisher(ctx, m.broker, topic, m.settings)
 	if err != nil {
 		return nil, fmt.Errorf("create publisher for topic %s: %w", topic, err)
 	}
@@ -185,20 +185,20 @@ func (s *Set) publisherFor(ctx context.Context, topic Topic) (gcp.EncodedPublish
 	return pub, nil
 }
 
-// Stop flushes every publisher this set has opened. Flushes run concurrently
+// Stop flushes every publisher this mux has opened. Flushes run concurrently
 // so shutdown is bounded by the slowest one rather than their sum: under a
 // shared deadline, a sequential loop would let one slow topic starve the rest
 // of their flush window, abandoning buffered messages that then get re-claimed
 // and re-published on the next drain.
-func (s *Set) Stop(ctx context.Context) error {
-	s.mu.Lock()
-	s.closed = true
-	tps := make([]*topicPublisher, 0, len(s.publishers))
-	for _, tp := range s.publishers {
+func (m *Mux) Stop(ctx context.Context) error {
+	m.mu.Lock()
+	m.closed = true
+	tps := make([]*topicPublisher, 0, len(m.publishers))
+	for _, tp := range m.publishers {
 		tps = append(tps, tp)
 	}
-	clear(s.publishers)
-	s.mu.Unlock()
+	clear(m.publishers)
+	m.mu.Unlock()
 
 	errs := make([]error, len(tps))
 	var wg sync.WaitGroup

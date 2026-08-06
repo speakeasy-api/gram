@@ -1062,7 +1062,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	// misconfigured emulator, say) fails boot naming the topic instead of
 	// dead-lettering outbox rows one retry budget at a time. On the emulator
 	// this is also what reconciles the topics into existence.
-	outboxPublisher := topics.NewSet(psbroker, &outboxPublishSettings)
+	outboxPublisher := topics.NewMux(psbroker, &outboxPublishSettings)
 	if err := outboxPublisher.Warm(ctx); err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to warm outbox topic publishers: %w", err)
 	}

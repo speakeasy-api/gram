@@ -28,7 +28,7 @@ type stubBroker struct {
 }
 
 // newStubBroker registers a cleanup that closes every client the broker
-// created: Set.Stop stops publishers but has no view of the clients behind
+// created: Mux.Stop stops publishers but has no view of the clients behind
 // them, so without this each test leaks a gRPC client and its goroutines.
 func newStubBroker(t *testing.T) *stubBroker {
 	t.Helper()
@@ -99,35 +99,35 @@ func TestAllCoversDeclaredTopics(t *testing.T) {
 	}
 }
 
-func TestSetPublish_UnknownTopic(t *testing.T) {
+func TestMuxPublish_UnknownTopic(t *testing.T) {
 	t.Parallel()
 
 	broker := newStubBroker(t)
-	set := NewSet(broker, nil)
+	mux := NewMux(broker, nil)
 
-	_, err := set.Publish(t.Context(), "gram.nope.v1.Missing", []byte("x"), nil).Get(t.Context())
+	_, err := mux.Publish(t.Context(), "gram.nope.v1.Missing", []byte("x"), nil).Get(t.Context())
 
 	require.ErrorIs(t, err, ErrUnknownTopic)
 	require.Zero(t, broker.calls, "an undeclared topic must fail before a publisher is opened")
 }
 
-// TestSetPublish_DoesNotDecodePayloads pins the byte-orientation of the whole
+// TestMuxPublish_DoesNotDecodePayloads pins the byte-orientation of the whole
 // package: bytes that do not parse as the topic's message type are still
 // handed to Pub/Sub, because deciding whether they parse is the topic's
 // server-side BINARY schema's job. A client-side decode here would re-render
 // the payload, and the transactional outbox depends on the committed bytes
 // reaching the wire verbatim.
-func TestSetPublish_DoesNotDecodePayloads(t *testing.T) {
+func TestMuxPublish_DoesNotDecodePayloads(t *testing.T) {
 	t.Parallel()
 
 	broker := newStubBroker(t)
-	set := NewSet(broker, boundedSettings())
-	t.Cleanup(func() { _ = set.Stop(context.Background()) })
+	mux := NewMux(broker, boundedSettings())
+	t.Cleanup(func() { _ = mux.Stop(context.Background()) })
 
 	// Field 1, length-delimited, with the length byte truncated.
 	corrupt := []byte{0x0A, 0xFF}
 
-	_, err := set.Publish(t.Context(), string(GramPingV2Message), corrupt, nil).Get(t.Context())
+	_, err := mux.Publish(t.Context(), string(GramPingV2Message), corrupt, nil).Get(t.Context())
 
 	// The failure must come from the wire, not from a decode: a client-side
 	// parse check would reject the corrupt bytes immediately, before the
@@ -142,68 +142,68 @@ func TestSetPublish_DoesNotDecodePayloads(t *testing.T) {
 	require.Equal(t, 1, broker.calls, "the payload must reach the publisher without a decode standing in the way")
 }
 
-func TestSetPublish_CachesPublisherPerTopic(t *testing.T) {
+func TestMuxPublish_CachesPublisherPerTopic(t *testing.T) {
 	t.Parallel()
 
 	broker := newStubBroker(t)
-	set := NewSet(broker, boundedSettings())
-	t.Cleanup(func() { _ = set.Stop(context.Background()) })
+	mux := NewMux(broker, boundedSettings())
+	t.Cleanup(func() { _ = mux.Stop(context.Background()) })
 
 	data, err := proto.Marshal(&pingv2.Message{})
 	require.NoError(t, err)
 
 	for range 3 {
-		set.Publish(t.Context(), string(GramPingV2Message), data, nil)
+		mux.Publish(t.Context(), string(GramPingV2Message), data, nil)
 	}
 
 	require.Equal(t, 1, broker.calls, "each topic should open exactly one publisher")
 }
 
-// TestSetPublish_BrokerFailureIsRetryable is the distinction that keeps a
+// TestMuxPublish_BrokerFailureIsRetryable is the distinction that keeps a
 // valid row out of the dead letter table. Creating a publisher is not a pure
 // lookup — the emulator reconciles the topic over the network first, and a
 // cancelled context lands here too — so a failure at this point says nothing
 // about whether the topic exists.
-func TestSetPublish_BrokerFailureIsRetryable(t *testing.T) {
+func TestMuxPublish_BrokerFailureIsRetryable(t *testing.T) {
 	t.Parallel()
 
 	broker := newStubBroker(t)
 	broker.err = context.DeadlineExceeded
-	set := NewSet(broker, nil)
+	mux := NewMux(broker, nil)
 
-	_, err := set.Publish(t.Context(), string(GramRiskV1Finding), nil, nil).Get(t.Context())
+	_, err := mux.Publish(t.Context(), string(GramRiskV1Finding), nil, nil).Get(t.Context())
 
 	require.ErrorIs(t, err, context.DeadlineExceeded, "the underlying cause must stay inspectable")
 	require.NotErrorIs(t, err, ErrUnknownTopic,
 		"the topic is declared; the broker just could not be reached")
 }
 
-// TestSetWarm_BuildsEveryDeclaredTopic pins what Warm is for: one broker probe
+// TestMuxWarm_BuildsEveryDeclaredTopic pins what Warm is for: one broker probe
 // per declared topic at boot, cached so first use pays nothing further.
-func TestSetWarm_BuildsEveryDeclaredTopic(t *testing.T) {
+func TestMuxWarm_BuildsEveryDeclaredTopic(t *testing.T) {
 	t.Parallel()
 
 	broker := newStubBroker(t)
-	set := NewSet(broker, boundedSettings())
-	t.Cleanup(func() { _ = set.Stop(context.Background()) })
+	mux := NewMux(broker, boundedSettings())
+	t.Cleanup(func() { _ = mux.Stop(context.Background()) })
 
-	require.NoError(t, set.Warm(t.Context()))
+	require.NoError(t, mux.Warm(t.Context()))
 	require.Equal(t, len(All()), broker.calls, "every declared topic must be probed")
 
 	data, err := proto.Marshal(&pingv2.Message{})
 	require.NoError(t, err)
-	set.Publish(t.Context(), string(GramPingV2Message), data, nil)
+	mux.Publish(t.Context(), string(GramPingV2Message), data, nil)
 	require.Equal(t, len(All()), broker.calls, "publishing after Warm must reuse the warmed publisher")
 }
 
-func TestSetWarm_SurfacesBrokerFailure(t *testing.T) {
+func TestMuxWarm_SurfacesBrokerFailure(t *testing.T) {
 	t.Parallel()
 
 	broker := newStubBroker(t)
 	broker.err = context.DeadlineExceeded
-	set := NewSet(broker, nil)
+	mux := NewMux(broker, nil)
 
-	err := set.Warm(t.Context())
+	err := mux.Warm(t.Context())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.ErrorContains(t, err, string(All()[0]), "the failure must name the topic it happened on")
 }
@@ -218,25 +218,25 @@ func TestNoopPublisher(t *testing.T) {
 	require.NoError(t, pub.Stop(t.Context()))
 }
 
-// TestSetPublish_AfterStopFails pins the shutdown lifecycle: once Stop has
+// TestMuxPublish_AfterStopFails pins the shutdown lifecycle: once Stop has
 // begun, a racing publish must fail rather than repopulate the cleared cache
 // with a publisher nothing ever flushes.
-func TestSetPublish_AfterStopFails(t *testing.T) {
+func TestMuxPublish_AfterStopFails(t *testing.T) {
 	t.Parallel()
 
 	broker := newStubBroker(t)
-	set := NewSet(broker, boundedSettings())
-	require.NoError(t, set.Stop(context.Background()))
+	mux := NewMux(broker, boundedSettings())
+	require.NoError(t, mux.Stop(context.Background()))
 
-	_, err := set.Publish(t.Context(), string(GramPingV2Message), []byte("x"), nil).Get(t.Context())
+	_, err := mux.Publish(t.Context(), string(GramPingV2Message), []byte("x"), nil).Get(t.Context())
 	require.ErrorContains(t, err, "stopped")
-	require.Zero(t, broker.calls, "a stopped set must not open new publishers")
+	require.Zero(t, broker.calls, "a stopped mux must not open new publishers")
 }
 
-func TestSetStopIsSafeWithoutPublishers(t *testing.T) {
+func TestMuxStopIsSafeWithoutPublishers(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, NewSet(newStubBroker(t), nil).Stop(context.Background()))
+	require.NoError(t, NewMux(newStubBroker(t), nil).Stop(context.Background()))
 }
 
 var _ gcp.PublisherBroker = (*stubBroker)(nil)
