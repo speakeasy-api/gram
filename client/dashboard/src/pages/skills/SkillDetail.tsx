@@ -244,6 +244,22 @@ function SkillDetailSections({
                 <dt className="text-muted-foreground text-xs">Summary</dt>
                 <dd className="mt-1 text-sm">{skill.summary || "None"}</dd>
               </div>
+              <div className="sm:col-span-3">
+                <dt className="text-muted-foreground text-xs">Tags</dt>
+                <dd className="mt-1">
+                  {skill.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {skill.tags.map((tag) => (
+                        <Badge key={tag} variant="neutral" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm">None</span>
+                  )}
+                </dd>
+              </div>
             </dl>
           </SettingsSection.Body>
           <SettingsSection.Footer>

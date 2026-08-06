@@ -8,6 +8,7 @@ import {
   collectibleHeaders,
   dedupeRemotesByUrl,
   filterToHttpRemotes,
+  isFigmaCatalogServer,
   normalizeRemoteUrl,
 } from "./remotes";
 import type { PulseMCPServer } from "./hooks";
@@ -30,10 +31,13 @@ function remote(
   };
 }
 
-function server(remotes: ExternalMCPRemote[]): PulseMCPServer {
+function server(
+  remotes: ExternalMCPRemote[],
+  registrySpecifier = "test/server",
+): PulseMCPServer {
   return {
     description: "test",
-    registrySpecifier: "test/server",
+    registrySpecifier,
     version: "0.1.0",
     meta: {},
     toolCount: 0,
@@ -76,6 +80,16 @@ describe("dedupeRemotesByUrl", () => {
 
   it("handles an empty list", () => {
     expect(dedupeRemotesByUrl([])).toEqual([]);
+  });
+});
+
+describe("isFigmaCatalogServer", () => {
+  it("returns true for Figma's registry specifier", () => {
+    expect(isFigmaCatalogServer(server([], "com.figma.mcp/mcp"))).toBe(true);
+  });
+
+  it("returns false for a non-Figma server", () => {
+    expect(isFigmaCatalogServer(server([], "test/server"))).toBe(false);
   });
 });
 

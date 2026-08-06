@@ -38756,6 +38756,16 @@ paths:
               type: string
             type: array
         - allowEmptyValue: true
+          description: Only return skills that have any of these tags.
+          in: query
+          name: tags
+          schema:
+            description: Only return skills that have any of these tags.
+            items:
+              maxLength: 64
+              type: string
+            type: array
+        - allowEmptyValue: true
           description: How to order skills.
           in: query
           name: sort
@@ -39395,6 +39405,105 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillSuggestions
+  /rpc/skills.listTags:
+    get:
+      description: List distinct tags used by active skills in the project. The implementation requires the skills product feature and skill read scope.
+      operationId: listSkillTags
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillTagsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listTags skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listTags
+      x-speakeasy-react-hook:
+        name: SkillTags
   /rpc/skills.listUnknownActivations:
     get:
       description: List terminal skill activations that could not be attributed to a skill version.
@@ -40173,7 +40282,7 @@ paths:
         name: UnshareSkill
   /rpc/skills.update:
     post:
-      description: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+      description: Rename an active skill or update its display name, summary, and tags. The implementation requires the skills product feature and skill write scope.
       operationId: updateSkill
       parameters:
         - allowEmptyValue: true
@@ -61782,6 +61891,16 @@ components:
       required:
         - suggestions
         - total_open_count
+    ListSkillTagsResult:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+          description: Distinct tags used by active skills in the project, sorted lexicographically.
+      required:
+        - tags
     ListSkillVersionsResult:
       type: object
       properties:
@@ -68755,6 +68874,11 @@ components:
         summary:
           type: string
           description: The optional registry summary.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Registry tags for categorizing the skill.
         updated_at:
           type: string
           description: When the skill was last updated.
@@ -68771,6 +68895,7 @@ components:
         - display_name
         - source_kind
         - classification
+        - tags
         - version_count
         - has_valid_version
         - seen_count
@@ -73478,10 +73603,18 @@ components:
           type: string
           description: The optional skill summary.
           maxLength: 1024
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 64
+          description: Registry tags for categorizing the skill. At most 40 tags.
+          maxItems: 40
       required:
         - id
         - name
         - display_name
+        - tags
     UpdateSpendRuleRequestBody:
       type: object
       properties:

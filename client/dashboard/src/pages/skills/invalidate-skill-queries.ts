@@ -3,6 +3,7 @@ import { invalidateAllSkillDistributions } from "@gram/client/react-query/skillD
 import { invalidateAllSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { invalidateAllSkillFeedback } from "@gram/client/react-query/skillFeedback.js";
 import { invalidateAllSkillSuggestions } from "@gram/client/react-query/skillSuggestions.js";
+import { invalidateAllSkillTags } from "@gram/client/react-query/skillTags.js";
 import { invalidateAllSkillVersions } from "@gram/client/react-query/skillVersions.js";
 import { invalidateAllSkills } from "@gram/client/react-query/skills.js";
 import type { QueryClient } from "@tanstack/react-query";
@@ -18,5 +19,6 @@ export async function invalidateSkillQueries(
     invalidateAllSkillSuggestions(queryClient),
     invalidateAllSkillFeedback(queryClient),
     invalidateAllSkillEfficacyInsights(queryClient),
+    invalidateAllSkillTags(queryClient),
   ]);
 }
