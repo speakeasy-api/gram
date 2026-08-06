@@ -767,7 +767,7 @@
         },
         {
           "name": "charged_usd",
-          "description": "provider-charged amount, kept distinct from the computed model cost per the normalized fact catalog (Cursor only)",
+          "description": "provider-charged amount, kept deliberately distinct from the computed model cost (Cursor only)",
           "unit": "usd",
           "aggregation": "sum",
           "additivity": "full",
