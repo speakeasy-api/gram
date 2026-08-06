@@ -82,6 +82,76 @@ func TestDrain_TransientFailureSchedulesRetry(t *testing.T) {
 		"a row kept for retry must not also have been delivered, or the retry duplicates it")
 }
 
+// TestDrain_RetryBackoffFollowsEachRowsOwnAttemptCount pins the back-off to the
+// row rather than to the batch. Claims are ordered by id, so a batch routinely
+// mixes rows that have been failing for a while with rows enqueued seconds ago.
+// Settling all of them on the youngest row's attempt count collapses the
+// exponential schedule for the older ones, and while traffic keeps arriving
+// there is always a young row — so back-off never escalates and a batch burns
+// its whole attempt budget within a minute of the first failure.
+func TestDrain_RetryBackoffFollowsEachRowsOwnAttemptCount(t *testing.T) {
+	t.Parallel()
+
+	inst := newRelayTestInstance(t)
+	orgID := seedOrg(t, inst.conn)
+
+	// Seeded first so it holds the lowest id: this is the row whose attempt
+	// count used to dictate the delay for everything claimed alongside it.
+	fresh := seedRow(t, inst.conn, orgID, seedOptions{})
+
+	// Claiming bumps these to 9 — one short of the dead-letter threshold, and
+	// far enough along the 5s * 2^attempts curve that it has saturated at the
+	// ten minute cap.
+	const agedCount = 20
+	aged := make([]testrepo.SeedPublishOutboxRowRow, 0, agedCount)
+	for range agedCount {
+		aged = append(aged, seedRow(t, inst.conn, orgID, seedOptions{attempts: 8}))
+	}
+
+	inst.pub.failWith = func(protoreflect.FullName, int) error {
+		return errors.New("pubsub unavailable")
+	}
+
+	before := time.Now()
+	result, err := inst.relay.Drain(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, agedCount+1, result.Retrying)
+	require.Equal(t, 0, result.DeadLettered)
+
+	// A row on attempt 1 draws its delay from the next ten seconds. The extra
+	// margin covers the drain itself, which runs after this ceiling's origin.
+	freshCeiling := before.Add(15 * time.Second)
+
+	stored, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), fresh.ID)
+	require.NoError(t, err)
+	require.True(t, stored.RetryAfter.Valid)
+	require.WithinRange(t, stored.RetryAfter.Time, before, freshCeiling,
+		"a first attempt must not inherit the longer back-off of the rows it was claimed with")
+
+	windows := make(map[int64]struct{}, agedCount)
+	beyondFreshCeiling := 0
+	for _, row := range aged {
+		storedAged, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), row.ID)
+		require.NoError(t, err)
+		require.True(t, storedAged.RetryAfter.Valid)
+
+		windows[storedAged.RetryAfter.Time.UnixNano()] = struct{}{}
+		if storedAged.RetryAfter.Time.After(freshCeiling) {
+			beyondFreshCeiling++
+		}
+	}
+
+	// Each aged row draws from a ten minute window, so the odds of all twenty
+	// landing inside the fresh row's ten second one are (1/40)^20.
+	require.NotZero(t, beyondFreshCeiling,
+		"an aged row must back off on its own attempt count, not the batch minimum")
+
+	// Jitter is per row for the same reason the delay is: one timestamp for the
+	// batch makes every row eligible again at the same instant, which is the
+	// thundering herd the jitter exists to break up.
+	require.Greater(t, len(windows), 1, "each retrying row must get its own jittered retry window")
+}
+
 func TestDrain_UnknownTopicDeadLetters(t *testing.T) {
 	t.Parallel()
 
@@ -388,9 +458,11 @@ func TestSettlementIgnoresRowsReclaimedAfterLeaseExpiry(t *testing.T) {
 	require.Zero(t, deadLettered)
 
 	require.NoError(t, q.MarkPublishOutboxFailed(t.Context(), repo.MarkPublishOutboxFailedParams{
-		Ids:        ids,
-		LastError:  conv.ToPGTextEmpty("stale"),
-		RetryAfter: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Ids:       ids,
+		LastError: conv.ToPGTextEmpty("stale"),
+		RetryAfters: []pgtype.Timestamptz{
+			{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		},
 		LeaseToken: staleToken,
 	}))
 

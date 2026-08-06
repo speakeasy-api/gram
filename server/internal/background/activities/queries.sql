@@ -287,14 +287,24 @@ WHERE id = ANY(@ids::bigint[])
 -- name: MarkPublishOutboxFailed :exec
 -- Records a transient publish failure and releases the lease so the row is
 -- eligible again once retry_after elapses.
+--
+-- retry_after arrives per row, expanded in lockstep with the ids. A claim is
+-- ordered by id, so one batch mixes rows on their first attempt with rows deep
+-- into their back-off; a single timestamp for the batch would hand every row
+-- the shortest delay among them, and back-off would never escalate for as long
+-- as new rows kept arriving.
 UPDATE publish_outbox SET
     last_error = @last_error,
-    retry_after = @retry_after,
+    retry_after = settlement.retry_after,
     locked_until = NULL,
     lease_token = NULL,
     updated_at = clock_timestamp()
-WHERE id = ANY(@ids::bigint[])
-  AND lease_token = @lease_token::uuid;
+FROM (
+  SELECT unnest(@ids::bigint[]) AS id,
+         unnest(@retry_afters::timestamptz[]) AS retry_after
+) AS settlement
+WHERE publish_outbox.id = settlement.id
+  AND publish_outbox.lease_token = @lease_token::uuid;
 
 -- name: DeadLetterPublishOutboxRows :execrows
 -- Moves rows that can never publish out of the queue in one statement, so a

@@ -819,29 +819,39 @@ func (q *Queries) MarkOutboxRelayProcessed(ctx context.Context, arg MarkOutboxRe
 const markPublishOutboxFailed = `-- name: MarkPublishOutboxFailed :exec
 UPDATE publish_outbox SET
     last_error = $1,
-    retry_after = $2,
+    retry_after = settlement.retry_after,
     locked_until = NULL,
     lease_token = NULL,
     updated_at = clock_timestamp()
-WHERE id = ANY($3::bigint[])
-  AND lease_token = $4::uuid
+FROM (
+  SELECT unnest($3::bigint[]) AS id,
+         unnest($4::timestamptz[]) AS retry_after
+) AS settlement
+WHERE publish_outbox.id = settlement.id
+  AND publish_outbox.lease_token = $2::uuid
 `
 
 type MarkPublishOutboxFailedParams struct {
-	LastError  pgtype.Text
-	RetryAfter pgtype.Timestamptz
-	Ids        []int64
-	LeaseToken uuid.UUID
+	LastError   pgtype.Text
+	LeaseToken  uuid.UUID
+	Ids         []int64
+	RetryAfters []pgtype.Timestamptz
 }
 
 // Records a transient publish failure and releases the lease so the row is
 // eligible again once retry_after elapses.
+//
+// retry_after arrives per row, expanded in lockstep with the ids. A claim is
+// ordered by id, so one batch mixes rows on their first attempt with rows deep
+// into their back-off; a single timestamp for the batch would hand every row
+// the shortest delay among them, and back-off would never escalate for as long
+// as new rows kept arriving.
 func (q *Queries) MarkPublishOutboxFailed(ctx context.Context, arg MarkPublishOutboxFailedParams) error {
 	_, err := q.db.Exec(ctx, markPublishOutboxFailed,
 		arg.LastError,
-		arg.RetryAfter,
-		arg.Ids,
 		arg.LeaseToken,
+		arg.Ids,
+		arg.RetryAfters,
 	)
 	return err
 }

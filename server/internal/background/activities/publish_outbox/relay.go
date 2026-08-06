@@ -251,9 +251,10 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 	// Retries share a single error message per batch because they are settled in
 	// one UPDATE. The per-row error is logged in full below.
 	var lastRetryErr, lastDeadLetterErr error
-	// Back off on the fewest attempts among the retrying rows so no row waits
-	// longer than its own history warrants.
-	minRetryAttempts := int32(0)
+	// Retry windows do not share: a batch spans rows on their first attempt and
+	// rows deep into their back-off, and one delay for all of them would be the
+	// shortest one in the batch.
+	var retryAfters []pgtype.Timestamptz
 
 	for i, row := range rows {
 		err := failures[i]
@@ -271,10 +272,8 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 				attr.SlogError(err),
 			)
 		default:
-			if len(retry) == 0 || row.Attempts < minRetryAttempts {
-				minRetryAttempts = row.Attempts
-			}
 			retry = append(retry, row.ID)
+			retryAfters = append(retryAfters, calcRetryAfter(row.Attempts))
 			lastRetryErr = err
 			r.logger.WarnContext(ctx, "publish outbox row failed, will retry",
 				attr.SlogOrganizationID(row.OrganizationID),
@@ -313,10 +312,10 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 
 	if len(retry) > 0 {
 		if err := q.MarkPublishOutboxFailed(ctx, repo.MarkPublishOutboxFailedParams{
-			Ids:        retry,
-			LastError:  conv.ToPGTextEmpty(errString(lastRetryErr)),
-			RetryAfter: calcRetryAfter(minRetryAttempts),
-			LeaseToken: leaseToken,
+			Ids:         retry,
+			LastError:   conv.ToPGTextEmpty(errString(lastRetryErr)),
+			RetryAfters: retryAfters,
+			LeaseToken:  leaseToken,
 		}); err != nil {
 			return DrainResult{}, fmt.Errorf("mark publish outbox rows failed: %w", err)
 		}
