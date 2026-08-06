@@ -15,7 +15,7 @@
 //
 // Failure handling splits three ways:
 //
-//   - Permanent failures (unregistered topic, oversized payload, exhausted
+//   - Permanent failures (oversized payload, undecodable attributes, exhausted
 //     retry budget) move to publish_outbox_dead_letters.
 //   - Transient failures record an error and a jittered retry_after, releasing
 //     the lease so the row is picked up again later.

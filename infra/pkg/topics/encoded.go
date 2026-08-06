@@ -47,8 +47,11 @@ func (r failedResult) Ready() <-chan struct{} {
 func (r failedResult) Get(context.Context) (string, error) { return "", r.err }
 
 // ErrUnknownTopic is returned when a name does not correspond to any declared
-// topic. Treat it as permanent: an undeclared topic will not become declared
-// without a deploy, and a deploy re-reads the row anyway.
+// topic. Treat it as retryable, not permanent: writers validate names against
+// the same registry, so an unknown name here almost always means the row was
+// written by a binary newer than this one — a rolling deploy declared a topic
+// this registry predates. The condition clears when this binary is redeployed,
+// which nothing about an already-settled row would notice.
 var ErrUnknownTopic = errors.New("unknown pubsub topic")
 
 // Publisher publishes already-marshaled payloads to topics named at runtime.
