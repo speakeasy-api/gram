@@ -97,6 +97,45 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 	return i, err
 }
 
+const listUnencryptedOpenRouterAPIKeys = `-- name: ListUnencryptedOpenRouterAPIKeys :many
+SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+FROM openrouter_api_keys
+WHERE key_encrypted IS NULL
+  AND deleted IS FALSE
+`
+
+func (q *Queries) ListUnencryptedOpenRouterAPIKeys(ctx context.Context) ([]OpenrouterApiKey, error) {
+	rows, err := q.db.Query(ctx, listUnencryptedOpenRouterAPIKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenrouterApiKey
+	for rows.Next() {
+		var i OpenrouterApiKey
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.KeyType,
+			&i.Key,
+			&i.KeyEncrypted,
+			&i.KeyHash,
+			&i.MonthlyCredits,
+			&i.Disabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockOpenRouterKeyProvisioning = `-- name: LockOpenRouterKeyProvisioning :exec
 SELECT pg_advisory_xact_lock(hashtext('openrouter_key:' || $1::text || ':' || $2::text))
 `

@@ -28,6 +28,12 @@ WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE;
 
+-- name: ListUnencryptedOpenRouterAPIKeys :many
+SELECT *
+FROM openrouter_api_keys
+WHERE key_encrypted IS NULL
+  AND deleted IS FALSE;
+
 -- name: SetOpenRouterKeyEncryption :exec
 UPDATE openrouter_api_keys
 SET key_encrypted = @key_encrypted

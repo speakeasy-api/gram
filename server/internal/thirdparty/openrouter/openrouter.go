@@ -295,6 +295,22 @@ func (o *OpenRouter) decryptAPIKey(ctx context.Context, queries *repo.Queries, k
 	return key.Key, nil
 }
 
+// BackfillAPIKeyEncryption encrypts platform keys created before encrypted storage was available.
+func (o *OpenRouter) BackfillAPIKeyEncryption(ctx context.Context) error {
+	keys, err := o.repo.ListUnencryptedOpenRouterAPIKeys(ctx)
+	if err != nil {
+		return fmt.Errorf("list unencrypted openrouter API keys: %w", err)
+	}
+
+	for _, key := range keys {
+		if _, err := o.decryptAPIKey(ctx, o.repo, key); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
 	var openrouterKey string
 

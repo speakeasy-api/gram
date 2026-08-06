@@ -297,7 +297,11 @@ func newStreamsCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, encryptionClient)
+				openRouterClient := openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, encryptionClient)
+				if err := openRouterClient.BackfillAPIKeyEncryption(ctx); err != nil {
+					return fmt.Errorf("backfill openrouter API key encryption: %w", err)
+				}
+				openRouter = openRouterClient
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
