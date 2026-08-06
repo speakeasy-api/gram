@@ -2,18 +2,55 @@ import { Card } from "@/components/ui/Card";
 import { useSession } from "@/contexts/Auth";
 import { getEnterpriseTrialStatus } from "@/lib/enterprise-trial";
 import { Timer } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const SALES_URL = "https://www.speakeasy.com/talk-to-us";
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function EnterpriseTrialStatusCard(): JSX.Element | null {
   const { enterpriseTrial } = useSession();
+  const [now, setNow] = useState(() => new Date());
   const status = getEnterpriseTrialStatus(
     enterpriseTrial && {
       startedAt: enterpriseTrial.startedAt.toISOString(),
       endsAt: enterpriseTrial.endsAt.toISOString(),
     },
-    new Date(),
+    now,
   );
+
+  useEffect(() => {
+    setNow(new Date());
+  }, [enterpriseTrial?.startedAt, enterpriseTrial?.endsAt]);
+
+  useEffect(() => {
+    if (
+      enterpriseTrial === null ||
+      enterpriseTrial === undefined ||
+      status === null
+    ) {
+      return;
+    }
+
+    const currentTime = now.getTime();
+    const startsAt = enterpriseTrial.startedAt.getTime();
+    const endsAt = enterpriseTrial.endsAt.getTime();
+    const nextDayBoundary = startsAt + status.dayNumber * MILLISECONDS_PER_DAY;
+    const nextRemainingDaysBoundary =
+      endsAt - (status.remainingDays - 1) * MILLISECONDS_PER_DAY;
+    const nextUpdateAt = Math.min(
+      endsAt,
+      nextDayBoundary > currentTime ? nextDayBoundary : Infinity,
+      nextRemainingDaysBoundary > currentTime
+        ? nextRemainingDaysBoundary
+        : Infinity,
+    );
+    const timer = window.setTimeout(
+      () => setNow(new Date()),
+      nextUpdateAt - currentTime,
+    );
+
+    return () => window.clearTimeout(timer);
+  }, [enterpriseTrial, now, status]);
 
   if (status === null) {
     return null;
@@ -25,7 +62,7 @@ export function EnterpriseTrialStatusCard(): JSX.Element | null {
   const trialStatusLabel = `Enterprise trial: ${progressLabel}, ${daysLeftLabel}`;
 
   return (
-    <Card className="shadow-none group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none">
+    <Card className="shadow-none group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none group-data-[collapsible=icon]:[&>div]:p-2">
       <div
         role="group"
         aria-label={trialStatusLabel}

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession } from "@/contexts/Auth";
 
@@ -78,6 +78,41 @@ describe("EnterpriseTrialStatusCard", () => {
     const { container } = render(<EnterpriseTrialStatusCard />);
 
     expect(container.firstChild).toBeNull();
+  });
+
+  it("removes the card when the trial expires without a parent rerender", async () => {
+    vi.setSystemTime(new Date("2026-08-18T23:59:59.999Z"));
+
+    const { container } = render(<EnterpriseTrialStatusCard />);
+
+    expect(screen.getByText("1 day left")).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("updates the displayed day at a day boundary without a parent rerender", async () => {
+    render(<EnterpriseTrialStatusCard />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    });
+
+    expect(screen.getByText("Day 2/14")).toBeTruthy();
+    expect(screen.getByText("13 days left")).toBeTruthy();
+  });
+
+  it("uses compact card padding when the sidebar is collapsed", () => {
+    const { container } = render(<EnterpriseTrialStatusCard />);
+
+    expect(
+      container.firstElementChild?.classList.contains(
+        "group-data-[collapsible=icon]:[&>div]:p-2",
+      ),
+    ).toBe(true);
   });
 
   it("opens the Sales conversation safely in a new tab", () => {

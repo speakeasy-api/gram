@@ -134,13 +134,13 @@ func TestService_Info(t *testing.T) {
 	}{
 		{
 			name:        "converted",
-			endsAt:      time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
-			convertedAt: timestampPtr(time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC)),
+			endsAt:      time.Date(2100, time.August, 15, 12, 0, 0, 0, time.UTC),
+			convertedAt: timestampPtr(time.Date(2100, time.August, 2, 12, 0, 0, 0, time.UTC)),
 		},
 		{
 			name:      "demoted",
-			endsAt:    time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
-			demotedAt: timestampPtr(time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC)),
+			endsAt:    time.Date(2100, time.August, 15, 12, 0, 0, 0, time.UTC),
+			demotedAt: timestampPtr(time.Date(2100, time.August, 2, 12, 0, 0, 0, time.UTC)),
 		},
 		{
 			name:   "expired",
