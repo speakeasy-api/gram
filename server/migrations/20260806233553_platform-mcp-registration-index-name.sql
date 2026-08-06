@@ -1,7 +1,7 @@
 -- atlas:txmode none
 
--- Create index "platform_mcp_catalog_registrations_organization_connection_all_" to table: "platform_mcp_catalog_registrations"
-CREATE INDEX CONCURRENTLY "platform_mcp_catalog_registrations_organization_connection_all_" ON "platform_mcp_catalog_registrations" ("organization_id", "connection_id");
+-- Create index "platform_mcp_catalog_registrations_org_connection_idx" to table: "platform_mcp_catalog_registrations"
+CREATE INDEX CONCURRENTLY "platform_mcp_catalog_registrations_org_connection_idx" ON "platform_mcp_catalog_registrations" ("organization_id", "connection_id");
 -- Create index "platform_mcp_catalog_registrations_organization_project_idx" to table: "platform_mcp_catalog_registrations"
 CREATE INDEX CONCURRENTLY "platform_mcp_catalog_registrations_organization_project_idx" ON "platform_mcp_catalog_registrations" ("organization_id", "project_id");
 -- Create index "platform_mcp_catalog_registrations_project_mcp_endpoint_idx" to table: "platform_mcp_catalog_registrations"
