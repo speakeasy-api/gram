@@ -2095,6 +2095,20 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return true
 	}
 
+	if input.SkipIfUnchanged && preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
+		carryCfg := cfg
+		carryCfg.PlatformMCPEnabled = false
+		mcpPaths, err := mcpFilePaths(pluginInfos, carryCfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
+		}
+		verifiedFiles := make(map[string][]byte)
+		_, hooksIntact := carryHooksSubtree(verifiedFiles, existingFiles, targetHooksConfigJSON, cfg.OrgName)
+		if carry(verifiedFiles, mcpPaths) && carryPlatformMCPSubtree(verifiedFiles, existingFiles) && hooksIntact {
+			return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
+		}
+	}
+
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
