@@ -127,10 +127,22 @@ export function firstPartyConnectUrl(
   }
 }
 
-export function buildLoginRedirectURL(redirectTo: string | null): string {
-  let href = `${getServerURL()}/rpc/auth.login`;
-  if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
-  return href;
+export function buildLoginRedirectURL(
+  redirectTo: string | null,
+  orgName?: string,
+): string {
+  // The base is only consulted when getServerURL() is relative (empty in
+  // tests, per vitest.config.ts) — window.location.origin is always
+  // absolute, so `new URL` never throws here or in the browser.
+  const url = new URL(
+    `${getServerURL()}/rpc/auth.login`,
+    window.location.origin,
+  );
+  if (redirectTo) url.searchParams.set("redirect", redirectTo);
+  // Present only from the sign-up page. The server validates it, stashes it
+  // against the login nonce, and creates the org during the auth callback.
+  if (orgName) url.searchParams.set("org_name", orgName);
+  return url.toString();
 }
 
 /**

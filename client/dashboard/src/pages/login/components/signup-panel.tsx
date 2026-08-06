@@ -1,5 +1,7 @@
+import googleMark from "@/assets/google-mark.svg";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
+import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
@@ -8,88 +10,26 @@ const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9\s-_]+$/;
 const INVALID_ORG_NAME_MESSAGE =
   "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.";
 
-// Deliberately loose: the authoritative address comes back from the identity
-// provider, so this only catches obvious typos in the typed value.
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Matches the server's cap in validateOrgName. The server is authoritative and
+// rejects anything longer before the identity-provider hop; this only saves the
+// round trip.
+const MAX_ORG_NAME_LENGTH = 100;
 
-function validateFullName(value: string): string | undefined {
-  return value.trim() ? undefined : "Full name is required";
-}
-
-function validateEmail(value: string): string | undefined {
-  if (!value.trim()) return "Work email is required";
-  return EMAIL_REGEX.test(value.trim())
-    ? undefined
-    : "Enter a valid email address";
+// Pasted names often carry a non-breaking space, which JavaScript's `\s`
+// accepts and the server's Go regex does not.
+function normalizeCompanyName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function validateCompanyName(value: string): string | undefined {
-  if (!value.trim()) return "Company name is required";
-  return VALID_ORG_NAME_REGEX.test(value)
+  const normalized = normalizeCompanyName(value);
+  if (!normalized) return "Company name is required";
+  if (normalized.length > MAX_ORG_NAME_LENGTH) {
+    return `Company name must be ${MAX_ORG_NAME_LENGTH} characters or fewer`;
+  }
+  return VALID_ORG_NAME_REGEX.test(normalized)
     ? undefined
     : INVALID_ORG_NAME_MESSAGE;
-}
-
-// Mono uppercase label + input + inline error, per the sign up design. The
-// register panel's single field is styled inline; there are three here, so it
-// gets a component rather than three copies of the same class string.
-function SignUpField({
-  id,
-  label,
-  type,
-  placeholder,
-  value,
-  error,
-  disabled,
-  onChange,
-  onBlur,
-}: {
-  id: string;
-  label: string;
-  type: "text" | "email";
-  placeholder: string;
-  value: string;
-  error?: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-  onBlur: () => void;
-}): JSX.Element {
-  return (
-    <div className="flex flex-col gap-1">
-      <label
-        htmlFor={id}
-        className="auth-mono text-[12px] text-(--muted-strong)"
-      >
-        {label}
-      </label>
-      <input
-        id={id}
-        name={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        disabled={disabled}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
-        className={cn(
-          "w-full rounded-md border bg-(--card) px-3.5 py-[11px] text-[16px] text-black placeholder:text-(--muted) placeholder:opacity-55 focus:outline-none",
-          error
-            ? "border-(--vermilion)"
-            : "border-(--input-edge) focus:border-(--focus)",
-        )}
-      />
-      {error && (
-        <p
-          id={`${id}-error`}
-          className="mt-0.5 text-[12px] leading-[1.45] text-(--vermilion)"
-        >
-          {error}
-        </p>
-      )}
-    </div>
-  );
 }
 
 /** First error string for a field, or undefined. */
@@ -100,12 +40,14 @@ function firstError(errors: unknown[]): string | undefined {
 
 export function SignUpPanel(): JSX.Element {
   const form = useForm({
-    defaultValues: { fullName: "", email: "", companyName: "" },
-    onSubmit: () => {
-      // Account and org creation happen after the identity provider
-      // round-trip, on /register. The typed name and email are not persisted
-      // yet — the register endpoint only accepts an org name.
-      window.location.href = buildLoginRedirectURL("/register");
+    defaultValues: { companyName: "" },
+    onSubmit: ({ value }) => {
+      // The org itself is created server-side during the auth callback: the
+      // name rides on the login request, gets stashed against the login nonce,
+      // and never appears in a redirect param or the address bar.
+      window.location.assign(
+        buildLoginRedirectURL(null, normalizeCompanyName(value.companyName)),
+      );
     },
   });
 
@@ -131,14 +73,12 @@ export function SignUpPanel(): JSX.Element {
         ))}
       </div>
 
-      <SigninErrorNotice />
-
       <form
         onSubmit={(e) => {
           e.preventDefault();
           void form.handleSubmit();
         }}
-        className="mt-4 flex w-full flex-col gap-6"
+        className="mt-4 flex w-full flex-col gap-4"
       >
         <div className="flex flex-col gap-1">
           <p className="auth-mono text-[16px] tracking-[0.06em]">Sign up</p>
@@ -147,62 +87,19 @@ export function SignUpPanel(): JSX.Element {
           </p>
         </div>
 
-        {/* Fields and CTA share one subscription: `form.state` is a plain
-            getter onto the store, so only `Subscribe` (and `field.state`
-            inside `Field`) re-renders when the form state changes.
+        {/* Field and CTA share one subscription: `form.state` is a plain getter
+            onto the store, so only `Subscribe` (and `field.state` inside
+            `Field`) re-renders when form state changes.
 
             Validators run on change and again on submit, so an untouched empty
             form starts error-free with the CTA enabled — the design's default
-            state — and submitting it surfaces the required errors. */}
+            state — and submitting it surfaces the required error rather than
+            presenting a dead button. */}
         <form.Subscribe
           selector={(s) => [s.canSubmit, s.isSubmitting] as const}
         >
           {([canSubmit, isSubmitting]) => (
             <>
-              <form.Field
-                name="fullName"
-                validators={{
-                  onChange: ({ value }) => validateFullName(value),
-                  onSubmit: ({ value }) => validateFullName(value),
-                }}
-              >
-                {(field) => (
-                  <SignUpField
-                    id={field.name}
-                    label="Full name"
-                    type="text"
-                    placeholder="Sarah Chen"
-                    value={field.state.value}
-                    error={firstError(field.state.meta.errors)}
-                    disabled={isSubmitting}
-                    onChange={field.handleChange}
-                    onBlur={field.handleBlur}
-                  />
-                )}
-              </form.Field>
-
-              <form.Field
-                name="email"
-                validators={{
-                  onChange: ({ value }) => validateEmail(value),
-                  onSubmit: ({ value }) => validateEmail(value),
-                }}
-              >
-                {(field) => (
-                  <SignUpField
-                    id={field.name}
-                    label="Work email"
-                    type="email"
-                    placeholder="sarah@acme.com"
-                    value={field.state.value}
-                    error={firstError(field.state.meta.errors)}
-                    disabled={isSubmitting}
-                    onChange={field.handleChange}
-                    onBlur={field.handleBlur}
-                  />
-                )}
-              </form.Field>
-
               <form.Field
                 name="companyName"
                 validators={{
@@ -210,37 +107,84 @@ export function SignUpPanel(): JSX.Element {
                   onSubmit: ({ value }) => validateCompanyName(value),
                 }}
               >
-                {(field) => (
-                  <SignUpField
-                    id={field.name}
-                    label="Company name"
-                    type="text"
-                    placeholder="Acme Inc"
-                    value={field.state.value}
-                    error={firstError(field.state.meta.errors)}
-                    disabled={isSubmitting}
-                    onChange={field.handleChange}
-                    onBlur={field.handleBlur}
-                  />
-                )}
+                {(field) => {
+                  const error = firstError(field.state.meta.errors);
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <label
+                        htmlFor={field.name}
+                        className="auth-mono text-[12px] text-(--muted-strong)"
+                      >
+                        Company name
+                      </label>
+                      <input
+                        id={field.name}
+                        name={field.name}
+                        type="text"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="Acme Inc"
+                        disabled={isSubmitting}
+                        aria-invalid={error ? true : undefined}
+                        aria-describedby={
+                          error ? `${field.name}-error` : undefined
+                        }
+                        className={cn(
+                          "w-full rounded-md border bg-(--card) px-3.5 py-[11px] text-[16px] text-black placeholder:text-(--muted) placeholder:opacity-55 focus:outline-none",
+                          error
+                            ? "border-destructive-default"
+                            : "border-(--input-edge) focus:border-(--focus)",
+                        )}
+                      />
+                      {error && (
+                        <p
+                          id={`${field.name}-error`}
+                          className="mt-0.5 text-[12px] leading-[1.45] text-destructive"
+                        >
+                          {error}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
               </form.Field>
 
+              {/* The mark swaps for a spinner in the same leading slot and the
+                  label is unchanged, so the button keeps its width while the
+                  handoff is in flight. */}
               <button
                 type="submit"
-                disabled={!canSubmit}
+                disabled={!canSubmit || isSubmitting}
                 className={cn(
                   AUTH_BUTTON_CLASSES,
-                  "mt-1 w-full disabled:cursor-not-allowed disabled:opacity-50",
+                  "mx-auto gap-3 px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
                 )}
               >
-                {isSubmitting ? "Creating account" : "Start trial"}
+                {isSubmitting ? (
+                  <Loader2
+                    className="h-[18px] w-[18px] flex-none animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <img
+                    src={googleMark}
+                    alt=""
+                    className="h-[18px] w-[18px] flex-none"
+                  />
+                )}
+                Continue with Google
               </button>
             </>
           )}
         </form.Subscribe>
       </form>
 
-      <p className="text-[14px] text-(--muted-strong)">
+      {/* Auth failures return as ?signin_error=. The design places the notice
+          below the CTA, not above the heading. */}
+      <SigninErrorNotice />
+
+      <p className="mt-2 text-[14px] text-(--muted-strong)">
         Already have an account?{" "}
         <Link
           to="/login"
