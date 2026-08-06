@@ -1043,6 +1043,17 @@ WHERE p.project_id = @project_id
     WHERE rr.skill_version_id = @skill_version_id
       AND rr.risk_policy_id = p.id
   )
+  -- Pin the anchor to the same project as the policy. The caller passes a
+  -- version id it just captured under the authed project, so this is
+  -- defence in depth: it keeps a foreign version id from being anchored
+  -- under a local policy if a future caller is less careful.
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    JOIN skills sk ON sk.id = sv.skill_id
+    WHERE sv.id = @skill_version_id
+      AND sk.project_id = p.project_id
+  )
 ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL DO NOTHING;
 
 -- name: DeleteRiskResultsForMessages :exec
@@ -1071,7 +1082,10 @@ WHERE rr.id = @id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
   AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL;
+  AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL;
 
 -- name: ListRiskResultsByProjectFound :many
 -- Sort by the underlying chat message's created_at (the event time), NOT
@@ -1136,6 +1150,9 @@ FROM (
   ) blk ON TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+    -- fail the non-null scan. They need their own read path, not this one.
+    AND rr.skill_version_id IS NULL
     AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < sqlc.narg(to_time)::timestamptz)
@@ -1228,6 +1245,9 @@ LEFT JOIN LATERAL (
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
     OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -1485,6 +1505,9 @@ LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.false_positive_at IS NOT NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     sqlc.narg(cursor_false_positive_at)::timestamptz IS NULL
     OR (rr.false_positive_at, rr.id) < (sqlc.narg(cursor_false_positive_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
