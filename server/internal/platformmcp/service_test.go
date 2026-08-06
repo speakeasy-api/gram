@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -57,14 +58,16 @@ func TestServiceRevokeConnection(t *testing.T) {
 	}{
 		{name: "live admin can revoke", wantCalled: true},
 		{name: "non admin forbidden", authorizerErr: ErrForbidden, wantCode: oops.CodeForbidden},
+		{name: "authorizer unavailable", authorizerErr: errors.New("unavailable"), wantCode: oops.CodeUnavailable},
 		{name: "other organization connection is not found", revokeErr: platformoauth.ErrNotFound, wantCode: oops.CodeNotFound, wantCalled: true},
 		{name: "already revoked connection is not found", revokeErr: platformoauth.ErrRevoked, wantCode: oops.CodeNotFound, wantCalled: true},
+		{name: "store unavailable", revokeErr: errors.New("unavailable"), wantCode: oops.CodeUnavailable, wantCalled: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			store := &testLifecycleStore{revokeErr: test.revokeErr}
-			service := &Service{authorizer: &testServiceAuthorizer{err: test.authorizerErr}, lifecycle: store}
+			service := &Service{logger: testenv.NewLogger(t), authorizer: &testServiceAuthorizer{err: test.authorizerErr}, lifecycle: store}
 			ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "organization", UserID: "user"})
 
 			err := service.RevokeConnection(ctx, &gen.RevokeConnectionPayload{ConnectionID: "connection"})
@@ -83,6 +86,44 @@ func TestServiceRevokeConnection(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServiceGetLifecycleUnavailable(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{
+		logger:     testenv.NewLogger(t),
+		authorizer: &testServiceAuthorizer{},
+		lifecycle:  &testLifecycleStore{getErr: errors.New("unavailable")},
+	}
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "organization", UserID: "user"})
+
+	_, err := service.GetLifecycle(ctx, &gen.GetLifecyclePayload{})
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code)
+}
+
+func TestServiceGetLifecycleAdmissionFailureIsIndeterminate(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{
+		logger:     testenv.NewLogger(t),
+		authorizer: &testServiceAuthorizer{},
+		lifecycle: &testLifecycleStore{lifecycle: Lifecycle{
+			DefaultProjectID:     "project",
+			MarketplacePublished: true,
+		}},
+		admission: testAdmissionEvaluator{err: errors.New("unavailable")},
+	}
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "organization", OrganizationSlug: "organization", UserID: "user"})
+
+	result, err := service.GetLifecycle(ctx, &gen.GetLifecyclePayload{})
+
+	require.NoError(t, err)
+	require.Equal(t, "indeterminate", result.Admission)
+	require.Equal(t, "status_indeterminate", result.ReasonCode)
 }
 
 func TestServiceGetLifecycleDoesNotExposeCredentials(t *testing.T) {

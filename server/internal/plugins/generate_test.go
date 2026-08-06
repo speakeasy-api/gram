@@ -99,12 +99,14 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 
 	var claude marketplaceManifest
 	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
-	require.Contains(t, claude.Plugins, marketplaceEntry{
+	require.Len(t, claude.Plugins, len(fingerprintTestPlugins())+2)
+	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
+	require.Equal(t, marketplaceEntry{
 		Name:        platformMCPPluginName,
 		DisplayName: "Gram Platform MCP",
 		Source:      "./platform-mcp",
 		Description: "Read-only organization administration through the Gram Platform MCP.",
-	})
+	}, claude.Plugins[1])
 
 	var cursor marketplaceManifest
 	require.NoError(t, json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursor))
@@ -121,6 +123,19 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.NoError(t, err)
 	for path := range withoutPlatform {
 		require.NotContains(t, path, platformMCPPluginRoot)
+	}
+}
+
+func TestGeneratePluginPackagesRejectsInvalidPlatformMCPServerURL(t *testing.T) {
+	t.Parallel()
+
+	for _, serverURL := range []string{"", "localhost:8080", "https:///missing-host", "ftp://example.com"} {
+		_, err := GeneratePluginPackages(fingerprintTestPlugins(), GenerateConfig{
+			OrgName:            "Acme Corp",
+			ServerURL:          serverURL,
+			PlatformMCPEnabled: true,
+		})
+		require.ErrorContains(t, err, "invalid Platform MCP server URL", serverURL)
 	}
 }
 

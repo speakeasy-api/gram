@@ -307,6 +307,8 @@ trackedFiles:
   src/funcs/packagesListVersions.ts: {}
   src/funcs/packagesPublish.ts: {}
   src/funcs/packagesUpdate.ts: {}
+  src/funcs/platformMcpGetLifecycle.ts: {}
+  src/funcs/platformMcpRevokeConnection.ts: {}
   src/funcs/pluginsAddPluginServer.ts: {}
   src/funcs/pluginsCreatePlugin.ts: {}
   src/funcs/pluginsDeletePlugin.ts: {}
@@ -1005,6 +1007,8 @@ trackedFiles:
   src/models/components/package.ts: {}
   src/models/components/packageversion.ts: {}
   src/models/components/periodusage.ts: {}
+  src/models/components/platformmcpconnection.ts: {}
+  src/models/components/platformmcplifecycle.ts: {}
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
   src/models/components/pluginassignment.ts: {}
@@ -1065,6 +1069,7 @@ trackedFiles:
   src/models/components/restoreskillversionrequestbody.ts: {}
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
+  src/models/components/revokeconnectionrequestbody.ts: {}
   src/models/components/riskblock.ts: {}
   src/models/components/riskcategoriesresult.ts: {}
   src/models/components/riskcategorydefinition.ts: {}
@@ -1533,6 +1538,7 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getotelforwardingconfig.ts: {}
   src/models/operations/getperiodusage.ts: {}
+  src/models/operations/getplatformmcplifecycle.ts: {}
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
   src/models/operations/getproject.ts: {}
@@ -1746,6 +1752,7 @@ trackedFiles:
   src/models/operations/revokeinvite.ts: {}
   src/models/operations/revokelitellminstance.ts: {}
   src/models/operations/revokeorganizationremotesession.ts: {}
+  src/models/operations/revokeplatformmcpconnection.ts: {}
   src/models/operations/revokeremotesession.ts: {}
   src/models/operations/revokeriskpolicybypassrequest.ts: {}
   src/models/operations/revokeusersession.ts: {}
@@ -2291,6 +2298,8 @@ trackedFiles:
   src/react-query/otelForwardingConfig.core.ts: {}
   src/react-query/otelForwardingConfig.ts: {}
   src/react-query/pauseTrigger.ts: {}
+  src/react-query/platformMcpLifecycle.core.ts: {}
+  src/react-query/platformMcpLifecycle.ts: {}
   src/react-query/plugin.core.ts: {}
   src/react-query/plugin.ts: {}
   src/react-query/plugins.core.ts: {}
@@ -2353,6 +2362,7 @@ trackedFiles:
   src/react-query/revokeInvite.ts: {}
   src/react-query/revokeLiteLLMInstance.ts: {}
   src/react-query/revokeOrganizationRemoteSession.ts: {}
+  src/react-query/revokePlatformMcpConnection.ts: {}
   src/react-query/revokeRemoteSession.ts: {}
   src/react-query/revokeUserSession.ts: {}
   src/react-query/revokeUserSessionClient.ts: {}
@@ -2669,6 +2679,7 @@ trackedFiles:
   src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
+  src/sdk/platformmcp.ts: {}
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
@@ -4806,6 +4817,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getPlatformMcpLifecycle:
+    speakeasy-default-get-platform-mcp-lifecycle:
+      responses:
+        "200":
+          application/json: {"admission": "enabled", "authorized": false, "marketplace_published": true, "ready": true, "reason_code": "gate_disabled"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getPlugin:
     speakeasy-default-get-plugin:
       parameters:
@@ -7130,6 +7150,15 @@ examples:
           id: "5fdebb84-c5ea-4464-9112-8acfc18236cb"
       requestBody:
         application/json: {"id": "5fdebb84-c5ea-4464-9112-8acfc18236cb"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  revokePlatformMcpConnection:
+    speakeasy-default-revoke-platform-mcp-connection:
+      requestBody:
+        application/json: {"connection_id": "d3cd580d-23ca-4239-a717-f578e1ccc88b"}
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}

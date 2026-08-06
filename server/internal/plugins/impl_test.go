@@ -2019,6 +2019,9 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "default")
+	defaultSlug := "default"
+	authCtx.ProjectSlug = &defaultSlug
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
@@ -2035,6 +2038,10 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	var fingerprints map[string]string
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
 	require.Contains(t, fingerprints, "__platform_mcp__")
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.True(t, *status.UpToDate, "publish status must include the admitted Platform MCP fingerprint")
 	platformFilesBefore := map[string][]byte{
 		"platform-mcp/.claude-plugin/plugin.json": mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
 		"platform-mcp/.mcp.json":                  mock.lastPushedFiles["platform-mcp/.mcp.json"],
@@ -2064,7 +2071,24 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 
 	// If the database records a previously published package but the repository
 	// was deleted, an indeterminate admission reconstructs it rather than turning
-	// a rollout dependency outage into a permanent publish failure.
+	// a rollout dependency outage into a permanent publish failure. Seed stale
+	// evidence so the assertion below proves reconstruction updates the fingerprint
+	// to match the bytes it writes.
+	const stalePlatformFingerprint = "sha256:stale-platform-fingerprint"
+	afterIndeterminate["__platform_mcp__"] = stalePlatformFingerprint
+	staleFingerprints, err := json.Marshal(afterIndeterminate)
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:                connection.ProjectID,
+		InstallationID:           connection.InstallationID,
+		RepoOwner:                connection.RepoOwner,
+		RepoName:                 connection.RepoName,
+		MarketplaceToken:         connection.MarketplaceToken,
+		PublishedMcpFingerprints: staleFingerprints,
+		PublishedHooksVersion:    connection.PublishedHooksVersion,
+		PublishedHooksConfig:     connection.PublishedHooksConfig,
+	})
+	require.NoError(t, err)
 	mock.repoFiles = nil
 	mock.lastPushedFiles = nil
 	result, err = publisher.PublishProject(ctx, plugins.PublishProjectInput{
@@ -2077,6 +2101,13 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.False(t, result.Skipped)
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var afterReconstruction map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterReconstruction))
+	require.NotEqual(t, stalePlatformFingerprint, afterReconstruction["__platform_mcp__"])
+	require.Equal(t, fingerprints["__platform_mcp__"], afterReconstruction["__platform_mcp__"])
 
 	// A confirmed disable removes only the Platform package. The absence of a
 	// customer MCP change makes the publisher carry customer bytes instead of
