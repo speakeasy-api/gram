@@ -138,40 +138,31 @@ export function SkillInsightsSection({
           estimated time saved over the last 30 days.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          {query.error && !query.data && (
-            <ErrorAlert
-              title="Unable to load skill insights"
-              error={query.error}
-            />
-          )}
-          {versionsError && (
-            <ErrorAlert
-              title="Unable to load skill versions"
-              error={versionsError}
-            />
-          )}
-          {(query.isPending || (query.data && versionsLoading)) && (
-            <InsightsLoading />
-          )}
-          {query.data && !versionsLoading && !versionsError && (
-            <InsightsContent
-              insight={query.data.result.insights[0]}
-              skillId={data.skill.id}
-              canReadChats={canReadChats}
-              versionLabels={versionLabels}
-            />
-          )}
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Efficacy and estimated savings cover sampled scored sessions.
-            Session cost is attributed in full to each activated skill version,
-            so totals are not additive.
-          </SettingsSection.FooterHint>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
+      {query.error && !query.data && (
+        <ErrorAlert title="Unable to load skill insights" error={query.error} />
+      )}
+      {versionsError && (
+        <ErrorAlert
+          title="Unable to load skill versions"
+          error={versionsError}
+        />
+      )}
+      {(query.isPending || (query.data && versionsLoading)) && (
+        <InsightsLoading />
+      )}
+      {query.data && !versionsLoading && !versionsError && (
+        <InsightsContent
+          insight={query.data.result.insights[0]}
+          skillId={data.skill.id}
+          canReadChats={canReadChats}
+          versionLabels={versionLabels}
+        />
+      )}
+      <Text small muted>
+        Efficacy and estimated savings cover sampled scored sessions. Session
+        cost is attributed in full to each activated skill version, so totals
+        are not additive.
+      </Text>
     </SettingsSection>
   );
 }
