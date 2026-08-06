@@ -326,6 +326,44 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
+// TestServePublic_DisabledPublicLegacyToolset_Returns404 verifies that a
+// legacy toolset-backed MCP server (mcp_slug set, no mcp_endpoints row)
+// stops serving once disabled, even when it was public — mcp_enabled false
+// must surface as not-found on the serve path, not just on the metadata
+// surfaces.
+func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "disabled-public-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
+
+	// Serves anonymously while enabled.
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+
+	// Disable via the same flag the dashboard/API writes, deliberately
+	// leaving mcp_is_public true — the state that kept serving anonymously
+	// before the fix.
+	err = toolsetsRepo.SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false,
+		ID:         toolset.ID,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "disabled toolset must not serve")
+	require.Contains(t, err.Error(), "not found")
+}
+
 func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	t.Parallel()
 

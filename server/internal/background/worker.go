@@ -155,7 +155,9 @@ func ForDeploymentProcessing(
 			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			Outbox:                  gcp.NewNoopRawPublisher(),
 		},
 	}
 }
@@ -343,6 +345,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
+	temporalWorker.RegisterActivity(activities.ReconcileCustomDomain)
+	temporalWorker.RegisterActivity(activities.SignalCustomDomainReconcile)
 	temporalWorker.RegisterActivity(activities.ListCustomDomainsForHealthCheck)
 	temporalWorker.RegisterActivity(activities.CheckCustomDomainHealth)
 	temporalWorker.RegisterActivity(activities.NotifyCustomDomainUnhealthy)
@@ -353,8 +357,12 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
+	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
+	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
+	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -404,6 +412,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	// Publish outbox relay activities
+	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
+	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
+	// Plugin publishing activities
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
@@ -429,6 +441,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.ResetStaleChatAnalysisReservations)
 	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.SignalChatAnalysisCoordinator)
 	skillEfficacyWorker.RegisterActivity(activities.chatAnalysisScorer.PublishChatAnalysisBatch)
+	if activities.skillSuggestionAnalyzer != nil {
+		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.ListSkillSuggestionProjects)
+		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.ListRecentlyActiveSuggestionSkills)
+		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.SignalSkillSuggestions)
+		skillEfficacyWorker.RegisterActivity(activities.skillSuggestionAnalyzer.AnalyzeSkillSuggestion)
+		temporalWorker.RegisterWorkflow(SkillSuggestionWorkflow)
+		temporalWorker.RegisterWorkflow(SkillSuggestionAnalysisWorkflow)
+		temporalWorker.RegisterWorkflow(SkillSuggestionSweepWorkflow)
+	}
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIData)
@@ -444,14 +465,18 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainHealthCheckWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUnhealthyNotifyWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainHealthSweepWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
+	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
@@ -488,6 +513,9 @@ func NewTemporalWorker(
 	// Outbox -> Relay workflow and GC
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	// Publish outbox -> Pub/Sub workflow and dead letter GC
+	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
+	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
@@ -502,7 +530,6 @@ func NewTemporalWorker(
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
-
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -515,10 +542,20 @@ func NewTemporalWorker(
 		}
 	}
 
+	if err := AddDeviceIntegrationSyncCoordinatorSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add device integration sync schedule", attr.SlogError(err))
+		}
+	}
+
 	if err := AddAIUsagePollerCoordinatorSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddWeeklyUsageSummarySchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add weekly usage summary schedule", attr.SlogError(err))
 	}
 
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
@@ -561,6 +598,14 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
+	if err := AddPublishOutboxSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add publish outbox schedule", attr.SlogError(err))
+	}
+
+	if err := AddPublishOutboxGCSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add publish outbox gc schedule", attr.SlogError(err))
+	}
+
 	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
@@ -581,6 +626,12 @@ func NewTemporalWorker(
 
 	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	}
+
+	if activities.skillSuggestionAnalyzer != nil {
+		if err := AddSkillSuggestionSweepSchedule(context.Background(), env); err != nil {
+			logger.ErrorContext(context.Background(), "failed to add skill suggestion sweep schedule", attr.SlogError(err))
+		}
 	}
 
 	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {

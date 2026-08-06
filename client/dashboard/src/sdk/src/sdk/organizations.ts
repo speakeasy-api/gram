@@ -336,7 +336,7 @@ export class Organizations extends ClientSDK {
    * verifyOnboardingHooksSetup organizations
    *
    * @remarks
-   * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+   * Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
    */
   async verifyOnboardingHooksSetup(
     request?: VerifyOnboardingHooksSetupRequest | undefined,

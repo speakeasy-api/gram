@@ -437,6 +437,7 @@ func (tp *ToolProxy) doFunction(
 		},
 		ToolURN:  descriptor.URN,
 		ToolName: descriptor.Name,
+		Meta:     toolCallMeta(env.MCPClient),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").LogError(ctx, logger)
@@ -490,6 +491,28 @@ func (tp *ToolProxy) doFunction(
 		OrganizationID:    descriptor.OrganizationID,
 		OrganizationSlug:  descriptor.OrganizationSlug,
 	})
+}
+
+// toolCallMeta converts a resolved caller identity into the `_meta` block sent
+// to a function runner, or nil when nothing is known about the caller. The
+// values are platform-supplied: no user configuration path can reach them.
+func toolCallMeta(client toolconfig.MCPClientIdentity) *functions.ToolCallMeta {
+	if client.IsZero() {
+		return nil
+	}
+
+	meta := &functions.ToolCallMeta{
+		ClientInfo:    nil,
+		OAuthClientID: client.OAuthClientID,
+	}
+	if client.Name != "" {
+		meta.ClientInfo = &functions.MCPClientInfo{
+			Name:    client.Name,
+			Version: client.Version,
+		}
+	}
+
+	return meta
 }
 
 func (tp *ToolProxy) doHTTP(
@@ -812,8 +835,9 @@ func (tp *ToolProxy) doExternalMCP(
 	// Build headers from environment variables
 	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
 	opts := &externalmcp.ClientOptions{
-		Authorization: "",
-		Headers:       headers,
+		Authorization:  "",
+		Headers:        headers,
+		DisableRetries: false,
 	}
 
 	// Connect to the external MCP server

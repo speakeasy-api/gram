@@ -1,5 +1,6 @@
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn, Icon } from "@speakeasy-api/moonshine";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { ChartButton } from "./ChartButton";
 

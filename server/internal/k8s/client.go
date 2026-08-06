@@ -7,17 +7,19 @@ import (
 	"sync"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
 type KubernetesClients struct {
-	Clientset     kubernetes.Interface
-	DynamicClient dynamic.Interface
-	logger        *slog.Logger
-	namespace     string
-	enabled       bool
+	Clientset      kubernetes.Interface
+	DynamicClient  dynamic.Interface
+	logger         *slog.Logger
+	namespace      string
+	backendService string
+	enabled        bool
 }
 
 var (
@@ -26,15 +28,19 @@ var (
 )
 
 // InitializeK8sClient initializes and returns KubernetesClients singleton.
-func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (*KubernetesClients, error) {
+// namespace and backendService override where custom domain ingresses are
+// created and which service they route to; empty values fall back to the
+// historical gram-<env> and gram-server defaults.
+func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string, namespace string, backendService string) (*KubernetesClients, error) {
 	// not supporting k8s client in local dev mode currently
 	if env == "local" {
 		return &KubernetesClients{
-			Clientset:     nil,
-			DynamicClient: nil,
-			logger:        logger.With(attr.SlogComponent("k8s_client")),
-			enabled:       false,
-			namespace:     "",
+			Clientset:      nil,
+			DynamicClient:  nil,
+			logger:         logger.With(attr.SlogComponent("k8s_client")),
+			enabled:        false,
+			namespace:      "",
+			backendService: "",
 		}, nil
 	}
 
@@ -58,11 +64,12 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (
 		}
 
 		k8sClients = &KubernetesClients{
-			Clientset:     clientset,
-			DynamicClient: dynamicClient,
-			logger:        logger,
-			enabled:       true,
-			namespace:     fmt.Sprintf("gram-%s", env),
+			Clientset:      clientset,
+			DynamicClient:  dynamicClient,
+			logger:         logger,
+			enabled:        true,
+			namespace:      conv.Default(namespace, fmt.Sprintf("gram-%s", env)),
+			backendService: conv.Default(backendService, "gram-server"),
 		}
 
 		logger.InfoContext(ctx, "Kubernetes clients initialized successfully.")
@@ -77,5 +84,5 @@ func (k *KubernetesClients) Provisioner(kind ProvisionerKind) CustomDomainProvis
 	if !k.enabled {
 		return &StubProvisioner{kind: kind, logger: k.logger, calls: nil}
 	}
-	return &IngressProvisioner{clientset: k.Clientset, namespace: k.namespace, logger: k.logger}
+	return &IngressProvisioner{clientset: k.Clientset, namespace: k.namespace, backendService: k.backendService, logger: k.logger}
 }

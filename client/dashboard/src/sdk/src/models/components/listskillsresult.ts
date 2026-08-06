@@ -21,6 +21,10 @@ export type ListSkillsResult = {
    * The active skills in this page.
    */
   skills: Array<Skill>;
+  /**
+   * The total number of active skills matching the filters.
+   */
+  totalCount: number;
 };
 
 /** @internal */
@@ -31,10 +35,12 @@ export const ListSkillsResult$inboundSchema: z.ZodMiniType<
   z.object({
     next_cursor: z.optional(z.string()),
     skills: z.array(Skill$inboundSchema),
+    total_count: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "next_cursor": "nextCursor",
+      "total_count": "totalCount",
     });
   }),
 );

@@ -96,7 +96,7 @@ candidate_chats AS (
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-  -- Join users table to enable searching by user display name
+  -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = $5
     AND c.deleted IS FALSE
@@ -113,6 +113,8 @@ candidate_chats AS (
       OR c.external_user_id ILIKE '%' || $9 || '%'
       OR c.title ILIKE '%' || $9 || '%'
       OR u.display_name ILIKE '%' || $9 || '%'
+      OR u.email ILIKE '%' || $9 || '%'
+      OR ua.email ILIKE '%' || $9 || '%'
     )
     AND (
       $10 = ''
@@ -328,6 +330,20 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 	var total int64
 	err := row.Scan(&total)
 	return total, err
+}
+
+type CreateChatContentPartParams struct {
+	ChatID              uuid.UUID
+	ProjectID           uuid.UUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
 }
 
 type CreateChatMessageParams struct {
@@ -1209,6 +1225,113 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 	return last_cursor_id, err
 }
 
+const listChatContentPartsByChatID = `-- name: ListChatContentPartsByChatID :many
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , ccp.project_id
+  , ccp.kind
+  , ccp.content_asset_url
+  , ccp.external_id
+  , ccp.parent_chat_message_id
+  , ccp.version
+  , ccp.source
+  , ccp.metadata
+  , ccp.risk_analyzed_at
+  , ccp.created_at
+  , ccp.updated_at
+  , ccp.deleted_at
+  , ccp.deleted
+  , EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      JOIN risk_policies rp
+        ON rp.id = rr.risk_policy_id
+       AND rp.enabled IS TRUE
+       AND rp.deleted IS FALSE
+      WHERE rr.project_id = $1::uuid
+        AND rr.chat_content_part_id = ccp.id
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    ) AS is_risk
+FROM chat_content_parts ccp
+WHERE ccp.chat_id = $2
+  AND (ccp.project_id IS NULL OR ccp.project_id = $1::uuid)
+  AND ccp.deleted IS FALSE
+  -- Only the parts the requested page can actually render: one anchored to a
+  -- message on this page, or an unparented one the client places by time
+  -- proximity. Without this a page request reads every attachment body in the
+  -- chat from asset storage, then discards the ones it cannot anchor.
+  AND (
+    ccp.parent_chat_message_id IS NULL
+    OR ccp.parent_chat_message_id = ANY($3::uuid[])
+  )
+ORDER BY created_at ASC, id ASC
+`
+
+type ListChatContentPartsByChatIDParams struct {
+	ProjectID            uuid.UUID
+	ChatID               uuid.UUID
+	ParentChatMessageIds []uuid.UUID
+}
+
+type ListChatContentPartsByChatIDRow struct {
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ProjectID           uuid.NullUUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	IsRisk              bool
+}
+
+func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChatContentPartsByChatIDParams) ([]ListChatContentPartsByChatIDRow, error) {
+	rows, err := q.db.Query(ctx, listChatContentPartsByChatID, arg.ProjectID, arg.ChatID, arg.ParentChatMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatContentPartsByChatIDRow
+	for rows.Next() {
+		var i ListChatContentPartsByChatIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Kind,
+			&i.ContentAssetUrl,
+			&i.ExternalID,
+			&i.ParentChatMessageID,
+			&i.Version,
+			&i.Source,
+			&i.Metadata,
+			&i.RiskAnalyzedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.IsRisk,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatMessages = `-- name: ListChatMessages :many
 SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
@@ -1820,7 +1943,7 @@ candidate_chats AS (
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-  -- Join users table to enable searching by user display name
+  -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
@@ -1837,6 +1960,8 @@ candidate_chats AS (
       OR c.external_user_id ILIKE '%' || $7 || '%'
       OR c.title ILIKE '%' || $7 || '%'
       OR u.display_name ILIKE '%' || $7 || '%'
+      OR u.email ILIKE '%' || $7 || '%'
+      OR ua.email ILIKE '%' || $7 || '%'
     )
     AND (
       $8 = ''
@@ -2086,6 +2211,46 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.AssistantName,
 			&i.TotalCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClaudeUserMessagesForPromptAttachmentParent = `-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
+SELECT cm.id, cm.content
+FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND cm.role = 'user'
+  AND cm.content != ''
+ORDER BY cm.seq DESC, cm.created_at DESC
+`
+
+type ListClaudeUserMessagesForPromptAttachmentParentParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ListClaudeUserMessagesForPromptAttachmentParentRow struct {
+	ID      uuid.UUID
+	Content string
+}
+
+func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, arg ListClaudeUserMessagesForPromptAttachmentParentParams) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
+	rows, err := q.db.Query(ctx, listClaudeUserMessagesForPromptAttachmentParent, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClaudeUserMessagesForPromptAttachmentParentRow
+	for rows.Next() {
+		var i ListClaudeUserMessagesForPromptAttachmentParentRow
+		if err := rows.Scan(&i.ID, &i.Content); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2761,7 +2926,7 @@ type SeedRiskResultParams struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	RiskPolicyID   uuid.UUID
-	ChatMessageID  uuid.UUID
+	ChatMessageID  uuid.NullUUID
 	Found          bool
 }
 
@@ -3117,21 +3282,31 @@ DO UPDATE SET
     project_id = EXCLUDED.project_id
   , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
   , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
-  , title = COALESCE(EXCLUDED.title, chats.title)
+  -- Two title regimes share this upsert. Feeds with authoritative titles
+  -- (ChatGPT conversations, Anthropic compliance) are newest-wins: a non-null
+  -- incoming title refreshes the row. Feeds whose titles are DERIVED from
+  -- content (Codex cloud: the session's first prompt) are first-wins
+  -- (@prefer_stored_title): a later poll window derives a mid-session prompt
+  -- as its "first", and newest-wins would retitle the chat on every window.
+  , title = CASE
+      WHEN $10::bool THEN COALESCE(chats.title, EXCLUDED.title)
+      ELSE COALESCE(EXCLUDED.title, chats.title)
+    END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 RETURNING id
 `
 
 type UpsertExternalChatParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalChatID    pgtype.Text
+	Title             pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	PreferStoredTitle bool
 }
 
 func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChatParams) (uuid.UUID, error) {
@@ -3145,6 +3320,7 @@ func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChat
 		arg.Title,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.PreferStoredTitle,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

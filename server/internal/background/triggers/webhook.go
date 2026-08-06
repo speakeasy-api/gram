@@ -1,6 +1,7 @@
 package triggers
 
 import (
+	"context"
 	"crypto/hmac"
 	"encoding/base64"
 	"encoding/hex"
@@ -145,6 +146,12 @@ type WebhookVendor struct {
 	SecretEnv           string
 	Signature           HMACScheme
 	SupportedEventTypes []string
+	// Authenticate replaces HMAC signature verification for vendors whose
+	// scheme is not a shared-secret MAC over the body (e.g. Bot Framework's
+	// Microsoft-signed JWTs). Exactly one of Authenticate and Signature.NewHash
+	// must be set; NewWebhookDefinition enforces this at construction so a
+	// vendor can never be silently wired with no authentication at all.
+	Authenticate func(ctx context.Context, body []byte, headers http.Header, env map[string]string) error
 	// PreVerify inspects the request before signature verification. Return
 	// skipSignature=true to authorize the request without checking the HMAC
 	// (e.g. Slack's url_verification handshake, which must echo a challenge
@@ -183,6 +190,9 @@ func NewWebhookDefinition(
 	compiled *jsonschema.Schema,
 	decodeConfigFn func(raw map[string]any) (Config, error),
 ) Definition {
+	if (vendor.Authenticate == nil) == (vendor.Signature.NewHash == nil) {
+		panic(fmt.Errorf("webhook vendor %q must set exactly one of Authenticate and Signature.NewHash", vendor.Slug))
+	}
 	return Definition{
 		Slug:                 vendor.Slug,
 		Title:                vendor.Title,
@@ -193,7 +203,7 @@ func NewWebhookDefinition(
 		EnvRequirements:      vendor.EnvRequirements,
 		EventType:            vendor.EventType,
 		DecodeConfig:         decodeConfigFn,
-		AuthenticateWebhook: func(body []byte, headers http.Header, env map[string]string, _ Config) error {
+		AuthenticateWebhook: func(ctx context.Context, body []byte, headers http.Header, env map[string]string, _ Config) error {
 			if vendor.PreVerify != nil {
 				skip, err := vendor.PreVerify(body, headers)
 				if err != nil {
@@ -203,8 +213,8 @@ func NewWebhookDefinition(
 					return nil
 				}
 			}
-			if vendor.Signature.NewHash == nil {
-				return nil
+			if vendor.Authenticate != nil {
+				return vendor.Authenticate(ctx, body, headers, env)
 			}
 			ciEnv := toolconfig.CIEnvFrom(env)
 			secret := ciEnv.Get(vendor.SecretEnv)

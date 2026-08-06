@@ -140,14 +140,14 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   {
     id: "codex",
     name: "OpenAI Codex",
-    description: "OpenAI Codex CLI & desktop app",
+    description: "Codex CLI & Codex mode in the ChatGPT app",
     icon: "codex",
     connected: false,
     setupSteps: [
       {
         title: "Deploy the Speakeasy device agent via MDM",
         description:
-          "Codex is instrumented centrally by the Speakeasy device agent — this covers both the Codex CLI and the Codex desktop app. Roll the agent out through your MDM (Kandji, Jamf, Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform so its configuration is applied to every developer with no per-user setup.",
+          "Codex is instrumented centrally by the Speakeasy device agent — this covers the Codex CLI and Codex mode in the ChatGPT desktop app, which OpenAI merged the standalone Codex app into. Chat and Work modes in that same app are not covered here; they are captured through the OpenAI Compliance API integration instead. Roll the agent out through your MDM (Kandji, Jamf, Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform so its configuration is applied to every developer with no per-user setup.",
         helpLink: {
           url: "{{GRAM_DEVICE_AGENT_URL}}",
           linkLabel: "device agent setup",
@@ -172,15 +172,6 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
         },
       },
     ],
-  },
-  {
-    id: "opencode",
-    name: "OpenCode",
-    description: "Open-source terminal coding agent",
-    icon: "opencode",
-    connected: false,
-    available: false,
-    setupSteps: [],
   },
   {
     id: "cursor",
@@ -212,6 +203,31 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
           "In Cursor's team marketplace settings, mark the observability plugin (slug below) as required so tool events flow to Speakeasy for every team member without per-user setup.",
         code: `{{GRAM_CURSOR_PLUGIN_NAME}}`,
         language: "text",
+      },
+    ],
+  },
+  {
+    id: "opencode",
+    name: "opencode",
+    description: "Open-source terminal coding agent",
+    icon: "opencode",
+    connected: false,
+    setupSteps: [
+      {
+        title: "Install the speakeasy-hooks binary",
+        description:
+          "opencode has no plugin marketplace, so the observability plugin is rendered straight into your repo by the speakeasy-hooks CLI. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
+      },
+      {
+        title: "Render the plugin into your repo",
+        description:
+          "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug>`,
+        language: "bash",
+        requiresApiKey: true,
       },
     ],
   },

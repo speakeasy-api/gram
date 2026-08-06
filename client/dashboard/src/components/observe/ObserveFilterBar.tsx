@@ -16,7 +16,7 @@ import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import type {
   MultiSelectGroup,
   MultiSelectOption,
-} from "@/components/ui/multi-select";
+} from "@/components/ui/MultiSelect";
 
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";

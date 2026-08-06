@@ -75,7 +75,7 @@ export const INSIGHTS_SUGGESTION_ICONS = {
   zap: Zap,
 } satisfies Record<string, LucideIcon>;
 
-type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
+export type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
 
 export interface InsightsSuggestion {
   /** Chip text — a short question. */
@@ -633,7 +633,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "Compare clients",
       icon: "bot",
       prompt:
-        "Compare usage across different AI coding clients (Claude Code, Cursor, Codex, etc). Which is most popular?",
+        "Compare usage across different AI coding clients. Which is most popular?",
     },
   ],
 

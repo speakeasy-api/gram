@@ -23,8 +23,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -86,16 +89,56 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "missing_client_id")
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
-	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		ClientID:            clientID,
-	})
+	// lookupClientOnly: any CIMD row was persisted at authorize time, and
+	// mid-flow token legs must keep working even if the CIMD flag flips off.
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
+	}
+	// CIMD-resolved clients are public by construction (the AS only accepts
+	// documents declaring token_endpoint_auth_method "none", and the schema
+	// forbids a secret on CIMD rows). Reject any attempt to authenticate
+	// one with credentials per RFC 6749 §5.2 — a URL-shaped client_id
+	// cannot travel via HTTP Basic (r.BasicAuth does no percent-decoding),
+	// so a legitimate CIMD client always presents form client_id + none.
+	// The `disabled` admission mode is an off switch, so it applies to the
+	// token leg too: an operator who turns CIMD off for an issuer expects
+	// outstanding refresh tokens to stop working, not just new authorize
+	// flows. It is a whole-class deny needing no catalog or custom-URL
+	// consultation, so it costs one in-memory comparison.
+	//
+	// `presets` deliberately does NOT enforce here. Preset membership is
+	// implicit and Gram-mutable — removing a catalog entry de-admits it on
+	// every presets-mode issuer at deploy — so enforcing at /token would let
+	// a one-line catalog edit terminate live sessions fleet-wide, surfacing
+	// as a mid-session failure no client recovers from. Admission for
+	// `presets` is a gate on STARTING a flow, never on continuing one.
+	//
+	// Note this stops the issuance of new tokens; access tokens already
+	// minted stay valid until they expire (see AIS-406).
+	if clientRow.ClientIDMetadataUri.Valid {
+		mode, recognized := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
+		if !recognized {
+			// Still fails closed below, but without this the rejection is
+			// indistinguishable from an operator deliberately choosing
+			// `disabled`, so a corrupt row would never be diagnosed from
+			// the token leg.
+			logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+				attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
+			)
+		}
+		if mode == admission.ModeDisabled {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
+		}
+	}
+	if clientRow.ClientIDMetadataUri.Valid && presentedAuthMethod != "none" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_client_presented_credentials")
+		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", `client_id metadata document clients must use token_endpoint_auth_method "none"`)
 	}
 	// Public clients (token_endpoint_auth_method=none) have a NULL hash:
 	// PKCE / refresh-token possession is the integrity proof, no secret check.
@@ -114,9 +157,9 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 
 	switch grantType {
 	case "authorization_code":
-		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, &clientRow, baseURL, presentedAuthMethod, logger)
+		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
 	case "refresh_token":
-		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, &clientRow, baseURL, presentedAuthMethod, logger)
+		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
 	default:
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, presentedAuthMethod, grantType, "unsupported_grant_type")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
@@ -342,7 +385,14 @@ func (s *Service) mintSessionAndRespond(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
-	access, jti, err := s.userSessionSigner.Mint(subject, endpoint.AudienceURN, issuerURL, accessTokenLifetime)
+	access, jti, err := s.userSessionSigner.Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: endpoint.AudienceURN,
+		Issuer:   issuerURL,
+		Lifetime: accessTokenLifetime,
+		ClientID: clientRow.ClientID,
+		JTI:      "",
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)
 	}
@@ -385,12 +435,12 @@ func (s *Service) mintSessionAndRespond(
 	return nil
 }
 
-// writeTokenOAuthError unwraps a *usersessions.OAuthError to its code +
+// writeTokenOAuthError unwraps a *oauthwire.Error to its code +
 // description and forwards to writeTokenError. Falls back to a generic
 // invalid_request if err is something else (shouldn't happen — Validate
-// returns *OAuthError).
+// returns *oauthwire.Error).
 func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	if errors.As(err, &oauthErr) {
 		return writeTokenError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}

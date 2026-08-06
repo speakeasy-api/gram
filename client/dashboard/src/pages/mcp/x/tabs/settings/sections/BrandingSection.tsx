@@ -1,26 +1,24 @@
+import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { ImageUpload } from "@/components/upload";
+} from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { Asset } from "@gram/client/models/components/asset.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import {
-  invalidateAllGetMcpMetadata,
-  useGetMcpMetadata,
-} from "@gram/client/react-query/getMcpMetadata.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
-import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { FooterSaveButton, SettingsSection } from "../SettingsSection";
@@ -46,58 +44,54 @@ export function BrandingSection({
   const update = useUpdateMcpServerMutation();
   const navigate = useNavigate();
   const routes = useRoutes();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Logo lives on the server's MCP metadata (mcp_metadata.logo_id) — the same
-  // record catalog installs persist the registry icon into.
-  const { data: metadataData } = useGetMcpMetadata(
+  const metadataResult = useGetMcpMetadata(
     { mcpServerId: mcpServer.id },
     undefined,
     {
-      retry: false,
-      throwOnError: false, // Expected 404 when no metadata exists
+      retry: (failureCount, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return failureCount < 3;
+      },
+      throwOnError: false,
     },
   );
-  const metadata = metadataData?.metadata;
-  const setMetadata = useMcpMetadataSetMutation();
-
-  // Staged logo asset id ("" = no logo). Picking a file uploads the asset (to
-  // preview it) but the assignment only persists on Save, like the name.
-  const persistedLogoId = metadata?.logoAssetId ?? "";
-  const [logoDraft, setLogoDraft] = useState(persistedLogoId);
-  useEffect(() => {
-    setLogoDraft(persistedLogoId);
-  }, [mcpServer.id, persistedLogoId]);
+  const metadataIs404 =
+    metadataResult.error instanceof GramError &&
+    metadataResult.error.statusCode === 404;
+  // Anything other than a confirmed "no metadata yet" 404 means the form's
+  // local draft (seeded from this) can't be trusted as a complete picture of
+  // the current record. Saving before this resolves would spread undefined
+  // branding/install-page fields into a full-record upsert and wipe out real
+  // values that just hadn't loaded yet.
+  const metadataUnresolved =
+    metadataResult.isLoading ||
+    (metadataResult.isError && !metadataIs404) ||
+    metadataResult.isRefetchError;
+  const metadataForm = useMcpMetadataMetadataForm(
+    { kind: "mcp_server", mcpServerId: mcpServer.id },
+    metadataResult.data?.metadata,
+  );
 
   const trimmedDraft = nameDraft.trim();
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
-  const logoDirty = logoDraft !== persistedLogoId;
-  const saving = update.isPending || setMetadata.isPending;
+  const dirty = nameDirty || metadataForm.brandingDirty;
+  const saving = update.isPending || metadataForm.isLoading;
   const saveDisabled =
-    (!nameDirty && !logoDirty) ||
+    !dirty ||
     trimmedDraft === "" ||
     trimmedDraft.length > NAME_MAX_LENGTH ||
-    saving;
+    saving ||
+    (metadataUnresolved && metadataForm.brandingDirty);
   const characterCount = `${nameDraft.length} of ${NAME_MAX_LENGTH} characters used`;
 
   const handleSave = async () => {
     try {
-      if (logoDirty) {
-        // The metadata endpoint upserts every field, so carry the existing
-        // values along to avoid wiping instructions or documentation links.
-        // Omitting logoAssetId clears the logo.
-        await setMetadata.mutateAsync({
-          request: {
-            setMcpMetadataRequestBody: {
-              mcpServerId: mcpServer.id,
-              logoAssetId: logoDraft || undefined,
-              externalDocumentationUrl: metadata?.externalDocumentationUrl,
-              externalDocumentationText: metadata?.externalDocumentationText,
-              instructions: metadata?.instructions,
-              installationOverrideUrl: metadata?.installationOverrideUrl,
-            },
-          },
-        });
-        await invalidateAllGetMcpMetadata(queryClient, { refetchType: "all" });
+      if (metadataForm.brandingDirty) {
+        await metadataForm.saveAsync();
       }
 
       if (nameDirty) {
@@ -109,6 +103,7 @@ export function BrandingSection({
               remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
               tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
               toolsetId: mcpServer.toolsetId ?? undefined,
+              unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
               environmentId: mcpServer.environmentId ?? undefined,
               toolVariationsGroupId:
                 mcpServer.toolVariationsGroupId ?? undefined,
@@ -122,13 +117,14 @@ export function BrandingSection({
         // args and the page-level not-found guard doesn't bounce the user
         // back to /mcp.
         const nextParam = mcpServerRouteParam(updated);
-        void navigate(routes.mcp.x.settings.href(nextParam), { replace: true });
+        void navigate(routes.mcp.x.settings.href(nextParam), {
+          replace: true,
+        });
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
           invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         ]);
       }
-
       toast.success("MCP server updated");
     } catch (error) {
       const message =
@@ -148,6 +144,51 @@ export function BrandingSection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
+          <Field className="max-w-md">
+            <FieldLabel>Icon</FieldLabel>
+            <Stack direction="horizontal" gap={3} align="center">
+              {metadataForm.logoUploadHandlers.renderFilePreview() ?? (
+                <div className="bg-muted text-muted-foreground flex h-16 w-16 shrink-0 items-center justify-center rounded-md text-xs">
+                  No icon
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) {
+                    metadataForm.logoUploadHandlers
+                      .onUpload(file)
+                      .catch((error: unknown) => {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to upload icon",
+                        );
+                      });
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={metadataUnresolved}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Button.Text>Upload icon</Button.Text>
+              </Button>
+            </Stack>
+            {metadataUnresolved && !metadataResult.isLoading && (
+              <FieldDescription className="text-destructive pl-1 text-xs">
+                Couldn't load current branding settings. Refresh the page before
+                making changes.
+              </FieldDescription>
+            )}
+          </Field>
           <Field
             data-invalid={update.isError ? true : undefined}
             className="max-w-md"
@@ -169,19 +210,6 @@ export function BrandingSection({
               </FieldDescription>
             )}
             {update.isError && <FieldError>{update.error.message}</FieldError>}
-          </Field>
-          <Field className="max-w-md">
-            <FieldLabel>Logo</FieldLabel>
-            <FieldDescription>
-              Shown next to this server in the dashboard and advertised to MCP
-              clients. Catalog installs prefill it with the server's catalog
-              icon.
-            </FieldDescription>
-            <ImageUpload
-              key={persistedLogoId || "no-logo"}
-              existingAssetId={metadata?.logoAssetId}
-              onUpload={(asset: Asset) => setLogoDraft(asset.id)}
-            />
           </Field>
         </SettingsSection.Body>
         <SettingsSection.Footer>

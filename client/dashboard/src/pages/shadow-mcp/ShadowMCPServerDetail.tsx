@@ -2,6 +2,12 @@ import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { type Column, Table } from "@/components/ui/Table";
+import { Text } from "@/components/ui/Text";
 import {
   type ActiveInventoryAction,
   type InventoryActionMode,
@@ -11,23 +17,31 @@ import {
 } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import {
   eligibleShadowMCPAllowRulePolicies,
+  shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
   shadowMCPPolicyState,
+  type ShadowMCPPolicyDisposition,
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { ALLOW_RULE_POLICY_REQUIRED } from "@/components/shadow-mcp/shadowMCPInventoryActionItems";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { formatPlatform } from "@/lib/formatPlatform";
+import { encodeCrumb } from "@/pages/costs/taxonomy";
+import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { useRoutes } from "@/routes";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
+import type { ShadowMCPInventoryUserSource } from "@gram/client/models/components/shadowmcpinventoryusersource.js";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useDeleteShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/deleteShadowMCPInventoryPolicyBypass.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useResolveShadowMCPInventoryRequestMutation } from "@gram/client/react-query/resolveShadowMCPInventoryRequest.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/blockShadowMCPInventoryServer.js";
+import { useUnblockShadowMCPInventoryServerMutation } from "@gram/client/react-query/unblockShadowMCPInventoryServer.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import {
@@ -40,16 +54,9 @@ import {
   useShadowMCPInventoryUsers,
 } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
-import {
-  Badge,
-  Button,
-  type Column,
-  Icon,
-  Table,
-} from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
 const USERS_PAGE_LIMIT = 50;
@@ -67,14 +74,51 @@ function usageCountLabel(count: number) {
   return `${count} ${count === 1 ? "call" : "calls"}`;
 }
 
+function sourceLabel(source: string) {
+  return formatPlatform(source) || "Unknown";
+}
+
+function UserSources({
+  sources,
+}: {
+  sources: ShadowMCPInventoryUserSource[] | undefined;
+}) {
+  const orderedSources = [...(sources ?? [])].sort((left, right) => {
+    const countDifference = right.observedUseCount - left.observedUseCount;
+    if (countDifference !== 0) return countDifference;
+
+    return sourceLabel(left.source).localeCompare(sourceLabel(right.source));
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {orderedSources.map((source) => (
+        <div className="flex items-center gap-1.5" key={source.source}>
+          <HookSourceIcon source={source.source} className="size-4 shrink-0" />
+          <span className="whitespace-nowrap font-medium">
+            {sourceLabel(source.source)}
+          </span>
+          <Badge variant="neutral">
+            <Badge.Text>{source.observedUseCount}</Badge.Text>
+          </Badge>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function userCountLabel(count: number) {
   return `${count} ${count === 1 ? "user" : "users"}`;
 }
 
 function actionModeForServer(
   server: ShadowMCPInventoryServer,
+  disposition: ShadowMCPPolicyDisposition | null,
 ): InventoryActionMode {
   if (server.requestCount > 0) return "review";
+  if (disposition === "allow_all") {
+    return server.access === "blocked" ? "unblock" : "block";
+  }
   if (server.access === "allowed") return "edit";
   return "add";
 }
@@ -89,13 +133,19 @@ function actionLabel(mode: InventoryActionMode) {
       return "Edit Rule";
     case "delete":
       return "Delete Rule";
+    case "block":
+      return "Block Server";
+    case "unblock":
+      return "Unblock Server";
   }
 }
 
 function ServerStatus({
+  disposition,
   policyState,
   server,
 }: {
+  disposition: ShadowMCPPolicyDisposition | null;
   policyState: ShadowMCPPolicyState;
   server: ShadowMCPInventoryServer;
 }) {
@@ -106,9 +156,9 @@ function ServerStatus({
       <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
         <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
       </Badge>
-      <Type muted small>
-        {shadowMCPInventoryStatusDescription(server, policyState)}
-      </Type>
+      <Text muted small>
+        {shadowMCPInventoryStatusDescription(server, policyState, disposition)}
+      </Text>
     </div>
   );
 }
@@ -124,30 +174,36 @@ function DetailStat({
 }) {
   return (
     <div className="min-w-0">
-      <Type muted small>
+      <Text muted small>
         {label}
-      </Type>
-      <Type
+      </Text>
+      <Text
         variant={emphasized ? "body" : "small"}
         className="mt-1 truncate font-medium"
       >
         {value}
-      </Type>
+      </Text>
     </div>
   );
 }
 
 function ServerSummary({
+  disposition,
   policyState,
   server,
 }: {
+  disposition: ShadowMCPPolicyDisposition | null;
   policyState: ShadowMCPPolicyState;
   server: ShadowMCPInventoryServer;
 }) {
   return (
     <div className="border-border overflow-hidden rounded-md border">
       <div className="bg-muted/20 grid gap-4 p-4 md:grid-cols-4">
-        <ServerStatus policyState={policyState} server={server} />
+        <ServerStatus
+          disposition={disposition}
+          policyState={policyState}
+          server={server}
+        />
         <DetailStat
           emphasized
           label="Requests"
@@ -187,11 +243,13 @@ function ServerSummary({
 }
 
 function TopUsersTable({
+  onOpenUser,
   onLoadMore,
   users,
   hasMore,
   isLoading,
 }: {
+  onOpenUser: (user: ShadowMCPInventoryUser) => void;
   onLoadMore: () => void;
   users: ShadowMCPInventoryUser[];
   hasMore: boolean;
@@ -201,36 +259,42 @@ function TopUsersTable({
     {
       key: "user",
       header: "User",
-      render: (user) => <Type variant="small">{user.userKey}</Type>,
+      render: (user) => <Text variant="small">{user.userKey}</Text>,
+      width: "1fr",
+    },
+    {
+      key: "sources",
+      header: "Sources",
+      render: (user) => <UserSources sources={user.sources} />,
       width: "1fr",
     },
     {
       key: "calls",
       header: "Calls",
       render: (user) => (
-        <Type variant="small">{usageCountLabel(user.observedUseCount)}</Type>
+        <Text variant="small">{usageCountLabel(user.observedUseCount)}</Text>
       ),
-      width: "160px",
+      width: "0.6fr",
     },
     {
       key: "lastCalled",
       header: "Last called",
       render: (user) => (
-        <Type variant="small">{formatShortDate(user.lastCalled)}</Type>
+        <Text variant="small">{formatShortDate(user.lastCalled)}</Text>
       ),
-      width: "180px",
+      width: "0.6fr",
     },
   ];
 
   if (users.length === 0) {
     return (
       <div className="bg-muted/20 flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed px-6 py-8 text-center">
-        <Type variant="body" className="font-medium">
+        <Text variant="body" className="font-medium">
           No user activity
-        </Type>
-        <Type muted small className="mt-1 max-w-md">
+        </Text>
+        <Text muted small className="mt-1 max-w-md">
           Users will appear here after this Shadow MCP server is called.
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -244,6 +308,8 @@ function TopUsersTable({
         handleLoadMore={onLoadMore}
         hasMore={hasMore}
         isLoading={isLoading}
+        isRowClickable={(user) => Boolean(user.email)}
+        onRowClick={onOpenUser}
         rowKey={(row) => row.userKey}
       />
     </Table>
@@ -254,20 +320,23 @@ function DetailActionButtons({
   allowRuleUnavailableMessage,
   canManageAllowRules,
   disabled,
+  disposition,
   onOpenAction,
   server,
 }: {
   allowRuleUnavailableMessage: string;
   canManageAllowRules: boolean;
   disabled: boolean;
+  disposition: ShadowMCPPolicyDisposition | null;
   onOpenAction: (mode: InventoryActionMode) => void;
   server: ShadowMCPInventoryServer;
 }) {
-  const primaryMode = actionModeForServer(server);
+  const primaryMode = actionModeForServer(server, disposition);
+  const isAllowAll = disposition === "allow_all";
   const primaryRequiresAllowRule =
-    primaryMode === "add" || primaryMode === "edit";
+    !isAllowAll && (primaryMode === "add" || primaryMode === "edit");
   const hasVisibleAllowRuleAction =
-    primaryRequiresAllowRule || server.access === "allowed";
+    primaryRequiresAllowRule || (!isAllowAll && server.access === "allowed");
   const primaryDisabled =
     disabled || (primaryRequiresAllowRule && !canManageAllowRules);
 
@@ -277,20 +346,22 @@ function DetailActionButtons({
         <Button
           disabled={primaryDisabled}
           onClick={() => onOpenAction(primaryMode)}
-          variant="primary"
+          variant={primaryMode === "block" ? "destructive-primary" : "primary"}
         >
           <Button.Text>{actionLabel(primaryMode)}</Button.Text>
         </Button>
-        {server.access === "allowed" && primaryMode !== "edit" && (
-          <Button
-            disabled={disabled || !canManageAllowRules}
-            onClick={() => onOpenAction("edit")}
-            variant="tertiary"
-          >
-            <Button.Text>{actionLabel("edit")}</Button.Text>
-          </Button>
-        )}
-        {server.access === "allowed" && (
+        {!isAllowAll &&
+          server.access === "allowed" &&
+          primaryMode !== "edit" && (
+            <Button
+              disabled={disabled || !canManageAllowRules}
+              onClick={() => onOpenAction("edit")}
+              variant="tertiary"
+            >
+              <Button.Text>{actionLabel("edit")}</Button.Text>
+            </Button>
+          )}
+        {!isAllowAll && server.access === "allowed" && (
           <Button
             disabled={disabled}
             onClick={() => onOpenAction("delete")}
@@ -304,9 +375,9 @@ function DetailActionButtons({
         )}
       </div>
       {hasVisibleAllowRuleAction && !canManageAllowRules && (
-        <Type muted small>
+        <Text muted small>
           {allowRuleUnavailableMessage}
-        </Type>
+        </Text>
       )}
     </div>
   );
@@ -315,6 +386,8 @@ function DetailActionButtons({
 export default function ShadowMCPServerDetail(): JSX.Element {
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
+  const routes = useRoutes();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const policiesQuery = useRiskListPolicies();
   const membersQuery = useMembers();
@@ -328,6 +401,13 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       policiesQuery.data?.policies,
     );
   }
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
+  const allowAllPolicy =
+    disposition === "allow_all"
+      ? (shadowMCPPolicies.find(
+          (policy) => policy.shadowMcpDisposition === "allow_all",
+        ) ?? null)
+      : null;
   const allowRuleUnavailableMessage = policiesQuery.isError
     ? "Policy status is unavailable. Refresh the page to try again."
     : ALLOW_RULE_POLICY_REQUIRED;
@@ -366,6 +446,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     enabled: usersQueryEnabled,
   });
   const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
+  const blockInventoryServer = useBlockShadowMCPInventoryServerMutation();
+  const unblockInventoryServer = useUnblockShadowMCPInventoryServerMutation();
   const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
   const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
   const updateServerName = useUpdateShadowMCPInventoryServerNameMutation();
@@ -376,12 +458,21 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     isSubmittingAction ||
     upsertPolicyBypass.isPending ||
     deletePolicyBypass.isPending ||
-    resolveInventoryRequest.isPending;
+    resolveInventoryRequest.isPending ||
+    blockInventoryServer.isPending ||
+    unblockInventoryServer.isPending;
   const pageLoading =
     policiesQuery.isLoading ||
     membersQuery.isLoading ||
     rolesQuery.isLoading ||
     serverQuery.isLoading;
+  const onOpenUser = (user: ShadowMCPInventoryUser) => {
+    if (!user.email) return;
+
+    void navigate(
+      `${routes.costs.href()}/${encodeCrumb({ dim: Dimension.Email, value: user.email })}`,
+    );
+  };
 
   useEffect(() => {
     setUsersPaginationScope(usersScope);
@@ -469,7 +560,28 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     const label = action.server.serverName ?? action.server.canonicalServerUrl;
     setIsSubmittingAction(true);
     try {
-      if (action.mode === "delete") {
+      if (action.mode === "block" || action.mode === "unblock") {
+        if (!allowAllPolicy) {
+          throw new Error("no allow_all shadow MCP policy available");
+        }
+        const target = {
+          projectId: project.id,
+          serverUrl: action.server.canonicalServerUrl,
+          policyId: allowAllPolicy.id,
+        };
+        if (action.mode === "block") {
+          await blockInventoryServer.mutateAsync({
+            request: { blockShadowMCPInventoryServerRequestBody: target },
+          });
+        } else {
+          await unblockInventoryServer.mutateAsync({ request: target });
+        }
+        toast.success(
+          action.mode === "block"
+            ? `Blocked server: ${label}`
+            : `Unblocked server: ${label}`,
+        );
+      } else if (action.mode === "delete") {
         await deletePolicyBypass.mutateAsync({
           request: {
             projectId: project.id,
@@ -583,6 +695,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                   allowRuleUnavailableMessage={allowRuleUnavailableMessage}
                   canManageAllowRules={shadowMCPPolicies.length > 0}
                   disabled={isSubmitting}
+                  disposition={disposition}
                   onOpenAction={openAction}
                   server={server}
                 />
@@ -593,17 +706,18 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                 <SkeletonTable />
               ) : serverQuery.error || !server ? (
                 <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Shadow MCP server could not be loaded
-                  </Type>
-                  <Type muted small className="max-w-md">
+                  </Text>
+                  <Text muted small className="max-w-md">
                     Refresh the page or try again later.
-                  </Type>
+                  </Text>
                 </div>
               ) : (
                 <div className="flex min-h-0 flex-col gap-6">
                   <ShadowMCPInventoryActionSheet
                     action={activeAction}
+                    disposition={disposition}
                     isSubmitting={isSubmitting}
                     members={membersQuery.data?.members ?? []}
                     onOpenChange={(open) => {
@@ -617,27 +731,32 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     roles={rolesQuery.data?.roles ?? []}
                     shadowMCPPolicies={shadowMCPPolicies}
                   />
-                  <ServerSummary policyState={policyState} server={server} />
+                  <ServerSummary
+                    disposition={disposition}
+                    policyState={policyState}
+                    server={server}
+                  />
                   <section className="min-h-0 space-y-3">
                     <div>
-                      <Type variant="subheading">Top users</Type>
-                      <Type muted small>
+                      <Text variant="subheading">Top users</Text>
+                      <Text muted small>
                         Users with observed calls to this Shadow MCP server.
-                      </Type>
+                      </Text>
                     </div>
                     {usersQuery.isLoading && !hasLoadedUserPages ? (
                       <SkeletonTable />
                     ) : usersQuery.error && !hasLoadedUserPages ? (
                       <div className="bg-background flex min-h-24 flex-col items-center justify-center gap-1 px-4 py-6 text-center">
-                        <Type variant="body" className="font-medium">
+                        <Text variant="body" className="font-medium">
                           Users could not be loaded
-                        </Type>
+                        </Text>
                       </div>
                     ) : (
                       <TopUsersTable
                         hasMore={Boolean(nextUsersCursor)}
                         isLoading={isLoadingMoreUsers}
                         onLoadMore={loadMoreUsers}
+                        onOpenUser={onOpenUser}
                         users={displayedUsers}
                       />
                     )}

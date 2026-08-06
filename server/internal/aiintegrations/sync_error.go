@@ -145,6 +145,20 @@ type CodexCostSyncProgress struct {
 	WatermarkReached  time.Time `json:"watermark_reached"`
 }
 
+func (p ChatGPTConversationSyncProgress) String() string {
+	return fmt.Sprintf(
+		"window_start=%s log_pages=%d log_files=%d events=%d messages_written=%d chats_upserted=%d timestamp_fallbacks=%d watermark_reached=%s",
+		p.WindowStart.Format(time.RFC3339Nano), p.LogPages, p.LogFiles, p.Events, p.MessagesWritten, p.ChatsUpserted, p.TimestampFallbacks, p.WatermarkReached.Format(time.RFC3339Nano),
+	)
+}
+
+func (p CodexCloudSyncProgress) String() string {
+	return fmt.Sprintf(
+		"window_start=%s log_pages=%d log_files=%d events=%d messages_written=%d chats_upserted=%d skipped_clients=%d skipped_details=%d skipped_missing_ids=%d timestamp_fallbacks=%d watermark_reached=%s",
+		p.WindowStart.Format(time.RFC3339Nano), p.LogPages, p.LogFiles, p.Events, p.MessagesWritten, p.ChatsUpserted, p.SkippedClients, p.SkippedDetails, p.SkippedMissingIDs, p.TimestampFallbacks, p.WatermarkReached.Format(time.RFC3339Nano),
+	)
+}
+
 func (p CodexCostSyncProgress) String() string {
 	return fmt.Sprintf(
 		"window_start=%s log_pages=%d log_files=%d cost_events=%d cost_events_written=%d watermark_reached=%s",

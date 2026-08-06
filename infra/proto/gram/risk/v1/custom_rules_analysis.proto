@@ -23,6 +23,7 @@ message CustomRulesAnalysis {
   string kind = 9; // The message.Type string (e.g. "user_message", "tool_request").
   repeated ToolCall tool_calls = 10;
   repeated string custom_rule_ids = 11; // The policy's selected detector rule ids.
+  string content_part_id = 12;
 
   // ToolCall is one recorded tool invocation surfaced from a message's tool calls.
   message ToolCall {

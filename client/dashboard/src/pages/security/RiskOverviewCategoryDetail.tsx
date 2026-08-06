@@ -5,14 +5,19 @@ import {
 } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
+import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   useCallback,
@@ -24,14 +29,17 @@ import {
 } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
-import { getRuleTitleFallback } from "./risk-utils";
+import { getRuleTitleFallback, isJudgeSource } from "./risk-utils";
 import {
   CategoryLabel,
+  EventMatchDialog,
   MaskedMatch,
   RevealAllProvider,
   RevealAllToggle,
   RuleLabel,
 } from "./risk-ui";
+import { useDismissFinding } from "./useDismissFinding";
+import { useSetupExclusionRule } from "./useSetupExclusionRule";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "15m",
@@ -159,7 +167,34 @@ function RiskOverviewCategoryDetailContent() {
   const categoryMeta = RULE_CATEGORY_META[category as RuleCategory];
   const categoryLabel = categoryMeta?.label ?? category;
 
+  const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
+  const visibleResults = useMemo(
+    () => results.filter((r) => !isOptimisticallyDismissed(r.id)),
+    [results, isOptimisticallyDismissed],
+  );
+  const selection = useRowSelection(visibleResults, (r) => r.id);
+  const handleDismissSelected = useCallback(() => {
+    const toDismiss = selection.selectedItems;
+    if (toDismiss.length === 0) return;
+    dismiss(toDismiss);
+    selection.clear();
+  }, [selection, dismiss]);
+
+  const exclusionRule = useSetupExclusionRule();
+  const handleSetupExclusionSelected = useCallback(() => {
+    const selected = selection.selectedItems;
+    if (selected.length === 0) return;
+    // Deliberately doesn't clear the selection (unlike handleDismissSelected):
+    // a batch AI suggestion takes a few seconds, and clearing here would
+    // collapse the bulk bar mid-request, hiding the spinner on "Setup
+    // exclusion rule" with no visible feedback until the sheet opens. Leaving
+    // the selection also means Clear/retry still works if the sheet is
+    // cancelled.
+    exclusionRule.open(selected);
+  }, [selection, exclusionRule]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
+  const headerMeasure = useMeasuredHeight<HTMLTableRowElement>();
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
@@ -203,7 +238,21 @@ function RiskOverviewCategoryDetailContent() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
               <MetricCard
                 title="Findings"
-                value={overviewCategory?.findings ?? totalCount}
+                // overviewCategory.findings is the authoritative count for a
+                // category ranked in the overview's top 10. A category can be
+                // absent from that ranking for two different reasons that
+                // look identical from here — it has zero findings, or it
+                // simply isn't top-ranked — so falling back to totalCount
+                // unconditionally is wrong: totalCount comes from resultsQuery,
+                // which is filtered by ruleFilter when a rule is selected, so
+                // it would understate the category's true total. ruleBreakdownQuery
+                // is always category-scoped and never filtered by ruleFilter, so
+                // its server-computed total is the correct unranked fallback.
+                value={
+                  overviewCategory
+                    ? overviewCategory.findings
+                    : (ruleBreakdownQuery.data?.total ?? totalCount)
+                }
                 format="compact"
                 icon="flag"
               />
@@ -223,13 +272,36 @@ function RiskOverviewCategoryDetailContent() {
                   .filter(Boolean)}
               />
             </div>
-            <ResultsTable
-              results={results}
-              isLoading={resultsQuery.isLoading}
-              scrollRef={scrollRef}
-              onScroll={handleScroll}
-              onSelectChat={setSelectedChatId}
-            />
+            {exclusionRule.sheet}
+            <div className="relative">
+              <BulkActionBar
+                selectedCount={selection.selectedCount}
+                actions={[
+                  {
+                    label: "Mark as false positive",
+                    onClick: handleDismissSelected,
+                  },
+                  {
+                    label: "Set up exclusion rule",
+                    onClick: handleSetupExclusionSelected,
+                  },
+                ]}
+                loading={exclusionRule.isSuggesting}
+                leftOffsetPx={32}
+                heightPx={headerMeasure.height}
+              />
+              <ResultsTable
+                results={visibleResults}
+                isLoading={resultsQuery.isLoading}
+                scrollRef={scrollRef}
+                headerRowRef={headerMeasure.ref}
+                onScroll={handleScroll}
+                onSelectChat={setSelectedChatId}
+                selection={selection}
+                onDismiss={(r) => dismiss([r])}
+                onSetupExclusion={(r) => exclusionRule.open([r])}
+              />
+            </div>
           </div>
         </Page.Section.Body>
       </Page.Section>
@@ -248,14 +320,22 @@ function ResultsTable({
   results,
   isLoading,
   scrollRef,
+  headerRowRef,
   onScroll,
   onSelectChat,
+  selection,
+  onDismiss,
+  onSetupExclusion,
 }: {
   results: RiskResult[];
   isLoading: boolean;
   scrollRef: React.RefObject<HTMLDivElement | null>;
+  headerRowRef: (node: HTMLTableRowElement | null) => void;
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   onSelectChat: (chatId: string) => void;
+  selection: RowSelection<RiskResult>;
+  onDismiss: (result: RiskResult) => void;
+  onSetupExclusion: (result: RiskResult) => void;
 }) {
   if (isLoading) {
     return (
@@ -287,6 +367,7 @@ function ResultsTable({
     >
       <table className="w-full table-fixed text-sm">
         <colgroup>
+          <col className="w-[32px]" />
           <col className="w-[180px]" />
           <col className="w-[200px]" />
           <col />
@@ -295,12 +376,19 @@ function ResultsTable({
           <col className="w-[48px]" />
         </colgroup>
         <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
-          <tr>
+          <tr ref={headerRowRef}>
+            <th className="px-4 py-2">
+              <Checkbox
+                checked={selection.allState}
+                onCheckedChange={() => selection.toggleAll()}
+                aria-label="Select all findings"
+              />
+            </th>
             <th className="px-4 py-2 text-left">Time</th>
-            <th className="px-4 py-2 text-left">Rule</th>
+            <th className="px-4 py-2 text-left">Category / Rule</th>
             <th className="px-4 py-2 text-left">Session</th>
             <th className="px-4 py-2 text-left">User</th>
-            <th className="px-4 py-2 text-left">Match</th>
+            <th className="px-4 py-2 text-left">Evidence</th>
             <th className="px-4 py-2"></th>
           </tr>
         </thead>
@@ -326,6 +414,13 @@ function ResultsTable({
                   : "hover:bg-muted/30"
               }
             >
+              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={selection.isSelected(result.id)}
+                  onCheckedChange={() => selection.toggle(result.id)}
+                  aria-label="Select finding"
+                />
+              </td>
               <td className="text-muted-foreground truncate px-4 py-3 font-mono text-xs">
                 {result.createdAt
                   ? new Date(result.createdAt).toLocaleString()
@@ -347,18 +442,38 @@ function ResultsTable({
                 {result.userId ?? "-"}
               </td>
               <td className="px-4 py-3">
-                <MaskedMatch
-                  resultId={result.id}
-                  matchRedacted={result.matchRedacted}
-                />
-              </td>
-              <td className="px-4 py-3 text-right">
-                {result.chatId && (
-                  <Icon
-                    name="chevron-right"
-                    className="text-muted-foreground size-4"
+                {isJudgeSource(result.source) ? (
+                  <EventMatchDialog
+                    resultId={result.id}
+                    matchRedacted={result.matchRedacted}
+                    rationale={result.description}
+                  />
+                ) : (
+                  <MaskedMatch
+                    resultId={result.id}
+                    matchRedacted={result.matchRedacted}
                   />
                 )}
+              </td>
+              <td
+                className="px-4 py-3 text-right"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <MoreActions
+                  actions={
+                    [
+                      {
+                        label: "Mark as false positive",
+                        onClick: () => onDismiss(result),
+                      },
+                      {
+                        label: "Set up exclusion rule",
+                        onClick: () => onSetupExclusion(result),
+                      },
+                    ] satisfies Action[]
+                  }
+                />
               </td>
             </tr>
           ))}

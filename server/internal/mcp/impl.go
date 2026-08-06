@@ -12,13 +12,16 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -43,15 +46,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -67,11 +73,13 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -85,19 +93,39 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	logger                 *slog.Logger
-	tracer                 trace.Tracer
-	metrics                *metrics
-	guardianPolicy         *guardian.Policy
-	db                     *pgxpool.Pool
-	authRepo               *auth_repo.Queries
-	toolsetsRepo           *toolsets_repo.Queries
-	mcpMetadataRepo        *metadata_repo.Queries
-	orgsRepo               *organizations_repo.Queries
-	auth                   *auth.Auth
-	env                    toolconfig.EnvironmentLoader
-	serverURL              *url.URL
-	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	metrics         *metrics
+	guardianPolicy  *guardian.Policy
+	db              *pgxpool.Pool
+	authRepo        *auth_repo.Queries
+	toolsetsRepo    *toolsets_repo.Queries
+	mcpMetadataRepo *metadata_repo.Queries
+	orgsRepo        *organizations_repo.Queries
+	auth            *auth.Auth
+	env             toolconfig.EnvironmentLoader
+	serverURL       *url.URL
+	siteURL         *url.URL
+	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// features gates flag-controlled behavior on the OAuth surface (inbound
+	// CIMD). Wired from the same posthog client in production; typed as the
+	// interface so tests can inject feature.InMemory.
+	features feature.Provider
+	// cimdOrgFlagLastKnown remembers the last successful per-organization
+	// evaluation of FlagUserSessionCIMD so a flag-provider outage degrades
+	// to the last known state instead of failing closed on the
+	// unauthenticated OAuth surface. Guarded by cimdOrgFlagMu; holds one bool
+	// per organization that touches the surface.
+	cimdOrgFlagMu        sync.RWMutex
+	cimdOrgFlagLastKnown map[string]bool
+	// cimdResolver fetches + validates Client ID Metadata Documents for
+	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
+	cimdResolver *cimd.Resolver
+	// cimdAdmissionMetrics records the per-issuer admission decisions made
+	// before the resolver runs, on their own cimd.admission.decisions
+	// instrument (a denial performs no fetch, so it has no place under
+	// cimd.fetch.attempts).
+	cimdAdmissionMetrics   *admission.Metrics
 	toolProxy              *gateway.ToolProxy
 	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
@@ -122,11 +150,15 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	// sessionClientInfo holds the MCP client identity captured at initialize
+	// so tools/call on the same session can resolve it. Always usable: without
+	// Redis it records nothing and every caller resolves as unknown.
+	sessionClientInfo *sessionclientinfo.Store
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
 	// in isolation.
-	userSessionSigner *usersessions.Signer
+	userSessionSigner *sessiontokens.Signer
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
@@ -137,6 +169,8 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelManager      *tunnelManager
+	// Nil when no Redis was wired; every public tunneled request then fails closed.
+	tunnelPublic *tunnelPublicRuntime
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -235,7 +269,9 @@ func NewService(
 	chatSessionsManager *chatsessions.Manager,
 	env toolconfig.EnvironmentLoader,
 	posthog *posthog.Posthog,
+	features feature.Provider,
 	serverURL *url.URL,
+	siteURL *url.URL,
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
@@ -256,12 +292,14 @@ func NewService(
 	platformFeatureChecker platformtools.FeatureChecker,
 	platformToolsets map[string]platformtools.Toolset,
 	identityResolver IdentityResolver,
-	userSessionSigner *usersessions.Signer,
+	userSessionSigner *sessiontokens.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
 	tunnelGatewayCIDRs []string,
+	redisClient *redis.Client,
+	tunnelPublicConfig TunnelPublicConfig,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -279,21 +317,27 @@ func NewService(
 	)
 
 	return &Service{
-		logger:          logger,
-		tracer:          tracer,
-		metrics:         newMetrics(meter, logger),
-		guardianPolicy:  guardianPolicy,
-		db:              db,
-		authRepo:        auth_repo.New(db),
-		toolsetsRepo:    toolsets_repo.New(db),
-		mcpMetadataRepo: metadata_repo.New(db),
-		orgsRepo:        organizations_repo.New(db),
-		deploymentsRepo: deployments_repo.New(db),
-		externalmcpRepo: externalmcp_repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		env:             env,
-		serverURL:       serverURL,
-		posthog:         posthog,
+		logger:               logger,
+		tracer:               tracer,
+		metrics:              newMetrics(meter, logger),
+		guardianPolicy:       guardianPolicy,
+		db:                   db,
+		authRepo:             auth_repo.New(db),
+		toolsetsRepo:         toolsets_repo.New(db),
+		mcpMetadataRepo:      metadata_repo.New(db),
+		orgsRepo:             organizations_repo.New(db),
+		deploymentsRepo:      deployments_repo.New(db),
+		externalmcpRepo:      externalmcp_repo.New(db),
+		auth:                 auth.New(logger, db, sessions, authzEngine),
+		env:                  env,
+		serverURL:            serverURL,
+		siteURL:              siteURL,
+		posthog:              posthog,
+		features:             features,
+		cimdOrgFlagMu:        sync.RWMutex{},
+		cimdOrgFlagLastKnown: map[string]bool{},
+		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -333,12 +377,27 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		sessionClientInfo:  sessionclientinfo.NewStore(redisClient, 0),
 		identityResolver:   identityResolver,
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
 	}
+}
+
+func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return ""
+	}
+
+	return mcpaccess.RequestAccessURL(s.siteURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+		Scope:        "mcp:connect",
+		ResourceID:   serverID,
+		ResourceName: serverName,
+	})
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
@@ -348,11 +407,13 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/favicon.ico", oops.ErrHandle(service.logger, service.ServeFavicon).ServeHTTP)
+	o11y.AttachHandler(mux, "DELETE", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.HandleDeleteServer).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
@@ -391,25 +452,135 @@ func (s *Service) HandleClientMetadataDocument(w http.ResponseWriter, r *http.Re
 	return s.remoteChallengeMgr.HandleClientMetadataDocument(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
-// HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
-// and delegating to metadata service, or returning method not allowed for others.
+// HandleOpenAIAppsChallenge serves the domain-verification token configured
+// for the custom domain resolved by middleware. The platform host has no
+// custom-domain context and intentionally returns not found.
+func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	domainCtx := customdomains.FromContext(ctx)
+	if domainCtx == nil {
+		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+	}
+
+	domain, err := customdomains_repo.New(s.db).GetCustomDomainByID(ctx, domainCtx.DomainID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load OpenAI apps challenge token").LogError(ctx, s.logger)
+	}
+	if !domain.OpenaiAppsChallengeToken.Valid {
+		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	if _, err := w.Write([]byte(domain.OpenaiAppsChallengeToken.String)); err != nil {
+		return fmt.Errorf("write OpenAI apps challenge token: %w", err)
+	}
+	return nil
+}
+
+// HandleGetServer handles GET requests to /mcp/{mcpSlug}. Browser requests
+// (HTML Accept header) get the install page. SSE requests (Accept:
+// text/event-stream) against a proxy-backed (remote/tunneled) mcp_server are
+// the Streamable HTTP standalone server->client stream (spec § Listening for
+// Messages from the Server) and dispatch through the unified endpoint
+// dispatcher so the proxy relays them upstream. Everything else — including
+// SSE requests against toolset-backed servers, which never send
+// server-initiated messages — keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
-	// Check if this is a browser request (HTML Accept header)
+	var wantsHTML, wantsSSE bool
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-			// Intentionally NOT gated by enforceCustomDomainLockdown: the
-			// install page must remain reachable on the platform host even
-			// when the org's custom domain has an IP allowlist (private MCP
-			// install pages rely on the platform-host session cookie). Only
-			// the runtime POST path (ServePublic) is locked down.
-			if err := metadataService.ServeInstallPage(w, r); err != nil {
-				return fmt.Errorf("failed to serve install page: %w", err)
-			}
-			return nil
+		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
+		if err != nil {
+			continue
+		}
+		// An explicit q=0 marks the media type as not acceptable (RFC 9110
+		// § 12.4.2) — never route toward a representation the client rejected.
+		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
+			continue
+		}
+		switch mediatype {
+		case "text/html", "application/xhtml+xml":
+			wantsHTML = true
+		case "text/event-stream":
+			wantsSSE = true
+		}
+	}
+
+	if wantsHTML {
+		// Intentionally NOT gated by enforceCustomDomainLockdown: the
+		// install page must remain reachable on the platform host even
+		// when the org's custom domain has an IP allowlist (private MCP
+		// install pages rely on the platform-host session cookie). Only
+		// the runtime paths (ServePublic, serveProxyBackedEndpoint) are
+		// locked down.
+		if err := metadataService.ServeInstallPage(w, r); err != nil {
+			return fmt.Errorf("failed to serve install page: %w", err)
+		}
+		return nil
+	}
+
+	// The Streamable HTTP spec requires clients to send Accept:
+	// text/event-stream on this GET; gating on it keeps health checkers and
+	// other stray probes answering locally instead of generating upstream
+	// noise.
+	if wantsSSE {
+		if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+			return err
 		}
 	}
 
 	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+}
+
+// HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable
+// HTTP session termination (spec § Session Management). Proxy-backed servers
+// relay it upstream so the remote session is actually torn down;
+// toolset-backed servers hold no upstream session state, so the method stays
+// unsupported there.
+func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) error {
+	if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+		return err
+	}
+	return oops.E(oops.CodeMethodNotAllowed, nil, "session termination is not supported for this MCP server")
+}
+
+// serveProxyBackedEndpoint resolves {mcpSlug} and, when it maps to a
+// proxy-backed (remote or tunneled) mcp_server, dispatches the request
+// through the unified endpoint dispatcher — the same issuer gate + backend
+// switch the POST path uses. handled=true means an authoritative outcome was
+// reached (dispatched, or failed in a way the caller must propagate);
+// handled=false means the slug does not resolve or resolves to a non-proxy
+// backend, so callers fall back to their legacy behavior.
+func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Request) (handled bool, err error) {
+	ctx := r.Context()
+
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return false, nil
+	}
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		return false, nil
+	default:
+		return true, err
+	}
+
+	if !mcpServer.RemoteMcpServerID.Valid && !mcpServer.TunneledMcpServerID.Valid {
+		return false, nil
+	}
+
+	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+		return true, err
+	}
+
+	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
@@ -770,7 +941,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err))
+				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, toolset.ID.String(), toolset.Name)))
 			}
 		}
 
@@ -996,6 +1167,11 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // strictPlatform=true to assert that the original challenge was minted
 // on the platform domain — the value is an explicit assertion rather
 // than a route inference.
+//
+// Disabled toolsets (mcp_enabled false) surface as errToolsetNotFound so
+// every legacy-routed surface (serving, well-known metadata, OAuth
+// challenges) treats them as nonexistent — mirroring how the
+// mcp_endpoints → mcp_servers path handles visibility 'disabled'.
 func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, error) {
 	var toolset toolsets_repo.Toolset
 	var err error
@@ -1015,6 +1191,9 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 		return nil, errToolsetNotFound
 	case err != nil:
 		return nil, fmt.Errorf("lookup toolset: %w", err)
+	}
+	if !toolset.McpEnabled {
+		return nil, errToolsetNotFound
 	}
 	return &toolset, nil
 }
@@ -1109,13 +1288,13 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
 	case "initialize":
-		return handleInitialize(ctx, s.logger, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.serverURL)
+		return handleInitialize(ctx, s.logger, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.serverURL, s.sessionClientInfo)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1396,6 +1575,7 @@ func (s *Service) HandleToolsCall(
 		s.mcpMetadataRepo,
 		s.auditLogger,
 		s.platformExtras,
+		s.sessionClientInfo,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tool call: %w", err)

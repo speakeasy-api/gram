@@ -1,15 +1,15 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router";
+import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { MCPActivityIndicator } from "./MCPActivityIndicator";
 import type { McpActivityStatus } from "./mcp-activity";
-import { McpServerLogo } from "./McpServerLogo";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
 // Today only Remote-MCP-backed servers reach this component (filtered upstream
@@ -35,6 +35,9 @@ export function MCPServerCard({
 
   const mcpEnabled = server.visibility !== "disabled";
   const mcpIsPublic = server.visibility === "public";
+  // Unproxied servers are never proxied, so an endpoint count would always
+  // read 0 and imply something's broken. Surface the backend kind instead.
+  const isUnproxied = !!server.unproxiedMcpServerId;
 
   return (
     <Link
@@ -43,22 +46,27 @@ export function MCPServerCard({
     >
       <DotCard
         icon={
-          <McpServerLogo mcpServerId={server.id} name={server.name} size="lg" />
+          <SourceMcpIcon
+            mcpServerId={server.id}
+            className="h-8 w-8 object-contain"
+          />
         }
       >
         {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="text-md group-hover:text-primary flex-1 truncate transition-colors"
             title={server.name ?? undefined}
           >
             {server.name || "MCP Server"}
-          </Type>
+          </Text>
           <Badge variant="neutral" className="bg-card">
             <Badge.Text>
-              {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
+              {isUnproxied
+                ? "Not proxied"
+                : `${endpointCount} ${endpointCount === 1 ? "endpoint" : "endpoints"}`}
             </Badge.Text>
           </Badge>
         </div>

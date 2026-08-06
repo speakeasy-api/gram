@@ -9,9 +9,10 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DashboardCard } from "@/components/ui/dashboard-card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
@@ -40,7 +41,7 @@ import {
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { Line } from "react-chartjs-2";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { buildRiskTrendChartData, type TrendPoint } from "./riskTrendChartData";
 
 ChartJS.register(
@@ -134,13 +135,13 @@ function NoPoliciesEmptyState() {
         <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
           <Shield className="text-muted-foreground size-6" />
         </div>
-        <Type variant="subheading" className="mb-1">
+        <Text variant="subheading" className="mb-1">
           Risk Analysis
-        </Type>
-        <Type small muted className="mb-4 max-w-md text-center">
+        </Text>
+        <Text small muted className="mb-4 max-w-md text-center">
           Create a risk policy to begin scanning chat messages for leaked
           secrets, sensitive data, and policy flags.
-        </Type>
+        </Text>
         <Button variant="primary" asChild>
           <Link to={routes.policyCenter.href()}>
             <Button.Text>Manage Policies</Button.Text>
@@ -359,13 +360,13 @@ function SecurityOverviewContent() {
               className="text-muted-foreground mt-0.5 size-4 shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <Type small className="font-medium">
+              <Text small className="font-medium">
                 All risk policies are disabled
-              </Type>
-              <Type small muted>
+              </Text>
+              <Text small muted>
                 Showing historic findings only — new chat messages will not be
                 scanned until a policy is re-enabled.
-              </Type>
+              </Text>
             </div>
             <Button variant="secondary" size="sm" asChild>
               <Link to={routes.policyCenter.href()}>
@@ -503,10 +504,6 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
     return next;
   }, [location.search]);
 
-  const agentsParams = new URLSearchParams(carriedRangeParams);
-  agentsParams.set("has_risk", "true");
-  const agentsHref = `${routes.agentSessions.href()}?${agentsParams.toString()}`;
-
   const riskEventsHref = carriedRangeParams.toString()
     ? `${routes.riskEvents.href()}?${carriedRangeParams.toString()}`
     : routes.riskEvents.href();
@@ -519,24 +516,14 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
         changes over time.
       </Page.Section.Description>
       <Page.Section.CTA>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" asChild>
-            <Link to={agentsHref}>
-              <Button.Text>View Sessions with Risk</Button.Text>
-              <Button.RightIcon>
-                <Icon name="arrow-right" />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-          <Button variant="secondary" asChild>
-            <Link to={riskEventsHref}>
-              <Button.Text>View All Events</Button.Text>
-              <Button.RightIcon>
-                <Icon name="arrow-right" />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-        </div>
+        <Button variant="secondary" asChild>
+          <Link to={riskEventsHref}>
+            <Button.Text>View All Events</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" />
+            </Button.RightIcon>
+          </Link>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-8">{children}</div>
@@ -681,6 +668,12 @@ function RiskTrendChart({
         borderWidth: 1,
         padding: 12,
         boxPadding: 4,
+        // Index-mode hover activates every series at that x. Drop zeros so a
+        // sparse multi-series chart doesn't list every inactive category
+        // (which balloons the tooltip until it covers the chart). Returning
+        // `undefined` from `label` is not enough — Chart.js treats that as
+        // "use the default callback" and still renders the line.
+        filter: (item) => (item.parsed.y ?? 0) !== 0,
         callbacks: {
           title: (items) => {
             const x = items[0]?.parsed.x;
@@ -693,12 +686,10 @@ function RiskTrendChart({
               minute: "2-digit",
             });
           },
-          label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return undefined;
-            return item.formattedValue
+          label: (item) =>
+            item.formattedValue
               ? `${item.dataset.label}: ${item.formattedValue}`
-              : "";
-          },
+              : "",
         },
       },
       zoom: zoomPluginOptions,

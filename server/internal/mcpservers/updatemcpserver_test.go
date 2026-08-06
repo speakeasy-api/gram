@@ -752,3 +752,110 @@ func TestUpdateMcpServer_AlreadyEnabledUpdateDoesNotAttach(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, servers)
 }
+
+func TestUpdateMcpServer_TunneledMcpPublicAllowedWithConsent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	tunneledServerIDStr := tunneledServerID.String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "private tunneled mcp server pending consent",
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerIDStr,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	enableTunneledPublicConsent(t, ctx, ti.conn, *authCtx.ProjectID, tunneledServerID)
+
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                nil,
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerIDStr,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, types.McpServerVisibility("public"), updated.Visibility)
+}
+
+func TestUpdateMcpServer_AttachingUnproxiedBackendRejectsNonStaff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, _ := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "test mcp server")
+	unproxiedServerID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		ID:                   created.ID,
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &unproxiedServerID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestUpdateMcpServer_AlreadyUnproxiedAllowsNonStaffRename(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	unproxiedServerID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	staffCtx := withStaffEmail(t, ctx)
+	created, err := ti.service.CreateMcpServer(staffCtx, &gen.CreateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Name:                 "vendor server",
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &unproxiedServerID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	// A non-staff project member with write access can still manage a server
+	// staff already attached to an unproxied backend, as long as the backend
+	// reference itself isn't changing.
+	newName := "renamed vendor server"
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		ID:                   created.ID,
+		Name:                 &newName,
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &unproxiedServerID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, newName, *updated.Name)
+}

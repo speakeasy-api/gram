@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDownIcon } from "lucide-react";
+import { AtSign, ChevronDownIcon } from "lucide-react";
 import { memo, type FC } from "react";
 
 import type { TextMessagePartComponent } from "@assistant-ui/react";
@@ -53,6 +53,20 @@ const ContextDisclosure: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => {
   );
 };
 
+const SkillContextPills: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => (
+  <div className="aui-user-skill-context mb-2 flex flex-wrap gap-1">
+    {blocks.map((block, index) => (
+      <span
+        key={`${block.skillName}-${index}`}
+        className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-xs text-white/80"
+      >
+        <AtSign className="size-3 shrink-0" />
+        <span className="truncate">{block.skillName}</span>
+      </span>
+    ))}
+  </div>
+);
+
 /**
  * Drop-in replacement for the default user text part. Folds leading
  * `<…context>` blocks into a collapsed disclosure and renders the remaining
@@ -64,9 +78,16 @@ const UserMessageTextImpl: TextMessagePartComponent = ({ text }) => {
   if (blocks.length === 0) {
     return <p className="aui-user-message-text whitespace-pre-line">{text}</p>;
   }
+  const skillBlocks = blocks.filter((block) => block.skillName);
+  const disclosureBlocks = blocks.filter((block) => !block.skillName);
   return (
     <div className="aui-user-message-text-with-context">
-      <ContextDisclosure blocks={blocks} />
+      {skillBlocks.length > 0 ? (
+        <SkillContextPills blocks={skillBlocks} />
+      ) : null}
+      {disclosureBlocks.length > 0 ? (
+        <ContextDisclosure blocks={disclosureBlocks} />
+      ) : null}
       {rest.trim() !== "" && (
         <p className="aui-user-message-text whitespace-pre-line">{rest}</p>
       )}

@@ -85,8 +85,11 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: () => <span data-testid="skills-icon" />,
 }));
 

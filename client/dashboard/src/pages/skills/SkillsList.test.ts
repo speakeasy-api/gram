@@ -1,10 +1,6 @@
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { describe, expect, it } from "vitest";
-import {
-  filterSkills,
-  skillCountLabel,
-  sortSkills,
-} from "./skills-list-helpers";
+import { filterSkills, prioritizeAddableSkills } from "./skills-list-helpers";
 
 function skill(overrides: Partial<Skill>): Skill {
   return {
@@ -15,6 +11,7 @@ function skill(overrides: Partial<Skill>): Skill {
     summary: "Draft customer release notes",
     sourceKind: "manual",
     classification: "custom",
+    tags: [],
     latestVersionId: "version_a",
     versionCount: 1,
     hasValidVersion: true,
@@ -59,75 +56,30 @@ describe("SkillsList filtering", () => {
     expect(filterSkills(skills, "", ["manual"], ["built_in"])).toEqual([]);
   });
 
-  it("never labels loaded pages as the project-wide total", () => {
+  it("filters by any overlapping tag", () => {
+    const tagged = [
+      skill({ id: "a", tags: ["ops", "runbook"] }),
+      skill({ id: "b", tags: ["docs"] }),
+    ];
     expect(
-      skillCountLabel({
-        active: false,
-        hasNextPage: true,
-        incomplete: false,
-        loadedCount: 200,
-        resultCount: 200,
-      }),
-    ).toBe("200 loaded");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: true,
-        incomplete: false,
-        loadedCount: 200,
-        resultCount: 3,
-      }),
-    ).toBe("Searching 200 loaded");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: false,
-        incomplete: false,
-        loadedCount: 240,
-        resultCount: 3,
-      }),
-    ).toBe("3 skills");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: true,
-        incomplete: true,
-        loadedCount: 200,
-        resultCount: 0,
-      }),
-    ).toBe("0 matching loaded");
+      filterSkills(tagged, "", [], [], ["ops"]).map((item) => item.id),
+    ).toEqual(["a"]);
+    expect(filterSkills(tagged, "", [], [], ["missing"])).toEqual([]);
   });
 
-  it("sorts sampled metrics ahead of missing values", () => {
-    const first = skill({ id: "a", displayName: "Alpha" });
-    const second = skill({ id: "b", displayName: "Beta" });
-    const metrics = new Map([
-      [
-        second.id,
-        {
-          activations: 4,
-          activatedSessions: 3,
-          averageSessionCostUsd: 1,
-          sessionCostUsd: 3,
-          efficacy: {
-            averageScore: 0.8,
-            estimatedMinutesSavedAverage: 5,
-            estimatedMinutesSavedSamples: 1,
-            estimatedMinutesSavedTotal: 5,
-            estimatedTurnsSavedAverage: 1,
-            estimatedTurnsSavedSamples: 1,
-            estimatedTurnsSavedTotal: 1,
-            flagCounts: {},
-            roiConfidenceCounts: {},
-            scoredSessions: 1,
-          },
-        },
-      ],
-    ]);
+  it("prioritizes addable skills without reordering either group", () => {
+    const unavailableFirst = skill({ id: "a", hasValidVersion: false });
+    const availableFirst = skill({ id: "b" });
+    const unavailableSecond = skill({ id: "c", hasValidVersion: false });
+    const availableSecond = skill({ id: "d" });
 
-    expect(sortSkills([first, second], metrics, "efficacy")[0]?.id).toBe("b");
-    expect(sortSkills([first, second], metrics, "activations")[0]?.id).toBe(
-      "b",
-    );
+    expect(
+      prioritizeAddableSkills([
+        unavailableFirst,
+        availableFirst,
+        unavailableSecond,
+        availableSecond,
+      ]).map((item) => item.id),
+    ).toEqual(["b", "d", "a", "c"]);
   });
 });

@@ -3,15 +3,15 @@ import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
 import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import { useFetchSourceContent } from "@/components/sources/useFetchSourceContent";
-import { SkeletonCode } from "@/components/ui/skeleton";
+import { SkeletonCode } from "@/components/ui/Skeleton";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
@@ -29,11 +29,13 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
+import UnproxiedMCPDetails from "./unproxied-mcp/UnproxiedMCPDetails";
 import RemoteMCPDetails from "./remote-mcp/RemoteMCPDetails";
 import TunneledMCPDetails from "./tunneled-mcp/TunneledMCPDetails";
 import { SourceOverviewTab } from "./SourceOverviewTab";
@@ -242,6 +244,10 @@ export default function SourceDetails(): JSX.Element {
     return <TunneledMCPDetails />;
   }
 
+  if (sourceKind === "unproxiedmcp") {
+    return <UnproxiedMCPDetails />;
+  }
+
   if (!isLoadingDeployment && !source) {
     return <Navigate to={routes.sources.href()} replace />;
   }
@@ -271,9 +277,9 @@ export default function SourceDetails(): JSX.Element {
               </Badge>
             </div>
             <div className="ml-1 flex items-center gap-2">
-              <Type className="text-muted-foreground max-w-2xl truncate">
+              <Text className="text-muted-foreground max-w-2xl truncate">
                 {source?.slug}
-              </Type>
+              </Text>
             </div>
           </div>
         </DetailHero>
@@ -346,11 +352,11 @@ export default function SourceDetails(): JSX.Element {
                 </div>
               ) : specError ? (
                 <div className="py-8 text-center">
-                  <Type className="text-destructive">
+                  <Text className="text-destructive">
                     {specError instanceof Error
                       ? specError.message
                       : "Failed to fetch spec"}
-                  </Type>
+                  </Text>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -370,9 +376,9 @@ export default function SourceDetails(): JSX.Element {
                   wordWrap="on"
                 />
               ) : (
-                <Type className="text-muted-foreground py-8 text-center">
+                <Text className="text-muted-foreground py-8 text-center">
                   No spec content available
-                </Type>
+                </Text>
               )}
             </TabsContent>
           )}

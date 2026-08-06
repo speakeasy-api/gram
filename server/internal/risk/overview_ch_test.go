@@ -50,6 +50,8 @@ func chOverviewFinding(t *testing.T, projectID uuid.UUID, orgID string, chatID, 
 		FingerprintTenantHS256:   "",
 		ExcludedAt:               nil,
 		ExclusionID:              nil,
+		MessageCreatedAt:         createdAt,
+		AssistantID:              "",
 	}
 }
 
@@ -83,8 +85,9 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	disabledPolicyID, err := uuid.Parse(disabledPolicy.ID)
 	require.NoError(t, err)
 
-	from := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour) // 30 days ago, well within ClickHouse TTL
+	to := from.AddDate(0, 0, 7)                             // 7-day window
 
 	aliceSecret1Chat, aliceSecret1 := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
 	aliceSecret2Chat, aliceSecret2 := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
@@ -186,13 +189,139 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	for _, point := range result.TimeSeriesFindings {
 		timeSeries[point.Category+"|"+point.BucketStart] = point.Findings
 	}
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-02T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-02T14:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["pii|2026-05-03T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["shadow_mcp|2026-05-04T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-05T13:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-05T14:00:00Z"])
-	require.Equal(t, int64(0), timeSeries["pii|2026-05-05T13:00:00Z"])
+	bucket := func(offset time.Duration) string {
+		return from.Add(offset).Truncate(time.Hour).Format(time.RFC3339)
+	}
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(36*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(38*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["pii|"+bucket(60*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["shadow_mcp|"+bucket(84*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(109*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(110*time.Hour)])
+	require.Equal(t, int64(0), timeSeries["pii|"+bucket(109*time.Hour)])
+}
+
+// TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow covers the case
+// mirrorFalsePositiveToClickHouse actually produces: a finding's original row
+// (false_positive_at NULL) plus a later-inserted row sharing the SAME id with
+// false_positive_at set. A naive "row satisfies false_positive_at IS NULL"
+// filter would still count the id via the stale original row; only picking
+// each id's most-recently-inserted row before filtering excludes it.
+func TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour)
+	to := from.AddDate(0, 0, 1)
+
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+
+	// A second, untouched finding so the assertion distinguishes "dedup works"
+	// from "nothing was counted at all".
+	live := chOverviewFinding(t, projectID, orgID, chatID, msgID, from.Add(2*time.Hour), "gitleaks", "secret.aws_access_token", "alice@example.com")
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{live}))
+
+	// The dismissed finding's original row and its later append, sharing one
+	// id. inserted_at is set explicitly (rather than left to the now64(9)
+	// default) so the append is unambiguously the latest row regardless of how
+	// fast the two INSERTs run.
+	dismissedID := uuid.Must(uuid.NewV7())
+	require.NoError(t, ti.chConn.Exec(ctx, `
+		INSERT INTO risk_findings (id, created_at, inserted_at, organization_id, project_id, rule_id, source, category, chat_id)
+		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?)
+	`, dismissedID, from.Add(3*time.Hour), from.Add(3*time.Hour), orgID, projectID.String(), chatID.String()))
+	require.NoError(t, ti.chConn.Exec(ctx, `
+		INSERT INTO risk_findings (id, created_at, inserted_at, organization_id, project_id, rule_id, source, category, chat_id, false_positive_at)
+		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
+	`, dismissedID, from.Add(3*time.Hour), from.Add(4*time.Hour), orgID, projectID.String(), chatID.String(), from.Add(4*time.Hour)))
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{
+		From: new(from.Format(time.RFC3339)),
+		To:   new(to.Format(time.RFC3339)),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(1), result.Findings, "the dismissed id's stale original row must not be counted")
+
+	categoryCounts := map[string]int64{}
+	for _, category := range result.TopCategories {
+		categoryCounts[category.Category] = category.Findings
+	}
+	require.Equal(t, int64(1), categoryCounts["secrets"])
+}
+
+// TestInsertRiskFindings_SameIDTwiceInOneBatchGetsDistinctInsertedAt guards
+// against a regression where inserted_at was left off InsertRiskFindings'
+// column list and fell back to the table's DEFAULT now64(9). ClickHouse
+// evaluates now64() once per INSERT statement, not once per row, so every
+// row in a single multi-row batch got the identical inserted_at. That's
+// invisible when each id appears once per batch, but risk.markResultsFalsePositive
+// can append a second row for an id that was JUST inserted (or a Pub/Sub
+// backlog can redeliver several state changes for the same id into one
+// batch), and an identical inserted_at makes the ROW_NUMBER() dedup in
+// overviewFindings (overview.go) pick a non-deterministic row instead of the
+// latest one.
+func TestInsertRiskFindings_SameIDTwiceInOneBatchGetsDistinctInsertedAt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -1).Truncate(time.Hour)
+	to := now.Add(time.Hour)
+
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "bob@example.com")
+
+	original := chOverviewFinding(t, projectID, orgID, chatID, msgID, from.Add(time.Hour), "gitleaks", "secret.stripe_api_key", "bob@example.com")
+	dismissedAt := from.Add(2 * time.Hour)
+	dismissed := original
+	dismissed.FalsePositiveAt = &dismissedAt
+
+	// Both rows share `original.ID` and land in ONE InsertRiskFindings call,
+	// reproducing the same-batch double-insert scenario a rapid mark/unmark
+	// (or a redelivered backlog) produces in production.
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{original, dismissed}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	rows, err := ti.chConn.Query(ctx, `SELECT toUnixTimestamp64Nano(inserted_at) FROM risk_findings WHERE id = ? ORDER BY inserted_at`, original.ID)
+	require.NoError(t, err)
+	var insertedAtsNanos []int64
+	for rows.Next() {
+		var nanos int64
+		require.NoError(t, rows.Scan(&nanos))
+		insertedAtsNanos = append(insertedAtsNanos, nanos)
+	}
+	require.NoError(t, rows.Err())
+	require.Len(t, insertedAtsNanos, 2)
+	require.Less(t, insertedAtsNanos[0], insertedAtsNanos[1],
+		"the two rows for one id inserted in the same batch must get distinct, ordered inserted_at values, got %v", insertedAtsNanos)
+
+	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{
+		From: new(from.Format(time.RFC3339)),
+		To:   new(to.Format(time.RFC3339)),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), result.Findings, "the dedup must resolve to the later (dismissed) row, not an arbitrary one")
 }
 
 // TestGetRiskOverview_ClickHouseUserEmailPrecedence covers the Go-side email
@@ -210,8 +339,9 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
-	from := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2026, 5, 2, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour) // 30 days ago, well within ClickHouse TTL
+	to := from.AddDate(0, 0, 1)                             // 1 day window
 
 	// The auth context user exists in the users table; findings attributed to
 	// that internal user id must resolve to its email even with an opaque
@@ -244,4 +374,32 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	}
 	require.Equal(t, int64(1), users[userEmail])
 	require.Equal(t, int64(1), users["Unknown user"])
+}
+
+func TestRiskFindingsTTLRemovesExpiredRows(t *testing.T) { //nolint:paralleltest // OPTIMIZE mutates the ClickHouse table shared by this package's tests.
+	ctx, ti := newTestRiskService(t)
+
+	const retention = 90 * 24 * time.Hour
+	now := time.Now().UTC()
+	projectID := uuid.New()
+	orgID := "org_" + uuid.NewString()
+	expired := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), now.Add(-retention-24*time.Hour), "gitleaks", "secret.github_pat", "expired@example.com")
+	retained := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), now.Add(-retention+24*time.Hour), "gitleaks", "secret.github_pat", "retained@example.com")
+
+	queries := chrepo.New(ti.chConn)
+	require.NoError(t, queries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{expired, retained}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// TTL deletion normally happens during background merges. Force a merge so
+	// this test observes the retention contract deterministically.
+	require.NoError(t, ti.chConn.Exec(ctx, "OPTIMIZE TABLE risk_findings FINAL"))
+
+	var expiredCount, retainedCount uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, `
+		SELECT countIf(id = ?), countIf(id = ?)
+		FROM risk_findings
+		WHERE organization_id = ? AND project_id = ?
+	`, expired.ID, retained.ID, orgID, projectID.String()).Scan(&expiredCount, &retainedCount))
+	require.Zero(t, expiredCount)
+	require.Equal(t, uint64(1), retainedCount)
 }

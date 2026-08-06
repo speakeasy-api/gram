@@ -60,6 +60,11 @@ vi.mock("@gram/client/react-query/riskApprovePolicyBypassRequest.js", () => ({
   useRiskApprovePolicyBypassRequestMutation: mocks.mutation,
 }));
 
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  invalidateAllRiskListPolicies: vi.fn(),
+  useRiskListPolicies: () => ({ data: undefined }),
+}));
+
 vi.mock("@gram/client/react-query/riskDenyPolicyBypassRequest.js", () => ({
   useRiskDenyPolicyBypassRequestMutation: mocks.mutation,
 }));
@@ -80,13 +85,16 @@ vi.mock("nuqs", () => ({
   useQueryState: mocks.useQueryState,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -108,6 +116,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Dialog", () => ({
   Dialog: Object.assign(
     ({
       children,
@@ -124,6 +135,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: ({
     columns,
     data,
@@ -158,7 +172,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/radio-group", async () => {
+vi.mock("@/components/ui/RadioGroup", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   const RadioContext = React.createContext<
     | {
@@ -195,7 +209,7 @@ vi.mock("@/components/ui/radio-group", async () => {
   };
 });
 
-vi.mock("@/components/ui/select", async () => {
+vi.mock("@/components/ui/Select", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   const SelectContext = React.createContext<
     | {
@@ -244,7 +258,7 @@ vi.mock("@/components/ui/select", async () => {
   };
 });
 
-vi.mock("@/components/ui/sheet", () => ({
+vi.mock("@/components/ui/Sheet", () => ({
   Sheet: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   SheetContent: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>

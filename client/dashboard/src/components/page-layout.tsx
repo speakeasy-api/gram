@@ -4,16 +4,17 @@ import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
 import { InitialChoiceStep } from "@/components/onboarding-choice-step.tsx";
 import { useRoutes } from "@/routes.tsx";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import React, { ReactElement } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
-import { Heading } from "./ui/heading.tsx";
-import { MoreActions } from "./ui/more-actions.tsx";
-import { Toolbar } from "./ui/toolbar.tsx";
-import { Type } from "./ui/type.tsx";
-import { XYFade } from "./ui/xy-fade.tsx";
+import { Heading } from "@/components/ui/Heading";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { Text } from "@/components/ui/Text";
+import { XYFade } from "@/components/ui/XyFade";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -171,9 +172,9 @@ function PageSectionDescription({
   className?: string;
 }) {
   return (
-    <Type muted small className={cn("font-normal", className)}>
+    <Text muted small className={cn("font-normal", className)}>
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -271,9 +272,9 @@ export function EmptyState({
         <Heading variant="h5" className="font-medium">
           {heading}
         </Heading>
-        <Type small muted className="mb-4 text-center">
+        <Text small muted className="mb-4 text-center">
           {description}
-        </Type>
+        </Text>
         {CTA}
       </Stack>
     </div>

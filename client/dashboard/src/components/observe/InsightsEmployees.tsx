@@ -3,19 +3,19 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { useInsightsState } from "@/components/insights-context";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
 import { Page } from "@/components/page-layout";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import {
@@ -50,19 +50,26 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import { slugify } from "@/lib/constants";
-import {
-  Badge,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeView = "employees" | "unattributed";
 
 const VIEW_SEARCH_PARAM = "view";
+const SORT_SEARCH_PARAM = "sort";
+
+// `?sort=tokenCount:desc` seeds the table's initial sort so links into this page
+// (e.g. the Top Users card on the project home) land on the same ordering the
+// card showed. Sorting stays table-local afterwards; the param is read once.
+function parseSortParam(raw: string | null): SortDescriptor | null {
+  if (!raw) return null;
+  const [id, direction] = raw.split(":");
+  if (!id) return null;
+  return { id, direction: direction === "asc" ? "asc" : "desc" };
+}
 
 const EMPLOYEE_VIEWS: EmployeeView[] = ["employees", "unattributed"];
 const VIEW_LABELS: Record<EmployeeView, string> = {
@@ -261,6 +268,7 @@ export function InsightsEmployeesContent(): JSX.Element {
       ? "unattributed"
       : "employees";
   const isUnattributedView = view === "unattributed";
+  const initialSort = parseSortParam(searchParams.get(SORT_SEARCH_PARAM));
 
   const selectedStatuses = values.status;
   const selectedRoleId = values.role;
@@ -562,6 +570,7 @@ export function InsightsEmployeesContent(): JSX.Element {
                 key={view}
                 employees={employees}
                 search={search}
+                initialSort={initialSort}
                 onSelectUser={openUser}
                 deviceSyncByEmail={deviceSyncByEmail}
                 deviceStatus={deviceStatus}
@@ -580,19 +589,25 @@ const PAGE_SIZE = 10;
 function EmployeeTable({
   employees,
   search,
+  initialSort,
   onSelectUser,
   deviceSyncByEmail,
   deviceStatus,
 }: {
   employees: Employee[];
   search: string;
+  initialSort: SortDescriptor | null;
   onSelectUser: (employee: Employee) => void;
   deviceSyncByEmail: Map<string, Date>;
   deviceStatus: DeviceAgentColumnStatus;
 }) {
   const showDeviceAgent = deviceStatus !== "hidden";
   const [page, setPage] = useState(0);
-  const [sort, setSort] = useState<SortDescriptor | null>(null);
+  // Default to enrolled-first when no explicit sort was seeded via URL. Status
+  // labels sort "Enrolled" before "Not Enrolled" ascending.
+  const [sort, setSort] = useState<SortDescriptor | null>(
+    initialSort ?? { id: "status", direction: "asc" },
+  );
   // Only ticks once statuses are actually resolvable; disabled (0) otherwise so
   // the memo stays stable (deviceAgentState is only called when "ready").
   const now = useNow(deviceStatus === "ready" ? AGENT_STATUS_TICK_MS : 0);
@@ -788,7 +803,7 @@ function EmployeeTable({
 
   const NoResultsMessage = () => {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center py-10">
         <p className="text-muted-foreground text-sm">
           {search
             ? `No employees matching "${search}".`
@@ -821,7 +836,7 @@ function EmployeeTable({
           </p>
           <div className="flex items-center gap-1">
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
@@ -829,7 +844,7 @@ function EmployeeTable({
               <ChevronLeft className="size-4" />
             </Button>
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}

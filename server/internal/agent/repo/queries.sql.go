@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireDeviceAgentConfigurationLock = `-- name: AcquireDeviceAgentConfigurationLock :exec
+
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || $1::text, 0))
+`
+
+// AcquireDeviceAgentConfigurationLock serializes configuration updates for an
+// organization even when no row exists yet — FOR UPDATE cannot lock an absent
+// row, so two concurrent first-time saves would otherwise both audit a nil
+// before-snapshot. Transaction-scoped: released automatically at
+// commit/rollback.
+func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireDeviceAgentConfigurationLock, organizationID)
+	return err
+}
+
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
 SELECT
   pr.id AS project_id,
@@ -159,6 +174,49 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 	return items, nil
 }
 
+const getDeviceAgentConfiguration = `-- name: GetDeviceAgentConfiguration :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetDeviceAgentConfiguration(ctx context.Context, organizationID string) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentConfiguration, organizationID)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDeviceAgentConfigurationForUpdate = `-- name: GetDeviceAgentConfigurationForUpdate :one
+
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = $1
+FOR UPDATE
+`
+
+// GetDeviceAgentConfigurationForUpdate locks the row for the update
+// transaction so the unknown-key merge and audit before-snapshot cannot read
+// a config replaced beneath them.
+func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, organizationID string) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentConfigurationForUpdate, organizationID)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
 SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
@@ -198,6 +256,93 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one
+
+INSERT INTO device_agent_configurations (
+  organization_id,
+  schema_version,
+  config
+)
+VALUES (
+  $1,
+  $2,
+  $3::jsonb
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET schema_version = EXCLUDED.schema_version
+  , config = EXCLUDED.config
+  , updated_at = clock_timestamp()
+RETURNING organization_id, schema_version, config, created_at, updated_at
+`
+
+type UpsertDeviceAgentConfigurationParams struct {
+	OrganizationID string
+	SchemaVersion  int32
+	Config         []byte
+}
+
+// UpsertDeviceAgentConfiguration deliberately replaces the whole document:
+// @config is the already-merged result computed by UpdateConfiguration under
+// the org advisory lock, where stored keys outside the caller's replaceable
+// set (unknown keys, platform-admin-only keys for org admins) were carried
+// over. Do not call this with a raw client payload.
+func (q *Queries) UpsertDeviceAgentConfiguration(ctx context.Context, arg UpsertDeviceAgentConfigurationParams) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceAgentConfiguration, arg.OrganizationID, arg.SchemaVersion, arg.Config)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertDeviceAgentDeviceSync = `-- name: UpsertDeviceAgentDeviceSync :exec
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, LOWER(serial_number)) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+  , email        = EXCLUDED.email
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_device_syncs.hostname)
+WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname)
+`
+
+type UpsertDeviceAgentDeviceSyncParams struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       pgtype.Text
+}
+
+// Best-effort record that the agent on the machine bearing @serial_number
+// polled. Sibling of UpsertDeviceAgentSync: that one answers "does this user
+// run the agent somewhere", this one answers "does THIS machine run it".
+// Only called when the agent reported a serial.
+//
+// The guard extends the sibling's once-a-minute heartbeat throttle with two
+// change conditions. Throttling alone would be wrong here: the row carries
+// mutable descriptive columns, and at a ~60s poll cadence last_seen_at is
+// almost always fresh, so a reassigned machine's new user (or a rename)
+// could go unrecorded for the entire session.
+// Infers device_agent_device_syncs_org_lower_serial_key, the unique
+// expression index that is this table's dedup key. Matching the readers'
+// LOWER() comparison is what stops one machine from holding two rows.
+func (q *Queries) UpsertDeviceAgentDeviceSync(ctx context.Context, arg UpsertDeviceAgentDeviceSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertDeviceAgentDeviceSync,
+		arg.OrganizationID,
+		arg.SerialNumber,
+		arg.Email,
+		arg.Hostname,
+	)
+	return err
 }
 
 const upsertDeviceAgentSync = `-- name: UpsertDeviceAgentSync :exec

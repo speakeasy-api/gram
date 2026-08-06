@@ -40,38 +40,76 @@ func Debounce[Params any, Result any](
 	signalIDFunc func(params Params) string,
 	reenqueue func(params Params, result Result) bool,
 ) func(ctx workflow.Context, params Params) (result Result, err error) {
-	return func(ctx workflow.Context, params Params) (result Result, err error) {
-		discard := ""
-		signalCh := workflow.GetSignalChannel(ctx, signalIDFunc(params))
-		// Drain the signal that triggered this run via signal-with-start so it
-		// doesn't double-count toward the post-run reenqueue check.
-		_ = signalCh.ReceiveAsync(&discard)
+	return debounce(wrapped, continueAsSelf, signalIDFunc, reenqueue, nil)
+}
 
-		res, err := wrapped(ctx, params)
+// DebounceWithSignalCoalescing folds signal messages into the next run's parameters.
+func DebounceWithSignalCoalescing[Params any, Result any](
+	wrapped func(ctx workflow.Context, params Params) (result Result, err error),
+	continueAsSelf func(ctx workflow.Context, params Params) (result Result, err error),
+	signalIDFunc func(params Params) string,
+	reenqueue func(params Params, result Result) bool,
+	coalesce func(params Params, message string) Params,
+) func(ctx workflow.Context, params Params) (result Result, err error) {
+	return debounce(wrapped, continueAsSelf, signalIDFunc, reenqueue, coalesce)
+}
+
+func debounce[Params any, Result any](
+	wrapped func(ctx workflow.Context, params Params) (result Result, err error),
+	continueAsSelf func(ctx workflow.Context, params Params) (result Result, err error),
+	signalIDFunc func(params Params) string,
+	reenqueue func(params Params, result Result) bool,
+	coalesce func(params Params, message string) Params,
+) func(ctx workflow.Context, params Params) (result Result, err error) {
+	return func(ctx workflow.Context, params Params) (result Result, err error) {
+		signalCh := workflow.GetSignalChannel(ctx, signalIDFunc(params))
+		// Drain the signal-with-start trigger and every StartDelay burst signal so
+		// they coalesce into this analysis rather than forcing a redundant run.
+		runParams := params
+		for {
+			var message string
+			if !signalCh.ReceiveAsync(&message) {
+				break
+			}
+			if coalesce != nil {
+				runParams = coalesce(runParams, message)
+			}
+		}
+
+		res, err := wrapped(ctx, runParams)
 		if err != nil {
-			if drainSignals(signalCh) {
-				return res, workflow.NewContinueAsNewError(ctx, continueAsSelf, params)
+			nextParams, received := receiveDebounceSignals(signalCh, runParams, coalesce)
+			if received > 0 {
+				return res, workflow.NewContinueAsNewError(ctx, continueAsSelf, nextParams)
 			}
 			return res, err
 		}
 
 		recv := 0
-		if reenqueue(params, res) {
+		if reenqueue(runParams, res) {
 			recv++
 		}
-		for {
-			message := ""
-			received := signalCh.ReceiveAsync(&message)
-			if !received {
-				break
-			}
-			recv++
-		}
+		nextParams, received := receiveDebounceSignals(signalCh, runParams, coalesce)
+		recv += received
 
 		if recv == 0 {
 			return res, nil
 		}
 
-		return res, workflow.NewContinueAsNewError(ctx, continueAsSelf, params)
+		return res, workflow.NewContinueAsNewError(ctx, continueAsSelf, nextParams)
+	}
+}
+
+func receiveDebounceSignals[Params any](signalCh workflow.ReceiveChannel, params Params, coalesce func(Params, string) Params) (Params, int) {
+	received := 0
+	for {
+		var message string
+		if !signalCh.ReceiveAsync(&message) {
+			return params, received
+		}
+		received++
+		if coalesce != nil {
+			params = coalesce(params, message)
+		}
 	}
 }

@@ -1,10 +1,10 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -48,7 +48,8 @@ import type { ToolUsageUserSummary } from "@gram/client/models/components/toolus
 import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
@@ -71,14 +72,14 @@ import {
   type Scale,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
-import { Bar, Line } from "react-chartjs-2";
+import { Bar } from "react-chartjs-2";
 import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
-import type { MultiSelectGroup } from "@/components/ui/multi-select";
+import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import {
   bucketStartNsToMs,
   buildToolUsageTimeSeries,
@@ -173,6 +174,25 @@ const SHARED_TOOLTIP = {
   boxPadding: 4,
 } satisfies _BarTooltip;
 
+// Category-axis labels are mostly emails. Keep the domain — it's how you tell
+// internal from external users — and spend the character budget on the local
+// part instead. Full label is still available in the tooltip title.
+const MAX_AXIS_LABEL_CHARS = 26;
+
+function truncateAxisLabel(label: string): string {
+  if (label.length <= MAX_AXIS_LABEL_CHARS) return label;
+
+  const at = label.lastIndexOf("@");
+  if (at > 0) {
+    const domain = label.slice(at);
+    if (domain.length <= MAX_AXIS_LABEL_CHARS - 4) {
+      return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1 - domain.length)}…${domain}`;
+    }
+  }
+
+  return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1)}…`;
+}
+
 const SHARED_BAR_SCALES = {
   x: {
     stacked: true,
@@ -191,11 +211,7 @@ const SHARED_BAR_SCALES = {
       padding: 2,
       font: { size: 12 },
       callback(value) {
-        const label = this.getLabelForValue(value as number);
-        const display = label.includes("@")
-          ? label.split("@")[0]!.slice(0, 14) + "@…"
-          : label.slice(0, 14) + (label.length > 14 ? "…" : "");
-        return display;
+        return truncateAxisLabel(this.getLabelForValue(value as number));
       },
     },
   },
@@ -733,7 +749,7 @@ function HooksInnerContent({
           </div>
           <div className="flex items-center gap-2">
             <HooksSetupButton />
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild>
               <Link to={orgRoutes.logs.href()}>
                 <Settings className="h-4 w-4" />
                 Configure settings
@@ -985,7 +1001,7 @@ function StackedBarChart({
       {hiddenCount > 0 && onShowAll && (
         <div className="mt-2 flex w-full">
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             icon="chevron-down"
             iconAfter={true}
@@ -1121,7 +1137,7 @@ function UserEventCountsChart({
     const color = USER_SOURCE_COLORS[0]!;
     const chartDatasets = [
       {
-        label: "Events",
+        label: "Tool calls",
         barThickness: 24,
         data: sortedUsers.map((user) => user.eventCount),
         backgroundColor: color,
@@ -1327,9 +1343,10 @@ function ChartNoData({
   );
 }
 
-function MultiLineChart({
+function StackedTimeBarChart({
   labels,
   timestamps,
+  bucketMs,
   tooltipLabels,
   datasets,
   tooltipAfterBody,
@@ -1338,13 +1355,14 @@ function MultiLineChart({
 }: {
   labels: string[];
   timestamps: number[];
+  bucketMs: number;
   tooltipLabels: string[];
   datasets: TimeSeriesDataset[];
   tooltipAfterBody?: (dataIndex: number) => string[];
   onRangeSelect?: (from: Date, to: Date) => void;
   height?: number;
 }) {
-  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<"bar">({
     onRangeSelect,
     resolveRange: (min, max) => {
       if (timestamps.length === 0) return null;
@@ -1353,7 +1371,9 @@ function MultiLineChart({
       const from = timestamps[fromIndex];
       const to = timestamps[toIndex];
       if (from == null || to == null) return null;
-      return { from: new Date(from), to: new Date(to) };
+      // `to` is a bucket start; extend by the bucket width so the selection
+      // covers the last bucket's events.
+      return { from: new Date(from), to: new Date(to + bucketMs) };
     },
   });
 
@@ -1365,7 +1385,7 @@ function MultiLineChart({
     return <ChartNoData />;
   }
 
-  const options: ChartOptions<"line"> = {
+  const options: ChartOptions<"bar"> = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
@@ -1373,14 +1393,18 @@ function MultiLineChart({
       legend: SHARED_LEGEND,
       tooltip: {
         ...SHARED_TOOLTIP,
+        // Index-mode hover activates every series at that x. Drop zeros so a
+        // sparse multi-series chart doesn't build a tooltip listing every
+        // inactive source (which balloons until it covers the chart). Returning
+        // `undefined` from `label` is not enough — Chart.js treats that as
+        // "use the default callback" and still renders the line.
+        filter: (item) => (item.parsed.y ?? 0) !== 0,
         callbacks: {
           title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
-          label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return undefined;
-            return item.formattedValue
+          label: (item) =>
+            item.formattedValue
               ? `${item.dataset.label}: ${item.formattedValue}`
-              : "";
-          },
+              : "",
           ...(tooltipAfterBody
             ? {
                 afterBody: (items) =>
@@ -1393,17 +1417,15 @@ function MultiLineChart({
     },
     scales: {
       x: {
-        grid: {
-          display: true,
-          color: "rgba(128, 128, 128, 0.1)",
-          lineWidth: 1,
-        },
-        ticks: { maxTicksLimit: 8 },
+        stacked: true,
+        grid: { display: false },
+        ticks: { maxTicksLimit: 8, color: CHART_COLORS.labelFaded },
       },
       y: {
+        stacked: true,
         beginAtZero: true,
         grid: { color: "rgba(128, 128, 128, 0.2)" },
-        ticks: { precision: 0 },
+        ticks: { precision: 0, color: CHART_COLORS.labelFaded },
       },
     },
     transitions: SHARED_RESIZE_TRANSITION,
@@ -1414,7 +1436,7 @@ function MultiLineChart({
       className="relative transition-all duration-200 ease-in-out"
       style={{ height }}
     >
-      <Line ref={chartRef} data={{ labels, datasets }} options={options} />
+      <Bar ref={chartRef} data={{ labels, datasets }} options={options} />
     </div>
   );
 }
@@ -1446,18 +1468,18 @@ function ServerUsageTimeSeries({
 }) {
   const chartId = "server-usage";
   const expanded = expandedChart === chartId;
-  const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
     () =>
       buildToolUsageTimeSeries(
         timeSeries,
         (pt) =>
           displayTargetLabel(pt.targetLabel, pt.targetType, serverNameMappings),
-        timeRangeMs,
+        from,
+        to,
         undefined,
         USER_SOURCE_COLORS,
       ),
-    [timeSeries, timeRangeMs, serverNameMappings],
+    [timeSeries, from, to, serverNameMappings],
   );
   return (
     <ChartCard
@@ -1471,9 +1493,10 @@ function ServerUsageTimeSeries({
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
     >
-      <MultiLineChart
+      <StackedTimeBarChart
         labels={labels}
         timestamps={timestamps}
+        bucketMs={bucketMs}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
         onRangeSelect={onRangeSelect}
@@ -1510,17 +1533,17 @@ function UserUsageTimeSeries({
 }) {
   const chartId = "user-usage";
   const expanded = expandedChart === chartId;
-  const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
     () =>
       buildToolUsageTimeSeries(
         timeSeries,
         (pt) => pt.userLabel,
-        timeRangeMs,
+        from,
+        to,
         undefined,
         USER_SOURCE_COLORS,
       ),
-    [timeSeries, timeRangeMs],
+    [timeSeries, from, to],
   );
   return (
     <ChartCard
@@ -1534,9 +1557,10 @@ function UserUsageTimeSeries({
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
     >
-      <MultiLineChart
+      <StackedTimeBarChart
         labels={labels}
         timestamps={timestamps}
+        bucketMs={bucketMs}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
         onRangeSelect={onRangeSelect}
@@ -1573,17 +1597,17 @@ function SkillUsageTimeSeries({
 }) {
   const chartId = "skill-usage";
   const expanded = expandedChart === chartId;
-  const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
     () =>
       buildToolUsageTimeSeries(
         skillTimeSeries,
         (pt) => pt.targetLabel,
-        timeRangeMs,
+        from,
+        to,
         undefined,
         USER_SOURCE_COLORS,
       ),
-    [skillTimeSeries, timeRangeMs],
+    [skillTimeSeries, from, to],
   );
   return (
     <ChartCard
@@ -1597,9 +1621,10 @@ function SkillUsageTimeSeries({
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
     >
-      <MultiLineChart
+      <StackedTimeBarChart
         labels={labels}
         timestamps={timestamps}
+        bucketMs={bucketMs}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
         onRangeSelect={onRangeSelect}
@@ -1721,10 +1746,10 @@ function ErrorsOverTimeChart({
   isZoomed?: boolean;
   onResetZoom?: () => void;
 }) {
-  const timeRangeMs = to.getTime() - from.getTime();
   const {
     labels,
     timestamps,
+    bucketMs,
     tooltipLabels,
     datasets,
     hasErrors,
@@ -1733,21 +1758,15 @@ function ErrorsOverTimeChart({
     const built = buildToolUsageTimeSeries(
       timeSeries,
       () => "errors",
-      timeRangeMs,
+      from,
+      to,
       (pt) => pt.failureCount,
       ["#ef4444"],
     );
-    const errorColor = "#ef4444";
-    const recoloredDatasets = built.datasets.map((ds) => ({
+    const renamedDatasets = built.datasets.map((ds) => ({
       ...ds,
       label: "Errors",
-      borderColor: errorColor,
-      backgroundColor: errorColor + "1a",
-      pointBackgroundColor: errorColor,
     }));
-    const tsIndex = new Map<number, number>(
-      built.timestamps.map((ts, i): [number, number] => [ts, i]),
-    );
     const total = built.datasets[0]?.data.reduce((s, p) => s + p, 0) ?? 0;
 
     const accumulator = new Map<number, Map<string, number>>(
@@ -1757,12 +1776,15 @@ function ErrorsOverTimeChart({
       ]),
     );
 
+    const fromMs = from.getTime();
     for (const pt of timeSeries) {
       if (pt.failureCount === 0) continue;
       const ms = bucketStartNsToMs(pt.bucketStartNs);
       if (ms == null) continue;
-      const idx = tsIndex.get(ms);
-      if (idx === undefined) continue;
+      const idx = Math.min(
+        Math.max(Math.floor((ms - fromMs) / built.bucketMs), 0),
+        built.timestamps.length - 1,
+      );
       const displayName = displayTargetLabel(
         pt.targetLabel,
         pt.targetType,
@@ -1783,12 +1805,13 @@ function ErrorsOverTimeChart({
     return {
       labels: built.labels,
       timestamps: built.timestamps,
+      bucketMs: built.bucketMs,
       tooltipLabels: built.tooltipLabels,
-      datasets: recoloredDatasets,
+      datasets: renamedDatasets,
       hasErrors: total > 0,
       perServerByIndex,
     };
-  }, [timeSeries, timeRangeMs, serverNameMappings]);
+  }, [timeSeries, from, to, serverNameMappings]);
 
   const chartId = "errors-over-time";
   const expanded = expandedChart === chartId;
@@ -1808,9 +1831,10 @@ function ErrorsOverTimeChart({
       {!hasErrors ? (
         <ChartNoData message="No errors in this period" />
       ) : (
-        <MultiLineChart
+        <StackedTimeBarChart
           labels={labels}
           timestamps={timestamps}
+          bucketMs={bucketMs}
           tooltipLabels={tooltipLabels}
           datasets={datasets}
           onRangeSelect={onRangeSelect}
@@ -2096,7 +2120,7 @@ function HooksAnalytics({
         <UserEventCountsChart
           loading={sectionStatus.users.pending}
           error={sectionStatus.users.error}
-          title="User Event Counts"
+          title="Tool Calls by User"
           users={users}
           handleFilter={makeFilterHandler({ user: "row" })}
           expandedChart={expandedChart}

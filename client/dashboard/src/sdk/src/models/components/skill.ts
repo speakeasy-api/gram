@@ -41,7 +41,7 @@ export type Skill = {
    */
   lastSeenAt?: Date | undefined;
   /**
-   * The derived latest version ID, selected from immutable version creation order.
+   * The current version ID, selected by effective promotion time.
    */
   latestVersionId?: string | undefined;
   /**
@@ -68,6 +68,10 @@ export type Skill = {
    * The optional registry summary.
    */
   summary?: string | undefined;
+  /**
+   * Registry tags for categorizing the skill.
+   */
+  tags: Array<string>;
   /**
    * When the skill was last updated.
    */
@@ -102,6 +106,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     share_token: z.optional(z.string()),
     source_kind: z.string(),
     summary: z.optional(z.string()),
+    tags: z.array(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

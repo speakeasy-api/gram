@@ -352,10 +352,12 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 	}
 
 	judged, err := judge.Judge(ctx, JudgeInput{
-		OrgID:      input.OrganizationID,
-		ProjectID:  projectID.String(),
-		ChatID:     input.ChatID,
-		Transcript: transcript,
+		EvaluationID: input.ID,
+		OrgID:        input.OrganizationID,
+		ProjectID:    projectID.String(),
+		ChatID:       input.ChatID,
+		AuthorID:     input.AuthorID,
+		Transcript:   transcript,
 	})
 	switch {
 	case err != nil && errors.Is(err, ErrModelFailure):
@@ -363,6 +365,11 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 	case err != nil:
 		result.Retryable++
 		return fmt.Errorf("judge chat analysis evaluation: %w", err)
+	}
+
+	if scoreless, ok := judge.(ScorelessJudge); ok && scoreless.SkipScoreSink() {
+		result.Scored++
+		return nil
 	}
 
 	// One row per insert: a CHECK the judge's normalization somehow let through

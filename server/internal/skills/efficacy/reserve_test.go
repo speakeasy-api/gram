@@ -745,31 +745,47 @@ func TestRecoverStaleReservationsBoundsConcurrentBatches(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reserved, 3)
 
-	var first RecoveryResult
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		var recoverErr error
-		first, recoverErr = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 2)
-		assert.NoError(collect, recoverErr)
-		assert.Equal(collect, RecoveryResult{Recovered: 2, DeadLettered: 0}, first)
-	}, 5*time.Second, 10*time.Millisecond)
+	// Backdate rather than wait out a lease: retrying the sweep until it
+	// reports Recovered == 2 is not idempotent — a pass that catches only some
+	// rows past the cutoff, followed by a retry that catches the rest, recovers
+	// all three while the final call still reports two.
+	aged, err := repo.New(fixture.db).BackdateReservedSkillEfficacyEvaluationsFixture(ctx, repo.BackdateReservedSkillEfficacyEvaluationsFixtureParams{
+		BackdateBy: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+		ProjectID:  fixture.projectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 3, aged)
+
+	first, err := RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 2)
+	require.NoError(t, err)
+	require.Equal(t, RecoveryResult{Recovered: 2, DeadLettered: 0}, first)
 	require.Len(t, fixture.pendingEvaluations(t), 2)
 	require.Len(t, fixture.reservedEvaluations(t, 3), 1, "one bounded row remains")
+
+	// reservedEvaluations claims through the recovery query, which stamps
+	// updated_at = clock_timestamp() on the remaining row. On a fast runner the
+	// concurrent sweeps below can start inside the millisecond lease and find
+	// nothing stale, so age the row again.
+	aged, err = repo.New(fixture.db).BackdateReservedSkillEfficacyEvaluationsFixture(ctx, repo.BackdateReservedSkillEfficacyEvaluationsFixtureParams{
+		BackdateBy: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+		ProjectID:  fixture.projectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, aged)
 
 	var group sync.WaitGroup
 	results := make([]RecoveryResult, 2)
 	errs := make([]error, 2)
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		for i := range results {
-			group.Go(func() {
-				results[i], errs[i] = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 2)
-			})
-		}
-		group.Wait()
+	for i := range results {
+		group.Go(func() {
+			results[i], errs[i] = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 2)
+		})
+	}
+	group.Wait()
 
-		assert.NoError(collect, errs[0])
-		assert.NoError(collect, errs[1])
-		assert.Equal(collect, int64(1), results[0].Recovered+results[1].Recovered)
-	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	require.Equal(t, int64(1), results[0].Recovered+results[1].Recovered)
 	require.Len(t, fixture.pendingEvaluations(t), 3)
 }
 

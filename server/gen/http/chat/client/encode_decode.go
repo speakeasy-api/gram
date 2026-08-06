@@ -2511,6 +2511,22 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 	return res
 }
 
+// unmarshalChatContentPartResponseBodyToChatChatContentPart builds a value of
+// type *chat.ChatContentPart from a value of type *ChatContentPartResponseBody.
+func unmarshalChatContentPartResponseBodyToChatChatContentPart(v *ChatContentPartResponseBody) *chat.ChatContentPart {
+	res := &chat.ChatContentPart{
+		ID:                  *v.ID,
+		Kind:                *v.Kind,
+		Content:             *v.Content,
+		ParentChatMessageID: v.ParentChatMessageID,
+		Metadata:            v.Metadata,
+		IsRisk:              *v.IsRisk,
+		CreatedAt:           *v.CreatedAt,
+	}
+
+	return res
+}
+
 // unmarshalRiskSegmentResponseBodyToChatRiskSegment builds a value of type
 // *chat.RiskSegment from a value of type *RiskSegmentResponseBody.
 func unmarshalRiskSegmentResponseBodyToChatRiskSegment(v *RiskSegmentResponseBody) *chat.RiskSegment {

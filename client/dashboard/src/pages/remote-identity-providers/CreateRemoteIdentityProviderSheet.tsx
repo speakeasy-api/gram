@@ -1,26 +1,28 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +35,7 @@ import {
   deriveSlugFromUrl,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { useIssuerDiscovery } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { buildCreateIssuerForm } from "./issuerSettingsForm";
 
 // Sentinel for the "no project" (organizational) selection. Radix Select treats
 // the empty string specially, so we use an explicit value and map it back to an
@@ -95,7 +98,10 @@ export function CreateRemoteIdentityProviderSheet({
     showDiscoverControls,
     showResetControls,
     endpointWarnings,
-  } = useIssuerDiscovery(null);
+    // This sheet can create an organization-level issuer, which has no project
+    // to authorize against, so it fetches metadata through the org-scoped
+    // endpoint rather than borrowing the active project's scope.
+  } = useIssuerDiscovery(null, { scope: "organization" });
 
   const createMutation = useCreateOrganizationRemoteSessionIssuerMutation({
     onSuccess: async (created) => {
@@ -154,36 +160,17 @@ export function CreateRemoteIdentityProviderSheet({
       request: {
         createIssuerRequestBody: {
           projectId: projectId === ORGANIZATIONAL ? undefined : projectId,
-          slug: slug.trim(),
-          issuer: issuerUrl.trim(),
-          name: name.trim() || undefined,
-          clientSetupDocumentationUrl:
-            clientSetupDocumentationUrl.trim() || undefined,
-          authorizationEndpoint: authorizationEndpoint.trim() || undefined,
-          tokenEndpoint: tokenEndpoint.trim() || undefined,
-          registrationEndpoint: registrationEndpoint.trim() || undefined,
-          jwksUri: jwksUri.trim() || undefined,
-          // RFC 8414 metadata arrays are NOT NULL server-side. Forward what
-          // discovery returned, or empty arrays when the operator typed
-          // everything by hand.
-          scopesSupported: discoveredSnapshot?.scopesSupported ?? [],
-          grantTypesSupported: discoveredSnapshot?.grantTypesSupported ?? [],
-          responseTypesSupported:
-            discoveredSnapshot?.responseTypesSupported ?? [],
-          tokenEndpointAuthMethodsSupported:
-            discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
-          // CIMD support is parsed during discovery and persisted here so the
-          // issuer can offer the CIMD client type. Defaults false when the
-          // operator skipped Discover and typed the endpoints by hand.
-          clientIdMetadataDocumentSupported:
-            discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
-          // RFC 8414 documentation URLs are discovery-only — there are no form
-          // inputs for them. Undefined when the operator skipped Discover or the
-          // issuer advertised nothing usable.
-          serviceDocumentation:
-            discoveredSnapshot?.serviceDocumentation || undefined,
-          opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
-          opTosUri: discoveredSnapshot?.opTosUri || undefined,
+          ...buildCreateIssuerForm({
+            name,
+            slug,
+            clientSetupDocumentationUrl,
+            issuerUrl,
+            authorizationEndpoint,
+            tokenEndpoint,
+            registrationEndpoint,
+            jwksUri,
+            discoveredSnapshot,
+          }),
         },
       },
     });
@@ -220,10 +207,10 @@ export function CreateRemoteIdentityProviderSheet({
                   ))}
                 </SelectContent>
               </Select>
-              <Type muted small>
+              <Text muted small>
                 Organizational providers are inherited by every project. Choose
                 a project to scope the provider to it.
-              </Type>
+              </Text>
             </Stack>
 
             <IssuerUrlField
@@ -260,10 +247,10 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="my-identity-provider"
               />
-              <Type muted small>
+              <Text muted small>
                 Identifier for this identity provider. Auto-derived from the
                 Issuer URL until you edit it.
-              </Type>
+              </Text>
             </Stack>
 
             <Stack gap={2}>
@@ -278,11 +265,11 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="My Identity Provider"
               />
-              <Type muted small>
+              <Text muted small>
                 Friendly label shown in the dashboard. Auto-derived from the
                 Issuer URL until you edit it; falls back to the Issuer URL when
                 left blank.
-              </Type>
+              </Text>
             </Stack>
 
             <Stack gap={2}>
@@ -294,10 +281,10 @@ export function CreateRemoteIdentityProviderSheet({
                 onChange={setClientSetupDocumentationUrl}
                 placeholder="https://docs.example.com/oauth/apps"
               />
-              <Type muted small>
+              <Text muted small>
                 Linked from the New Client sheet so operators can set up an
                 OAuth client with this provider themselves.
-              </Type>
+              </Text>
             </Stack>
 
             <EndpointsFields

@@ -1,4 +1,5 @@
-import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
+import { Icon, IconProps } from "@/components/ui/Icon";
+import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -21,7 +22,8 @@ import SkillDetail from "./pages/skills/SkillDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
-import DeviceAgent from "./pages/device-agent/DeviceAgent";
+import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
+import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -31,6 +33,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
+import ExploreDemo from "./pages/demo/ExploreDemo";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
@@ -46,6 +49,7 @@ import {
 import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
+import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
@@ -74,12 +78,18 @@ import {
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
+import {
+  PlatformRemoteIdentityProvidersPage,
+  PlatformRemoteIdentityProvidersRoot,
+} from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviders";
+import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
+import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SecurityOverview, {
@@ -185,6 +195,12 @@ const ROUTE_STRUCTURE = {
     title: "Register",
     url: "/register",
     component: Register,
+    unauthenticated: true,
+  },
+  exploreDemo: {
+    title: "Explore demo",
+    url: "/explore-demo",
+    component: ExploreDemo,
     unauthenticated: true,
   },
   home: {
@@ -303,6 +319,11 @@ const ROUTE_STRUCTURE = {
         url: "add-tunneled-mcp",
         component: CreateTunneledMcp,
       },
+      addUnproxiedMcp: {
+        title: "Add Unproxied MCP Server",
+        url: "add-unproxied-mcp",
+        component: CreateUnproxiedMcp,
+      },
     },
   },
   catalog: {
@@ -391,16 +412,20 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Overview",
             url: "overview",
           },
-          tools: {
-            title: "MCP Server Tools",
-            url: "tools",
+          inspect: {
+            title: "MCP Server Inspect",
+            url: "inspect",
           },
-          // Legacy route. MCPServerDetails redirects this to
+          // Legacy routes. MCPServerDetails redirects `authentication` to
           // settings#authentication now that authentication lives under
-          // Settings.
+          // Settings, and `tools` to `inspect`.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
+          },
+          tools: {
+            title: "MCP Server Tools",
+            url: "tools",
           },
           teamAccess: {
             title: "MCP Server Team Access",
@@ -646,7 +671,32 @@ const ROUTE_STRUCTURE = {
       detail: {
         title: "Plugin",
         url: ":pluginId",
+        // PluginDetail renders every section itself, picking the active one
+        // from the path — the subpages exist to own the URLs (same shape as
+        // mcp.details).
         component: PluginDetail,
+        subPages: {
+          overview: {
+            title: "Plugin Overview",
+            url: "overview",
+          },
+          servers: {
+            title: "Plugin MCP Servers",
+            url: "servers",
+          },
+          skills: {
+            title: "Plugin Skills",
+            url: "skills",
+          },
+          assignments: {
+            title: "Plugin Assignments",
+            url: "assignments",
+          },
+          settings: {
+            title: "Plugin Settings",
+            url: "settings",
+          },
+        },
       },
     },
   },
@@ -906,6 +956,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Webhooks",
     url: "webhooks",
     icon: "webhook",
+    stage: "beta",
     component: OrgWebhooks,
   },
   externalServices: {
@@ -915,9 +966,17 @@ const ORG_ROUTE_STRUCTURE = {
     component: ExternalServicesRoot,
     indexComponent: ExternalServicesPage,
     subPages: {
+      // Credentials are namespaced under their own collection segment so that a
+      // second kind of external-service resource (encryption keys) can sit
+      // beside them rather than having to share this level.
+      //
+      // The provider segment is part of the resource's own path because the
+      // detail page is per-provider: each provider has its own get/update
+      // endpoints and its own fields, so a deep link has to carry which one it
+      // is rather than relying on state handed over from the list.
       credentialDetail: {
         title: "External Credential",
-        url: ":credentialId",
+        url: "credentials/:provider/:credentialId",
         component: ExternalCredentialDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
@@ -974,11 +1033,56 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
+  // The platform catalog gets its own base path rather than a static segment
+  // under remote-identity-providers, where it would be a sibling of the
+  // `:issuerId` route and rely on the router ranking static above dynamic to
+  // not be swallowed by it. Platform-admin only; see PlatformAdminOnly.
+  platformRemoteIdentityProviders: {
+    // Kept distinct from the tenant route's title: nav items register by title
+    // (see CollapsibleNavItem), and Recents and the command palette show it
+    // without a group header to disambiguate. The sidebar renders the shorter
+    // "Remote Identity Providers" under the Platform Admin header, and this
+    // also matches the URL-derived breadcrumb.
+    title: "Platform Remote Identity Providers",
+    url: "platform-remote-identity-providers",
+    icon: "key-round",
+    component: PlatformRemoteIdentityProvidersRoot,
+    indexComponent: PlatformRemoteIdentityProvidersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Platform Remote Identity Provider",
+        url: ":issuerId",
+        component: PlatformRemoteIdentityProviderDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
   deviceAgent: {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
-    component: DeviceAgent,
+    component: DeviceAgentRoot,
+    indexComponent: DeviceAgent,
+    subPages: {
+      configuration: {
+        title: "Configuration",
+        url: "configuration",
+        component: DeviceAgent,
+      },
+      mdmIntegrations: {
+        title: "MDM Integrations",
+        url: "mdm-integrations",
+        component: DeviceAgent,
+      },
+      mdmDetail: {
+        title: "MDM Integration",
+        url: "mdm-integrations/:provider",
+        component: MdmIntegrationDetail,
+      },
+    },
   },
   access: {
     title: "Roles & Permissions",
@@ -1002,6 +1106,12 @@ const ORG_ROUTE_STRUCTURE = {
         component: Access,
       },
     },
+  },
+  requestAccess: {
+    title: "Request Access",
+    url: "request-access",
+    component: RequestAccess,
+    outsideMainLayout: true,
   },
   collections: {
     title: "Collections",

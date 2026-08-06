@@ -132,24 +132,27 @@ func TestService_FetchImageFromURL_FaviconICO(t *testing.T) {
 	require.Equal(t, "image/x-icon", result.Asset.ContentType)
 }
 
-func TestService_FetchImageFromURL_UnsupportedContentType(t *testing.T) {
+func TestService_FetchImageFromURL_UndeterminableContentTypeDefaultsToPNG(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsService(t)
 
-	// Non-image content type and no image extension to fall back on.
+	// Neither the response content type nor the URL extension names an image
+	// type. Rather than rejecting, the fetch assumes PNG: favicon hosts are
+	// unreliable about content types, and refusing them would strand real
+	// logos. Bytes are never decoded, so a non-image body is stored and later
+	// fails to render rather than failing the fetch.
 	srv := newImageServer(t, "text/html", http.StatusOK, "<html></html>")
 
-	_, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
+	result, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		URL:              srv.URL + "/page",
 	})
 
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnsupportedMedia, oopsErr.Code)
+	require.NoError(t, err)
+	require.Equal(t, "image/png", result.Asset.ContentType)
 }
 
 func TestService_FetchImageFromURL_SVGRejected(t *testing.T) {

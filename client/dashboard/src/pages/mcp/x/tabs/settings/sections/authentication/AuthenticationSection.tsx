@@ -1,11 +1,12 @@
+import { Badge } from "@/components/ui/Badge";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "@/components/ui/field";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Field";
+import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
@@ -39,6 +40,7 @@ export function AuthenticationSection({
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
+  const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
@@ -47,23 +49,45 @@ export function AuthenticationSection({
         <SettingsSection.Header>
           <SettingsSection.Title>Authentication</SettingsSection.Title>
           <SettingsSection.Description>
-            Configure user sessions and, when required, upstream identity
-            providers for clients connecting to this server.
+            {isUnproxied
+              ? "Speakeasy doesn't manage authentication for unproxied servers."
+              : "Configure user sessions and, when required, upstream identity providers for clients connecting to this server."}
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            <AuthenticationSectionBody target={target} />
+            {isUnproxied ? (
+              <UnproxiedAuthenticationNotice />
+            ) : (
+              <AuthenticationSectionBody target={target} />
+            )}
           </SettingsSection.Body>
-          <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              Authentication changes apply to new client connections.
-            </SettingsSection.FooterHint>
-          </SettingsSection.Footer>
+          {isUnproxied ? null : (
+            <SettingsSection.Footer>
+              <SettingsSection.FooterHint>
+                Authentication changes apply to new client connections.
+              </SettingsSection.FooterHint>
+            </SettingsSection.Footer>
+          )}
         </SettingsSection.Panel>
       </SettingsSection>
-      <McpServerSessionsPanel mcpServer={mcpServer} />
+      {isUnproxied ? null : <McpServerSessionsPanel mcpServer={mcpServer} />}
     </>
+  );
+}
+
+function UnproxiedAuthenticationNotice(): JSX.Element {
+  return (
+    <Field>
+      <FieldLabel>Authentication</FieldLabel>
+      <div>
+        <Badge variant="success">Not applicable</Badge>
+      </div>
+      <FieldDescription>
+        The customer connects directly using the vendor&apos;s own credentials —
+        there&apos;s nothing for Speakeasy to configure here.
+      </FieldDescription>
+    </Field>
   );
 }
 
@@ -74,8 +98,10 @@ export function AuthenticationSection({
  */
 export function AuthenticationSectionBody({
   target,
+  additionalSetupAction,
 }: {
   target: AuthTarget;
+  additionalSetupAction?: ReactNode;
 }): JSX.Element {
   const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
@@ -88,9 +114,11 @@ export function AuthenticationSectionBody({
     enabled: issuerConfigured,
   });
 
-  // listRemoteSessionIssuers returns both this project's issuers and inherited
-  // organization-level ones (project_id IS NULL, same org), so the selectable
-  // list spans organizational and project-scoped providers.
+  // listRemoteSessionIssuers returns this project's own issuers, inherited
+  // organization-level ones (same org), and inherited platform issuers from the
+  // shared catalog, so the selectable list spans all three tiers. A client can
+  // be attached to any of them; only project-owned issuer metadata is editable
+  // here.
   const { data: issuersResult, isLoading: isLoadingIssuers } =
     useRemoteSessionIssuers();
   const allIssuers = useMemo(
@@ -177,6 +205,7 @@ export function AuthenticationSectionBody({
           openSheet(authorizationServer, protectedResourceScopes)
         }
         onStartManual={() => openSheet(undefined)}
+        additionalAction={additionalSetupAction}
       />
     );
   } else if (isLoadingUserSessionIssuer) {
@@ -240,11 +269,13 @@ function IdentityProviderSetupField({
   hasDiscoveredAuthorizationServer,
   onUseDiscovered,
   onStartManual,
+  additionalAction,
 }: {
   probeStatus: ProtectedResourceProbeStatus;
   hasDiscoveredAuthorizationServer: boolean;
   onUseDiscovered: () => void;
   onStartManual: () => void;
+  additionalAction?: ReactNode;
 }) {
   return (
     <Field>
@@ -258,6 +289,7 @@ function IdentityProviderSetupField({
             hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
             onUseDiscovered={onUseDiscovered}
             onStartManual={onStartManual}
+            additionalAction={additionalAction}
           />
         }
       />
@@ -273,9 +305,9 @@ function AuthenticationLoadingField() {
   return (
     <Field>
       <FieldLabel>Authentication</FieldLabel>
-      <Type muted small>
+      <Text muted small>
         Loading authentication configuration...
-      </Type>
+      </Text>
     </Field>
   );
 }

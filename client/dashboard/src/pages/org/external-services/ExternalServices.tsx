@@ -1,53 +1,77 @@
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Type } from "@/components/ui/type";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { RequireScope } from "@/components/require-scope";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
 import type { ExternalCredentialSummary } from "@gram/client/models/components/externalcredentialsummary.js";
-import { useDeleteGcpIamPlatformCredentialMutation } from "@gram/client/react-query/deleteGcpIamPlatformCredential";
+import { useDeleteGcpIamCredentialMutation } from "@gram/client/react-query/deleteGcpIamCredential";
 import {
-  invalidateAllListPlatformExternalCredentials,
-  useListPlatformExternalCredentials,
-} from "@gram/client/react-query/listPlatformExternalCredentials";
-import { useVerifyGcpIamPlatformCredentialMutation } from "@gram/client/react-query/verifyGcpIamPlatformCredential";
+  invalidateAllListExternalCredentials,
+  useListExternalCredentials,
+} from "@gram/client/react-query/listExternalCredentials";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useVerifyGcpIamCredentialMutation } from "@gram/client/react-query/verifyGcpIamCredential";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { CreateExternalCredentialSheet } from "./CreateExternalCredentialSheet";
-import { providerLabel, verifySourceLabel } from "./providers";
+import { providerLabel, providerSlug } from "./providers";
 
 export function ExternalServicesRoot(): JSX.Element {
   return <Outlet />;
 }
 
+// The probe reports the principal it resolved, but an identity source that
+// carries no service-account email is still a successful verify.
+function verifiedMessage(principal: string | undefined): string {
+  if (!principal) {
+    return "Verified.";
+  }
+  return `Gram can impersonate ${principal}.`;
+}
+
 export function ExternalServicesPage(): JSX.Element {
-  const isAdmin = useIsPlatformAdmin();
+  const { data: features, isLoading: featuresLoading } = useProductFeatures(
+    undefined,
+    undefined,
+    { staleTime: 30_000, throwOnError: false },
+  );
+
+  // The sidebar entry is already hidden without the entitlement; this covers a
+  // direct URL. Treat "still loading" and "the read failed" as not-yet-known so
+  // an entitled organization never flashes the gate.
+  const gated =
+    !featuresLoading &&
+    features?.customerManagedEncryptionKeysEnabled === false;
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        {isAdmin ? (
-          <ExternalServicesOverview />
+        {gated ? (
+          <Text muted className="py-8 text-center">
+            Customer-managed keys are not enabled for this organization.
+          </Text>
         ) : (
-          <Type muted className="py-8 text-center">
-            External Services is available to platform admins only.
-          </Type>
+          <RequireScope scope={["org:read", "org:admin"]} level="page">
+            <ExternalServicesOverview />
+          </RequireScope>
         )}
       </Page.Body>
     </Page>
@@ -57,14 +81,15 @@ export function ExternalServicesPage(): JSX.Element {
 function ExternalServicesOverview(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const [createOpen, setCreateOpen] = useState(false);
-  // GCP is the only provider with a platform-admin create endpoint and detail
-  // page today, so scope the list to it to stay consistent with the GCP-only
-  // detail route.
-  const { data, isLoading, isError, refetch } =
-    useListPlatformExternalCredentials({ provider: "gcp_iam" });
+  // GCP is the only provider with a detail page today, so scope the list to it
+  // rather than linking rows to a route that cannot render them. AWS is deferred
+  // until Gram has an AWS identity to assume a customer role from.
+  const { data, isLoading, isError, refetch } = useListExternalCredentials({
+    provider: "gcp_iam",
+  });
   const credentials = data?.credentials ?? [];
 
-  const verify = useVerifyGcpIamPlatformCredentialMutation();
+  const verify = useVerifyGcpIamCredentialMutation();
 
   const handleVerify = (credential: ExternalCredentialSummary) => {
     const toastId = toast.loading(`Verifying ${credential.name}…`);
@@ -81,15 +106,7 @@ function ExternalServicesOverview(): JSX.Element {
             });
             return;
           }
-          const via = result.identitySource
-            ? ` via ${verifySourceLabel(result.identitySource)}`
-            : "";
-          toast.success(
-            result.principal
-              ? `Verified as ${result.principal}${via}.`
-              : `Verified${via}.`,
-            { id: toastId },
-          );
+          toast.success(verifiedMessage(result.principal), { id: toastId });
         },
         onError: (error) => {
           toast.error(
@@ -106,17 +123,19 @@ function ExternalServicesOverview(): JSX.Element {
       <Page.Section>
         <Page.Section.Title>External Services</Page.Section.Title>
         <Page.Section.CTA>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Button.LeftIcon>
-              <Plus />
-            </Button.LeftIcon>
-            <Button.Text>New External Credential</Button.Text>
-          </Button>
+          <RequireScope scope="org:admin" level="component">
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Button.LeftIcon>
+                <Plus />
+              </Button.LeftIcon>
+              <Button.Text>New External Credential</Button.Text>
+            </Button>
+          </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Description className="max-w-2xl">
-          Gram's platform-level credentials for authenticating into external
-          services. Shared across every organization and visible to platform
-          admins only.
+          How Gram authenticates into your cloud account to reach the keys you
+          manage there. Gram impersonates a service account you nominate, so it
+          never holds long-lived credentials of your own.
         </Page.Section.Description>
         <Page.Section.Body>
           <CredentialTable
@@ -125,8 +144,11 @@ function ExternalServicesOverview(): JSX.Element {
             isError={isError}
             onRetry={() => void refetch()}
             onVerify={handleVerify}
-            detailHref={(id) =>
-              orgRoutes.externalServices.credentialDetail.href(id)
+            detailHref={(credential) =>
+              orgRoutes.externalServices.credentialDetail.href(
+                providerSlug(credential.provider),
+                credential.id,
+              )
             }
           />
         </Page.Section.Body>
@@ -153,12 +175,12 @@ function CredentialTable({
   isError: boolean;
   onRetry: () => void;
   onVerify: (credential: ExternalCredentialSummary) => void;
-  detailHref: (id: string) => string;
+  detailHref: (credential: ExternalCredentialSummary) => string;
 }): JSX.Element {
   if (isError) {
     return (
       <Stack gap={3} className="py-8" align="center" justify="center">
-        <Type muted>Failed to load external credentials.</Type>
+        <Text muted>Failed to load external credentials.</Text>
         <Button size="sm" variant="secondary" onClick={onRetry}>
           <Button.Text>Retry</Button.Text>
         </Button>
@@ -167,9 +189,9 @@ function CredentialTable({
   }
   if (!isLoading && credentials.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         No external credentials yet
-      </Type>
+      </Text>
     );
   }
 
@@ -186,27 +208,27 @@ function CredentialTable({
         <DotRow
           key={credential.id}
           icon={<Icon name="cloud" className="text-muted-foreground h-5 w-5" />}
-          href={detailHref(credential.id)}
+          href={detailHref(credential)}
           ariaLabel={`View external credential ${credential.name}`}
         >
           <td className="px-3 py-3">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
             >
               {credential.name}
-            </Type>
+            </Text>
           </td>
           <td className="px-3 py-3">
-            <Type small muted>
+            <Text small muted>
               {providerLabel(credential.provider)}
-            </Type>
+            </Text>
           </td>
           <td className="px-3 py-3">
-            <Type small muted as="div">
+            <Text small muted as="div">
               <HumanizeDateTime date={credential.createdAt} />
-            </Type>
+            </Text>
           </td>
           <td className="px-3 py-3 text-right">
             <RowActions credential={credential} onVerify={onVerify} />
@@ -229,26 +251,30 @@ function RowActions({
 }): JSX.Element {
   return (
     <div className="relative z-20" onClick={(e) => e.stopPropagation()}>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="tertiary" size="sm">
-            <Button.LeftIcon>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button.LeftIcon>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onVerify(credential)}>
-            Verify
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* The menu portals out of the DOM subtree, so CSS containment cannot
+          disable it — gate the trigger by rendering nothing without the scope. */}
+      <RequireScope scope="org:admin" level="section">
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="tertiary" size="sm">
+              <Button.LeftIcon>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button.LeftIcon>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onVerify(credential)}>
+              Verify
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </RequireScope>
     </div>
   );
 }
 
-// DeleteCredentialDialog confirms and performs a platform credential delete.
-// Shared with the detail page's Settings tab (Danger Zone).
+// DeleteCredentialDialog confirms and performs a credential delete. Shared with
+// the detail page's Settings tab (Danger Zone).
 export function DeleteCredentialDialog({
   credentialId,
   credentialName,
@@ -261,9 +287,9 @@ export function DeleteCredentialDialog({
   onDeleted: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const deleteMutation = useDeleteGcpIamPlatformCredentialMutation({
+  const deleteMutation = useDeleteGcpIamCredentialMutation({
     onSuccess: async () => {
-      await invalidateAllListPlatformExternalCredentials(queryClient);
+      await invalidateAllListExternalCredentials(queryClient);
       toast.success("External credential deleted");
       onClose();
       onDeleted();
@@ -287,11 +313,11 @@ export function DeleteCredentialDialog({
           <Dialog.Title>Delete external credential</Dialog.Title>
         </Dialog.Header>
         <div className="space-y-4 py-4">
-          <Type variant="body">
+          <Text variant="body">
             Are you sure you want to delete{" "}
             <span className="font-bold italic">{credentialName}</span>? This
             action cannot be undone.
-          </Type>
+          </Text>
           <div className="flex justify-end space-x-2">
             <Button variant="secondary" onClick={onClose}>
               <Button.Text>Cancel</Button.Text>

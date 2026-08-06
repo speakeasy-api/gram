@@ -191,7 +191,8 @@ function generateHooksKeyName(): string {
   return `Hooks Key (Generated) - ${timestamp}`.slice(0, maxLength);
 }
 
-const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
+const errInvalidCallback =
+  "Callback URL must use HTTP or HTTPS on localhost or 127.0.0.1";
 const errWrongOrganization =
   "This connection link belongs to a different organization. Switch to that organization in the dashboard, then retry the connection.";
 const PREFERRED_PROJECT_KEY = "preferredProject";
@@ -200,8 +201,9 @@ function isCallbackLocal(callbackUrl: string): boolean {
   try {
     const url = new URL(callbackUrl);
     const hostname = url.hostname.toLowerCase();
+    const isHttp = url.protocol === "http:" || url.protocol === "https:";
 
-    return hostname === "localhost" || hostname === "127.0.0.1";
+    return isHttp && (hostname === "localhost" || hostname === "127.0.0.1");
   } catch {
     return false;
   }

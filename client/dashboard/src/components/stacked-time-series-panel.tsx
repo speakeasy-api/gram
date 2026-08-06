@@ -7,7 +7,7 @@ import {
   Legend,
   LinearScale,
 } from "chart.js";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { Info } from "lucide-react";
 import {
   type ReactNode,
@@ -18,9 +18,9 @@ import {
   useState,
 } from "react";
 import { Bar } from "react-chartjs-2";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleButton } from "@/components/ui/toggle-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { ToggleButton } from "@/components/ui/ToggleButton";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import {
   CHART_COLORS,
@@ -152,7 +152,7 @@ export function StackedTimeSeriesPanel({
 }: {
   // The panel title, with the info-tooltip copy beside it.
   title: string;
-  headerHint: string;
+  headerHint: ReactNode;
   // Gap-filled daily UTC bucket start times — the axis grid. Every stack's
   // series aligns to it by index.
   bucketsMs: number[];

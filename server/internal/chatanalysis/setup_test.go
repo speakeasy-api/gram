@@ -85,8 +85,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	signaler := &captureSignaler{}
 
@@ -99,7 +99,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 // withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
 // Tests for admin-only endpoints opt in explicitly so non-admin paths exercise
-// the realistic default produced by testenv.InitAuthContext.
+// the realistic default produced by authztest.InitAuthContext.
 func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

@@ -35,6 +35,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -78,6 +79,16 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
+	// turnStream carries assistant turn frames to dashboard subscribers. Nil
+	// disables streaming — turns still complete and the dashboard falls back
+	// to loading the reply once it lands.
+	turnStream *TurnStream
+}
+
+// WithTurnStream enables streaming assistant turn frames to subscribers.
+func (s *Service) WithTurnStream(stream *TurnStream) *Service {
+	s.turnStream = stream
+	return s
 }
 
 func NewService(
@@ -117,6 +128,7 @@ func NewService(
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
+		turnStream:       nil, // opt in via WithTurnStream
 	}
 }
 
@@ -129,6 +141,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/chat/turnstream", oops.ErrHandle(service.logger, service.HandleTurnStream).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -669,35 +682,22 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	}
 }
 
-func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	// A Speakeasy admin impersonating an org via the dev-tools override holds
-	// every scope (see authz.Engine), so RBAC cannot stop them — block
-	// transcript access explicitly before any session data is read.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin {
-		return nil, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be opened while impersonating an organization")
-	}
-
-	chatID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
-	}
-
-	chat, err := s.repo.GetChat(ctx, chatID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
-	}
-
-	// older chat_messages may not have project_id in the model, but it will always exist on the chat
+// authorizeChatRead decides whether the caller may read a chat's content.
+//
+// It is shared by every path that hands a transcript to a caller — LoadChat
+// and the turn stream — because they expose the same data and so must answer
+// this the same way. The turn stream originally checked only that the chat
+// belonged to the caller's project, which let an embedded chat-session token
+// watch any other user's chat in that project.
+//
+// Project scoping lives here rather than at the call sites so it cannot be
+// dropped by one of them: GetChat looks up by id alone, so without this a chat
+// in another org is readable by anyone who knows its id.
+func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
+	// older chat_messages may not have project_id in the model, but it will
+	// always exist on the chat
 	if chat.ProjectID != *authCtx.ProjectID {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return oops.C(oops.CodeUnauthorized)
 	}
 
 	// External-user and chat-session-token callers must match the chat owner.
@@ -717,13 +717,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-				return nil, oops.C(oops.CodeUnauthorized)
+				return oops.C(oops.CodeUnauthorized)
 			}
 		}
 	}
 
 	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
-	// enforced for the org (enterprise + feature flag + session). Members can
+	// enforced for the org (feature flag + session). Members can
 	// always read sessions they own, so bypass the scope check for the owner;
 	// reading anyone else's session requires an unrestricted chat:read grant,
 	// which only admins hold. The managed-assistant runtime is exempt — it
@@ -731,8 +731,44 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
 	if !isAssistantCall && !isOwner {
 		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
-			return nil, err
+			return err
 		}
+	}
+
+	return nil
+}
+
+func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// A Speakeasy admin impersonating an org via the dev-tools override holds
+	// every scope (see authz.Engine), so RBAC cannot stop them — block
+	// transcript access explicitly before any session data is read. The shared
+	// demo org is exempt: its transcripts are fabricated by seed/demo/ and
+	// exist to be read.
+	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin &&
+		authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be opened while impersonating an organization")
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+
+	chat, err := s.repo.GetChat(ctx, chatID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	}
+
+	if err := s.authorizeChatRead(ctx, authCtx, chat); err != nil {
+		return nil, err
 	}
 
 	// Record dashboard session-opens in the audit log. Scroll pagination
@@ -991,6 +1027,49 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat entry totals").LogError(ctx, s.logger)
 	}
 
+	// Anchor the content-part fetch to the page being returned. Each part costs
+	// an asset read below, so fetching the whole chat would re-read every
+	// attachment body on every page request.
+	pageMessageIDs := make([]uuid.UUID, 0, len(resultMessages))
+	for _, m := range resultMessages {
+		if id, err := uuid.Parse(m.ID); err == nil {
+			pageMessageIDs = append(pageMessageIDs, id)
+		}
+	}
+
+	contentPartRows, err := s.repo.ListChatContentPartsByChatID(ctx, repo.ListChatContentPartsByChatIDParams{
+		ChatID:               chat.ID,
+		ProjectID:            *authCtx.ProjectID,
+		ParentChatMessageIds: pageMessageIDs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat content parts").LogError(ctx, s.logger)
+	}
+	contentParts := make([]*gen.ChatContentPart, len(contentPartRows))
+	var contentPartGroup errgroup.Group
+	contentPartGroup.SetLimit(maxConcurrentChatAssetWork)
+	for i, row := range contentPartRows {
+		contentPartGroup.Go(func() error {
+			content := s.loadContentPartContent(ctx, row.ChatID, row.ID, row.ContentAssetUrl)
+			contentPart := &gen.ChatContentPart{
+				ID:                  row.ID.String(),
+				Kind:                row.Kind,
+				Content:             content,
+				ParentChatMessageID: nil,
+				Metadata:            json.RawMessage(row.Metadata),
+				IsRisk:              row.IsRisk,
+				CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
+			}
+			if row.ParentChatMessageID.Valid {
+				parentID := row.ParentChatMessageID.UUID.String()
+				contentPart.ParentChatMessageID = &parentID
+			}
+			contentParts[i] = contentPart
+			return nil
+		})
+	}
+	_ = contentPartGroup.Wait()
+
 	var source *string
 	if isInitialLatest {
 		for i := len(latestPageRows) - 1; i >= 0; i-- {
@@ -1022,6 +1101,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		Summary:              conv.FromPGText[string](chat.Summary),
 		SummaryGeneratedAt:   formatOptionalTimestamptz(chat.SummaryGeneratedAt),
 		Messages:             resultMessages,
+		ContentParts:         contentParts,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),
 		HasMoreBefore:        hasMoreBefore,
@@ -1455,7 +1535,17 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
-		if err := s.streamCompletion(ctx, w, streamBody, getContextWindow); err != nil {
+		// A watchable chat also gets its tokens republished as turn frames on
+		// the way past, so the dashboard renders text as it is generated. The
+		// bytes still reach this caller untouched; the tee is a side channel.
+		src := io.Reader(streamBody)
+		if s.turnStream != nil && chatID != uuid.Nil {
+			teed, done := s.teeStreamText(ctx, chatID)
+			src = io.TeeReader(streamBody, teed)
+			defer done()
+		}
+
+		if err := s.streamCompletion(ctx, w, src, getContextWindow); err != nil {
 			return err
 		}
 
@@ -1470,9 +1560,24 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	/**
 	 * Non-Streaming
 	 */
-	response, err := s.completionClient.GetCompletion(ctx, completionReq)
-	if err != nil {
-		return s.classifyCompletionError(ctx, "completion failed", err)
+	// A watchable chat has its tokens streamed upstream and republished as
+	// they pass, so the dashboard can render text while it is still being
+	// generated; this caller still gets back the assembled JSON it asked for.
+	// With no chat to attribute frames to, or no stream to publish on, this is
+	// an ordinary completion.
+	var response *openrouter.CompletionResponse
+	if s.turnStream != nil && chatID != uuid.Nil {
+		teed, teeErr := s.teedCompletion(ctx, completionReq, chatID)
+		if teeErr != nil {
+			return teeErr
+		}
+		response = teed
+	} else {
+		plain, callErr := s.completionClient.GetCompletion(ctx, completionReq)
+		if callErr != nil {
+			return s.classifyCompletionError(ctx, "completion failed", callErr)
+		}
+		response = plain
 	}
 
 	var gramMetadata *openrouter.GramMetadata
@@ -2127,6 +2232,19 @@ func (s *Service) loadMessageContentFields(ctx context.Context, chatID uuid.UUID
 	}
 
 	// 3. Fallback to plain text content
+	return content
+}
+
+func (s *Service) loadContentPartContent(ctx context.Context, chatID uuid.UUID, contentPartID uuid.UUID, contentAssetURL string) string {
+	content, err := blobio.ReadAllString(ctx, s.assetStorage, contentAssetURL, maxAssetReadSize)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read content part from asset storage",
+			attr.SlogError(err),
+			attr.SlogChatID(chatID.String()),
+			attr.SlogChatContentPartID(contentPartID.String()),
+		)
+		return ""
+	}
 	return content
 }
 

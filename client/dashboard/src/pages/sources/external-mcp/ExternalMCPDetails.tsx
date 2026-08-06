@@ -2,9 +2,9 @@ import { Page } from "@/components/page-layout";
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
 import { ExternalMCPIllustration } from "@/components/sources/SourceCardIllustrations";
 import { useCatalogIconMap } from "@/components/sources/sources-hooks";
-import { Heading } from "@/components/ui/heading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { attachmentToURNPrefix } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -12,7 +12,10 @@ import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.j
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { RequireScope } from "@/components/require-scope";
-import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
@@ -165,9 +168,9 @@ export default function ExternalMCPDetails(): JSX.Element {
                 </Badge>
               </div>
               <div className="ml-1 flex items-center gap-2">
-                <Type className="text-background/70! max-w-2xl truncate">
+                <Text className="text-background/70! max-w-2xl truncate">
                   {source?.slug}
-                </Type>
+                </Text>
               </div>
             </Stack>
           </div>
@@ -215,46 +218,46 @@ export default function ExternalMCPDetails(): JSX.Element {
               {/* Row 1: Name, Origin, Origin ID */}
               <div className="flex flex-wrap gap-x-16 gap-y-6">
                 <div>
-                  <Type muted small className="mb-1">
+                  <Text muted small className="mb-1">
                     Name
-                  </Type>
-                  <Type className="font-medium">{source?.name || "—"}</Type>
+                  </Text>
+                  <Text className="font-medium">{source?.name || "—"}</Text>
                 </div>
                 <div>
-                  <Type muted small className="mb-1">
+                  <Text muted small className="mb-1">
                     Created from
-                  </Type>
+                  </Text>
                   <Badge variant="neutral">
                     <Badge.Text>{sourceOrigin.label}</Badge.Text>
                   </Badge>
                 </div>
                 <div>
-                  <Type muted small className="mb-1">
+                  <Text muted small className="mb-1">
                     Origin ID
-                  </Type>
-                  <Type className="font-mono break-all">
+                  </Text>
+                  <Text className="font-mono break-all">
                     {sourceOrigin.id || "—"}
-                  </Type>
+                  </Text>
                 </div>
               </div>
 
               {/* Row 2: Server Specifier */}
               <div className="flex gap-16">
                 <div>
-                  <Type muted small className="mb-1">
+                  <Text muted small className="mb-1">
                     Server Specifier
-                  </Type>
-                  <Type className="font-mono break-all">
+                  </Text>
+                  <Text className="font-mono break-all">
                     {source?.registryServerSpecifier || "—"}
-                  </Type>
+                  </Text>
                 </div>
               </div>
 
               {/* Row 3: Deployment */}
               <div>
-                <Type muted small className="mb-1">
+                <Text muted small className="mb-1">
                   Deployment
-                </Type>
+                </Text>
                 {deployment?.deployment?.id ? (
                   <routes.deployments.deployment.Link
                     params={[deployment.deployment.id]}
@@ -263,7 +266,7 @@ export default function ExternalMCPDetails(): JSX.Element {
                     {deployment.deployment.id.slice(0, 8)}
                   </routes.deployments.deployment.Link>
                 ) : (
-                  <Type className="text-muted-foreground">None</Type>
+                  <Text className="text-muted-foreground">None</Text>
                 )}
               </div>
             </div>
@@ -301,7 +304,7 @@ export default function ExternalMCPDetails(): JSX.Element {
               ) : (
                 <div className="py-12 text-center">
                   <Server className="text-muted-foreground/50 mx-auto mb-3 h-12 w-12" />
-                  <Type muted>No MCP servers are using this source yet.</Type>
+                  <Text muted>No MCP servers are using this source yet.</Text>
                 </div>
               )}
             </div>
@@ -315,13 +318,13 @@ export default function ExternalMCPDetails(): JSX.Element {
             <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
               {/* Danger Zone */}
               <div className="border-destructive/30 rounded-lg border p-6">
-                <Type variant="subheading" className="text-destructive mb-1">
+                <Text variant="subheading" className="text-destructive mb-1">
                   Danger Zone
-                </Type>
-                <Type muted small className="mb-4">
+                </Text>
+                <Text muted small className="mb-4">
                   Removing this source will remove it from the current
                   deployment. This action cannot be undone.
-                </Type>
+                </Text>
                 <RequireScope scope="project:write" level="component">
                   <Button
                     variant="destructive-primary"
@@ -373,9 +376,9 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
               <Server className="text-primary h-5 w-5" />
             </div>
             <div>
-              <Type className="group-hover:text-primary text-base font-semibold transition-colors">
+              <Text className="group-hover:text-primary text-base font-semibold transition-colors">
                 {toolset.name}
-              </Type>
+              </Text>
               <div className="mt-1 flex items-center gap-2">
                 <McpEnabledBadge enabled={!!toolset.mcpEnabled} />
                 <McpPublicBadge isPublic={!!toolset.mcpIsPublic} />
@@ -387,17 +390,17 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
 
         {/* Description */}
         {toolset.description && (
-          <Type className="text-muted-foreground line-clamp-2 text-sm">
+          <Text className="text-muted-foreground line-clamp-2 text-sm">
             {toolset.description}
-          </Type>
+          </Text>
         )}
 
         {/* Footer with tool count */}
         <div className="mt-4 border-t pt-3">
-          <Type className="text-muted-foreground text-xs">
+          <Text className="text-muted-foreground text-xs">
             {toolset.toolUrns?.length || 0} tool
             {(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""} available
-          </Type>
+          </Text>
         </div>
       </div>
     </routes.mcp.details.Link>

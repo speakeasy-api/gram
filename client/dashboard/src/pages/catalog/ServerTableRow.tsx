@@ -1,8 +1,9 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { DotRow } from "@/components/ui/dot-row";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
@@ -70,14 +71,14 @@ export function ServerTableRow({
       {/* Name */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="group-hover:text-primary truncate text-sm transition-colors"
             title={displayName}
           >
             {displayName}
-          </Type>
+          </Text>
           {isAdded && (
             <Badge variant="success">
               <Badge.Text>Added</Badge.Text>
@@ -94,16 +95,16 @@ export function ServerTableRow({
 
       {/* Version */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           v{server.version}
-        </Type>
+        </Text>
       </td>
 
       {/* Description */}
       <td className="max-w-xs px-3 py-3">
-        <Type small muted className="block truncate">
+        <Text small muted className="block truncate">
           {server.description}
-        </Type>
+        </Text>
       </td>
 
       {/* Tools */}

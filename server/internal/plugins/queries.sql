@@ -187,6 +187,9 @@ RETURNING *;
 -- Resolve an mcp_server for plugin-server validation, scoped to the project so
 -- IDs alone are never trusted. has_endpoint reports whether the server has at
 -- least one usable endpoint so the caller can reject unpublishable servers.
+-- is_unproxied reports whether the server is backed by an unproxied MCP
+-- server, which is never proxied and so never has an mcp_endpoints row; the
+-- caller exempts those servers from the has_endpoint requirement.
 SELECT
   s.id,
   s.name,
@@ -195,7 +198,8 @@ SELECT
   EXISTS (
     SELECT 1 FROM mcp_endpoints e
     WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
-  ) AS has_endpoint
+  ) AS has_endpoint,
+  (s.unproxied_mcp_server_id IS NOT NULL)::boolean AS is_unproxied
 FROM mcp_servers s
 WHERE
   s.id = @mcp_server_id
@@ -323,7 +327,10 @@ ORDER BY p.slug, ps.sort_order ASC;
 -- rule; per-plugin endpoint preference is a follow-up). Resolving the host
 -- inside the selection keeps endpoint choice and URL-host construction in
 -- lockstep, so a dangling custom-domain endpoint is never picked and emitted as
--- a (wrong) platform URL. Servers without a usable endpoint are dropped.
+-- a (wrong) platform URL. A server backed by an unproxied MCP server never has
+-- an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
+-- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
+-- usable endpoint nor an unproxied backing are dropped.
 -- Scoped to project_id; the mcp_server must live in the same project as the
 -- plugin, and disabled servers are excluded.
 SELECT
@@ -336,8 +343,9 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
-  ep.slug AS endpoint_slug,
-  ep.custom_domain AS endpoint_custom_domain
+  COALESCE(ep.slug, '') AS endpoint_slug,
+  ep.custom_domain AS endpoint_custom_domain,
+  ump.url AS unproxied_url
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
@@ -355,9 +363,10 @@ LEFT JOIN LATERAL (
   ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
+LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
-  AND ep.slug IS NOT NULL
+  AND (ep.slug IS NOT NULL OR ump.url IS NOT NULL)
 ORDER BY p.slug, ps.sort_order ASC;
 
 -- name: GetOrganizationName :one
@@ -553,7 +562,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
@@ -594,7 +603,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id

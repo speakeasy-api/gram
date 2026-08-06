@@ -23,8 +23,9 @@ type Skill struct {
 	SourceKind string
 	// The skill classification.
 	Classification string
-	// The derived latest version ID, selected from immutable version creation
-	// order.
+	// Registry tags for categorizing the skill.
+	Tags []string
+	// The current version ID, selected by effective promotion time.
 	LatestVersionID *string
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64

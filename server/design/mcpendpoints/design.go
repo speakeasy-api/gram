@@ -243,6 +243,7 @@ var McpEndpoint = Type("McpEndpoint", func() {
 		Format(FormatUUID)
 	})
 	Attribute("slug", McpEndpointSlug, "The slug")
+	Attribute("is_domain_root", Boolean, "Whether this endpoint is mapped to its custom-domain root")
 	Attribute("created_at", String, func() {
 		Description("When the MCP endpoint was created")
 		Format(FormatDateTime)
@@ -252,7 +253,7 @@ var McpEndpoint = Type("McpEndpoint", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "mcp_server_id", "slug", "created_at", "updated_at")
+	Required("id", "project_id", "mcp_server_id", "slug", "is_domain_root", "created_at", "updated_at")
 })
 
 var ListMcpEndpointsResult = Type("ListMcpEndpointsResult", func() {

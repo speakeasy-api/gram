@@ -1,5 +1,5 @@
-import { SidebarMenuItem } from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { SidebarMenuItem } from "@/components/ui/Sidebar";
+import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
 import { motion } from "motion/react";
@@ -7,8 +7,8 @@ import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { Type } from "./ui/type";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 
 export const NAV_LOADING_DURATION_MS = 600;
 
@@ -401,7 +401,7 @@ export function NavButton({
           )}
         />
       )}
-      <Type
+      <Text
         variant="small"
         className={cn(
           "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
@@ -410,7 +410,7 @@ export function NavButton({
         )}
       >
         {titleNode ?? title}
-      </Type>
+      </Text>
       {title === "Billing" && <ProductTierBadge />}
       {stage && (
         <ReleaseStageBadge
@@ -543,9 +543,19 @@ export function CollapsibleNavGroup({
 
 export function CollapsibleNavItem({
   item,
+  label,
   stage,
 }: {
   item: AppRoute;
+  // Display text override, when the group header already supplies the context
+  // the route title spells out (e.g. "Remote Identity Providers" under a
+  // "Platform Admin" header). Only the label changes: `useNavItem` still keys
+  // on the route title, which must stay unique across the sidebar because
+  // `registerRef` stores one element per id — two items sharing a title would
+  // overwrite each other and move the hover/active highlight to the wrong row.
+  // The title also remains what Recents and the command palette show, where
+  // there is no group header to disambiguate.
+  label?: string;
   stage?: ReleaseStage;
 }): React.JSX.Element {
   const navItem = useNavItem(item.title);
@@ -596,7 +606,7 @@ export function CollapsibleNavItem({
           )}
         >
           <span className={cn("truncate", isLoading && "nav-shimmer")}>
-            {item.title}
+            {label ?? item.title}
           </span>
           {item.title === "Billing" && <ProductTierBadge />}
           {(stage ?? item.stage) && (

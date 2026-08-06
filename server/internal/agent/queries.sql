@@ -103,6 +103,32 @@ SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
 WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
 
+-- name: UpsertDeviceAgentDeviceSync :exec
+-- Best-effort record that the agent on the machine bearing @serial_number
+-- polled. Sibling of UpsertDeviceAgentSync: that one answers "does this user
+-- run the agent somewhere", this one answers "does THIS machine run it".
+-- Only called when the agent reported a serial.
+--
+-- The guard extends the sibling's once-a-minute heartbeat throttle with two
+-- change conditions. Throttling alone would be wrong here: the row carries
+-- mutable descriptive columns, and at a ~60s poll cadence last_seen_at is
+-- almost always fresh, so a reassigned machine's new user (or a rename)
+-- could go unrecorded for the entire session.
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
+VALUES (@organization_id, @serial_number, @email, sqlc.narg('hostname'))
+-- Infers device_agent_device_syncs_org_lower_serial_key, the unique
+-- expression index that is this table's dedup key. Matching the readers'
+-- LOWER() comparison is what stops one machine from holding two rows.
+ON CONFLICT (organization_id, LOWER(serial_number)) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+  , email        = EXCLUDED.email
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_device_syncs.hostname)
+WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
+
 -- name: ListDeviceAgentSyncs :many
 -- Lists every distinct email seen polling the device agent for an org, most
 -- recently active first, for the dashboard's device-agent users view.
@@ -110,3 +136,50 @@ SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
 WHERE organization_id = @organization_id
 ORDER BY last_seen_at DESC;
+
+-- name: GetDeviceAgentConfiguration :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id;
+
+-- AcquireDeviceAgentConfigurationLock serializes configuration updates for an
+-- organization even when no row exists yet — FOR UPDATE cannot lock an absent
+-- row, so two concurrent first-time saves would otherwise both audit a nil
+-- before-snapshot. Transaction-scoped: released automatically at
+-- commit/rollback.
+
+-- name: AcquireDeviceAgentConfigurationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || @organization_id::text, 0));
+
+-- GetDeviceAgentConfigurationForUpdate locks the row for the update
+-- transaction so the unknown-key merge and audit before-snapshot cannot read
+-- a config replaced beneath them.
+
+-- name: GetDeviceAgentConfigurationForUpdate :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
+-- UpsertDeviceAgentConfiguration deliberately replaces the whole document:
+-- @config is the already-merged result computed by UpdateConfiguration under
+-- the org advisory lock, where stored keys outside the caller's replaceable
+-- set (unknown keys, platform-admin-only keys for org admins) were carried
+-- over. Do not call this with a raw client payload.
+
+-- name: UpsertDeviceAgentConfiguration :one
+INSERT INTO device_agent_configurations (
+  organization_id,
+  schema_version,
+  config
+)
+VALUES (
+  @organization_id,
+  @schema_version,
+  @config::jsonb
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET schema_version = EXCLUDED.schema_version
+  , config = EXCLUDED.config
+  , updated_at = clock_timestamp()
+RETURNING organization_id, schema_version, config, created_at, updated_at;

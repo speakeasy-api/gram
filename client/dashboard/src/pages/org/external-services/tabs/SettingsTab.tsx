@@ -1,12 +1,13 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import type { GcpIamCredential } from "@gram/client/models/components/gcpiamcredential.js";
-import { invalidateAllGetGcpIamPlatformCredential } from "@gram/client/react-query/getGcpIamPlatformCredential";
-import { invalidateAllListPlatformExternalCredentials } from "@gram/client/react-query/listPlatformExternalCredentials";
-import { useUpdateGcpIamPlatformCredentialMutation } from "@gram/client/react-query/updateGcpIamPlatformCredential";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { invalidateAllGetGcpIamCredential } from "@gram/client/react-query/getGcpIamCredential";
+import { invalidateAllListExternalCredentials } from "@gram/client/react-query/listExternalCredentials";
+import { useUpdateGcpIamCredentialMutation } from "@gram/client/react-query/updateGcpIamCredential";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -24,11 +25,11 @@ function SettingsSection({
   return (
     <div className="flex flex-col gap-4 border-b pb-6 last:border-b-0 last:pb-0">
       <div className="flex flex-col gap-1">
-        <Type className="font-medium">{title}</Type>
+        <Text className="font-medium">{title}</Text>
         {description && (
-          <Type small muted>
+          <Text small muted>
             {description}
-          </Type>
+          </Text>
         )}
       </div>
       {children}
@@ -68,13 +69,13 @@ export function SettingsTab({
   );
   const [showDelete, setShowDelete] = useState(false);
 
-  const update = useUpdateGcpIamPlatformCredentialMutation({
+  const update = useUpdateGcpIamCredentialMutation({
     onSuccess: async () => {
       // Refresh the list and this credential's detail (Overview + page title) so
       // the saved changes appear without a reload.
       await Promise.all([
-        invalidateAllListPlatformExternalCredentials(queryClient),
-        invalidateAllGetGcpIamPlatformCredential(queryClient),
+        invalidateAllListExternalCredentials(queryClient),
+        invalidateAllGetGcpIamCredential(queryClient),
       ]);
       toast.success("External credential updated");
     },
@@ -89,15 +90,20 @@ export function SettingsTab({
       : "An unexpected error occurred. Please try again."
     : null;
 
+  // Every field the update replaces is rendered above, so saving can never
+  // silently drop a value the form did not show.
+  const savable =
+    name.trim().length > 0 && impersonateServiceAccount.trim().length > 0;
+
   const handleSave = () => {
+    if (!savable) return;
     update.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
         updateGcpIamCredentialRequestBody: {
           id: credential.id,
           name: name.trim(),
-          impersonateServiceAccount:
-            impersonateServiceAccount.trim() || undefined,
+          impersonateServiceAccount: impersonateServiceAccount.trim(),
         },
       },
     });
@@ -114,7 +120,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="GCP identity"
-        description="Leave blank to use Gram's ambient attached identity, or set a service account for Gram to impersonate."
+        description="The service account in your project that Gram impersonates. Gram's own service account needs the roles/iam.serviceAccountTokenCreator role on it."
       >
         <Field
           label="Impersonate service account"
@@ -131,7 +137,7 @@ export function SettingsTab({
       )}
 
       <div>
-        <Button onClick={handleSave} disabled={update.isPending}>
+        <Button onClick={handleSave} disabled={!savable || update.isPending}>
           <Button.Text>
             {update.isPending ? "Saving…" : "Save changes"}
           </Button.Text>
@@ -139,10 +145,10 @@ export function SettingsTab({
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
-        <Type className="font-medium">Danger Zone</Type>
-        <Type small muted>
+        <Text className="font-medium">Danger Zone</Text>
+        <Text small muted>
           Deleting this credential is permanent.
-        </Type>
+        </Text>
         <div>
           <Button
             variant="destructive-primary"

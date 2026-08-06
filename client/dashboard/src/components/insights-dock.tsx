@@ -1,11 +1,13 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
-import { useAssistantRuntime } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import type { ElementsConfig, ElementsTransportFactory } from "@/elements";
 import {
   ActiveChatTitle,
@@ -32,7 +34,7 @@ import {
   INSIGHTS_SUGGESTION_ICONS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import type { UIMessage } from "ai";
 import {
   ArrowLeft,
@@ -135,7 +137,14 @@ const DOCK_PANEL_COMPOSER_CSS = `
     transform: translateY(50%);
     margin: 0;
   }
-  .aui-composer-action-wrapper-inner { display: none; }
+  .aui-composer-action-wrapper-inner {
+    display: flex;
+  }
+  .aui-composer-action-wrapper-inner > :not(.aui-composer-skill-context-picker) {
+    display: none;
+  }
+  .aui-composer-skill-context-picker-label { display: none; }
+  .aui-composer-skill-context-badges { padding: 0.5rem 3rem 0 0.75rem; }
   .aui-composer-send, .aui-composer-cancel {
     width: 1.5rem;
     height: 1.5rem;
@@ -181,6 +190,14 @@ const CHAT_FULLPAGE_COMPOSER_CSS = `
     padding-top: 0.875rem;
     padding-bottom: 0.875rem;
     font-size: 0.9375rem;
+  }
+  :host-context(.gram-chat-fullpage) .aui-composer-action-wrapper {
+    position: static;
+    margin: 0.5rem 0.25rem;
+    transform: none;
+  }
+  :host-context(.gram-chat-fullpage) .aui-composer-skill-context-picker-label {
+    display: inline;
   }
   :host-context(.gram-chat-fullpage) .aui-composer-wrapper {
     padding-bottom: 1.25rem;
@@ -714,6 +731,23 @@ export function InsightsProvider({
   const contextInfo = override?.contextInfo;
   const hideTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const selectedSkillIdsRef = useRef(selectedSkillIds);
+  selectedSkillIdsRef.current = selectedSkillIds;
+  const getSelectedSkillIds = useCallback(
+    () => selectedSkillIdsRef.current,
+    [],
+  );
+  const handleSkillIdsSent = useCallback((sentSkillIds: string[]) => {
+    const sent = new Set(sentSkillIds);
+    setSelectedSkillIds((current) =>
+      current.filter((skillID) => !sent.has(skillID)),
+    );
+  }, []);
+
+  useEffect(() => {
+    setSelectedSkillIds([]);
+  }, [mcpConfig.projectSlug]);
 
   // Server-side Project Assistant. Resolved lazily the first time the chat
   // panel is opened or a chat route is visited; once resolved it stays, so the
@@ -727,7 +761,32 @@ export function InsightsProvider({
     ready: assistantReady,
     error: assistantError,
     needsAdmin: assistantNeedsAdmin,
-  } = useServerAssistantTransport(mcpConfig.projectSlug, true);
+  } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
+    getSkillIds: getSelectedSkillIds,
+    onSkillIdsSent: handleSkillIdsSent,
+  });
+
+  const skillsQuery = useSkillsInfinite(
+    { limit: 200, gramProject: mcpConfig.projectSlug },
+    undefined,
+    {
+      enabled: assistantReady,
+      throwOnError: false,
+    },
+  );
+  useDrainInfiniteQuery(skillsQuery, assistantReady);
+  const composerSkills = useMemo(
+    () =>
+      (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+        .filter((skill) => skill.hasValidVersion)
+        .map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          displayName: skill.displayName,
+          summary: skill.summary,
+        })),
+    [skillsQuery.data?.pages],
+  );
 
   // Derive "Continue chat" from the server: if the assistant's most recent
   // conversation was active within CONTINUE_WINDOW_MS, the resting pill offers
@@ -936,6 +995,14 @@ export function InsightsProvider({
       composer: {
         placeholder: "Ask anything",
         attachments: false,
+        skillContext: {
+          skills: composerSkills,
+          selectedSkillIds,
+          onSelectedSkillIdsChange: setSelectedSkillIds,
+          loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
+          error: !!skillsQuery.error,
+          maxSelected: 10,
+        },
       },
       theme: {
         colorScheme: theme === "dark" ? "dark" : "light",
@@ -954,6 +1021,11 @@ export function InsightsProvider({
       theme,
       wrappedTransport,
       managedAssistantId,
+      composerSkills,
+      selectedSkillIds,
+      skillsQuery.isPending,
+      skillsQuery.isFetchingNextPage,
+      skillsQuery.error,
       resolveAssistantLink,
       resolveCreator,
       isOwnChat,
@@ -1092,7 +1164,7 @@ export function InsightsProvider({
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
       // Expose the gated "runtime is mounted" signal, not the raw eager
-      // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
+      // `assistantReady`: chat pages render AUI hooks
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
@@ -1380,11 +1452,14 @@ function PendingPromptBridge({
   pending: { text: string; nonce: number } | null;
   onConsume: () => void;
 }): null {
-  const assistantRuntime = useAssistantRuntime();
+  const thread = useAui().thread();
+  const isThreadReady = useAuiState(
+    ({ thread }) => !thread.isLoading && !thread.isDisabled,
+  );
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!pending || !assistantRuntime) return;
+    if (!pending || !isThreadReady) return;
     if (firedNonceRef.current === pending.nonce) return;
     firedNonceRef.current = pending.nonce;
 
@@ -1399,21 +1474,16 @@ function PendingPromptBridge({
     // asynchronously, so a post-append "did it land?" check races and
     // re-appending duplicates the send.
     let done = false;
-    let unsubscribe: (() => void) | null = null;
 
     const finish = () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
       onConsume();
     };
 
     const attempt = () => {
       if (done) return;
-      const state = assistantRuntime.thread.getState();
-      if (state.isLoading || state.isDisabled) return;
       try {
-        assistantRuntime.thread.append(text);
+        thread.append(text);
       } catch (err) {
         if (!isEmptyThreadError(err)) {
           console.error("Failed to send queued assistant prompt:", err);
@@ -1425,16 +1495,11 @@ function PendingPromptBridge({
     };
 
     attempt();
-    if (!done) {
-      unsubscribe = assistantRuntime.thread.subscribe(attempt);
-    }
 
     return () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
     };
-  }, [pending, assistantRuntime, onConsume]);
+  }, [pending, isThreadReady, thread, onConsume]);
 
   return null;
 }

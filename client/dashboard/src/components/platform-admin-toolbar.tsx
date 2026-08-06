@@ -10,7 +10,8 @@ import {
   PlatformAdminInfoPanel,
   PlatformAdminOnboardingPanel,
 } from "./platform-admin-panel";
-import { Switch } from "./ui/switch";
+import { DevBadge } from "@/components/dev-badge";
+import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -29,6 +30,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
@@ -307,6 +309,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   const [platformAdmin, setPlatformAdmin] = useState(
     () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
   );
+  const [orgMemoryEnabled, setOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
   // Leftmost edge (px from viewport left) of any open right-anchored Sheet, or
   // null when none is open. Drives the shift that keeps the toolkit off panels'
   // footer buttons.
@@ -594,9 +597,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
             className="flex flex-1 cursor-grab items-center gap-2.5 active:cursor-grabbing"
           >
             <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              DEV
-            </span>
+            <DevBadge />
             <span className="text-muted-foreground text-xs font-semibold">
               Developer Toolkit
             </span>
@@ -720,8 +721,28 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
 
             {/* Features tab: RBAC enable/disable + product feature toggles */}
             {activeTab === "features" && (
-              <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+              <div className="max-h-[440px] space-y-3 overflow-y-auto px-3 py-3">
                 <PlatformAdminFeaturesPanel />
+                <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`h-1.5 w-1.5 rounded-full ${orgMemoryEnabled ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"}`}
+                    />
+                    <div>
+                      <div className="text-foreground text-xs font-medium">
+                        Org Memory dashboard
+                      </div>
+                      <div className="text-muted-foreground text-[10px]">
+                        Visible for this browser session
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={orgMemoryEnabled}
+                    onCheckedChange={setOrgMemoryEnabled}
+                    aria-label="Toggle Org Memory dashboard"
+                  />
+                </div>
               </div>
             )}
 

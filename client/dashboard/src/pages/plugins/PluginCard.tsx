@@ -1,22 +1,22 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
-import type { Action } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import type { Action } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -125,14 +125,14 @@ export function PluginCard({
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <Type
+                <Text
                   variant="subheading"
                   as="div"
                   className="text-md group-hover:text-primary truncate transition-colors"
                   title={plugin.name}
                 >
                   {plugin.name}
-                </Type>
+                </Text>
                 {isDefault && (
                   <Badge variant="information">
                     <Badge.Text>Default</Badge.Text>
@@ -144,14 +144,14 @@ export function PluginCard({
                   </Badge>
                 )}
               </div>
-              <Type
+              <Text
                 small
                 muted
                 className="truncate font-mono"
                 title={plugin.slug}
               >
                 {plugin.slug}
-              </Type>
+              </Text>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Badge variant="neutral">
@@ -176,11 +176,11 @@ export function PluginCard({
           </div>
 
           {description && (
-            <Type small muted className="mb-1 line-clamp-3">
+            <Text small muted className="mb-1 line-clamp-3">
               {description}
-            </Type>
+            </Text>
           )}
-          <Type small className="text-muted-foreground/60 mt-2 mb-3">
+          <Text small className="text-muted-foreground/60 mt-2 mb-3">
             {publishStatus?.lastPublishedAt ? (
               <>
                 Published{" "}
@@ -191,7 +191,7 @@ export function PluginCard({
                 Updated <HumanizeDateTime date={plugin.updatedAt} />
               </>
             )}
-          </Type>
+          </Text>
 
           <div className="mt-auto flex items-center justify-end gap-2 pt-2">
             <div className="flex items-center gap-2">

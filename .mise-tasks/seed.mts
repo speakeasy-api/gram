@@ -12,7 +12,6 @@ import path from "node:path";
 
 import { intro, log as clackLog, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
-import { accessEnableRBAC } from "#gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "#gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "#gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
@@ -25,6 +24,7 @@ import { keysValidate } from "#gram/client/funcs/keysValidate.js";
 import { projectsCreate } from "#gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "#gram/client/funcs/projectsRead.js";
 import { resourcesList } from "#gram/client/funcs/resourcesList.js";
+import { skillsCreate } from "#gram/client/funcs/skillsCreate.js";
 import { toolsList } from "#gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "#gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "#gram/client/funcs/toolsetsUpdateBySlug.js";
@@ -306,6 +306,7 @@ async function seedShadowMCPInventoryData(init: {
 
   const inventoryRows: string[] = [];
   const telemetryRows: string[] = [];
+  const hookSources = ["claude-code", "cursor", "codex"];
   const clickhouseDateTime64 = (date: Date) =>
     date.toISOString().replace("T", " ").replace("Z", "");
   for (const [serverIndex, [serverName, serverURL]] of servers.entries()) {
@@ -319,7 +320,18 @@ async function seedShadowMCPInventoryData(init: {
     const userCount = 3 + (serverIndex % 6);
     const callCount = 8 + serverIndex * 3;
     for (let callIndex = 0; callIndex < callCount; callIndex++) {
-      const userEmail = users[(serverIndex * 2 + callIndex) % userCount];
+      const userCallIndex = serverIndex * 2 + callIndex;
+      const userSlot = userCallIndex % userCount;
+      const userEmail = users[userSlot];
+      const primaryHookSource =
+        hookSources[(serverIndex + userSlot) % hookSources.length];
+      const isMultiSourceUser = userSlot === serverIndex % userCount;
+      const hookSource = isMultiSourceUser
+        ? hookSources[
+            (serverIndex + userSlot + Math.floor(userCallIndex / userCount)) %
+              hookSources.length
+          ]
+        : primaryHookSource;
       const calledAt = new Date(
         lastSeen.getTime() - callIndex * (35 + serverIndex * 4) * 60 * 1000,
       );
@@ -334,7 +346,7 @@ async function seedShadowMCPInventoryData(init: {
         "gen_ai.tool.call.result": "ok",
         "gram.event.source": "hook",
         "gram.hook.event": "PostToolUse",
-        "gram.hook.source": "claude-code",
+        "gram.hook.source": hookSource,
         "gram.mcp.server_url": serverURL,
         "gram.project.id": projectId,
         "gram.tool.name": toolName,
@@ -441,6 +453,109 @@ SELECT COUNT(*) FROM upserted;
     });
   }
   log.info("Assigned current user to seeded Admin role");
+}
+
+// Mirrors authz.SeedSystemRoleGrants for local databases that predate RBAC.
+// Keep these scope lists in sync with authz.SystemRoleGrants. As in the Go
+// seeder, an existing role with any grants is left unchanged.
+async function seedSystemRoleGrants(organizationId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+BEGIN;
+
+INSERT INTO global_roles (
+  workos_slug,
+  workos_name,
+  workos_description,
+  workos_created_at,
+  workos_updated_at,
+  workos_last_event_id
+)
+VALUES
+  ('admin', 'Admin', 'Administrator role', clock_timestamp(), clock_timestamp(), NULL),
+  ('member', 'Member', 'Member role', clock_timestamp(), clock_timestamp(), NULL)
+ON CONFLICT (workos_slug) DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
+  deleted_at = NULL,
+  workos_deleted_at = NULL,
+  updated_at = clock_timestamp()
+WHERE global_roles.deleted IS TRUE
+   OR global_roles.workos_deleted IS TRUE;
+
+WITH system_role_scopes (role_slug, scope, resource_kind) AS (
+  VALUES
+    ('admin', 'org:read', 'org'),
+    ('admin', 'org:admin', 'org'),
+    ('admin', 'project:read', 'project'),
+    ('admin', 'project:write', 'project'),
+    ('admin', 'mcp:read', 'mcp'),
+    ('admin', 'mcp:write', 'mcp'),
+    ('admin', 'mcp:connect', 'mcp'),
+    ('admin', 'environment:read', 'environment'),
+    ('admin', 'environment:write', 'environment'),
+    ('admin', 'skill:read', 'skill'),
+    ('admin', 'skill:write', 'skill'),
+    ('member', 'org:read', 'org'),
+    ('member', 'project:read', 'project'),
+    ('member', 'mcp:read', 'mcp'),
+    ('member', 'mcp:connect', 'mcp'),
+    ('member', 'skill:read', 'skill')
+),
+roles_without_grants AS (
+  SELECT global_roles.id, global_roles.workos_slug
+  FROM global_roles
+  WHERE global_roles.workos_slug IN ('admin', 'member')
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM principal_grants
+      WHERE principal_grants.organization_id = :'organization_id'
+        AND principal_grants.principal_urn IN (
+          'role:global:' || global_roles.id::text,
+          'role:' || global_roles.workos_slug
+        )
+    )
+)
+INSERT INTO principal_grants (
+  organization_id,
+  principal_urn,
+  scope,
+  effect,
+  selectors
+)
+SELECT
+  :'organization_id',
+  'role:global:' || roles_without_grants.id::text,
+  system_role_scopes.scope,
+  NULL,
+  jsonb_build_object(
+    'resource_kind', system_role_scopes.resource_kind,
+    'resource_id', '*'
+  )
+FROM roles_without_grants
+JOIN system_role_scopes
+  ON system_role_scopes.role_slug = roles_without_grants.workos_slug
+ON CONFLICT (
+  organization_id,
+  principal_urn,
+  scope,
+  COALESCE(effect, 'allow'),
+  selectors
+)
+DO NOTHING;
+
+COMMIT;
+`;
+  await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -f -`.quiet();
+
+  log.info("Seeded built-in roles and grants");
 }
 
 async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
@@ -630,7 +745,7 @@ async function deployAssets(init: {
   projectSlug: string;
   projectName: string;
   assets: Asset[];
-}): Promise<string> {
+}): Promise<string | null> {
   const { sessionId, projectSlug, projectName, assets } = init;
 
   const oapi: Array<{ assetId: string; name: string; slug: string }> = [];
@@ -762,8 +877,17 @@ async function deployAssets(init: {
     `evolve deployment for '${projectSlug}'`,
   );
 
+  // Best-effort: evolve is the first seed step that needs Temporal, so it is
+  // the one that fails when the worker or Temporal itself is briefly
+  // unavailable. Aborting here discarded every later seed step — org members,
+  // telemetry, chats — for one flaky workflow start, leaving a dashboard with
+  // nothing in it. Skipping the project instead withholds the completion
+  // marker (see seedStepFailures), so the next `mise run seed` retries it.
   if (!evolveRes.ok) {
-    abort(`Failed to evolve project \`${projectName}\``, evolveRes.error);
+    log.stepFailed(
+      `Failed to evolve project \`${projectName}\`: ${evolveRes.error}`,
+    );
+    return null;
   }
 
   const deploymentId = evolveRes.value.deployment?.id;
@@ -1806,11 +1930,12 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   ],
   // Prompt injection — match carries the full flagged event (the shape
   // judgemessage.Render produces), so the Risk Events "View event" dialog has a
-  // real payload to reveal instead of an opaque fingerprint.
+  // real payload to reveal instead of an opaque fingerprint. The description is
+  // the judge's rationale, which is what the Evidence column renders inline.
   [
     "prompt_injection",
     "prompt_injection",
-    "Prompt injection attempt",
+    "The user message overrides its prior instructions and directs the agent to disclose its system prompt and exfiltrate customer data to an external address.",
     JSON.stringify({
       produced_by: "end_user",
       body_kind: "content",
@@ -1823,7 +1948,7 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   [
     "llm_judge",
     "llm_judge",
-    "Message matched the prompt-based policy (destructive tool call).",
+    "The tool call creates an issue instructing operators to run `rm -rf /var/data` fleet-wide, which the policy prohibits for irreversible infrastructure actions.",
     JSON.stringify({
       produced_by: "ai_assistant_tool_call",
       body_kind: "tool_calls",
@@ -1842,7 +1967,7 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   [
     "llm_judge",
     "llm_judge",
-    "Message matched the prompt-based policy (financial policy violation).",
+    "The user asks the agent to move corporate funds to an external account and to omit the transfer from the books, which the policy treats as a financial-controls violation.",
     JSON.stringify({
       produced_by: "end_user",
       body_kind: "content",
@@ -2291,63 +2416,21 @@ async function seedNonCorporateAccountFindings(init: {
   }
 }
 
-// enableRBACForDevUser turns on RBAC for the org and grants the local dev user
-// the admin scope set plus chat:read. The Agent Sessions page only shows every
-// member's sessions to a caller holding an unrestricted chat:read grant under
-// RBAC enforcement; without it the list is scoped to the caller's own sessions.
-// We grant the full admin scope set too so existing admin actions keep working
-// once enforcement is on (locally the dev user has no WorkOS-synced role
-// assignment to inherit those from). Idempotent: enableRBAC no-ops if already
-// enabled and the grant insert is ON CONFLICT DO NOTHING.
-async function enableRBACForDevUser(init: {
-  sessionId: string;
+// grantDevUserFullSessionVisibility gives the local dev user unrestricted
+// chat:read. Organization provisioning supplies the built-in roles and grants,
+// while chat:read remains a direct grant because it is intentionally not part
+// of any system role. The insert is idempotent.
+async function grantDevUserFullSessionVisibility(init: {
   organizationId: string;
   userId: string;
-  gram: GramCore;
 }): Promise<void> {
-  const { sessionId, organizationId, userId, gram } = init;
-  log.info("Enabling RBAC + granting dev user full session visibility...");
+  const { organizationId, userId } = init;
+  log.info("Granting dev user full session visibility...");
 
-  // EnableRBAC is gated by requirePlatformAdmin (access/impl.go): the caller
-  // must have a @speakeasy.com/@speakeasyapi.dev email OR the users.admin flag.
-  // Locally the dev user's email is neither (e.g. a personal gmail address) and
-  // admin defaults to false, so the call 403s. Promote the dev user to admin in
-  // the DB first so the platform-admin check passes. Idempotent.
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; stdout?: string; message?: string };
-    abort(
-      `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
-    );
-  }
-
-  // EnableRBAC seeds the built-in system roles and flips the org feature flag.
-  const res = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!res.ok) {
-    abort("Failed to enable RBAC", res.error);
-  }
-
-  // The admin system role intentionally omits chat:read, and the dev user has
-  // no role assignment locally anyway, so grant the scopes directly to the user
-  // principal. Selectors mirror authz.NewSelector: one
-  // {resource_kind, resource_id:"*"} object per scope, effect NULL = allow.
+  // The Admin system role intentionally omits chat:read, so grant it directly to
+  // the user principal. The selector mirrors authz.NewSelector and effect NULL
+  // means allow.
   const SCOPES: { scope: string; kind: string }[] = [
-    { scope: "org:read", kind: "org" },
-    { scope: "org:admin", kind: "org" },
-    { scope: "project:read", kind: "project" },
-    { scope: "project:write", kind: "project" },
-    { scope: "mcp:read", kind: "mcp" },
-    { scope: "mcp:write", kind: "mcp" },
-    { scope: "mcp:connect", kind: "mcp" },
-    { scope: "environment:read", kind: "environment" },
-    { scope: "environment:write", kind: "environment" },
-    { scope: "skill:read", kind: "skill" },
-    { scope: "skill:write", kind: "skill" },
     { scope: "chat:read", kind: "chat" },
   ];
   const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
@@ -2376,7 +2459,7 @@ async function enableRBACForDevUser(init: {
       await fs.unlink(tmpFile).catch(() => {});
     }
     log.info(
-      `Enabled RBAC and granted dev user ${SCOPES.length} scopes (admin + chat:read); Agent Sessions now shows all org sessions.`,
+      "Granted the dev user chat:read; Agent Sessions now shows all org sessions.",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
@@ -3825,6 +3908,35 @@ async function seedObservabilityData(init: {
   const todayUtcStart = Math.floor(now / msPerDay) * msPerDay;
   const rawTtlBoundaryMs = todayUtcStart - RAW_TTL_SAFETY_DAYS * msPerDay;
   const rawTtlBoundaryNano = BigInt(rawTtlBoundaryMs) * BigInt(1_000_000);
+
+  // Days inside the ACTIVE billing cycle (anchor day 1 → the current UTC
+  // month) run heavier so the cycle lands clearly past the 50M contracted
+  // allowance and the billing page renders a real overage segment. The boost
+  // targets ~100M BILLED tokens for the cycle's elapsed days regardless of
+  // when the seed runs. The billed TUM population is much narrower than the
+  // raw telemetry inserted here (registry exclusions, cache reads dropped,
+  // stored-evidence gating): an unboosted seed bills ~350k tokens/day, the
+  // divisor below. The cap only guards against pathological division — it
+  // sits above the worst-case single-elapsed-day boost (~286x) so the
+  // overage renders whether the cycle is a day old or nearly sealed. Sole
+  // gap: on the cycle's first day the history (which ends yesterday) has no
+  // rows inside the cycle yet, so overage appears from day two. Run-date
+  // dependent, which is fine: the full-project delete preamble in chSQL
+  // resets every re-run.
+  const nowUtc = new Date(now);
+  const currentCycleStartMs = Date.UTC(
+    nowUtc.getUTCFullYear(),
+    nowUtc.getUTCMonth(),
+    1,
+  );
+  const elapsedCycleDays = Math.max(
+    1,
+    Math.floor((todayUtcStart - currentCycleStartMs) / msPerDay),
+  );
+  const currentCycleBoost = Math.min(
+    300,
+    Math.max(1, 100_000_000 / (elapsedCycleDays * 350_000)),
+  );
   const chBackfillInserts: string[] = [];
   // Risky history sessions also get a Postgres chat + one message so
   // seedRiskFindings can attach findings (risk_results FKs to chat_messages).
@@ -3889,14 +4001,28 @@ async function seedObservabilityData(init: {
           : null;
 
       // Cache-heavy token mix (agent sessions replay large cached prompts);
-      // ~15% are light API-style calls with little cache traffic.
+      // ~15% are light API-style calls with little cache traffic. Sessions
+      // in the active billing cycle carry the overage boost, divided by the
+      // day's weekend session damping so every in-cycle day contributes
+      // roughly the same volume — otherwise an early-month seed whose only
+      // elapsed days are a weekend would miss the overage target.
+      const cycleBoost =
+        dayStartMs >= currentCycleStartMs
+          ? currentCycleBoost / weekendFactor
+          : 1;
       const cacheDiv = r() < 0.15 ? 10 : 1;
-      const inputTokens = (800 + Math.floor(r() * 7_000)) * anonBoost;
-      const outputTokens = (300 + Math.floor(r() * 3_500)) * anonBoost;
-      const cacheReadTokens =
-        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost;
-      const cacheCreationTokens =
-        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
+      const inputTokens = Math.round(
+        (800 + Math.floor(r() * 7_000)) * anonBoost * cycleBoost,
+      );
+      const outputTokens = Math.round(
+        (300 + Math.floor(r() * 3_500)) * anonBoost * cycleBoost,
+      );
+      const cacheReadTokens = Math.round(
+        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
+      const cacheCreationTokens = Math.round(
+        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
       const cost = computeUsageCost(
@@ -4654,15 +4780,37 @@ function chatSessionBackfillSQL(
             is_claude_otel_row
             AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
         ) AS is_claude_tool_result,
-        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+        (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
         (
-            hook_source IN ('codex', 'cursor')
+            is_codex_otel_row
+            AND toString(attributes.event.name) = 'codex.sse_event'
+            AND toString(attributes.event.kind) = 'response.completed'
+            AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
+        ) AS is_codex_api_request,
+        least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
+        (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
+        (
+            hook_source = 'opencode'
+            AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+            AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
+        ) AS is_opencode_usage_row,
+        (
+            gram_urn = 'litellm:otel:traces'
+            AND event_urn IN (
+                'urn:telemetry:provider_otel:span:chat',
+                'urn:telemetry:provider_otel:span:embeddings',
+                'urn:telemetry:provider_otel:span:text_completion'
+            )
+        ) AS is_litellm_usage_row,
+        (
+            hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
         ) AS is_agent_tool_call,
         (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-        (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+        (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
         (
             (is_claude_tool_result AND toString(attributes.success) = 'false')
             OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
@@ -4672,10 +4820,18 @@ function chatSessionBackfillSQL(
             toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
             toString(id)
         ) AS tool_call_dedup_id,
-        if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(
+            is_claude_api_request, toString(attributes.prompt.id),
+            is_litellm_usage_row AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id),
+            is_codex_api_request OR is_opencode_usage_row OR is_litellm_usage_row, toString(id),
+            toString(attributes.gen_ai.response.id)
+        ) AS session_message_id,
         multiIf(
             is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
             is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model),
+            is_litellm_usage_row, toString(attributes.gen_ai.request.model),
             toString(attributes.gen_ai.response.model)
         ) AS effective_model
     SELECT
@@ -4690,10 +4846,10 @@ function chatSessionBackfillSQL(
         uniqExactIfState(session_message_id, session_message_id != '') AS message_count,
         uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS tool_call_count,
         countIf(is_failed_tool_call) AS failed_tool_call_count,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), is_codex_api_request, codex_input_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), is_codex_api_request, toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), is_codex_api_request, codex_input_tokens + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), is_codex_api_request, codex_cache_read_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
         sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
         sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
         groupUniqArray(toString(attributes.user.attributes.department_name)) AS department_names,
@@ -4715,7 +4871,7 @@ function chatSessionBackfillSQL(
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
       AND chat_id != ''
-      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+      AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
     GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }
@@ -4730,6 +4886,166 @@ function abort(message: string, ...values: unknown[]): never {
     }
   }
   process.exit(1);
+}
+
+// The suggest engine only produces edit suggestions from real agent feedback,
+// so local seeding writes an open suggestion directly. Each change's diff is
+// incremental (diffed against what the changes before it produce), matching
+// what the engine stores — regenerate them with skilldiff.Unified if the base
+// content changes.
+const SEED_SKILL_CONTENT = `---
+name: support-refunds
+description: Handle customer refund requests end to end.
+---
+
+Verify the order exists before promising anything.
+Match the request to the original payment method.
+Check the payment status in the billing dashboard.
+Confirm the item was returned or the claim is valid.
+Apply the refund policy for the product category.
+Issue the refund through the payments console.
+Record the refund reason in the order notes.
+Watch for duplicate refund attempts on the order.
+Notify the customer with the expected settlement window.
+Escalate disputed chargebacks to the billing team.
+Attach the conversation transcript to the ticket.
+Close the support ticket with a summary.
+`;
+
+// Diff lines are stored as arrays because unified-diff context lines carry a
+// leading space — a blank context line is a single space that whitespace
+// trimming would otherwise destroy inside a template literal.
+const SEED_SKILL_SUGGESTION_CHANGES = [
+  {
+    rationale:
+      "Refunds were promised for orders still in transit, which support then had to walk back.",
+    diff: [
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -3,7 +3,7 @@",
+      " description: Handle customer refund requests end to end.",
+      " ---",
+      " ",
+      "-Verify the order exists before promising anything.",
+      "+Verify the order exists and its fulfillment state before promising anything.",
+      " Match the request to the original payment method.",
+      " Check the payment status in the billing dashboard.",
+      " Confirm the item was returned or the claim is valid.",
+      "",
+    ].join("\n"),
+  },
+  {
+    rationale:
+      "Refunds issued to a different payment method fail compliance review and get reversed.",
+    diff: [
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -8,7 +8,7 @@",
+      " Check the payment status in the billing dashboard.",
+      " Confirm the item was returned or the claim is valid.",
+      " Apply the refund policy for the product category.",
+      "-Issue the refund through the payments console.",
+      "+Issue the refund through the payments console using the original payment method.",
+      " Record the refund reason in the order notes.",
+      " Watch for duplicate refund attempts on the order.",
+      " Notify the customer with the expected settlement window.",
+      "",
+    ].join("\n"),
+  },
+  {
+    rationale:
+      "Follow-up conversations could not locate the refund without its id in the ticket.",
+    diff: [
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -14,4 +14,4 @@",
+      " Notify the customer with the expected settlement window.",
+      " Escalate disputed chargebacks to the billing team.",
+      " Attach the conversation transcript to the ticket.",
+      "-Close the support ticket with a summary.",
+      "+Close the support ticket with a summary and the refund id.",
+      "",
+    ].join("\n"),
+  },
+];
+
+async function seedSkillEditSuggestion(init: {
+  gram: GramCore;
+  sessionId: string;
+  projectSlug: string;
+}): Promise<void> {
+  const { gram, sessionId, projectSlug } = init;
+
+  const created = await skillsCreate(
+    gram,
+    { createSkillRequestBody: { content: SEED_SKILL_CONTENT } },
+    {
+      option1: {
+        projectSlugHeaderGramProject: projectSlug,
+        sessionHeaderGramSession: sessionId,
+      },
+    },
+  );
+  if (!created.ok) {
+    log.stepFailed(`Failed to create seed skill: ${created.error}`);
+    return;
+  }
+  const skillId = created.value.skill.id;
+  const baseVersionId = created.value.version.id;
+
+  const changeValues = SEED_SKILL_SUGGESTION_CHANGES.map(
+    (change, position) =>
+      `(${position}, $seedskill$${change.diff}$seedskill$, $seedskill$${change.rationale}$seedskill$)`,
+  ).join(",\n    ");
+  // The change diffs are anchored to the seeded content, so a suggestion is
+  // only inserted while that version is still the one approvals resolve as
+  // the base (mirroring ResolveSkillSuggestionBase). Once the skill advances
+  // — e.g. edits were applied while demoing — re-seeding leaves it alone
+  // instead of planting a stale suggestion.
+  const sql = `
+INSERT INTO skill_edit_suggestions (project_id, skill_id, base_version_id, rationale, scored_session_count)
+SELECT s.project_id, s.id, '${baseVersionId}', 'Recurring friction in refund sessions points at the same missing steps.', 7
+FROM skills s
+WHERE s.id = '${skillId}'
+  AND '${baseVersionId}' = (
+    SELECT sv.id
+    FROM skill_versions sv
+    LEFT JOIN skill_version_origins svo
+      ON svo.project_id = s.project_id
+      AND svo.skill_id = sv.skill_id
+      AND svo.skill_version_id = sv.id
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+    ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+    LIMIT 1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM skill_edit_suggestions e
+    WHERE e.skill_id = s.id AND e.status = 'open'
+  );
+
+INSERT INTO skill_edit_suggestion_changes (project_id, suggestion_id, proposed_diff, rationale, position)
+SELECT e.project_id, e.id, x.diff, x.rationale, x.position
+FROM skill_edit_suggestions e
+CROSS JOIN (
+  VALUES
+    ${changeValues}
+) AS x(position, diff, rationale)
+WHERE e.skill_id = '${skillId}'
+  AND e.status = 'open'
+  AND e.base_version_id = '${baseVersionId}'
+  AND NOT EXISTS (
+    SELECT 1 FROM skill_edit_suggestion_changes c WHERE c.suggestion_id = e.id
+  );
+`;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
+
+  log.info(
+    `Seeded skill 'support-refunds' in '${projectSlug}' (an open edit suggestion with ${SEED_SKILL_SUGGESTION_CHANGES.length} changes is added while the skill is at its seeded base version)`,
+  );
 }
 
 async function seed() {
@@ -4877,15 +5193,31 @@ async function seed() {
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
     // session_capture gates Claude hook chat persistence; without it,
     // hooks.ingest accepts events but silently skips writing chat_messages.
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture:`.quiet();
-    log.info("Enabled local logs, tool_io_logs, and session_capture features");
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills:`.quiet();
+    log.info(
+      "Enabled local logs, tool_io_logs, session_capture, and skills features",
+    );
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
     log.stepFailed(
       `Failed to enable local log features: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
+
+  // Establish the user's organization-level authorization before the first
+  // protected API call. Platform super-admin status does not bypass ordinary
+  // org RBAC. Seed the system roles first so databases created before RBAC was
+  // enabled can still assign the user to Admin. All writes are idempotent.
+  await seedSystemRoleGrants(activeOrgID);
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+  await grantDevUserFullSessionVisibility({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
 
   // oxlint-disable-next-line no-unused-vars
   const key = await initAPIKey({
@@ -4928,6 +5260,11 @@ async function seed() {
       projectName: name,
       assets: seedAssets,
     });
+    if (deploymentId === null) {
+      // Toolsets below are keyed off the deployment, so this project has
+      // nothing more to seed. Later projects and seed sections still run.
+      continue;
+    }
     log.info(
       `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
     );
@@ -4987,6 +5324,12 @@ async function seed() {
       `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
     );
   }
+  await seedSkillEditSuggestion({
+    gram,
+    sessionId,
+    projectSlug: SEED_PROJECTS[0].slug,
+  });
+
   await seedTunnel();
 
   // Seed observability data for the E-Commerce project.
@@ -5026,21 +5369,9 @@ async function seed() {
     await seedRiskFindingsClickHouse({ projectId: firstProject.id });
   }
 
-  // Give the local dev user the "see all org sessions" admin view that the
-  // Agent Sessions page promises. That view is gated behind RBAC enforcement
-  // plus a chat:read grant, so enable RBAC and grant the dev user the admin
-  // scope set (chat:read is intentionally not part of any system role). Runs
-  // after asset/toolset seeding so those admin API calls aren't gated, and
-  // before the enterprise-account-type flip below (enforcement only activates
-  // once the org is enterprise).
-  await enableRBACForDevUser({
-    sessionId,
-    organizationId: activeOrgID,
-    userId: sessionInfo.result.userId,
-    gram,
-  });
-
-  // Set enterprise account type last so RBAC enforcement doesn't block seeding.
+  // Keep the fully seeded local organization on the enterprise tier so local
+  // development can exercise other enterprise capabilities. Billing tier no
+  // longer controls RBAC enforcement.
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
@@ -5052,19 +5383,6 @@ async function seed() {
       `Failed to set enterprise account type: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
-
-  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!enableRBACRes.ok) {
-    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
-  }
-  log.info("Enabled RBAC and seeded system roles");
-
-  await seedCurrentUserAdminRole({
-    organizationId: activeOrgID,
-    userId: activeUserID,
-  });
 
   if (seedStepFailures.length > 0) {
     log.warn(

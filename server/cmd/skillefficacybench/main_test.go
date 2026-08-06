@@ -50,9 +50,12 @@ func TestLoadBenchSetRejectsStalePromptVersion(t *testing.T) {
 func TestBuildRequestMatchesProductionJudgeSettings(t *testing.T) {
 	t.Parallel()
 
-	request, err := buildRequest(efficacy.JudgeModel, validTestBenchSet().Cases[0])
+	request, err := buildRequest(efficacy.JudgeModel, validTestBenchSet().Cases[0], nil)
 
 	require.NoError(t, err)
+	// Nil is what production sends, which the client turns into a disabled
+	// reasoning setting. An override here would silently bench something else.
+	require.Nil(t, request.Reasoning)
 	require.Equal(t, efficacy.JudgeModel, request.Model)
 	require.Equal(t, efficacy.SystemPrompt, request.SystemPrompt)
 	require.Equal(t, billing.ModelUsageSourceSkillEfficacy, request.UsageSource)

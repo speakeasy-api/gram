@@ -31,14 +31,16 @@ func NewMarkMessagesAnalyzed(logger *slog.Logger, tracerProvider trace.TracerPro
 }
 
 type MarkMessagesAnalyzedArgs struct {
-	ProjectID  uuid.UUID
-	MessageIDs []uuid.UUID
+	ProjectID      uuid.UUID
+	MessageIDs     []uuid.UUID
+	ContentPartIDs []uuid.UUID
 }
 
 func (a *MarkMessagesAnalyzed) Do(ctx context.Context, args MarkMessagesAnalyzedArgs) (err error) {
 	ctx, span := a.tracer.Start(ctx, "risk.markMessagesAnalyzed", trace.WithAttributes(
 		attribute.String("risk.project_id", args.ProjectID.String()),
 		attribute.Int("risk.message_count", len(args.MessageIDs)),
+		attribute.Int("risk.content_part_count", len(args.ContentPartIDs)),
 	))
 	defer func() {
 		if err != nil {
@@ -47,15 +49,22 @@ func (a *MarkMessagesAnalyzed) Do(ctx context.Context, args MarkMessagesAnalyzed
 		span.End()
 	}()
 
-	if len(args.MessageIDs) == 0 {
-		return nil
+	queries := repo.New(a.db)
+	if len(args.MessageIDs) > 0 {
+		if err := queries.MarkMessagesRiskAnalyzed(ctx, repo.MarkMessagesRiskAnalyzedParams{
+			ProjectID:  uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+			MessageIds: args.MessageIDs,
+		}); err != nil {
+			return fmt.Errorf("mark messages risk analyzed: %w", err)
+		}
 	}
-
-	if err := repo.New(a.db).MarkMessagesRiskAnalyzed(ctx, repo.MarkMessagesRiskAnalyzedParams{
-		ProjectID:  uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		MessageIds: args.MessageIDs,
-	}); err != nil {
-		return fmt.Errorf("mark messages risk analyzed: %w", err)
+	if len(args.ContentPartIDs) > 0 {
+		if err := queries.MarkContentPartsRiskAnalyzed(ctx, repo.MarkContentPartsRiskAnalyzedParams{
+			ProjectID:      uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+			ContentPartIds: args.ContentPartIDs,
+		}); err != nil {
+			return fmt.Errorf("mark content parts risk analyzed: %w", err)
+		}
 	}
 
 	return nil

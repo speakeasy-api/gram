@@ -1,13 +1,9 @@
-import "@speakeasy-api/moonshine/moonshine.css";
-import "./App.css"; // Import this second to override certain values in moonshine.css
+import "./App.css";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import {
-  MoonshineConfigProvider,
-  TooltipProvider,
-} from "@speakeasy-api/moonshine";
+import { Toaster } from "@/components/ui/Sonner";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
@@ -96,25 +92,23 @@ export default function App(): JSX.Element {
   }, []);
 
   return (
-    <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
-      <LocalTooltipProvider>
-        <TooltipProvider>
-          <TelemetryProvider>
-            <CommandPaletteProvider>
-              <BrowserRouter>
-                <NuqsAdapter>
-                  <SdkProvider>
-                    <AppContent />
-                    <Toaster />
-                    <CommandPalette />
-                  </SdkProvider>
-                </NuqsAdapter>
-              </BrowserRouter>
-            </CommandPaletteProvider>
-          </TelemetryProvider>
-        </TooltipProvider>
-      </LocalTooltipProvider>
-    </MoonshineConfigProvider>
+    <ConfigProvider theme={theme} setTheme={applyTheme}>
+      <TooltipProvider>
+        <TelemetryProvider>
+          <CommandPaletteProvider>
+            <BrowserRouter>
+              <NuqsAdapter>
+                <SdkProvider>
+                  <AppContent />
+                  <Toaster />
+                  <CommandPalette />
+                </SdkProvider>
+              </NuqsAdapter>
+            </BrowserRouter>
+          </CommandPaletteProvider>
+        </TelemetryProvider>
+      </TooltipProvider>
+    </ConfigProvider>
   );
 }
 

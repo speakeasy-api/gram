@@ -1,23 +1,25 @@
 import { InfoField, InfoSection, InfoText } from "@/components/detail-fields";
-import { Type } from "@/components/ui/type";
+import { RequireScope } from "@/components/require-scope";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { GcpIamCredential } from "@gram/client/models/components/gcpiamcredential.js";
-import type { VerifyPlatformCredentialResult } from "@gram/client/models/components/verifyplatformcredentialresult.js";
-import { useVerifyGcpIamPlatformCredentialMutation } from "@gram/client/react-query/verifyGcpIamPlatformCredential";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import type { VerifyCredentialResult } from "@gram/client/models/components/verifycredentialresult.js";
+import { useVerifyGcpIamCredentialMutation } from "@gram/client/react-query/verifyGcpIamCredential";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { gcpAuthMode, providerLabel, verifySourceLabel } from "../providers";
+import { GcpGrantInstructions } from "../GcpGrantInstructions";
+import { providerLabel } from "../providers";
 
 export function OverviewTab({
   credential,
 }: {
   credential: GcpIamCredential;
 }): JSX.Element {
-  const [result, setResult] = useState<VerifyPlatformCredentialResult | null>(
-    null,
-  );
+  const [result, setResult] = useState<VerifyCredentialResult | null>(null);
 
-  const verify = useVerifyGcpIamPlatformCredentialMutation({
+  const verify = useVerifyGcpIamCredentialMutation({
     onSuccess: (data) => {
       setResult(data);
     },
@@ -51,14 +53,21 @@ export function OverviewTab({
         <InfoField label="External Service">
           <InfoText>{providerLabel(credential.provider)}</InfoText>
         </InfoField>
-        <InfoField label="Authentication">
-          <InfoText>{gcpAuthMode(credential)}</InfoText>
-        </InfoField>
         {credential.impersonateServiceAccount && (
           <InfoField label="Impersonated service account">
-            <InfoText mono>{credential.impersonateServiceAccount}</InfoText>
+            <span className="flex items-center gap-1">
+              <InfoText mono>{credential.impersonateServiceAccount}</InfoText>
+              <CopyButton
+                size="xs"
+                text={credential.impersonateServiceAccount}
+                tooltip="Copy service account"
+              />
+            </span>
           </InfoField>
         )}
+        {/* Workload Identity Federation is no longer accepted here, but a
+            credential created before that rule may still carry it, so it stays
+            visible read-only rather than silently disappearing. */}
         {credential.wifPoolId && (
           <>
             <InfoField label="Workload Identity Federation pool ID">
@@ -84,17 +93,28 @@ export function OverviewTab({
         </InfoField>
       </InfoSection>
 
+      <InfoSection title="Access">
+        <GcpGrantInstructions />
+      </InfoSection>
+
       <InfoSection title="Verify">
-        <Type small muted>
-          Run a credential identity probe and report the effective principal.
-        </Type>
-        <div>
-          <Button onClick={handleVerify} disabled={verify.isPending}>
-            <Button.Text>
-              {verify.isPending ? "Verifying…" : "Verify identity"}
-            </Button.Text>
-          </Button>
-        </div>
+        <Text small muted>
+          Check that Gram can still impersonate this service account. Nothing is
+          stored; the check runs against your project each time.
+        </Text>
+        <RequireScope
+          scope="org:admin"
+          level="component"
+          reason="Verifying a credential requires an organization admin."
+        >
+          <div>
+            <Button onClick={handleVerify} disabled={verify.isPending}>
+              <Button.Text>
+                {verify.isPending ? "Verifying…" : "Verify access"}
+              </Button.Text>
+            </Button>
+          </div>
+        </RequireScope>
         {verifyError && (
           <Alert variant="error" dismissible={false}>
             {verifyError}
@@ -106,26 +126,28 @@ export function OverviewTab({
   );
 }
 
+function verifyMessage(result: VerifyCredentialResult): string {
+  if (result.verified) {
+    return `Gram can impersonate ${result.principal}.`;
+  }
+  return `Gram could not impersonate ${result.principal}.`;
+}
+
 function VerifyResult({
   result,
 }: {
-  result: VerifyPlatformCredentialResult;
+  result: VerifyCredentialResult;
 }): JSX.Element {
   return (
     <div className="border-border flex flex-col gap-1 rounded-md border p-4">
-      <Type small className="font-medium">
+      <Text small className="font-medium">
         {result.verified ? "Verified" : "Not verified"}
-      </Type>
-      {result.principal && <Type small>Principal: {result.principal}</Type>}
-      {result.identitySource && (
-        <Type small muted>
-          Resolved via {verifySourceLabel(result.identitySource)}.
-        </Type>
-      )}
+      </Text>
+      {result.principal && <Text small>{verifyMessage(result)}</Text>}
       {result.detail && (
-        <Type small muted>
+        <Text small muted>
           {result.detail}
-        </Type>
+        </Text>
       )}
     </div>
   );

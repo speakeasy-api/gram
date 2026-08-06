@@ -1,10 +1,10 @@
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "./ui/button";
-import { Dialog } from "./ui/dialog";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
+import { Button } from "./ui/Button";
+import { Dialog } from "./ui/Dialog";
+import { Input } from "./ui/Input";
+import { Label } from "@/components/ui/Label";
 import { ImageUpload } from "./upload";
 
 type InputProps =
@@ -133,7 +133,7 @@ export function InputDialog({
         </Stack>
         <Dialog.Footer>
           <Button
-            variant="ghost"
+            variant="tertiary"
             onClick={() => onOpenChange(false)}
             disabled={pending}
           >

@@ -59,6 +59,32 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 	require.Contains(t, byMatch, "DROP TABLE")
 }
 
+// Tool-call spans group per tool NAME (the only key Postgres ever stored) and
+// never claim a recorded call id: McpLookupToolCallID must stay empty so the
+// published tool_call_id column is never polluted with a name.
+func TestScanCELRules_GroupsPerToolNameAndClaimsNoCallID(t *testing.T) {
+	t.Parallel()
+	rules := celRules(t, customrules.Rule{
+		RuleID:        "custom.rm",
+		DetectionExpr: `tool_calls.filter(t, t.args.get("command").matchRegex("rm -rf")).size() > 0`,
+	})
+
+	view := MessageView{
+		Type: message.ToolRequest,
+		Tools: []ToolView{
+			NewToolView("shell:run", `{"command":"rm -rf /tmp"}`),
+			NewToolView("shell:run", `{"command":"rm -rf /var"}`),
+		},
+	}
+
+	findings := scanCEL(t, view, rules)
+	require.Len(t, findings, 2)
+	for _, f := range findings {
+		require.Equal(t, "shell:run", f.SpanGroupKey)
+		require.Empty(t, f.McpLookupToolCallID)
+	}
+}
+
 // Correlation does not cross tools.
 func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 	t.Parallel()

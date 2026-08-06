@@ -122,7 +122,16 @@ DO UPDATE SET
     project_id = EXCLUDED.project_id
   , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
   , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
-  , title = COALESCE(EXCLUDED.title, chats.title)
+  -- Two title regimes share this upsert. Feeds with authoritative titles
+  -- (ChatGPT conversations, Anthropic compliance) are newest-wins: a non-null
+  -- incoming title refreshes the row. Feeds whose titles are DERIVED from
+  -- content (Codex cloud: the session's first prompt) are first-wins
+  -- (@prefer_stored_title): a later poll window derives a mid-session prompt
+  -- as its "first", and newest-wins would retitle the chat on every window.
+  , title = CASE
+      WHEN @prefer_stored_title::bool THEN COALESCE(chats.title, EXCLUDED.title)
+      ELSE COALESCE(EXCLUDED.title, chats.title)
+    END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 RETURNING id;
 
@@ -209,6 +218,78 @@ VALUES (
   , @replayed
   , @created_at
 );
+
+-- name: CreateChatContentPart :copyfrom
+INSERT INTO chat_content_parts (
+    chat_id
+  , project_id
+  , kind
+  , content_asset_url
+  , external_id
+  , parent_chat_message_id
+  , version
+  , source
+  , metadata
+  , risk_analyzed_at
+  , created_at
+)
+VALUES (
+    @chat_id
+  , @project_id::uuid
+  , @kind
+  , @content_asset_url
+  , @external_id
+  , @parent_chat_message_id
+  , @version
+  , @source
+  , @metadata
+  , @risk_analyzed_at
+  , @created_at
+);
+
+-- name: ListChatContentPartsByChatID :many
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , ccp.project_id
+  , ccp.kind
+  , ccp.content_asset_url
+  , ccp.external_id
+  , ccp.parent_chat_message_id
+  , ccp.version
+  , ccp.source
+  , ccp.metadata
+  , ccp.risk_analyzed_at
+  , ccp.created_at
+  , ccp.updated_at
+  , ccp.deleted_at
+  , ccp.deleted
+  , EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      JOIN risk_policies rp
+        ON rp.id = rr.risk_policy_id
+       AND rp.enabled IS TRUE
+       AND rp.deleted IS FALSE
+      WHERE rr.project_id = @project_id::uuid
+        AND rr.chat_content_part_id = ccp.id
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    ) AS is_risk
+FROM chat_content_parts ccp
+WHERE ccp.chat_id = @chat_id
+  AND (ccp.project_id IS NULL OR ccp.project_id = @project_id::uuid)
+  AND ccp.deleted IS FALSE
+  -- Only the parts the requested page can actually render: one anchored to a
+  -- message on this page, or an unparented one the client places by time
+  -- proximity. Without this a page request reads every attachment body in the
+  -- chat from asset storage, then discards the ones it cannot anchor.
+  AND (
+    ccp.parent_chat_message_id IS NULL
+    OR ccp.parent_chat_message_id = ANY(@parent_chat_message_ids::uuid[])
+  )
+ORDER BY created_at ASC, id ASC;
 
 -- name: CreateExternalChatMessage :execrows
 INSERT INTO chat_messages (
@@ -300,7 +381,7 @@ candidate_chats AS (
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-  -- Join users table to enable searching by user display name
+  -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -317,6 +398,8 @@ candidate_chats AS (
       OR c.external_user_id ILIKE '%' || @search || '%'
       OR c.title ILIKE '%' || @search || '%'
       OR u.display_name ILIKE '%' || @search || '%'
+      OR u.email ILIKE '%' || @search || '%'
+      OR ua.email ILIKE '%' || @search || '%'
     )
     AND (
       @assistant_id = ''
@@ -425,7 +508,7 @@ candidate_chats AS (
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-  -- Join users table to enable searching by user display name
+  -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -442,6 +525,8 @@ candidate_chats AS (
       OR c.external_user_id ILIKE '%' || @search || '%'
       OR c.title ILIKE '%' || @search || '%'
       OR u.display_name ILIKE '%' || @search || '%'
+      OR u.email ILIKE '%' || @search || '%'
+      OR ua.email ILIKE '%' || @search || '%'
     )
     AND (
       @assistant_id = ''
@@ -689,6 +774,15 @@ ORDER BY 1;
 SELECT * FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid)
 ORDER BY created_at ASC, seq ASC;
+
+-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
+SELECT cm.id, cm.content
+FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.role = 'user'
+  AND cm.content != ''
+ORDER BY cm.seq DESC, cm.created_at DESC;
 
 -- name: ListChatTranscriptMessagesPage :many
 -- Keyset page of one chat's messages, newest first, carrying only the columns
