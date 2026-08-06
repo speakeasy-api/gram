@@ -104,15 +104,15 @@ func TestService_Info(t *testing.T) {
 		t.Parallel()
 
 		ctx, instance, organizationID := setupInfoRequest(t)
-		startedAt := time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC)
-		endsAt := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+		startedAt := time.Date(2100, time.August, 1, 12, 0, 0, 0, time.UTC)
+		endsAt := time.Date(2100, time.August, 15, 12, 0, 0, 0, time.UTC)
 		insertEnterpriseTrial(t, ctx, instance, organizationID, startedAt, endsAt, nil, nil)
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
 		require.NoError(t, err)
 		require.Equal(t, &gen.EnterpriseTrial{
-			StartedAt: "2026-08-01T12:00:00Z",
-			EndsAt:    "2026-08-15T12:00:00Z",
+			StartedAt: "2100-08-01T12:00:00Z",
+			EndsAt:    "2100-08-15T12:00:00Z",
 		}, result.EnterpriseTrial)
 	})
 
