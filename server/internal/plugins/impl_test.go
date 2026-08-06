@@ -586,6 +586,31 @@ func TestPluginsService_AddPluginServer_RejectsMcpServerWithoutEndpoint(t *testi
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestPluginsService_AddPluginServer_UnproxiedBackedWithoutEndpointSucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unproxied Test"})
+	require.NoError(t, err)
+
+	// Unproxied servers are never proxied, so they never gain an
+	// mcp_endpoints row. AddPluginServer must not reject them for lacking one
+	// the way it would a remote- or toolset-backed server.
+	mcpServer := createTestUnproxiedMcpServer(t, ctx, ti.conn, "Unproxied Widget", mcpservers.VisibilityPublic)
+
+	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Unproxied Widget", server.DisplayName)
+	require.NotNil(t, server.McpServerID)
+	require.Equal(t, mcpServer.idStr, *server.McpServerID)
+}
+
 func TestPluginsService_RemovePluginServer_McpServerBacked(t *testing.T) {
 	t.Parallel()
 
@@ -905,6 +930,52 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 		"claude observability plugin slug %q not found among published files", *status.ClaudeObservabilityPlugin)
 	require.True(t, codexPublished,
 		"codex observability plugin slug %q not found among published files", *status.CodexObservabilityPlugin)
+}
+
+// An unproxied-backed server has no mcp_endpoints row (Gram never proxies
+// it), so ListPluginsWithMcpServersForProject must resolve it via its own
+// unproxied_mcp_servers URL rather than dropping it for lacking an endpoint
+// slug — otherwise a server that AddPluginServer successfully attaches
+// silently never appears in the published bundle.
+func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unproxied Publish Test"})
+	require.NoError(t, err)
+
+	mcpServer := createTestUnproxiedMcpServer(t, ctx, ti.conn, "Vendor Widget", mcpservers.VisibilityPublic)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	mcpConfig, ok := mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]
+	require.True(t, ok, ".mcp.json not found among published files")
+
+	var config struct {
+		MCPServers map[string]struct {
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(mcpConfig, &config))
+
+	server, ok := config.MCPServers["Vendor Widget"]
+	require.True(t, ok, "unproxied server missing from published .mcp.json")
+	require.Equal(t, "https://vendor.example.com/mcp", server.URL,
+		"unproxied server must publish its own vendor URL, not a Gram-hosted endpoint")
+	require.Empty(t, server.Headers,
+		"unproxied server must never carry Gram's API key (or any other Gram-managed credential): "+
+			"MCPURL points straight at the vendor, so any header here leaks a Gram credential to a third party")
 }
 
 // Reproduces the plugin_github_connections_installation_repo_key conflict:

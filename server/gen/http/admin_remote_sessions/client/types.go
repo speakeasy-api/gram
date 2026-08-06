@@ -217,7 +217,7 @@ type CreateGlobalIssuerResponseBody struct {
 // ListGlobalIssuersResponseBody is the type of the "adminRemoteSessions"
 // service "listGlobalIssuers" endpoint HTTP response body.
 type ListGlobalIssuersResponseBody struct {
-	Items []*RemoteSessionIssuerResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	Items []*GlobalRemoteSessionIssuerResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -225,52 +225,16 @@ type ListGlobalIssuersResponseBody struct {
 // GetGlobalIssuerResponseBody is the type of the "adminRemoteSessions" service
 // "getGlobalIssuer" endpoint HTTP response body.
 type GetGlobalIssuerResponseBody struct {
-	// The remote_session_issuer id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id. Empty for organization-level issuers.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Project-unique slug.
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// Issuer URL; matches the iss claim.
-	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
-	// Optional display name; null when unset.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional logo asset id; null when unset.
-	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
-	// URL of OAuth client setup documentation shown when creating clients.
-	// Manually set, not RFC 8414; null when unset.
-	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
-	// Upstream authorization endpoint.
-	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
-	// Upstream token endpoint.
-	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
-	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
-	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
-	// Upstream JWKS URI; null when not advertised.
-	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// RFC 8414 service_documentation; developer documentation for the issuer. Null
-	// when not advertised.
-	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
-	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
-	// advertised.
-	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
-	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
-	// When true, may unlock OIDC-aware behaviour.
-	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
-	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
-	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
-	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported *bool   `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
-	CreatedAt                         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount *int `form:"global_client_count,omitempty" json:"global_client_count,omitempty" xml:"global_client_count,omitempty"`
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount *int `form:"tenant_client_count,omitempty" json:"tenant_client_count,omitempty" xml:"tenant_client_count,omitempty"`
 }
 
 // UpdateGlobalIssuerResponseBody is the type of the "adminRemoteSessions"
@@ -2778,6 +2742,21 @@ type DeleteGlobalClientGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GlobalRemoteSessionIssuerResponseBody is used to define fields on response
+// body types.
+type GlobalRemoteSessionIssuerResponseBody struct {
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount *int `form:"global_client_count,omitempty" json:"global_client_count,omitempty" xml:"global_client_count,omitempty"`
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount *int `form:"tenant_client_count,omitempty" json:"tenant_client_count,omitempty" xml:"tenant_client_count,omitempty"`
+}
+
 // RemoteSessionIssuerResponseBody is used to define fields on response body
 // types.
 type RemoteSessionIssuerResponseBody struct {
@@ -3226,20 +3205,20 @@ func NewCreateGlobalIssuerGatewayError(body *CreateGlobalIssuerGatewayErrorRespo
 	return v
 }
 
-// NewListGlobalIssuersListRemoteSessionIssuersResultOK builds a
+// NewListGlobalIssuersListGlobalRemoteSessionIssuersResultOK builds a
 // "adminRemoteSessions" service "listGlobalIssuers" endpoint result from a
 // HTTP "OK" response.
-func NewListGlobalIssuersListRemoteSessionIssuersResultOK(body *ListGlobalIssuersResponseBody) *adminremotesessions.ListRemoteSessionIssuersResult {
-	v := &adminremotesessions.ListRemoteSessionIssuersResult{
+func NewListGlobalIssuersListGlobalRemoteSessionIssuersResultOK(body *ListGlobalIssuersResponseBody) *adminremotesessions.ListGlobalRemoteSessionIssuersResult {
+	v := &adminremotesessions.ListGlobalRemoteSessionIssuersResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Items = make([]*types.RemoteSessionIssuer, len(body.Items))
+	v.Items = make([]*adminremotesessions.GlobalRemoteSessionIssuer, len(body.Items))
 	for i, val := range body.Items {
 		if val == nil {
 			v.Items[i] = nil
 			continue
 		}
-		v.Items[i] = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(val)
+		v.Items[i] = unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer(val)
 	}
 
 	return v
@@ -3395,55 +3374,14 @@ func NewListGlobalIssuersGatewayError(body *ListGlobalIssuersGatewayErrorRespons
 	return v
 }
 
-// NewGetGlobalIssuerRemoteSessionIssuerOK builds a "adminRemoteSessions"
+// NewGetGlobalIssuerGlobalRemoteSessionIssuerOK builds a "adminRemoteSessions"
 // service "getGlobalIssuer" endpoint result from a HTTP "OK" response.
-func NewGetGlobalIssuerRemoteSessionIssuerOK(body *GetGlobalIssuerResponseBody) *types.RemoteSessionIssuer {
-	v := &types.RemoteSessionIssuer{
-		ID:                                *body.ID,
-		ProjectID:                         *body.ProjectID,
-		OrganizationID:                    *body.OrganizationID,
-		Slug:                              *body.Slug,
-		Issuer:                            *body.Issuer,
-		Name:                              body.Name,
-		LogoAssetID:                       body.LogoAssetID,
-		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
-		AuthorizationEndpoint:             body.AuthorizationEndpoint,
-		TokenEndpoint:                     body.TokenEndpoint,
-		RegistrationEndpoint:              body.RegistrationEndpoint,
-		JwksURI:                           body.JwksURI,
-		ServiceDocumentation:              body.ServiceDocumentation,
-		OpPolicyURI:                       body.OpPolicyURI,
-		OpTosURI:                          body.OpTosURI,
-		Oidc:                              *body.Oidc,
-		Passthrough:                       *body.Passthrough,
-		ClientIDMetadataDocumentSupported: *body.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         *body.CreatedAt,
-		UpdatedAt:                         *body.UpdatedAt,
+func NewGetGlobalIssuerGlobalRemoteSessionIssuerOK(body *GetGlobalIssuerResponseBody) *adminremotesessions.GlobalRemoteSessionIssuer {
+	v := &adminremotesessions.GlobalRemoteSessionIssuer{
+		GlobalClientCount: *body.GlobalClientCount,
+		TenantClientCount: *body.TenantClientCount,
 	}
-	if body.ScopesSupported != nil {
-		v.ScopesSupported = make([]string, len(body.ScopesSupported))
-		for i, val := range body.ScopesSupported {
-			v.ScopesSupported[i] = val
-		}
-	}
-	if body.GrantTypesSupported != nil {
-		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
-		for i, val := range body.GrantTypesSupported {
-			v.GrantTypesSupported[i] = val
-		}
-	}
-	if body.ResponseTypesSupported != nil {
-		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
-		for i, val := range body.ResponseTypesSupported {
-			v.ResponseTypesSupported[i] = val
-		}
-	}
-	if body.TokenEndpointAuthMethodsSupported != nil {
-		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
-		for i, val := range body.TokenEndpointAuthMethodsSupported {
-			v.TokenEndpointAuthMethodsSupported[i] = val
-		}
-	}
+	v.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(body.Issuer)
 
 	return v
 }
@@ -5233,7 +5171,7 @@ func ValidateListGlobalIssuersResponseBody(body *ListGlobalIssuersResponseBody) 
 	}
 	for _, e := range body.Items {
 		if e != nil {
-			if err2 := ValidateRemoteSessionIssuerResponseBody(e); err2 != nil {
+			if err2 := ValidateGlobalRemoteSessionIssuerResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -5244,47 +5182,19 @@ func ValidateListGlobalIssuersResponseBody(body *ListGlobalIssuersResponseBody) 
 // ValidateGetGlobalIssuerResponseBody runs the validations defined on
 // GetGlobalIssuerResponseBody
 func ValidateGetGlobalIssuerResponseBody(body *GetGlobalIssuerResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
 	if body.Issuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
 	}
-	if body.Oidc == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("oidc", "body"))
+	if body.GlobalClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("global_client_count", "body"))
 	}
-	if body.Passthrough == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("passthrough", "body"))
+	if body.TenantClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tenant_client_count", "body"))
 	}
-	if body.ClientIDMetadataDocumentSupported == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_document_supported", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.LogoAssetID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	if body.Issuer != nil {
+		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -8449,6 +8359,26 @@ func ValidateDeleteGlobalClientGatewayErrorResponseBody(body *DeleteGlobalClient
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGlobalRemoteSessionIssuerResponseBody runs the validations defined
+// on GlobalRemoteSessionIssuerResponseBody
+func ValidateGlobalRemoteSessionIssuerResponseBody(body *GlobalRemoteSessionIssuerResponseBody) (err error) {
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.GlobalClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("global_client_count", "body"))
+	}
+	if body.TenantClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tenant_client_count", "body"))
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

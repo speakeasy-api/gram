@@ -43,7 +43,7 @@ func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, organiz
 		return AdmissionIndeterminate, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return AdmissionIndeterminate, err
+		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context: %w", err)
 	}
 
 	capable, err := c.capabilities.IsFeatureEnabled(ctx, organizationID, productfeatures.FeaturePlatformMCP)
@@ -51,7 +51,7 @@ func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, organiz
 		return AdmissionIndeterminate, fmt.Errorf("check platform mcp capability: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
-		return AdmissionIndeterminate, err
+		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context after capability: %w", err)
 	}
 	if !capable {
 		return AdmissionDisabled, nil
@@ -62,7 +62,7 @@ func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, organiz
 		return AdmissionIndeterminate, fmt.Errorf("evaluate platform mcp rollout: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
-		return AdmissionIndeterminate, err
+		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context after rollout: %w", err)
 	}
 	if rollout == feature.EvaluationIndeterminate {
 		return AdmissionIndeterminate, nil
@@ -76,7 +76,7 @@ func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, organiz
 		return AdmissionIndeterminate, fmt.Errorf("check platform mcp new-model eligibility: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
-		return AdmissionIndeterminate, err
+		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context after eligibility: %w", err)
 	}
 	if !eligible {
 		return AdmissionDisabled, nil

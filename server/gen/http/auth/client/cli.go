@@ -78,6 +78,21 @@ func BuildSwitchScopesPayload(authSwitchScopesOrganizationID string, authSwitchS
 	return v, nil
 }
 
+// BuildEnterDemoPayload builds the payload for the auth enterDemo endpoint
+// from CLI flags.
+func BuildEnterDemoPayload(authEnterDemoSessionToken string) (*auth.EnterDemoPayload, error) {
+	var sessionToken *string
+	{
+		if authEnterDemoSessionToken != "" {
+			sessionToken = &authEnterDemoSessionToken
+		}
+	}
+	v := &auth.EnterDemoPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildLogoutPayload builds the payload for the auth logout endpoint from CLI
 // flags.
 func BuildLogoutPayload(authLogoutSessionToken string) (*auth.LogoutPayload, error) {

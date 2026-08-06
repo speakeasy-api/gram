@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,9 +25,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -57,6 +60,8 @@ type Service struct {
 	roleMgr         *RoleManager
 	productFeatures ProductFeatures
 	audit           *audit.Logger
+	email           *email.Service
+	siteURL         *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -72,6 +77,8 @@ func NewService(
 	authz *authz.Engine,
 	productFeatures ProductFeatures,
 	auditLogger *audit.Logger,
+	emailService *email.Service,
+	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -85,6 +92,8 @@ func NewService(
 		roleMgr:         roleMgr,
 		productFeatures: productFeatures,
 		audit:           auditLogger,
+		email:           emailService,
+		siteURL:         siteURL,
 	}
 }
 
@@ -365,6 +374,15 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
+	// Sessions in the shared demo org have no membership rows. Return the
+	// full user-visible scope set so every dashboard page is browsable in the
+	// demo (page gates like Costs require org:admin). This is display-only:
+	// enforcement still uses the fixed read-only DemoScopeGrants set, and the
+	// write-guard middleware rejects mutations, so any action the wider UI
+	// exposes fails server-side.
+	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
+	}
 	if acPre.IsAdmin {
 		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
 			trace.SpanFromContext(ctx).SetAttributes(
@@ -460,7 +478,15 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 // fatal (page error boundaries and request retry loops).
 func (s *Service) isImpersonatingUnlinkedOrg(ctx context.Context) bool {
 	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || !ac.IsAdmin {
+	if !ok || ac == nil {
+		return false
+	}
+	// The shared demo org is always impersonated (no membership rows, no
+	// WorkOS link) — by any user, not just platform admins.
+	if ac.ActiveOrganizationID == constants.DemoOrganizationID {
+		return true
+	}
+	if !ac.IsAdmin {
 		return false
 	}
 	if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); !hasOverride {
@@ -686,6 +712,30 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 	return nil
 }
 
+// IsSpeakeasyStaffEmail reports whether email belongs to a Speakeasy-owned
+// domain (@speakeasy.com or @speakeasyapi.dev).
+func IsSpeakeasyStaffEmail(email string) bool {
+	return strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev")
+}
+
+// RequireStaffForUnproxiedMcp rejects the request unless authCtx's email is
+// on the Speakeasy staff domain allowlist. Shared by every package that
+// gates an unproxied-MCP-server action to Speakeasy staff (unproxiedmcp's
+// own create/delete, mcpservers' attach-to-backend check) so the check lives
+// in exactly one place. action is the verb used in the resulting error
+// message, e.g. "added", "deleted", "attached".
+func RequireStaffForUnproxiedMcp(ctx context.Context, authCtx *contextvalues.AuthContext, action string, logger *slog.Logger) error {
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if IsSpeakeasyStaffEmail(email) {
+		return nil
+	}
+
+	return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be %s by Speakeasy staff", action).LogWarn(ctx, logger)
+}
+
 // requirePlatformAdmin returns the auth context and an error if the caller is not
 // a Speakeasy employee. Mirrors the exact condition used by the platform-admin
 // impersonation feature in auth/impl.go: email domain OR admin DB flag.
@@ -701,7 +751,7 @@ func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.Auth
 	if ac.Email != nil {
 		email = *ac.Email
 	}
-	if strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev") {
+	if IsSpeakeasyStaffEmail(email) {
 		return ac, nil
 	}
 	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
@@ -1273,4 +1323,95 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	}
 
 	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil
+}
+
+// RequestAccess sends email notifications to organization administrators when a user
+// requests access to a scope they don't have permission for.
+func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessPayload) (*gen.RequestAccessResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	// Get the requester's info
+	requester, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
+	}
+
+	// Get organization info
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
+	}
+
+	// Get list of org admin emails
+	adminEmails, err := repo.New(s.db).ListOrgAdminEmails(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list org admin emails").LogError(ctx, logger)
+	}
+
+	if len(adminEmails) == 0 {
+		logger.WarnContext(ctx, "no org admins found to notify for access request")
+		return &gen.RequestAccessResult{SentToCount: 0}, nil
+	}
+
+	// Build the manage access link. The query params let the dashboard open a
+	// pre-filled grant dialog for the requester and scope.
+	manageAccessLink := ""
+	if s.siteURL != nil {
+		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+		q := url.Values{}
+		q.Set("grant_user", ac.UserID)
+		q.Set("scope", payload.Scope)
+		if payload.ResourceID != nil && *payload.ResourceID != "" {
+			q.Set("resource_id", *payload.ResourceID)
+		}
+		accessURL.RawQuery = q.Encode()
+		manageAccessLink = accessURL.String()
+	}
+
+	tmpl := email.AccessRequest{
+		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
+		OrganizationName: org.Name,
+		ManageAccessLink: manageAccessLink,
+	}
+
+	// Send emails to all admins
+	sentCount := 0
+	for _, adminEmail := range adminEmails {
+		if adminEmail == "" {
+			continue
+		}
+		if err := s.email.Send(ctx, adminEmail, tmpl); err != nil {
+			// Log but don't fail the entire request if one email fails
+			logger.WarnContext(ctx, "failed to send access request email",
+				attr.SlogError(err),
+				attr.SlogAccessRequestRecipient(adminEmail),
+			)
+			continue
+		}
+		sentCount++
+	}
+
+	if sentCount == 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "failed to notify any organization administrator").LogError(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "access request emails sent",
+		attr.SlogAccessRequestSentCount(sentCount),
+		attr.SlogAccessRequestAdminCount(len(adminEmails)),
+		attr.SlogAccessRequestScope(payload.Scope),
+	)
+
+	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
 }

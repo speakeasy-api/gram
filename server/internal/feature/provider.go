@@ -2,6 +2,7 @@ package feature
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -104,7 +105,11 @@ func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID 
 		return EvaluationIndeterminate, nil
 	}
 	if evaluator, ok := provider.(EvaluationProvider); ok {
-		return evaluator.EvaluateFlag(ctx, flag, distinctID, groups)
+		evaluation, err := evaluator.EvaluateFlag(ctx, flag, distinctID, groups)
+		if err != nil {
+			return EvaluationIndeterminate, fmt.Errorf("evaluate feature flag %q: %w", flag, err)
+		}
+		return evaluation, nil
 	}
 	return EvaluationIndeterminate, nil
 }

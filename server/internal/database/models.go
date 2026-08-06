@@ -694,6 +694,15 @@ type DirectoryUserGroupMembership struct {
 	WorkosCreatedAt        pgtype.Timestamptz
 }
 
+type EnterpriseTrial struct {
+	OrganizationID string
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -1633,6 +1642,43 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
+// Transactional outbox of pending Pub/Sub publishes. Rows are deleted once published, so the table is near-empty in steady state; permanent failures move to publish_outbox_dead_letters.
+type PublishOutbox struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	// Proto full name of the topic-declaring message, e.g. "gram.webhooks.v1.Event". Resolved through the outbox topic registry at publish time.
+	Topic string
+	// proto.Marshal of that message, published verbatim. Topic proto changes must stay additive: a row marshaled by one binary may be published after the topic schema has rolled forward.
+	Message []byte
+	// Pub/Sub message attributes. Carries the producer traceparent so the trace survives the database hop. content-type and schema are derived at publish time and cannot be overridden from here.
+	Attributes []byte
+	// Incremented when a row is claimed, not when it fails, so it counts deliveries attempted — the number dead-lettering acts on.
+	Attempts   int32
+	LastError  pgtype.Text
+	RetryAfter pgtype.Timestamptz
+	// Claim lease held by the draining relay. Deliberately absent from every index predicate: predicate columns are HOT-blocking, so indexing this would force a new index tuple on every claim.
+	LockedUntil pgtype.Timestamptz
+	// Identifies the claim currently holding the row, minted by the drainer. Settlement matches on it so a drain that outlived its lease cannot delete, dead-letter or release a row another drainer has since claimed. NULL means unclaimed. Unindexed, like locked_until, so claiming stays a HOT update.
+	LeaseToken uuid.NullUUID
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type PublishOutboxDeadLetter struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	LastError      string
+	// created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
+	EnqueuedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}
+
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -1893,6 +1939,7 @@ type Skill struct {
 	Summary        pgtype.Text
 	SourceKind     string
 	Classification string
+	Tags           []string
 	FirstSeenAt    pgtype.Timestamptz
 	LastSeenAt     pgtype.Timestamptz
 	SeenCount      int64

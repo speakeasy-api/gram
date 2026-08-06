@@ -725,6 +725,52 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 	return v, nil
 }
 
+// BuildRequestAccessPayload builds the payload for the access requestAccess
+// endpoint from CLI flags.
+func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {
+	var err error
+	var body RequestAccessRequestBody
+	{
+		err = json.Unmarshal([]byte(accessRequestAccessBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
+		}
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read"}))
+		}
+		if body.Message != nil {
+			if utf8.RuneCountInString(*body.Message) > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessRequestAccessApikeyToken != "" {
+			apikeyToken = &accessRequestAccessApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessRequestAccessSessionToken != "" {
+			sessionToken = &accessRequestAccessSessionToken
+		}
+	}
+	v := &access.RequestAccessPayload{
+		Scope:        body.Scope,
+		ResourceID:   body.ResourceID,
+		ResourceName: body.ResourceName,
+		Message:      body.Message,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetRBACStatusPayload builds the payload for the access getRBACStatus
 // endpoint from CLI flags.
 func BuildGetRBACStatusPayload(accessGetRBACStatusSessionToken string) (*access.GetRBACStatusPayload, error) {

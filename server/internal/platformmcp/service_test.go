@@ -2,8 +2,6 @@ package platformmcp
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -13,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestLifecycleResult(t *testing.T) {
@@ -99,7 +98,7 @@ func TestServiceGetLifecycleDoesNotExposeCredentials(t *testing.T) {
 		},
 	}}
 	service := &Service{
-		logger:     discardLogger(),
+		logger:     testenv.NewLogger(t),
 		authorizer: &testServiceAuthorizer{},
 		lifecycle:  store,
 		admission:  testAdmissionEvaluator{admission: AdmissionEnabled},
@@ -155,10 +154,6 @@ type testAdmissionEvaluator struct {
 
 func (e testAdmissionEvaluator) Evaluate(_ context.Context, _, _ string) (Admission, error) {
 	return e.admission, e.err
-}
-
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 var _ lifecycleStore = (*testLifecycleStore)(nil)

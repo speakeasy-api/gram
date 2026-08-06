@@ -1463,6 +1463,49 @@ jobs:
       - name: Test
         run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+  # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
+  # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
+  # idempotent across runs. The test is build-tagged (demoseed_safety) so the
+  # sharded server-test job skips it; this job is its only runner and reports
+  # as its own required check so a failure is immediately attributable.
+  demo-seed-safety:
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    env:
+      GOMAXPROCS: 8
+      TESTCONTAINERS_RYUK_DISABLED: true
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Install Go deps
+        run: mise run install:go
+
+      - name: Test
+        run: mise run test:server -count=1 -tags=demoseed_safety ./internal/demoseed/...
+
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
@@ -2117,6 +2160,7 @@ jobs:
       - format-check
       - server-build-lint
       - server-test
+      - demo-seed-safety
       - docker-build-server
       - docker-build-client
       - upload-dashboard-assets

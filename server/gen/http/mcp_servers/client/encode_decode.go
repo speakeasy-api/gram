@@ -553,6 +553,9 @@ func EncodeListMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.ToolsetID != nil {
 			values.Add("toolset_id", *p.ToolsetID)
 		}
+		if p.UnproxiedMcpServerID != nil {
+			values.Add("unproxied_mcp_server_id", *p.UnproxiedMcpServerID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -2919,6 +2922,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		RemoteMcpServerID:     v.RemoteMcpServerID,
 		TunneledMcpServerID:   v.TunneledMcpServerID,
 		ToolsetID:             v.ToolsetID,
+		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*v.Visibility),
 		CreatedAt:             *v.CreatedAt,

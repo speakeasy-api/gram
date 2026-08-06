@@ -517,7 +517,11 @@ func (s *Service) prepareProxyBackendContext(
 
 		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
-			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.authorizationChallengesURL(ctx)))
+			serverName := ""
+			if mcpServer.Name.Valid {
+				serverName = mcpServer.Name.String
+			}
+			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
 		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Gram identity if the

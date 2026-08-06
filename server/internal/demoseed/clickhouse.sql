@@ -49,37 +49,40 @@ SET mutations_sync = 1;
 
 -- Scoped deletes: telemetry source + every MV target + the org-keyed tables.
 ALTER TABLE telemetry_logs DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE trace_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE metrics_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE spend_rule_usage_summaries DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE attribute_keys DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE shadow_mcp_inventory_urls DELETE WHERE gram_project_id IN
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 ALTER TABLE authz_challenges DELETE WHERE organization_id = 'org_gram_demo_workspace';
 ALTER TABLE risk_findings DELETE WHERE organization_id = 'org_gram_demo_workspace';
 ALTER TABLE skill_session_versions DELETE WHERE organization_id = 'org_gram_demo_workspace';
 ALTER TABLE skill_efficacy_scores DELETE WHERE organization_id = 'org_gram_demo_workspace';
 
--- Tool-execution rows: 2 per chat. gram.toolset.slug makes the Insights CTE's
--- direct branch classify each trace as hosted MCP traffic; unique per-call
--- trace ids keep trace_summaries from merging them. ~7% non-200.
+-- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
+-- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
+-- classify each trace as hosted MCP traffic; unique per-call trace ids keep
+-- trace_summaries from merging them. Failures cluster into a process_refund
+-- incident over the last ~3 days plus a low background rate (~5% overall)
+-- instead of an evenly spread modulus.
 INSERT INTO telemetry_logs
   (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
    attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
 SELECT
-  nano + toUInt64(k * 1000000),
-  nano + toUInt64(k * 1000000),
+  nano + toInt64(k) * 75000000000 + toInt64(cityHash64('gap', i, k) % 45000000000),
+  nano + toInt64(k) * 75000000000 + toInt64(cityHash64('gap', i, k) % 45000000000),
   'INFO',
   concat('Tool call: ', tool_name),
   lower(hex(MD5(concat('gram-demo-tooltrace-', toString(i), '-', toString(k))))),
@@ -87,7 +90,9 @@ SELECT
     '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
     ',"gram.tool.name":"', tool_name, '"',
     ',"gram.toolset.slug":"', if(i % 5 = 0, 'acme-ops', 'acme-support-tools'), '"',
-    ',"http.response.status_code":', toString(if((i + k) % 14 = 0, 500, 200)),
+    ',"http.response.status_code":', toString(if(
+        (tool_name = 'process_refund' AND day_off <= 2 AND cityHash64('err', i, k) % 2 = 0)
+        OR cityHash64('errbg', i, k) % 30 = 0, 500, 200)),
     ',"http.server.request.duration":', toString(round(0.05 + (cityHash64(i, k) % 200) / 100, 3)),
     ',"gen_ai.conversation.id":"', chat_id, '"',
     ',"gram.project.id":"', toString(proj), '"',
@@ -110,8 +115,9 @@ SELECT
 FROM (
   SELECT
     number + 1 AS i,
-    arrayJoin([1, 2]) AS k,
-    1 + ((number + 1) % 6) AS uidx,
+    arrayJoin(range(1, toUInt64(4 + reinterpretAsUInt8(unhex(substring(h, 9, 2))) % 10))) AS k,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
@@ -130,10 +136,16 @@ FROM (
     arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
                   'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
                  1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
-    toUnixTimestamp64Nano(
-      subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                      13 * toInt64((number + 1) % 7))) AS nano
-  FROM numbers(60)
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    toUnixTimestamp64Nano(chat_dt) AS nano
+  FROM numbers(180)
 );
 
 -- Claude provenance (odd chats): one claude_code.api_request row per turn.
@@ -156,7 +168,7 @@ SELECT
     ',"output_tokens":', toString(out_tok),
     ',"cache_read_tokens":', toString(in_tok * 6),
     ',"cache_creation_tokens":', toString(intDiv(in_tok, 4)),
-    ',"cost_usd":', toString(round((in_tok * 48 + out_tok * 150) / 10000000, 6)),
+    ',"cost_usd":', toString(round((in_tok * 57375 + out_tok * 150000) / 10000000000, 4)),
     ',"model":"', model, '"',
     ',"query_source":"user"',
     ',"skill.name":"', arrayElement(['', 'triage-incident', 'support-refunds'], 1 + (cityHash64('skill', i, turn) % 3)), '"',
@@ -189,7 +201,8 @@ FROM (
   SELECT
     number + 1 AS i,
     arrayJoin([1, 2, 3]) AS turn,
-    1 + ((number + 1) % 6) AS uidx,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
@@ -205,12 +218,18 @@ FROM (
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     if(cityHash64('model', number) % 3 = 0, 'claude-opus-4-5', 'claude-sonnet-4-6') AS model,
-    toUInt64(20000 + cityHash64('in', number, turn) % 120000) AS in_tok,
-    toUInt64(800 + cityHash64('out', number, turn) % 3500) AS out_tok,
-    toUnixTimestamp64Nano(
-      subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                      13 * toInt64((number + 1) % 7))) AS nano
-  FROM numbers(60)
+    toUInt64(500000 + cityHash64('in', number, turn) % 3000000) AS in_tok,
+    toUInt64(2000 + cityHash64('out', number, turn) % 28000) AS out_tok,
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    toUnixTimestamp64Nano(chat_dt) AS nano
+  FROM numbers(180)
   WHERE (number + 1) % 2 = 1
 );
 
@@ -233,7 +252,7 @@ SELECT
     ',"tool_name":"', tool_name, '"',
     ',"tool_input_size_bytes":', toString(200 + cityHash64('tin', i, k) % 1800),
     ',"tool_result_size_bytes":', toString(500 + cityHash64('tout', i, k) % 8000),
-    ',"success":', if((i + k) % 17 = 0, 'false', 'true'),
+    ',"success":', if(cityHash64('cres', i, k) % 15 = 0, 'false', 'true'),
     ',"gen_ai.conversation.id":"', chat_id, '"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
@@ -256,7 +275,8 @@ FROM (
   SELECT
     number + 1 AS i,
     arrayJoin([1, 2]) AS k,
-    1 + ((number + 1) % 6) AS uidx,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
@@ -274,25 +294,33 @@ FROM (
     arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
                   'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
                  1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
-    toUnixTimestamp64Nano(
-      subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                      13 * toInt64((number + 1) % 7))) AS nano
-  FROM numbers(60)
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    toUnixTimestamp64Nano(chat_dt) AS nano
+  FROM numbers(180)
   WHERE (number + 1) % 2 = 1
 );
 
--- Odd chats: one Skill hook row each — feeds the Insights "Skill Usage" /
--- "Users per Skill" panels (skill_name materializes only when
--- gram.tool.name = 'Skill').
+-- Odd chats: 1-2 Skill hook rows each with a hash-weighted skill pick —
+-- feeds the Insights "Skill Usage" / "Users per Skill" panels (skill_name
+-- materializes only when gram.tool.name = 'Skill'). Deliberately looser than
+-- the efficacy tables' fixed skill-per-chat formula: these rows only drive
+-- the usage charts, which should not look like a perfect rotation.
 INSERT INTO telemetry_logs
   (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
    attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
 SELECT
-  nano + 45000000000,
-  nano + 45000000000,
+  nano + toInt64(45000000000 + (j - 1) * 420000000000 + cityHash64('sklt', i, j) % 300000000000),
+  nano + toInt64(45000000000 + (j - 1) * 420000000000 + cityHash64('sklt', i, j) % 300000000000),
   'INFO',
   'Hook: Skill invoked',
-  lower(hex(MD5(concat('gram-demo-skilltrace-', toString(i))))),
+  lower(hex(MD5(concat('gram-demo-skilltrace-', toString(i), '-', toString(j))))),
   concat(
     '{"gram.event.source":"hook"',
     ',"gram.hook.source":"claude-code"',
@@ -313,7 +341,9 @@ SELECT
 FROM (
   SELECT
     number + 1 AS i,
-    1 + ((number + 1) % 6) AS uidx,
+    arrayJoin(range(1, toUInt64(2 + reinterpretAsUInt8(unhex(substring(h, 11, 2))) % 2))) AS j,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
@@ -321,11 +351,19 @@ FROM (
     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx) AS email,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
-    arrayElement(['support-refunds', 'triage-incident', 'runbook'], 1 + (intDiv(number, 2) % 3)) AS skill,
-    toUnixTimestamp64Nano(
-      subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                      13 * toInt64((number + 1) % 7))) AS nano
-  FROM numbers(60)
+    arrayElement(['triage-incident', 'support-refunds', 'triage-incident', 'runbook',
+                  'support-refunds', 'triage-incident', 'support-refunds', 'runbook'],
+                 1 + toUInt32(cityHash64('skl', i, j) % 8)) AS skill,
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    toUnixTimestamp64Nano(chat_dt) AS nano
+  FROM numbers(180)
   WHERE (number + 1) % 2 = 1
 );
 
@@ -371,7 +409,8 @@ SELECT
 FROM (
   SELECT
     number + 1 AS i,
-    1 + ((number + 1) % 6) AS uidx,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
@@ -387,12 +426,18 @@ FROM (
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     if(cityHash64('model', number) % 2 = 0, 'claude-sonnet-4-6', 'gpt-5.6') AS model,
-    toUInt64(15000 + cityHash64('in', number) % 90000) AS in_tok,
-    toUInt64(600 + cityHash64('out', number) % 4000) AS out_tok,
-    toUnixTimestamp64Nano(
-      subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                      13 * toInt64((number + 1) % 7))) AS nano
-  FROM numbers(60)
+    toUInt64(800000 + cityHash64('in', number) % 7000000) AS in_tok,
+    toUInt64(3000 + cityHash64('out', number) % 40000) AS out_tok,
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    toUnixTimestamp64Nano(chat_dt) AS nano
+  FROM numbers(180)
   WHERE (number + 1) % 2 = 0
 );
 
@@ -412,10 +457,10 @@ SELECT
   concat(
     '{"gram.event.source":"hook"',
     ',"gram.hook.source":"cursor"',
-    ',"gram.hook.event":"', if((i + k) % 19 = 0, 'PostToolUseFailure', 'PostToolUse'), '"',
+    ',"gram.hook.event":"', if(cityHash64('hfail', i, k) % 16 = 0, 'PostToolUseFailure', 'PostToolUse'), '"',
     ',"gram.tool.name":"', tool_name, '"',
     ',"gram.tool_call.source":"acme-internal-mcp"',
-    if((i + k) % 19 = 0,
+    if(cityHash64('hfail', i, k) % 16 = 0,
        ',"gram.hook.error":"tool execution failed"',
        ',"gen_ai.tool.call.result":"ok"'),
     ',"gen_ai.tool.call.id":"call_demo_', toString(i), '_', toString(k), '"',
@@ -440,7 +485,8 @@ FROM (
   SELECT
     number + 1 AS i,
     arrayJoin([1, 2]) AS k,
-    1 + ((number + 1) % 6) AS uidx,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
@@ -458,10 +504,16 @@ FROM (
     arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
                   'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
                  1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
-    toUnixTimestamp64Nano(
-      subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                      13 * toInt64((number + 1) % 7))) AS nano
-  FROM numbers(60)
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    toUnixTimestamp64Nano(chat_dt) AS nano
+  FROM numbers(180)
   WHERE (number + 1) % 2 = 0
 );
 
@@ -479,8 +531,8 @@ SELECT
   lower(hex(MD5(concat('gram-demo-wutrace-', toString(i))))),
   concat(
     '{"gram.chat_analysis.work_units":', toString(1 + cityHash64('wu', i) % 5),
-    ',"gram.chat_analysis.scored_cost":', toString(round((200000 + cityHash64('sc', i) % 1300000) / 1000000, 6)),
-    ',"gram.chat_analysis.scored_tokens":', toString(50000 + cityHash64('st', i) % 400000),
+    ',"gram.chat_analysis.scored_cost":', toString(round((5000000 + cityHash64('sc', i) % 40000000) / 1000000, 4)),
+    ',"gram.chat_analysis.scored_tokens":', toString(2000000 + cityHash64('st', i) % 12000000),
     ',"gen_ai.conversation.id":"', chat_id, '"',
     ',"gen_ai.response.model":"', if(i % 2 = 1, 'claude-sonnet-4-6', 'gpt-5.6'), '"',
     ',"gram.project.id":"', toString(proj), '"',
@@ -505,7 +557,8 @@ SELECT
 FROM (
   SELECT
     number + 1 AS i,
-    1 + ((number + 1) % 6) AS uidx,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
@@ -520,10 +573,16 @@ FROM (
     arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx) AS team,
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
-    toUnixTimestamp64Nano(
-      subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                      13 * toInt64((number + 1) % 7))) AS nano
-  FROM numbers(60)
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    toUnixTimestamp64Nano(chat_dt) AS nano
+  FROM numbers(180)
 );
 
 -- Shadow MCP inventory + companion hook telemetry (Shadow MCP page list,
@@ -554,26 +613,29 @@ SELECT
     '{"gram.event.source":"hook"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.hook.event":"PostToolUse"',
-    ',"gram.tool.name":"', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], 1 + (number % 3)), '"',
+    ',"gram.tool.name":"', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], sidx), '"',
     ',"gram.mcp.server_url":"', arrayElement(
         ['https://mcp.internal.acme.example/mcp', 'https://tools.vendor-x.example/sse',
-         'https://ci-agents.acme.example/mcp'], 1 + (number % 3)), '"',
+         'https://ci-agents.acme.example/mcp'], sidx), '"',
     ',"gen_ai.tool.call.result":"ok"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', arrayElement(
         ['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
-         'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], 1 + (number % 6)), '"}'
+         'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+        arrayElement([3, 3, 3, 1, 1, 4, 2, 5], 1 + toUInt32(cityHash64('shu', number) % 8))), '"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
   proj,
-  concat('hooks:', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], 1 + (number % 3))),
+  concat('hooks:', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], sidx)),
   'gram-hooks',
   ''
 FROM (
   SELECT
     number,
+    1 + toUInt32(cityHash64('sht', number) % 3) AS sidx,
     toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
-    toUnixTimestamp64Nano(subtractHours(now64(9), 3 + toInt64(number) * 9)) AS nano
+    toUnixTimestamp64Nano(subtractMinutes(subtractHours(now64(9), 3 + toInt64(number) * 9),
+                                          toInt64(cityHash64('shj', number) % 300))) AS nano
   FROM numbers(24)
 );
 
@@ -647,9 +709,9 @@ SELECT
   concat(substring(hchat, 1, 8), '-', substring(hchat, 9, 4), '-5', substring(hchat, 14, 3), '-8',
          substring(hchat, 18, 3), '-', substring(hchat, 21, 12)),
   arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
-                'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'], 1 + (i % 6)),
+                'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'], uidx),
   arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
-                'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], 1 + (i % 6)),
+                'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx),
   'dec0de00-0000-4000-a000-00000000f001',
   1,
   arrayElement(['stripe-access-token', 'aws-access-token', 'pii.credit_card',
@@ -684,9 +746,18 @@ FROM (
     lower(hex(MD5(concat('gram-demo-msg-', toString((number + 1) * 3), '-',
                          if((number + 1) % 5 IN (2, 4), '1', '3'))))) AS hmsg,
     lower(hex(MD5(concat('gram-demo-chat-', toString((number + 1) * 3))))) AS hchat,
-    subtractMinutes(subtractHours(now64(9), 5 * toInt64((number + 1) * 3)),
-                    13 * toInt64(((number + 1) * 3) % 7) - 2) AS ts
-  FROM numbers(20)
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(hchat, 13, 2))) % 16) AS uidx,
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(hchat, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(hchat, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(hchat, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    chat_dt + toIntervalMinute(2) AS ts
+  FROM numbers(60)
 );
 
 -- Skill efficacy mappings: one skill_session_versions row per Postgres
@@ -706,7 +777,7 @@ SELECT
   arrayElement([toUUID('dec0de00-0000-4000-a000-0000000051a1'),
                 toUUID('dec0de00-0000-4000-a000-0000000051a2'),
                 toUUID('dec0de00-0000-4000-a000-0000000051a3')], sidx),
-  if(sidx = 3 AND i <= 24, toUUID('dec0de00-0000-4000-a000-0000000052b3'),
+  if(sidx = 3 AND day_off <= 4, toUUID('dec0de00-0000-4000-a000-0000000052b3'),
      arrayElement([toUUID('dec0de00-0000-4000-a000-0000000052a1'),
                    toUUID('dec0de00-0000-4000-a000-0000000052a2'),
                    toUUID('dec0de00-0000-4000-a000-0000000052a3')], sidx)),
@@ -721,9 +792,16 @@ FROM (
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
-    subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                    13 * toInt64((number + 1) % 7)) + toIntervalSecond(45) + toIntervalMinute(2 * (k - 1)) AS ts
-  FROM numbers(60)
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    chat_dt + toIntervalSecond(45) + toIntervalMinute(2 * (k - 1)) AS ts
+  FROM numbers(180)
   WHERE (number + 1) % 2 = 1
 );
 
@@ -745,7 +823,7 @@ SELECT
   arrayElement([toUUID('dec0de00-0000-4000-a000-0000000051a1'),
                 toUUID('dec0de00-0000-4000-a000-0000000051a2'),
                 toUUID('dec0de00-0000-4000-a000-0000000051a3')], sidx),
-  if(sidx = 3 AND i <= 24, toUUID('dec0de00-0000-4000-a000-0000000052b3'),
+  if(sidx = 3 AND day_off <= 4, toUUID('dec0de00-0000-4000-a000-0000000052b3'),
      arrayElement([toUUID('dec0de00-0000-4000-a000-0000000052a1'),
                    toUUID('dec0de00-0000-4000-a000-0000000052a2'),
                    toUUID('dec0de00-0000-4000-a000-0000000052a3')], sidx)),
@@ -756,7 +834,7 @@ SELECT
   -- Runbook v2 scores markedly lower than v1: surfaces the regression signal.
   least(0.99, greatest(0.05,
     arrayElement([0.87, 0.66, 0.42], sidx)
-    - if(sidx = 3 AND i <= 24, 0.14, 0)
+    - if(sidx = 3 AND day_off <= 4, 0.14, 0)
     + (toInt64(cityHash64('js', i) % 21) - 10) / 100)),
   arrayElement(['Agent followed the refund checklist and refused the pasted card number.',
                 'Triage steps mostly followed but escalation criteria applied loosely.',
@@ -780,9 +858,16 @@ FROM (
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
-    subtractMinutes(subtractHours(now64(9), 5 * toInt64(number + 1)),
-                    13 * toInt64((number + 1) % 7)) + toIntervalSecond(45) AS ts
-  FROM numbers(60)
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(h, 5, 2))) % 60) AS ts0,
+    if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
+    chat_dt + toIntervalSecond(45) AS ts
+  FROM numbers(180)
   WHERE (number + 1) % 2 = 1
 );
 
@@ -791,19 +876,19 @@ FROM (
 -- exit for the runner) when violated.
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
-     (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
-   ) < 400,
-  'demo seed postflight: expected >= 400 demo telemetry rows');
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
+   ) < 1500,
+  'demo seed postflight: expected >= 1500 demo telemetry rows');
 
 SELECT throwIf(
   (SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id IN
-     (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
-   ) < 60,
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
+   ) < 180,
   'demo seed postflight: chat_session_summaries_mv missing sessions');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN
-     (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
      AND department_name != ''
    ) = 0,
   'demo seed postflight: attribute_metrics_summaries has no identity dimensions');
@@ -813,22 +898,22 @@ SELECT throwIf(
   'demo seed postflight: authz_challenges empty');
 
 SELECT throwIf(
-  (SELECT count() FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace') < 30,
+  (SELECT count() FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace') < 90,
   'demo seed postflight: skill_session_versions missing rows');
 
 SELECT throwIf(
-  (SELECT count() FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace') < 30,
+  (SELECT count() FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace') < 90,
   'demo seed postflight: skill_efficacy_scores missing rows');
 
 SELECT throwIf(
-  (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 20,
+  (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 60,
   'demo seed postflight: risk_findings mirror missing rows');
 
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs
    WHERE toString(resource_attributes.gram.deployment.id) = 'demo-seed'
      AND gram_project_id NOT IN
-       (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+       (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) > 0,
   'demo seed postflight: demo-seed rows leaked outside demo projects');
 
@@ -838,7 +923,7 @@ SELECT throwIf(
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs
    WHERE gram_project_id IN
-       (toUUID('dec0de00-0000-4000-a000-000000000001'), toUUID('dec0de00-0000-4000-a000-000000000002'))
+       (toUUID('dec0de00-0000-4000-a000-000000000001'))
      AND toString(resource_attributes.gram.deployment.id) != 'demo-seed'
    ) > 0,
   'demo seed postflight: demo-project telemetry rows missing the demo-seed marker');

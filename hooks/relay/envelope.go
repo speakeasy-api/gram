@@ -139,8 +139,13 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	payload := components.IngestRequestBody{
 		SchemaVersion: schemaVersion,
 		Source: components.HookIngestSource{
-			Adapter:        adapterSlug(base.Provider),
-			AdapterVersion: nil,
+			Adapter: adapterSlug(base.Provider),
+			// Doubles as the relay's capability marker: releases before this
+			// one left the field unset, so the server reads its absence as
+			// "this client cannot report MCP inventory" and degrades the
+			// codex meta-tool guard rather than denying traffic that works
+			// today (DNO-767).
+			AdapterVersion: optStr(BinaryVersion),
 			RawEventName:   optStr(base.NativeName),
 			Hostname:       optStr(hostname),
 			UserEmail:      nil,

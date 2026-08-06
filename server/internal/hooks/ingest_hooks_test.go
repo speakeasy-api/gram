@@ -1952,3 +1952,208 @@ func TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID(t *te
 	require.Empty(t, metadata.BillingMode)
 	require.Equal(t, "stranger@personal.example", metadata.ObservedUserEmail)
 }
+
+// TestIngest_ShadowMCPGuardCoversCodexMetaTools: Codex's built-in MCP resource
+// tools carry no mcp__ prefix and their target lives in tool_input.server, so
+// neither arm of the gate (resolved MCP data, MCP-shaped tool name) recognizes
+// them. Before DNO-767 they were classified as ordinary tool calls and a
+// block_all shadow-MCP policy never ran, letting a Codex session read any MCP
+// server's resources. A meta-tool whose server cannot be read must still deny —
+// an unproven target is not an absent one.
+func TestIngest_ShadowMCPGuardCoversCodexMetaTools(t *testing.T) {
+	t.Parallel()
+
+	for _, toolName := range []string{"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"} {
+		for name, toolInput := range map[string]any{
+			"named server":      map[string]any{"server": "platform-logs"},
+			"missing server":    map[string]any{},
+			"blank server":      map[string]any{"server": "  "},
+			"non-string server": map[string]any{"server": 42},
+			"nil input":         nil,
+		} {
+			t.Run(toolName+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestHooksService(t)
+				ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+				payload := canonicalIngestPayload("codex", "tool.requested", "codex-meta-"+toolName+"-"+name)
+				payload.Source.AdapterVersion = new("1.2.3")
+				callID := "call-1"
+				payload.Data = &gen.HookIngestData{
+					ToolCall: &gen.HookToolCallData{
+						ID:    &callID,
+						Name:  &toolName,
+						Input: toolInput,
+					},
+				}
+
+				result, err := ti.service.Ingest(ctx, payload)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, "deny", result.Decision,
+					"a codex MCP meta-tool must be evaluated by the shadow-MCP policy")
+			})
+		}
+	}
+}
+
+// TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters: the meta-tool
+// names are Codex's, so an unrelated tool of the same name on another agent
+// must not be reclassified as an MCP call.
+func TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "non-codex-meta-tool")
+	payload.Source.AdapterVersion = new("1.2.3")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &callID,
+			Name:  &toolName,
+			Input: map[string]any{"server": "platform-logs"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, "deny", result.Decision)
+}
+
+// TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory: bringing the
+// meta-tools under the guard must not blanket-deny them. The guard can only
+// reach its generic "not Gram-hosted" deny without a URL, so a meta-tool
+// reading resources from a Gram-hosted server would be blocked — traffic the
+// legacy endpoint permits. Resolving the name against the session inventory is
+// what separates allowed from denied, and it must name the server when denying.
+func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
+	t.Parallel()
+
+	gramHosted := MCPServerEntry{
+		Source: "codex", Name: "speakeasy-team",
+		URL:    "https://app.getgram.ai/mcp/speakeasy-team-8g3az",
+		Status: "unknown",
+	}
+	external := MCPServerEntry{
+		Source: "codex", Name: "someone-else",
+		URL:    "https://mcp.example.test/mcp",
+		Status: "unknown",
+	}
+
+	tests := []struct {
+		name       string
+		entry      MCPServerEntry
+		target     string
+		wantDenied bool
+	}{
+		{"gram-hosted target is allowed", gramHosted, "speakeasy-team", false},
+		{"external target is denied", external, "someone-else", true},
+		{"target absent from inventory is denied", gramHosted, "unlisted", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+			sessionID := "codex-meta-inventory-" + tc.name
+			require.NoError(t, ti.service.cache.Set(ctx,
+				sessionMCPListCacheKey(sessionID), []MCPServerEntry{tc.entry}, sessionMCPListTTL))
+
+			toolName := "read_mcp_resource"
+			callID := "call-1"
+			payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+			payload.Source.AdapterVersion = new("1.2.3")
+			payload.Data = &gen.HookIngestData{
+				ToolCall: &gen.HookToolCallData{
+					ID: &callID, Name: &toolName,
+					Input: map[string]any{"server": tc.target},
+				},
+			}
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			if !tc.wantDenied {
+				require.NotEqual(t, "deny", result.Decision,
+					"a Gram-hosted meta-tool target must not be blocked")
+				return
+			}
+			require.Equal(t, "deny", result.Decision)
+		})
+	}
+}
+
+// TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix: Codex addresses a
+// server by its sanitized tool prefix as well as its configured name, and the
+// cached-entry fallback matches only on ToolPrefix. Without it a hyphenated
+// server is unresolvable on the ingest path while the legacy endpoint resolves
+// it, so a Gram-hosted target would be denied.
+func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
+	t.Parallel()
+
+	name := "platform-logs"
+	url := "https://app.getgram.ai/mcp/platform-logs"
+	payload := canonicalIngestPayload("codex", "session.started", "codex-tool-prefix")
+	payload.Data = &gen.HookIngestData{
+		McpInventory: []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+	}
+
+	entries := canonicalMCPInventoryEntries(payload)
+	require.Len(t, entries, 1)
+	require.Equal(t, "platform_logs", entries[0].ToolPrefix)
+
+	// The sanitized form must resolve to the configured server, as it does on
+	// the legacy endpoint.
+	matched := matchCodexCachedMCPServerEntry(entries, "platform_logs")
+	require.NotNil(t, matched)
+	require.Equal(t, url, matched.URL)
+
+	// Other adapters keep no codex-specific prefix.
+	payload.Source.Adapter = "claude"
+	require.Empty(t, canonicalMCPInventoryEntries(payload)[0].ToolPrefix)
+}
+
+// TestIngest_ShadowMCPMetaToolGateDegradesForIncapableClients: the server-side
+// deny ships independently of the hooks release that starts collecting the
+// Codex MCP inventory. A relay predating that release sends no inventory, so
+// the guard would have nothing to clear a target against and every meta-tool
+// call would deny — including reads of Gram-hosted servers that work today.
+// Those clients are identified by an absent adapter_version (nothing else has
+// ever set it) and keep their current behavior until they upgrade.
+func TestIngest_ShadowMCPMetaToolGateDegradesForIncapableClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-legacy-relay")
+	// An old relay: adapter_version left unset.
+	payload.Source.AdapterVersion = nil
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID: &callID, Name: &toolName,
+			Input: map[string]any{"server": "platform-logs"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, "deny", result.Decision,
+		"a relay that cannot report MCP inventory must not have its meta-tool calls blanket-denied")
+
+	// An empty string is as good as absent — it proves no capability either.
+	payload.Source.AdapterVersion = new("")
+	result, err = ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, "deny", result.Decision)
+}

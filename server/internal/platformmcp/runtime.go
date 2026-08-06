@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 const (
@@ -61,7 +63,7 @@ type Runtime struct {
 	server               *mcp.Server
 }
 
-func NewRuntime(authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL string, reader Reader, readiness ReadinessRecorder) *Runtime {
+func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL string, reader Reader, readiness ReadinessRecorder) *Runtime {
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -79,7 +81,7 @@ func NewRuntime(authenticator Authenticator, gate Gate, authorizer Authorizer, p
 						if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
 							// Discovery succeeded; the idempotent lifecycle projection is
 							// best-effort and must not turn an MCP response into a failure.
-							slog.Default().WarnContext(ctx, "record platform mcp connection readiness", "error", recordErr)
+							logger.WarnContext(ctx, "record platform mcp connection readiness", attr.SlogError(recordErr))
 						}
 					}
 				}
@@ -124,11 +126,7 @@ func (r *Runtime) Handler() http.Handler {
 			return
 		}
 		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
-			if errors.Is(err, ErrForbidden) {
-				http.Error(w, "forbidden", http.StatusForbidden)
-			} else {
-				http.Error(w, "unavailable", http.StatusServiceUnavailable)
-			}
+			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 

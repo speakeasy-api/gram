@@ -759,7 +759,9 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify mcp server").LogError(ctx, s.logger)
 		}
-		if server.Visibility == visibility.Disabled || !server.HasEndpoint {
+		// Unproxied-backed servers are never proxied, so they never gain an
+		// mcp_endpoints row; exempt them from the has_endpoint requirement.
+		if server.Visibility == visibility.Disabled || (!server.HasEndpoint && !server.IsUnproxied) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is disabled or has no published endpoint")
 		}
 		if displayName == "" {
@@ -1436,19 +1438,20 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			// directories when a rename happened while the rollout gate carried
 			// the hooks subtree.
 			slugCfg := GenerateConfig{
-				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:         "",
-				OrgID:            "",
-				ServerURL:        "",
-				APIKey:           "",
-				HooksAPIKey:      "",
-				ProjectSlug:      "",
-				IsDefaultProject: false,
-				Version:          "",
-				MarketplaceName:  "",
-				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
-				BrowserLogin:     false,
-				InstallFailOpen:  false,
+				OrgName:            s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:           "",
+				OrgID:              "",
+				ServerURL:          "",
+				APIKey:             "",
+				HooksAPIKey:        "",
+				ProjectSlug:        "",
+				IsDefaultProject:   false,
+				Version:            "",
+				MarketplaceName:    "",
+				HooksOrgName:       naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
+				BrowserLogin:       false,
+				InstallFailOpen:    false,
+				PlatformMCPEnabled: false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1937,7 +1940,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			admission, admissionErr = s.platformAdmission.Evaluate(ctx, input.OrganizationID, input.OrganizationSlug)
 			if admissionErr != nil {
 				if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
-					return nil, admissionErr
+					return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
 				}
 				s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
 					attr.SlogOrganizationID(input.OrganizationID),
@@ -2773,6 +2776,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
 				IsOAuth:     r.ToolsetIsOauth,
+				IsUnproxied: false,
 				EnvConfigs:  nil,
 			}
 
@@ -2823,24 +2827,46 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	for _, m := range mcpRows {
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
-		// Custom-domain endpoints are served from the domain host; platform
-		// endpoints from the Gram server URL. The query already resolved the
-		// single preferred endpoint per server.
-		mcpBase := s.serverURL
-		if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
-			mcpBase = fmt.Sprintf("https://%s", *cd)
+		// Classify from the authoritative backend signal (unproxied_url, set
+		// only when s.unproxied_mcp_server_id resolved a live row), not from
+		// endpoint presence/absence: nothing stops an mcp_endpoints row from
+		// existing for an unproxied-backed server (verifyEndpointReferenceOwnership
+		// only checks project ownership, not backend type), and mcp_servers'
+		// own backend-exclusivity check doesn't cover mcp_endpoints either.
+		// An unproxied-backed server's URL always wins so it's never routed
+		// through a Gram endpoint it can't actually be served from.
+		mcpURL := ""
+		isOAuth := false
+		isUnproxied := false
+		switch {
+		case m.UnproxiedUrl.Valid:
+			mcpURL = m.UnproxiedUrl.String
+			isUnproxied = true
+		case m.EndpointSlug != "":
+			// Custom-domain endpoints are served from the domain host; platform
+			// endpoints from the Gram server URL. The query already resolved the
+			// single preferred endpoint per server.
+			mcpBase := s.serverURL
+			if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
+				mcpBase = fmt.Sprintf("https://%s", *cd)
+			}
+			mcpURL = fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug)
+			// Remote MCP-backed servers authenticate via their user session
+			// issuer (OAuth), so the generated config carries no static
+			// Authorization header (IsOAuth).
+			isOAuth = true
 		}
-		// Remote MCP-backed servers authenticate via their user session issuer
-		// (OAuth), so the generated config carries no static Authorization
-		// header (IsOAuth). Environments are not yet wired to mcp_servers, so
-		// there are no public env configs to surface.
+
+		// Environments are not yet wired to mcp_servers, so there are no
+		// public env configs to surface.
 		pb.servers = append(pb.servers, serverBuild{
 			info: PluginServerInfo{
 				DisplayName: m.ServerDisplayName,
 				Policy:      m.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug),
+				MCPURL:      mcpURL,
 				IsPublic:    false,
-				IsOAuth:     true,
+				IsOAuth:     isOAuth,
+				IsUnproxied: isUnproxied,
 				EnvConfigs:  nil,
 			},
 			sortOrder: m.ServerSortOrder,
@@ -2895,12 +2921,13 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:  "",
-		HooksOrgName:     "",
-		IsDefaultProject: s.isDefaultProject(ctx, projectID),
-		BrowserLogin:     false,
-		InstallFailOpen:  false,
+		Version:            fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:    "",
+		HooksOrgName:       "",
+		IsDefaultProject:   s.isDefaultProject(ctx, projectID),
+		BrowserLogin:       false,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {

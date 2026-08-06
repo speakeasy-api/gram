@@ -41,6 +41,7 @@ import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { InspectTab } from "./tabs/InspectTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
+import { UnproxiedMcpOverviewTab } from "./tabs/UnproxiedMcpOverviewTab";
 
 const MCP_X_TAB_URLS = ["overview", "inspect", "team-access", "settings"];
 
@@ -91,6 +92,15 @@ export default function MCPServerDetails(): JSX.Element {
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
     );
   }
+  // Inspect is hidden from the nav for unproxied servers (see
+  // McpServerXSidebarNav) but the route still resolves, so bounce anyone who
+  // lands on it directly (old links, the legacy /tools redirect above) back
+  // to Overview instead of rendering a tab with nothing to show.
+  if (activeTab === "inspect" && mcpServer?.unproxiedMcpServerId) {
+    return (
+      <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
+    );
+  }
   if (!activeTab) {
     const initialTab = initialTabFromHash(location.hash);
     const hash =
@@ -110,16 +120,25 @@ export default function MCPServerDetails(): JSX.Element {
       case "overview":
         return (
           mcpServer &&
-          mcpServer.slug && (
-            <MCPOverviewTab
-              server={{
-                kind: "mcp-server",
-                id: mcpServer.id,
-                slug: mcpServer.slug,
-                name: mcpServer.name ?? "MCP Server",
-              }}
+          (mcpServer.unproxiedMcpServerId ? (
+            <UnproxiedMcpOverviewTab
+              unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
+              mcpServerId={mcpServer.id}
+              mcpServerSlug={mcpServer.slug ?? ""}
+              mcpServerName={mcpServer.name ?? "MCP Server"}
             />
-          )
+          ) : (
+            mcpServer.slug && (
+              <MCPOverviewTab
+                server={{
+                  kind: "mcp-server",
+                  id: mcpServer.id,
+                  slug: mcpServer.slug,
+                  name: mcpServer.name ?? "MCP Server",
+                }}
+              />
+            )
+          ))
         );
       case "inspect":
         return (
@@ -274,6 +293,7 @@ export function MCPServerStatusDropdown({
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
+          unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID
           // references. Forwarding them keeps stored values intact across a
@@ -307,6 +327,22 @@ export function MCPServerStatusDropdown({
   const currentDotClass =
     options.find((option) => option.value === server.visibility)?.dotClass ??
     "bg-green-400";
+
+  // Unproxied servers have no Gram-hosted endpoint for disabled/private to
+  // gate — the vendor's own server is reachable regardless of this setting —
+  // so there's nothing to toggle. Still show the record's actual stored
+  // value (not a hardcoded "Public") so this can't drift from what Settings
+  // and the readiness checklist report for the same server.
+  if (server.unproxiedMcpServerId) {
+    return (
+      <span className="text-foreground border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium">
+        <span
+          className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
+        />
+        {currentLabel}
+      </span>
+    );
+  }
 
   return (
     <DropdownMenu>

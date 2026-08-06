@@ -46,6 +46,7 @@ var (
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
 	OtelForwardingV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_forwarding_event_v1", "Emitted when changes to OTEL forwarding configs are made")
+	UnproxiedMcpServerV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.unproxied_mcp_server_event_v1", "Emitted when changes to unproxied MCP servers are made")
 	PluginV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.plugin_event_v1", "Emitted when changes to plugins are made")
 	ProjectV1                              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.project_event_v1", "Emitted when changes to projects are made")
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
@@ -71,6 +72,7 @@ var (
 	UserSessionConsentV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_consent_event_v1", "Emitted when changes to user session consents are made")
 	UserSessionV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_event_v1", "Emitted when changes to user sessions are made")
 	UserSessionIssuerV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_event_v1", "Emitted when changes to user session issuers are made")
+	UserSessionIssuerCimdClientV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_cimd_client_event_v1", "Emitted when the CIMD client URLs a user session issuer admits are changed")
 	VariationV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.variation_event_v1", "Emitted when changes to tool names and other properties are made")
 )
 

@@ -26,6 +26,7 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
     { value: "custom", label: "Custom" },
     { value: "remote", label: "Remote URL" },
     { value: "tunneled", label: "Tunneled" },
+    { value: "unproxied", label: "Unproxied" },
   ],
   // `plugins` is org data, so its options are supplied at render time via
   // pluginFilterOptions().
@@ -33,7 +34,7 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
 
 export interface McpFacets {
   status: "public" | "private" | "disabled";
-  source: "catalog" | "custom" | "remote" | "tunneled";
+  source: "catalog" | "custom" | "remote" | "tunneled" | "unproxied";
   /** IDs of the plugins this server is a member of. */
   pluginIds: string[];
 }
@@ -102,9 +103,14 @@ export function mcpServerFacets(
       : server.visibility === "private"
         ? "private"
         : "disabled";
+  const source = server.unproxiedMcpServerId
+    ? "unproxied"
+    : server.tunneledMcpServerId
+      ? "tunneled"
+      : "remote";
   return {
     status,
-    source: server.tunneledMcpServerId ? "tunneled" : "remote",
+    source,
     pluginIds: membership.byMcpServerId.get(server.id) ?? [],
   };
 }

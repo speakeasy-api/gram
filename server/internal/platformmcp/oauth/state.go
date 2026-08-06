@@ -98,7 +98,7 @@ type Store interface {
 	ConsumeGrant(ctx context.Context, input ConsumeGrantInput) (Grant, error)
 	CreateSession(ctx context.Context, session Session) error
 	GetSessionByRefreshHash(ctx context.Context, organizationID, refreshHash string) (Session, error)
-	DetectRefreshReuse(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (bool, error)
+	DetectRefreshReuse(ctx context.Context, organizationID, refreshHash string, now time.Time) (bool, error)
 	RotateSession(ctx context.Context, input RotateSessionInput) (Session, error)
 	RevokeSession(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (Session, error)
 	RevokeAccessSession(ctx context.Context, organizationID, jti, clientID string, now time.Time) (Session, error)
@@ -325,12 +325,12 @@ func (s *InMemoryStore) GetSessionByRefreshHash(_ context.Context, organizationI
 	return session, nil
 }
 
-func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, organizationID, refreshHash, clientID string, now time.Time) (bool, error) {
+func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, organizationID, refreshHash string, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	session, ok := s.sessions[refreshHash]
-	if !ok || session.Connection.OrganizationID != organizationID || session.ClientID != clientID {
+	if !ok || session.Connection.OrganizationID != organizationID {
 		return false, ErrNotFound
 	}
 	if session.RevokedAt == nil {

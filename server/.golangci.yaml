@@ -8,6 +8,10 @@ issues:
 
 run:
   relative-path-mode: wd
+  # The demo seed safety test is build-tagged out of the sharded test suite
+  # (it has its own CI job); the tag here keeps its files linted.
+  build-tags:
+    - demoseed_safety
 
 linters:
   enable:
@@ -460,6 +464,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
+        - "github.com/speakeasy-api/gram/server/internal/access.RequireStaffForUnproxiedMcp("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("

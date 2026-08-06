@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -95,6 +96,15 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
 	if authCtx.SessionID == nil && !isAssistant {
 		return ctx, nil
+	}
+
+	// Sessions in the shared demo org (which has no membership rows) get a
+	// fixed read-only grant set — for everyone, including platform admins, so
+	// the demo org is uniformly read-only. Must precede BOTH the scope
+	// override and admin-override branches: either could otherwise widen a
+	// demo session back to write grants.
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
+		return GrantsToContext(ctx, DemoScopeGrants()), nil
 	}
 
 	if overrides, ok := e.GetScopeOverrides(ctx); ok {
@@ -613,6 +623,12 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
 	if authCtx.SessionID == nil && !isAssistant {
 		return false, nil
+	}
+
+	// The shared demo org is always enforced so its read-only grant set takes
+	// effect regardless of the org's RBAC product feature.
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
+		return true, nil
 	}
 
 	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)

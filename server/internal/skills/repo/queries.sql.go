@@ -67,7 +67,7 @@ SET archived_at = clock_timestamp(),
 WHERE project_id = $1
   AND id = $2
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type ArchiveSkillParams struct {
@@ -86,6 +86,7 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -94,6 +95,29 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const backdateReservedSkillEfficacyEvaluationsFixture = `-- name: BackdateReservedSkillEfficacyEvaluationsFixture :execrows
+UPDATE skill_efficacy_evaluations
+SET updated_at = updated_at - $1::interval
+WHERE project_id = $2
+  AND state = 'reserved'
+`
+
+type BackdateReservedSkillEfficacyEvaluationsFixtureParams struct {
+	BackdateBy pgtype.Interval
+	ProjectID  uuid.UUID
+}
+
+// Test-only fixture: age a project's reserved rows past a recovery lease so a
+// test can make staleness deterministic instead of retrying a sweep that
+// recovers rows cumulatively.
+func (q *Queries) BackdateReservedSkillEfficacyEvaluationsFixture(ctx context.Context, arg BackdateReservedSkillEfficacyEvaluationsFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backdateReservedSkillEfficacyEvaluationsFixture, arg.BackdateBy, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const backfillSkillObservationsForCapturedVersion = `-- name: BackfillSkillObservationsForCapturedVersion :execrows
@@ -611,6 +635,10 @@ WHERE project_id = $1
     COALESCE(cardinality($4::text[]), 0) = 0
     OR classification = ANY($4::text[])
   )
+  AND (
+    COALESCE(cardinality($5::text[]), 0) = 0
+    OR tags && $5::text[]
+  )
 `
 
 type CountSkillsParams struct {
@@ -618,6 +646,7 @@ type CountSkillsParams struct {
 	Search          pgtype.Text
 	SourceKinds     []string
 	Classifications []string
+	Tags            []string
 }
 
 // CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
@@ -628,6 +657,7 @@ func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64
 		arg.Search,
 		arg.SourceKinds,
 		arg.Classifications,
+		arg.Tags,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -672,7 +702,7 @@ INSERT INTO skills (
 )
 ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type CreateCapturedSkillParams struct {
@@ -698,6 +728,7 @@ func (q *Queries) CreateCapturedSkill(ctx context.Context, arg CreateCapturedSki
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -726,7 +757,7 @@ INSERT INTO skills (
 )
 ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type CreateObservedSkillParams struct {
@@ -746,6 +777,7 @@ func (q *Queries) CreateObservedSkill(ctx context.Context, arg CreateObservedSki
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -859,7 +891,7 @@ INSERT INTO skills (
 )
 ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type CreateSkillParams struct {
@@ -885,6 +917,7 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -1568,7 +1601,7 @@ func (q *Queries) FailSkillObservationReconciliations(ctx context.Context, arg F
 }
 
 const getActiveSkillByName = `-- name: GetActiveSkillByName :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND name = $2
@@ -1591,6 +1624,7 @@ func (q *Queries) GetActiveSkillByName(ctx context.Context, arg GetActiveSkillBy
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -1937,7 +1971,7 @@ func (q *Queries) GetSharedSkillByToken(ctx context.Context, token string) (GetS
 }
 
 const getSkill = `-- name: GetSkill :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -1960,6 +1994,7 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -2008,7 +2043,7 @@ func (q *Queries) GetSkillAdoptionStats(ctx context.Context, arg GetSkillAdoptio
 }
 
 const getSkillByNameForUpdate = `-- name: GetSkillByNameForUpdate :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND name = $2
@@ -2032,6 +2067,7 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -2044,7 +2080,7 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 
 const getSkillDetails = `-- name: GetSkillDetails :one
 SELECT
-  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
+  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.tags, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   l.token AS share_token,
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(state.version_count, 0)::bigint AS version_count,
@@ -2109,6 +2145,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.Skill.Summary,
 		&i.Skill.SourceKind,
 		&i.Skill.Classification,
+		&i.Skill.Tags,
 		&i.Skill.FirstSeenAt,
 		&i.Skill.LastSeenAt,
 		&i.Skill.SeenCount,
@@ -2575,7 +2612,7 @@ func (q *Queries) GetSkillFeedbackMetrics(ctx context.Context, arg GetSkillFeedb
 }
 
 const getSkillForUpdate = `-- name: GetSkillForUpdate :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -2599,6 +2636,7 @@ func (q *Queries) GetSkillForUpdate(ctx context.Context, arg GetSkillForUpdatePa
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -3141,6 +3179,35 @@ func (q *Queries) ListDeletedSkillEfficacyChatIDs(ctx context.Context, arg ListD
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDistinctSkillTags = `-- name: ListDistinctSkillTags :many
+SELECT DISTINCT tag::text AS tag
+FROM skills s
+CROSS JOIN LATERAL unnest(s.tags) AS tag
+WHERE s.project_id = $1
+  AND s.archived_at IS NULL
+ORDER BY tag
+`
+
+func (q *Queries) ListDistinctSkillTags(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDistinctSkillTags, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		items = append(items, tag)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4005,7 +4072,7 @@ func (q *Queries) ListRecentSkillFeedback(ctx context.Context, arg ListRecentSki
 }
 
 const listRecentlyActiveSkills = `-- name: ListRecentlyActiveSkills :many
-SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND archived_at IS NULL
@@ -4058,6 +4125,7 @@ func (q *Queries) ListRecentlyActiveSkills(ctx context.Context, arg ListRecently
 			&i.Summary,
 			&i.SourceKind,
 			&i.Classification,
+			&i.Tags,
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
 			&i.SeenCount,
@@ -4685,7 +4753,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 
 const listSkills = `-- name: ListSkills :many
 SELECT
-  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
+  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.tags, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   l.token AS share_token,
   COALESCE(latest.id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(latest.version_count, 0)::bigint AS version_count,
@@ -4711,6 +4779,10 @@ SELECT
       AND (
         COALESCE(cardinality($4::text[]), 0) = 0
         OR counted.classification = ANY($4::text[])
+      )
+      AND (
+        COALESCE(cardinality($5::text[]), 0) = 0
+        OR counted.tags && $5::text[]
       )
   )::bigint AS total_count
 FROM skills s
@@ -4743,29 +4815,33 @@ WHERE s.project_id = $1
     OR s.classification = ANY($4::text[])
   )
   AND (
+    COALESCE(cardinality($5::text[]), 0) = 0
+    OR s.tags && $5::text[]
+  )
+  AND (
     (
-      COALESCE(NULLIF($5::text, ''), 'name') = 'name'
+      COALESCE(NULLIF($6::text, ''), 'name') = 'name'
       AND (
-        $6::text IS NULL
-        OR s.name > $6::text
+        $7::text IS NULL
+        OR s.name > $7::text
       )
     )
     OR (
-      COALESCE(NULLIF($5::text, ''), 'name') = 'updated'
+      COALESCE(NULLIF($6::text, ''), 'name') = 'updated'
       AND (
-        $7::timestamptz IS NULL
+        $8::timestamptz IS NULL
         OR (s.updated_at, s.id) < (
-          $7::timestamptz,
-          $8::uuid
+          $8::timestamptz,
+          $9::uuid
         )
       )
     )
   )
 ORDER BY
-  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'name' THEN s.name END ASC,
-  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
-  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.id END DESC
-LIMIT $9
+  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.id END DESC
+LIMIT $10
 `
 
 type ListSkillsParams struct {
@@ -4773,6 +4849,7 @@ type ListSkillsParams struct {
 	Search          pgtype.Text
 	SourceKinds     []string
 	Classifications []string
+	Tags            []string
 	SortOrder       string
 	CursorName      pgtype.Text
 	CursorUpdatedAt pgtype.Timestamptz
@@ -4795,6 +4872,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 		arg.Search,
 		arg.SourceKinds,
 		arg.Classifications,
+		arg.Tags,
 		arg.SortOrder,
 		arg.CursorName,
 		arg.CursorUpdatedAt,
@@ -4816,6 +4894,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.Skill.Summary,
 			&i.Skill.SourceKind,
 			&i.Skill.Classification,
+			&i.Skill.Tags,
 			&i.Skill.FirstSeenAt,
 			&i.Skill.LastSeenAt,
 			&i.Skill.SeenCount,
@@ -5204,7 +5283,7 @@ WHERE project_id = $1
   AND id = $2
   AND source_kind = 'captured'
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type PromoteObservedSkillToManualParams struct {
@@ -5223,6 +5302,7 @@ func (q *Queries) PromoteObservedSkillToManual(ctx context.Context, arg PromoteO
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -6017,7 +6097,7 @@ SET summary = $1::text,
 WHERE project_id = $2
   AND id = $3
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type SyncSkillSummaryParams struct {
@@ -6037,6 +6117,7 @@ func (q *Queries) SyncSkillSummary(ctx context.Context, arg SyncSkillSummaryPara
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -6157,17 +6238,19 @@ UPDATE skills
 SET name = $1,
     display_name = $2,
     summary = $3::text,
+    tags = $4,
     updated_at = clock_timestamp()
-WHERE project_id = $4
-  AND id = $5
+WHERE project_id = $5
+  AND id = $6
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type UpdateSkillDetailsParams struct {
 	Name        string
 	DisplayName string
 	Summary     pgtype.Text
+	Tags        []string
 	ProjectID   uuid.UUID
 	ID          uuid.UUID
 }
@@ -6177,6 +6260,7 @@ func (q *Queries) UpdateSkillDetails(ctx context.Context, arg UpdateSkillDetails
 		arg.Name,
 		arg.DisplayName,
 		arg.Summary,
+		arg.Tags,
 		arg.ProjectID,
 		arg.ID,
 	)
@@ -6189,6 +6273,7 @@ func (q *Queries) UpdateSkillDetails(ctx context.Context, arg UpdateSkillDetails
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.Tags,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
