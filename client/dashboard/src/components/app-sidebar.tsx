@@ -41,6 +41,7 @@ import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/Button";
 import { Text } from "@/components/ui/Text";
+import { EnterpriseTrialStatusCard } from "./enterprise-trial-status-card";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -304,6 +305,7 @@ export function AppSidebar({
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
+        <EnterpriseTrialStatusCard />
         <div className="mb-2 flex flex-col gap-1.5">
           <OnboardingResumeButton />
           <InsightsDockResumeButton />
