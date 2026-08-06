@@ -20,8 +20,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
-import { skillShareUrl } from "./share-link";
+import { skillShareDomain, skillShareUrl } from "./share-link";
 
 type SharingStatus = "private" | "public";
 
@@ -99,7 +100,12 @@ export function SkillSharingCardBlocks({
   );
 
   const pending = share.isPending || unshare.isPending;
-  const shareUrl = skill.shareToken ? skillShareUrl(skill.shareToken) : null;
+  // Public pages are served on the org's custom domain when one is live, so
+  // the copied link carries the customer's own branding.
+  const { domain: customDomain } = useCustomDomain(!!skill.shareToken);
+  const shareUrl = skill.shareToken
+    ? skillShareUrl(skill.shareToken, skillShareDomain(customDomain))
+    : null;
   const currentStatus: SharingStatus = shareUrl ? "public" : "private";
   const currentOption = STATUS_OPTIONS.find(
     (option) => option.value === currentStatus,
