@@ -5976,7 +5976,7 @@ ON platform_mcp_catalog_registrations (project_id, id);
 CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_organization_project_idx
 ON platform_mcp_catalog_registrations (organization_id, project_id);
 
-CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_organization_connection_all_idx
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_org_connection_idx
 ON platform_mcp_catalog_registrations (organization_id, connection_id);
 
 CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_remote_server_idx

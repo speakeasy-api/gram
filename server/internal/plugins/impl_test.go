@@ -2053,6 +2053,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	// permit SkipIfUnchanged.
 	publisher := newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionIndeterminate})
 	mock.getRepoFilesCalled = false
+	mock.pushFilesCalled = false
 	result, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: authCtx.UserID,
@@ -2060,8 +2061,9 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
-	require.False(t, result.Skipped)
+	require.True(t, result.Skipped)
 	require.True(t, mock.getRepoFilesCalled)
+	require.False(t, mock.pushFilesCalled)
 	require.Equal(t, platformFilesBefore["platform-mcp/.claude-plugin/plugin.json"], mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"])
 	require.Equal(t, platformFilesBefore["platform-mcp/.mcp.json"], mock.lastPushedFiles["platform-mcp/.mcp.json"])
 
@@ -2093,6 +2095,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NoError(t, err)
 	mock.repoFiles = nil
 	mock.lastPushedFiles = nil
+	mock.pushFilesCalled = false
 	result, err = publisher.PublishProject(ctx, plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: authCtx.UserID,
@@ -2101,6 +2104,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	})
 	require.NoError(t, err)
 	require.False(t, result.Skipped)
+	require.True(t, mock.pushFilesCalled)
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
 
