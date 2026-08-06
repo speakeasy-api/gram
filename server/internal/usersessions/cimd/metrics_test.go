@@ -275,9 +275,11 @@ func TestMetrics_NamesPinned(t *testing.T) {
 
 // TestMetrics_ReservedResultLabels pins the provisional label spellings that
 // follow-up issues will emit — cached / conditional_not_modified (AIS-216),
-// rate_limited (AIS-215), admission_denied (AIS-371) — plus the reserved
-// cimd.cache.hits instrument, so dashboards built on this vocabulary stay
-// valid when the emitting code lands.
+// rate_limited (AIS-215) — plus the reserved cimd.cache.hits instrument, so
+// dashboards built on this vocabulary stay valid when the emitting code
+// lands. AIS-371's admission_denied is deliberately absent: admission
+// records to its own cimd.admission.decisions counter, since a denial means
+// no fetch ran and so has no place under fetch.attempts.
 func TestMetrics_ReservedResultLabels(t *testing.T) {
 	t.Parallel()
 
@@ -293,7 +295,6 @@ func TestMetrics_ReservedResultLabels(t *testing.T) {
 		{result: fetchResultCached, want: "cached"},
 		{result: fetchResultConditionalNotModified, want: "conditional_not_modified"},
 		{result: fetchResultRateLimited, want: "rate_limited"},
-		{result: fetchResultAdmissionDenied, want: "admission_denied"},
 	}
 	for _, r := range reserved {
 		require.Equal(t, r.want, string(r.result))

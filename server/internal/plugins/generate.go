@@ -34,6 +34,12 @@ type PluginServerInfo struct {
 	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
 	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
 	IsOAuth bool
+	// IsUnproxied indicates the server is an unproxied MCP server: MCPURL
+	// points directly at the vendor, never through Gram's gateway. No
+	// Authorization header may be attached — the Gram API key would leak to
+	// the vendor's own server, which was never meant to receive it, and
+	// Gram has no way to inject vendor-specific credentials on its behalf.
+	IsUnproxied bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -131,19 +137,20 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:          "Hooks Check",
-		OrgEmail:         "hooks-check@example.com",
-		OrgID:            "org-hooks-check",
-		ServerURL:        "https://app.getgram.ai",
-		APIKey:           fingerprintAPIKeySentinel,
-		HooksAPIKey:      fingerprintHooksKeySentinel,
-		ProjectSlug:      "hooks-check",
-		IsDefaultProject: true,
-		Version:          "",
-		MarketplaceName:  "",
-		HooksOrgName:     "",
-		BrowserLogin:     false,
-		InstallFailOpen:  false,
+		OrgName:            "Hooks Check",
+		OrgEmail:           "hooks-check@example.com",
+		OrgID:              "org-hooks-check",
+		ServerURL:          "https://app.getgram.ai",
+		APIKey:             fingerprintAPIKeySentinel,
+		HooksAPIKey:        fingerprintHooksKeySentinel,
+		ProjectSlug:        "hooks-check",
+		IsDefaultProject:   true,
+		Version:            "",
+		MarketplaceName:    "",
+		HooksOrgName:       "",
+		BrowserLogin:       false,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
@@ -194,8 +201,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		HooksOrgName:     "",
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
-		BrowserLogin:    true,
-		InstallFailOpen: false,
+		BrowserLogin:       true,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -920,6 +928,10 @@ func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateC
 // APIKey plus all-public-no-env servers means the plugin is install-silent.
 func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 	for _, s := range p.Servers {
+		if s.IsUnproxied {
+			// No credential of any kind is ever collected for these.
+			continue
+		}
 		if s.IsPublic {
 			if len(s.EnvConfigs) > 0 {
 				return "ON_INSTALL"
@@ -995,18 +1007,22 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			EnvHTTPHeaders:    nil,
 		}
 
-		if s.IsOAuth {
+		switch {
+		case s.IsUnproxied:
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		case s.IsOAuth:
 			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
-		} else if s.IsPublic {
+		case s.IsPublic:
 			if len(s.EnvConfigs) > 0 {
 				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
 				for _, ec := range s.EnvConfigs {
 					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
 				}
 			}
-		} else if cfg.APIKey != "" {
+		case cfg.APIKey != "":
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
-		} else {
+		default:
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
@@ -1960,7 +1976,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
+		if !s.IsUnproxied && !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
 		// Public non-OAuth servers may need user-provided env vars.
@@ -2002,7 +2018,10 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -2141,7 +2160,10 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -2202,7 +2224,10 @@ func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p Plugi
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OpenCode auto-detects OAuth on remote servers and runs the
 			// authorization flow itself — no headers needed.
 		} else if s.IsPublic {

@@ -3,6 +3,7 @@ package remotesessionprovider
 import (
 	"bytes"
 	"io"
+	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
@@ -42,4 +43,37 @@ func TestBoundedReadCloserRejectsOverflow(t *testing.T) {
 	reader := &boundedReadCloser{ReadCloser: io.NopCloser(bytes.NewReader([]byte("12345"))), remaining: 4}
 	_, err := io.ReadAll(reader)
 	require.ErrorIs(t, err, errResponseTooLarge)
+}
+
+func TestAuthorizationRoundTripperRejectsChunkedOverflow(t *testing.T) {
+	t.Parallel()
+
+	rt := &authorizationRoundTripper{
+		base: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode:    http.StatusOK,
+				ContentLength: -1,
+				Body:          io.NopCloser(bytes.NewReader(bytes.Repeat([]byte("x"), maxResponseBytes+1))),
+				Header:        make(http.Header),
+				Request:       nil,
+				TLS:           nil,
+				Trailer:       nil,
+				Uncompressed:  false,
+			}, nil
+		}),
+		authorization: "Bearer test-token",
+	}
+	response, err := rt.RoundTrip(&http.Request{Header: make(http.Header)})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = response.Body.Close() })
+
+	_, err = io.ReadAll(response.Body)
+	require.ErrorIs(t, err, errResponseTooLarge)
+	require.True(t, rt.responseTooLarge.Load())
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }

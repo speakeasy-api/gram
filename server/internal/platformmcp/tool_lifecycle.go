@@ -34,12 +34,7 @@ func registerSetupHandoffTool(server *mcp.Server, registrations *RegistrationSer
 		if err != nil {
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
-		issued, err := registrations.IssueSetupHandoff(ctx, principal, IssueSetupHandoffInput{
-			ProjectSlug:    input.ProjectSlug,
-			RegistrationID: input.RegistrationID,
-			ProviderKey:    input.ProviderKey,
-			CatalogRef:     input.CatalogRef,
-		})
+		issued, err := registrations.IssueSetupHandoff(ctx, principal, IssueSetupHandoffInput(input))
 		if err != nil {
 			return nil, GetSetupHandoffToolOutput{}, err
 		}

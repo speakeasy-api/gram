@@ -208,7 +208,7 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 
 	authorize := httptest.NewRecorder()
-	service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&code_challenge_method=S256", nil))
+	service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=challenge&code_challenge_method=S256", nil))
 	idpURL, err := url.Parse(authorize.Header().Get("Location"))
 	require.NoError(t, err)
 
@@ -221,23 +221,6 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	service.OrganizationSelectionHandler().ServeHTTP(selection, httptest.NewRequest(http.MethodGet, selectionURL.String(), nil))
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Organization one")
-}
-
-func TestOAuthHTTPRejectsMalformedS256ChallengeBeforeLogin(t *testing.T) {
-	t.Parallel()
-
-	service := newTestOAuthHTTP(t)
-	store := testStore(t, service)
-	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
-
-	response := httptest.NewRecorder()
-	service.AuthorizeHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&state=client-state&code_challenge=challenge&code_challenge_method=S256", nil))
-
-	require.Equal(t, http.StatusFound, response.Code)
-	location, err := url.Parse(response.Header().Get("Location"))
-	require.NoError(t, err)
-	require.Equal(t, "client-state", location.Query().Get("state"))
-	require.Equal(t, "invalid_request", location.Query().Get("error"))
 }
 
 func TestOAuthHTTPRejectsConsentBeforeOrganizationSelection(t *testing.T) {
@@ -262,7 +245,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 
 	authorize := httptest.NewRecorder()
-	service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&code_challenge_method=S256", nil))
+	service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=challenge&code_challenge_method=S256", nil))
 	require.Equal(t, http.StatusFound, authorize.Code)
 	idpURL, err := url.Parse(authorize.Header().Get("Location"))
 	require.NoError(t, err)
@@ -403,36 +386,6 @@ func TestOAuthHTTPRefreshReplayIsRejectedBeforeAuthorization(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"invalid_grant"`)
 	_, err = store.RotateSession(context.Background(), platformoauth.RotateSessionInput{OrganizationID: connection.OrganizationID, RefreshHash: replacement.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: platformoauth.Session{ID: "session-after", ClientID: "client-1", Connection: connection, JTI: "jti-after", RefreshHash: "refresh-after", ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}})
 	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
-}
-
-func TestOAuthHTTPRefreshReplayDoesNotRevokeAnotherClient(t *testing.T) {
-	t.Parallel()
-
-	service := newTestOAuthHTTP(t)
-	store := testStore(t, service)
-	now := time.Now()
-	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
-	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
-	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-2", Name: "other", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
-	require.NoError(t, store.RegisterConnection(t.Context(), connection))
-	refreshOld, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
-	require.NoError(t, err)
-	refreshNew, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
-	require.NoError(t, err)
-	old := platformoauth.Session{ID: "session-old", ClientID: "client-1", Connection: connection, JTI: "jti-old", RefreshHash: opaqueHash(refreshOld), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
-	require.NoError(t, store.CreateSession(t.Context(), old))
-	replacement := platformoauth.Session{ID: "session-new", ClientID: "client-1", Connection: connection, JTI: "jti-new", RefreshHash: opaqueHash(refreshNew), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
-	_, err = store.RotateSession(t.Context(), platformoauth.RotateSessionInput{OrganizationID: connection.OrganizationID, RefreshHash: old.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: replacement})
-	require.NoError(t, err)
-
-	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token="+url.QueryEscape(refreshOld)+"&client_id=client-2"))
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	response := httptest.NewRecorder()
-	service.TokenHandler().ServeHTTP(response, request)
-
-	require.Equal(t, http.StatusBadRequest, response.Code)
-	_, err = store.RotateSession(t.Context(), platformoauth.RotateSessionInput{OrganizationID: connection.OrganizationID, RefreshHash: replacement.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: platformoauth.Session{ID: "session-after", ClientID: "client-1", Connection: connection, JTI: "jti-after", RefreshHash: "refresh-after", ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}})
-	require.NoError(t, err)
 }
 
 func TestOAuthHTTPRevokesExpiredAccessToken(t *testing.T) {

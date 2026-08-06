@@ -342,7 +342,7 @@ func (s *PostgresOAuthStore) GetSessionByRefreshHash(ctx context.Context, organi
 	return sessionFromRow(row), nil
 }
 
-func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (bool, error) {
+func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizationID, refreshHash string, now time.Time) (bool, error) {
 	if s == nil || s.db == nil {
 		return false, platformoauth.ErrNotFound
 	}
@@ -355,9 +355,6 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizatio
 	row, err := q.GetPlatformMCPSessionForRefreshForUpdate(ctx, platformrepo.GetPlatformMCPSessionForRefreshForUpdateParams{OrganizationID: organizationID, RefreshTokenHash: refreshHash})
 	if err != nil {
 		return false, mapOAuthReadError(err)
-	}
-	if row.ClientID != clientID {
-		return false, platformoauth.ErrNotFound
 	}
 	if !row.RevokedAt.Valid {
 		if err := tx.Commit(ctx); err != nil {

@@ -16,6 +16,11 @@ UPDATE chat_messages
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = @slug
+WHERE id = @id;
+
 -- name: UpdateRiskResultCreatedAt :exec
 UPDATE risk_results
 SET created_at = @created_at
@@ -250,3 +255,23 @@ INSERT INTO risk_results (
   @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
   @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
 );
+
+-- name: GetPlatformMCPSetupHandoffHashFixture :one
+-- Test-only inspection of the one-way setup credential persisted by Platform MCP.
+SELECT handoff_hash
+FROM platform_mcp_setup_handoffs
+WHERE id = @id;
+
+-- name: GetPlatformMCPReadinessFingerprintFixture :one
+-- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
+SELECT provider_authorization_fingerprint
+FROM platform_mcp_readiness
+WHERE registration_id = @registration_id
+ORDER BY checked_at DESC, id DESC
+LIMIT 1;
+
+-- name: ExpireRemoteSessionAccessTokenFixture :exec
+-- Test-only fixture forcing the shared remote-session refresh path.
+UPDATE remote_sessions
+SET access_expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = @id;

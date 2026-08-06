@@ -22,7 +22,7 @@ when its check passes.
 A check FAILS when the page shows an empty state, an error boundary, or zero
 where a value is expected.
 
-1. **Agent sessions list** — sessions list shows ~60 sessions with varied
+1. **Agent sessions list** — sessions list shows ~180 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
    `*@demo.getgram.ai`.
 2. **Risk events** — findings list non-empty; each finding is

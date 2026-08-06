@@ -174,6 +174,30 @@ export const useIsPlatformAdmin = (): boolean => {
   return isAdmin;
 };
 
+const SPEAKEASY_STAFF_KEY = "gram-dev-speakeasy-staff";
+
+// useIsSpeakeasyStaff gates the unproxied MCP server source on the
+// caller's email domain only, unlike useIsPlatformAdmin which also honors a
+// DB admin flag. Mirrors the domain-suffix check the backend enforces in
+// server/internal/unproxiedmcp.
+export const useIsSpeakeasyStaff = (): boolean => {
+  const { email } = useUser();
+  if (import.meta.env.DEV) {
+    try {
+      const override = localStorage.getItem(SPEAKEASY_STAFF_KEY);
+      if (override === "1") return true;
+      if (override === "0") return false;
+    } catch {
+      // ignore
+    }
+  }
+  const normalizedEmail = email.toLowerCase();
+  return (
+    normalizedEmail.endsWith("@speakeasy.com") ||
+    normalizedEmail.endsWith("@speakeasyapi.dev")
+  );
+};
+
 export function usePylonInAppChat(user: User | undefined): void {
   useEffect(() => {
     if (!user || !import.meta.env.PROD) {

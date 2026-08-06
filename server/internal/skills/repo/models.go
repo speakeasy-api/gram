@@ -17,6 +17,7 @@ type Skill struct {
 	Summary        pgtype.Text
 	SourceKind     string
 	Classification string
+	Tags           []string
 	FirstSeenAt    pgtype.Timestamptz
 	LastSeenAt     pgtype.Timestamptz
 	SeenCount      int64

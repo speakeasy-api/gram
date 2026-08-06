@@ -139,13 +139,7 @@ func (s *RegistrationStore) BeginReceipt(ctx context.Context, principal Principa
 		Operation:      operationRegisterCatalogMCP,
 		IdempotencyKey: request.IdempotencyKey,
 	}
-	if _, err := q.DeleteExpiredPlatformMCPOperationReceipt(ctx, platformrepo.DeleteExpiredPlatformMCPOperationReceiptParams{
-		OrganizationID: receiptLookup.OrganizationID,
-		SubjectUrn:     receiptLookup.SubjectUrn,
-		ProjectID:      receiptLookup.ProjectID,
-		Operation:      receiptLookup.Operation,
-		IdempotencyKey: receiptLookup.IdempotencyKey,
-	}); err != nil {
+	if _, err := q.DeleteExpiredPlatformMCPOperationReceipt(ctx, platformrepo.DeleteExpiredPlatformMCPOperationReceiptParams(receiptLookup)); err != nil {
 		return OperationReceipt{}, fmt.Errorf("reclaim expired platform mcp registration receipt: %w", err)
 	}
 
@@ -436,10 +430,10 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 			PlatformMcpRegistrationURN: urn.NewPlatformMcpRegistration(registration.ID),
 			CatalogProvider:            registration.CatalogProvider,
 			CatalogReference:           registration.CatalogReference,
-			RemoteMcpServerID:          registration.RemoteMcpServerID.UUID,
-			UserSessionIssuerID:        registration.UserSessionIssuerID.UUID,
-			McpServerID:                registration.McpServerID.UUID,
-			McpEndpointID:              registration.McpEndpointID.UUID,
+			RemoteMcpServerURN:         urn.NewRemoteMcpServer(registration.RemoteMcpServerID.UUID),
+			UserSessionIssuerURN:       urn.NewUserSessionIssuer(registration.UserSessionIssuerID.UUID),
+			McpServerURN:               urn.NewMcpServer(registration.McpServerID.UUID),
+			McpEndpointURN:             urn.NewMcpEndpoint(registration.McpEndpointID.UUID),
 		}); err != nil {
 			return OperationReceipt{}, fmt.Errorf("record platform mcp component convergence audit event: %w", err)
 		}

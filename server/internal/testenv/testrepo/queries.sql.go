@@ -153,6 +153,18 @@ func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, 
 	return err
 }
 
+const expireRemoteSessionAccessTokenFixture = `-- name: ExpireRemoteSessionAccessTokenFixture :exec
+UPDATE remote_sessions
+SET access_expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = $1
+`
+
+// Test-only fixture forcing the shared remote-session refresh path.
+func (q *Queries) ExpireRemoteSessionAccessTokenFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireRemoteSessionAccessTokenFixture, id)
+	return err
+}
+
 const failDeviceIntegrationSyncsFixture = `-- name: FailDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET last_poll_error = $1,
@@ -326,6 +338,36 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 		&i.LastError,
 	)
 	return i, err
+}
+
+const getPlatformMCPReadinessFingerprintFixture = `-- name: GetPlatformMCPReadinessFingerprintFixture :one
+SELECT provider_authorization_fingerprint
+FROM platform_mcp_readiness
+WHERE registration_id = $1
+ORDER BY checked_at DESC, id DESC
+LIMIT 1
+`
+
+// Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
+func (q *Queries) GetPlatformMCPReadinessFingerprintFixture(ctx context.Context, registrationID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPReadinessFingerprintFixture, registrationID)
+	var provider_authorization_fingerprint string
+	err := row.Scan(&provider_authorization_fingerprint)
+	return provider_authorization_fingerprint, err
+}
+
+const getPlatformMCPSetupHandoffHashFixture = `-- name: GetPlatformMCPSetupHandoffHashFixture :one
+SELECT handoff_hash
+FROM platform_mcp_setup_handoffs
+WHERE id = $1
+`
+
+// Test-only inspection of the one-way setup credential persisted by Platform MCP.
+func (q *Queries) GetPlatformMCPSetupHandoffHashFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPSetupHandoffHashFixture, id)
+	var handoff_hash string
+	err := row.Scan(&handoff_hash)
+	return handoff_hash, err
 }
 
 const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
@@ -883,6 +925,22 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const setProjectSlugFixture = `-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = $1
+WHERE id = $2
+`
+
+type SetProjectSlugFixtureParams struct {
+	Slug string
+	ID   uuid.UUID
+}
+
+func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
 	return err
 }
 

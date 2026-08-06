@@ -15,6 +15,7 @@ import { adminRemoteSessionsRefreshGlobalIssuerMetadata } from "../funcs/adminRe
 import { adminRemoteSessionsUpdateGlobalClient } from "../funcs/adminRemoteSessionsUpdateGlobalClient.js";
 import { adminRemoteSessionsUpdateGlobalIssuer } from "../funcs/adminRemoteSessionsUpdateGlobalIssuer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
@@ -197,7 +198,7 @@ export class AdminRemoteSessions extends ClientSDK {
     request: GetGlobalRemoteSessionIssuerRequest,
     security?: GetGlobalRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<RemoteSessionIssuer> {
+  ): Promise<GlobalRemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsGetGlobalIssuer(
       this,
       request,

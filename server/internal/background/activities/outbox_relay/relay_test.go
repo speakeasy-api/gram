@@ -315,7 +315,7 @@ func TestRelayEvents_SuccessfulDelivery(t *testing.T) {
 	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", mustMarshal(t, map[string]any{"action": "created"}))
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.MessageOut{
 			Id:        "svix-msg-abc",
 			EventType: "test.event",
@@ -362,7 +362,7 @@ func testRelayPermanentError(t *testing.T, httpStatus int) {
 	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", mustMarshal(t, map[string]any{"x": 1}))
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, &svixtest.HTTPStatusError{Code: httpStatus})
 
 	err := inst.relay.RelayEvents(ctx, []*outbox_relay.Event{
@@ -398,7 +398,7 @@ func testRelayTransientError(t *testing.T, httpStatus int) {
 	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", mustMarshal(t, map[string]any{"x": 1}))
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, &svixtest.HTTPStatusError{Code: httpStatus})
 
 	err := inst.relay.RelayEvents(ctx, []*outbox_relay.Event{
@@ -428,7 +428,7 @@ func TestRelayEvents_MaxAttemptsExceeded(t *testing.T) {
 	// Pre-seed 9 failed attempts — next failure (attempt 10) should dead-letter.
 	preloadAttempts(t, inst.conn, outboxID, 9)
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, &svixtest.HTTPStatusError{Code: 500})
 
 	err := inst.relay.RelayEvents(ctx, []*outbox_relay.Event{

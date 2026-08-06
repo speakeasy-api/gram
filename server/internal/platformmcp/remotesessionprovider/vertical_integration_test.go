@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -54,6 +56,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	conn, err := verticalSliceInfra.CloneTestDatabase(t, "platform_mcp_reviewed_remote_session")
 	require.NoError(t, err)
@@ -122,8 +126,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	require.Equal(t, "tools_list_ok", readiness.EvidenceCode)
 	require.Zero(t, upstream.standaloneSSERequests.Load(), "readiness probes must not open standalone SSE streams")
 
-	var fingerprint string
-	err = conn.QueryRow(ctx, "SELECT provider_authorization_fingerprint FROM platform_mcp_readiness WHERE registration_id = $1", registration.ID).Scan(&fingerprint)
+	fingerprint, err := testrepo.New(conn).GetPlatformMCPReadinessFingerprintFixture(ctx, registration.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, fingerprint)
 	require.NotContains(t, fingerprint, remoteSession.AccessTokenEncrypted)
@@ -132,8 +135,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	require.NoError(t, err)
 	beforeRefreshFingerprint, err := platformmcp.ProviderAuthorizationFingerprint(beforeRefresh.AuthorizationIdentity)
 	require.NoError(t, err)
-	_, err = conn.Exec(ctx, "UPDATE remote_sessions SET access_expires_at = clock_timestamp() - interval '1 minute' WHERE id = $1", remoteSession.ID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).ExpireRemoteSessionAccessTokenFixture(ctx, remoteSession.ID))
 	afterRefresh, err := adapter.ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
 	require.NoError(t, err)
 	afterRefreshFingerprint, err := platformmcp.ProviderAuthorizationFingerprint(afterRefresh.AuthorizationIdentity)
@@ -189,20 +191,32 @@ func newReviewedUpstream(t *testing.T) *reviewedUpstream {
 		switch r.URL.Path {
 		case "/authorize":
 			redirectURI, err := url.Parse(r.URL.Query().Get("redirect_uri"))
-			require.NoError(t, err)
+			if err != nil {
+				t.Errorf("parse reviewed provider redirect_uri: %v", err)
+				http.Error(w, "invalid redirect_uri", http.StatusBadRequest)
+				return
+			}
 			query := redirectURI.Query()
 			query.Set("code", "reviewed-provider-code")
 			query.Set("state", r.URL.Query().Get("state"))
 			redirectURI.RawQuery = query.Encode()
 			http.Redirect(w, r, redirectURI.String(), http.StatusFound)
 		case "/token":
-			require.NoError(t, r.ParseForm())
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("parse reviewed provider token request: %v", err)
+				http.Error(w, "invalid token request", http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			if r.Form.Get("grant_type") == "refresh_token" {
 				_, _ = w.Write([]byte(`{"access_token":"reviewed-provider-refreshed-token","refresh_token":"reviewed-provider-refreshed-refresh","token_type":"Bearer","expires_in":3600}`))
 				return
 			}
-			require.Equal(t, "authorization_code", r.Form.Get("grant_type"))
+			if r.Form.Get("grant_type") != "authorization_code" {
+				t.Errorf("unexpected reviewed provider grant_type: %q", r.Form.Get("grant_type"))
+				http.Error(w, "unsupported grant_type", http.StatusBadRequest)
+				return
+			}
 			_, _ = w.Write([]byte(`{"access_token":"reviewed-provider-access-token","refresh_token":"reviewed-provider-refresh-token","token_type":"Bearer","expires_in":3600}`))
 		case "/mcp":
 			if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
@@ -218,6 +232,7 @@ func newReviewedUpstream(t *testing.T) *reviewedUpstream {
 				return
 			case upstreamModeOverflow:
 				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Length", strconv.Itoa(1<<20+1))
 				_, _ = w.Write(bytes.Repeat([]byte("x"), 1<<20+1))
 				return
 			}

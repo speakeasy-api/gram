@@ -15,6 +15,7 @@ import type {
   SourceKinds,
 } from "@gram/client/models/operations/listskills.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
+import { useSkillTags } from "@gram/client/react-query/skillTags.js";
 import {
   useSkills,
   useSkillsInfinite,
@@ -29,7 +30,6 @@ import { useQueryState } from "nuqs";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { ApproveAllSkillSuggestions } from "./ApproveAllSkillSuggestions";
 import { skillShareUrl } from "./share-link";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import {
@@ -48,6 +48,13 @@ const SKILL_FILTERS = defineFilters([
     label: "Classification",
     kind: "multiselect",
     pinned: true,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    kind: "multiselect",
+    pinned: true,
+    allLabel: "All tags",
   },
 ]);
 
@@ -122,6 +129,18 @@ export default function SkillsList(): JSX.Element {
   const searchQuery = deferredSearch.trim() || undefined;
   const sourceKinds = filters.values.sourceKind as SourceKinds[];
   const classifications = filters.values.classification as Classifications[];
+  const tags = filters.values.tags as string[];
+  const tagsQuery = useSkillTags(undefined, undefined, { throwOnError: false });
+  const filterOptions = useMemo(
+    () => ({
+      ...FILTER_OPTIONS,
+      tags: (tagsQuery.data?.tags ?? []).map((tag) => ({
+        value: tag,
+        label: tag,
+      })),
+    }),
+    [tagsQuery.data?.tags],
+  );
   const pageQuery = useSkills(
     {
       cursor: pageCursors[page],
@@ -129,6 +148,7 @@ export default function SkillsList(): JSX.Element {
       search: searchQuery,
       sourceKinds,
       classifications,
+      tags,
       sort: "updated",
     },
     undefined,
@@ -140,6 +160,7 @@ export default function SkillsList(): JSX.Element {
       search: searchQuery,
       sourceKinds,
       classifications,
+      tags,
     },
     undefined,
     {
@@ -178,7 +199,8 @@ export default function SkillsList(): JSX.Element {
   const active =
     deferredSearch.trim().length > 0 ||
     filters.values.sourceKind.length > 0 ||
-    filters.values.classification.length > 0;
+    filters.values.classification.length > 0 ||
+    filters.values.tags.length > 0;
   const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
   const effectiveMetricSort = metricSort !== null && !insightsUnavailable;
   const effectiveSort = insightsUnavailable && metricSort ? null : sort;
@@ -210,6 +232,15 @@ export default function SkillsList(): JSX.Element {
           <Text small muted className="truncate font-mono">
             {skill.name}
           </Text>
+          {skill.tags.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {skill.tags.map((tag) => (
+                <Badge key={tag} variant="neutral" className="text-xs">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
       ),
     },
@@ -435,7 +466,7 @@ export default function SkillsList(): JSX.Element {
                   <Page.Toolbar.Filters
                     schema={SKILL_FILTERS}
                     values={filters.values}
-                    optionsById={FILTER_OPTIONS}
+                    optionsById={filterOptions}
                     onChange={(id, value) => {
                       (
                         filters.setValue as (
@@ -455,13 +486,6 @@ export default function SkillsList(): JSX.Element {
                     }}
                   />
                   <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
-                  <Page.Toolbar.Actions>
-                    <ApproveAllSkillSuggestions
-                      suggestions={openSuggestions.suggestions}
-                      total={openSuggestions.total}
-                      fullyLoaded={openSuggestions.fullyLoaded}
-                    />
-                  </Page.Toolbar.Actions>
                   <Page.Toolbar.Refresh
                     onRefresh={() => {
                       void Promise.all([
@@ -470,13 +494,15 @@ export default function SkillsList(): JSX.Element {
                           : pageQuery.refetch(),
                         insightsQuery.refetch(),
                         openSuggestions.query.refetch(),
+                        tagsQuery.refetch(),
                       ]);
                     }}
                     isRefreshing={
                       pageQuery.isFetching ||
                       metricQuery.isFetching ||
                       insightsQuery.isFetching ||
-                      openSuggestions.query.isFetching
+                      openSuggestions.query.isFetching ||
+                      tagsQuery.isFetching
                     }
                   />
                 </Page.Toolbar>

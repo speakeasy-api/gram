@@ -423,7 +423,7 @@ func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, princip
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, err
 	}
-	return q.GetPlatformMCPCatalogRegistrationForLifecycle(ctx, platformrepo.GetPlatformMCPCatalogRegistrationForLifecycleParams{
+	registration, err := q.GetPlatformMCPCatalogRegistrationForLifecycle(ctx, platformrepo.GetPlatformMCPCatalogRegistrationForLifecycleParams{
 		RegistrationID:       registrationID,
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
@@ -431,6 +431,10 @@ func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, princip
 		ConnectionGeneration: generation,
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("load platform mcp lifecycle registration: %w", err)
+	}
+	return registration, nil
 }
 
 func validateSetupHandoffBinding(organizationID string, binding SetupHandoffBinding) error {
@@ -459,7 +463,7 @@ func isReadinessState(state ReadinessState) bool {
 func newSetupHandoffValue() (string, error) {
 	value := make([]byte, 32)
 	if _, err := rand.Read(value); err != nil {
-		return "", err
+		return "", fmt.Errorf("read setup handoff entropy: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(value), nil
 }

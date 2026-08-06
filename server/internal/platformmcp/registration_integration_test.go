@@ -25,6 +25,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -46,6 +47,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration")
 	require.NoError(t, err)
@@ -131,8 +134,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	issuedHandoff, err := store.IssueSetupHandoff(ctx, principal, handoffBinding, time.Now().UTC())
 	require.NoError(t, err)
 	require.NotEmpty(t, issuedHandoff.Value)
-	var persistedHandoffHash string
-	err = conn.QueryRow(ctx, "SELECT handoff_hash FROM platform_mcp_setup_handoffs WHERE id = $1", issuedHandoff.ID).Scan(&persistedHandoffHash)
+	persistedHandoffHash, err := testrepo.New(conn).GetPlatformMCPSetupHandoffHashFixture(ctx, issuedHandoff.ID)
 	require.NoError(t, err)
 	require.Equal(t, setupHandoffHash(issuedHandoff.Value), persistedHandoffHash)
 	require.NotEqual(t, issuedHandoff.Value, persistedHandoffHash)

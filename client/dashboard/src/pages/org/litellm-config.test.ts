@@ -16,6 +16,12 @@ describe("LiteLLM configuration", () => {
       "api_base: https://api.getgram.ai/rpc/litellm.ingest",
     );
     expect(config).toContain("Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY");
+    expect(config).toContain(`      extra_headers:
+        - x-gram-session-id
+        - x-claude-code-session-id
+        - session-id
+        - thread-id
+        - x-session-id`);
     expect(config).toContain("streaming_end_of_stream_only: true");
     expect(config).toContain("unreachable_fallback: fail_closed");
   });

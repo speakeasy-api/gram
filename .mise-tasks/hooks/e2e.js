@@ -8,6 +8,9 @@
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
 //USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
 //USAGE flag "--skip-build" help="Skip building plugins; use dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
+
+// @ts-nocheck This script is plain untyped JS; the root tsconfig has checkJs
+// enabled for the rest of .mise-tasks. Remove once it is properly annotated.
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";

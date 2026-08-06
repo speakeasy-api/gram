@@ -33,7 +33,10 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: { id: "sess-1" } }),
 }));
 
-vi.mock("@/lib/utils", () => ({ buildLoginRedirectURL: () => "/login" }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  buildLoginRedirectURL: () => "/login",
+}));
 
 vi.mock("@/components/gram-logo", () => ({ GramLogo: () => null }));
 

@@ -34,18 +34,24 @@ func TestValidateCatalogRegistrationRequest(t *testing.T) {
 	require.NoError(t, validateCatalogRegistrationRequest(principal, project, request))
 
 	t.Run("rejects an input hash that does not match normalized identity", func(t *testing.T) {
+		t.Parallel()
+
 		invalid := request
 		invalid.InputHash = catalogRegistrationInputHash(project.Slug, invalid.SourceKind, invalid.CatalogProvider, "other/reference")
 		require.ErrorIs(t, validateCatalogRegistrationRequest(principal, project, invalid), ErrRegistrationInvalid)
 	})
 
 	t.Run("rejects a project mismatch", func(t *testing.T) {
+		t.Parallel()
+
 		invalid := request
 		invalid.ProjectSlug = "other-project"
 		require.ErrorIs(t, validateCatalogRegistrationRequest(principal, project, invalid), ErrRegistrationInvalid)
 	})
 
 	t.Run("rejects an overlong idempotency key", func(t *testing.T) {
+		t.Parallel()
+
 		invalid := request
 		invalid.IdempotencyKey = string(make([]byte, 129))
 		require.ErrorIs(t, validateCatalogRegistrationRequest(principal, project, invalid), ErrRegistrationInvalid)

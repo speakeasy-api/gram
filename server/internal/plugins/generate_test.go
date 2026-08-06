@@ -409,6 +409,92 @@ func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
 	require.Contains(t, pluginMeta.UserConfig, "GRAM_API_KEY")
 }
 
+// TestGenerateUnproxiedServerNeverGetsGramCredential guards against
+// reintroducing the leak fixed alongside this test: an unproxied server's
+// MCPURL points straight at the vendor, so no format may attach a Gram
+// credential (static header, env-header, or bearer-token-env-var) to it —
+// checked across all four generated formats, and with cfg.APIKey both set
+// and unset, since the leak only reproduced with a baked key present.
+func TestGenerateUnproxiedServerNeverGetsGramCredential(t *testing.T) {
+	t.Parallel()
+
+	for _, cfg := range []GenerateConfig{
+		{OrgName: "Test Org", ServerURL: "https://app.getgram.ai", APIKey: "gram_live_leaked_key"},
+		{OrgName: "Test Org", ServerURL: "https://app.getgram.ai"},
+	} {
+		plugins := []PluginInfo{
+			{
+				Name: "Test",
+				Slug: "test",
+				Servers: []PluginServerInfo{
+					{DisplayName: "vendor-widget", MCPURL: "https://vendor.example.com/mcp", IsUnproxied: true},
+				},
+			},
+		}
+
+		files, err := GeneratePluginPackages(plugins, cfg)
+		require.NoError(t, err)
+
+		var claudeConfig claudeMCPConfig
+		require.NoError(t, json.Unmarshal(files["test/.mcp.json"], &claudeConfig))
+		claudeServer := claudeConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", claudeServer.URL)
+		require.Empty(t, claudeServer.Headers, "Claude must not attach a Gram credential to an unproxied server")
+
+		var cursorConfig cursorMCPConfig
+		require.NoError(t, json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &cursorConfig))
+		cursorServer := cursorConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", cursorServer.URL)
+		require.Empty(t, cursorServer.Headers, "Cursor must not attach a Gram credential to an unproxied server")
+
+		var codexConfig codexMCPConfig
+		require.NoError(t, json.Unmarshal(files["test-codex/.mcp.json"], &codexConfig))
+		codexServer := codexConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", codexServer.URL)
+		require.Empty(t, codexServer.HTTPHeaders, "Codex must not attach a Gram credential to an unproxied server")
+		require.Empty(t, codexServer.BearerTokenEnvVar, "Codex must not set a bearer_token_env_var for an unproxied server")
+
+		var opencodeConfig opencodeMCPConfig
+		require.NoError(t, json.Unmarshal(files["opencode-plugins/test/test/mcp.json"], &opencodeConfig))
+		opencodeServer := opencodeConfig.MCP["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", opencodeServer.URL)
+		require.Empty(t, opencodeServer.Headers, "OpenCode must not attach a Gram credential to an unproxied server")
+
+		require.Equal(t, "ON_USE", codexAuthPolicy(plugins[0], cfg),
+			"an all-unproxied plugin needs no install-time secret prompt")
+	}
+}
+
+// TestGenerateClaudeUnproxiedDoesNotForcePrompt mirrors
+// TestGenerateClaudeMixedOAuthAndHTTPServers: a private HTTP server still
+// forces the GRAM_API_KEY prompt, but an unproxied server standing alone
+// must not — needsGramKeyPrompt has the same IsOAuth/IsPublic-only gap the
+// header-attachment branches had.
+func TestGenerateClaudeUnproxiedDoesNotForcePrompt(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "vendor-widget", MCPURL: "https://vendor.example.com/mcp", IsUnproxied: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY",
+		"a plugin with only an unproxied server needs no Gram API key prompt")
+}
+
 func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{

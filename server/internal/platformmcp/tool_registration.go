@@ -34,12 +34,7 @@ func registerCatalogRegistrationTool(server *mcp.Server, registrations *Registra
 		if err != nil {
 			return nil, RegisterCatalogMCPToolOutput{}, err
 		}
-		result, err := registrations.RegisterCatalogMCP(ctx, principal, RegisterCatalogMCPInput{
-			ProjectSlug:    input.ProjectSlug,
-			ProviderKey:    input.ProviderKey,
-			CatalogRef:     input.CatalogRef,
-			IdempotencyKey: input.IdempotencyKey,
-		})
+		result, err := registrations.RegisterCatalogMCP(ctx, principal, RegisterCatalogMCPInput(input))
 		if err != nil {
 			return nil, RegisterCatalogMCPToolOutput{}, err
 		}

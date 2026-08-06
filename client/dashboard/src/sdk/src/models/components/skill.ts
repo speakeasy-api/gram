@@ -69,6 +69,10 @@ export type Skill = {
    */
   summary?: string | undefined;
   /**
+   * Registry tags for categorizing the skill.
+   */
+  tags: Array<string>;
+  /**
    * When the skill was last updated.
    */
   updatedAt: Date;
@@ -102,6 +106,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     share_token: z.optional(z.string()),
     source_kind: z.string(),
     summary: z.optional(z.string()),
+    tags: z.array(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

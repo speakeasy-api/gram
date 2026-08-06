@@ -85,19 +85,23 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
-		return IssuedSetupHandoff{}, err
+		return IssuedSetupHandoff{}, fmt.Errorf("resolve setup handoff project: %w", err)
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
 	if err != nil {
 		return IssuedSetupHandoff{}, ErrSetupHandoffInvalid
 	}
-	return s.store.IssueSetupHandoff(ctx, principal, SetupHandoffBinding{
+	issued, err := s.store.IssueSetupHandoff(ctx, principal, SetupHandoffBinding{
 		ProjectID:        project.ID,
 		RegistrationID:   registrationID,
 		ProviderKey:      catalog.ProviderKey,
 		CatalogReference: catalog.CatalogRef,
 		Intent:           catalog.SetupIntent,
 	}, s.now())
+	if err != nil {
+		return IssuedSetupHandoff{}, fmt.Errorf("issue platform mcp setup handoff: %w", err)
+	}
+	return issued, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
@@ -123,7 +127,7 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
-		return RegisterCatalogMCPResult{}, err
+		return RegisterCatalogMCPResult{}, fmt.Errorf("resolve catalog registration project: %w", err)
 	}
 	request := CatalogRegistrationRequest{
 		ProjectSlug:      project.Slug,
@@ -135,12 +139,12 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	}
 	receipt, err := s.store.BeginReceipt(ctx, principal, project, request, s.now())
 	if err != nil {
-		return RegisterCatalogMCPResult{}, err
+		return RegisterCatalogMCPResult{}, fmt.Errorf("begin catalog registration receipt: %w", err)
 	}
 	if !receipt.Replayed || receipt.Status == receiptStatusPending {
 		receipt, err = s.store.ConvergeRegistration(ctx, principal, project, request, receipt)
 		if err != nil {
-			return RegisterCatalogMCPResult{}, err
+			return RegisterCatalogMCPResult{}, fmt.Errorf("converge catalog registration: %w", err)
 		}
 	}
 	if !receipt.RegistrationID.Valid {
@@ -152,7 +156,7 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		}
 		receipt, err = s.store.CompleteRegistration(ctx, principal, project, request, receipt, catalog.remoteURL)
 		if err != nil {
-			return RegisterCatalogMCPResult{}, err
+			return RegisterCatalogMCPResult{}, fmt.Errorf("complete catalog registration: %w", err)
 		}
 	}
 	if !receipt.RegistrationID.Valid {

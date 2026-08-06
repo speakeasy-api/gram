@@ -1279,13 +1279,41 @@ WHERE s.id = @id
 -- NULL project_id and NULL organization_id.
 
 -- name: ListGlobalRemoteSessionIssuers :many
-SELECT *
-FROM remote_session_issuers
-WHERE project_id IS NULL
-  AND organization_id IS NULL
-  AND deleted IS FALSE
-  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
-ORDER BY id DESC
+-- Platform issuers for the platform-admin catalog, each with the two client
+-- counts that decide whether it can be deleted.
+--
+-- GLOBAL VS TENANT CLIENT COUNTS (mirrored by
+-- GetGlobalRemoteSessionIssuerWithClientCountsByID; change them together):
+--
+-- global_client_count covers the clients a platform admin owns and can remove
+-- themselves. tenant_client_count covers the clients organizations registered
+-- against the shared issuer, which a platform admin can neither see nor delete.
+-- The split matches the conflict DeleteGlobalIssuer raises, so the catalog can
+-- explain a blocked delete up front instead of only after the 409. A single
+-- total would report blockers without saying whose they are.
+SELECT
+    sqlc.embed(i),
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.project_id IS NULL
+          AND c.organization_id IS NULL
+          AND c.deleted IS FALSE
+    )::bigint AS global_client_count,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
+          AND c.deleted IS FALSE
+    )::bigint AS tenant_client_count
+FROM remote_session_issuers AS i
+WHERE i.project_id IS NULL
+  AND i.organization_id IS NULL
+  AND i.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
+ORDER BY i.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: GetGlobalRemoteSessionIssuerByID :one
@@ -1295,6 +1323,36 @@ WHERE id = @id
   AND project_id IS NULL
   AND organization_id IS NULL
   AND deleted IS FALSE;
+
+-- name: GetGlobalRemoteSessionIssuerWithClientCountsByID :one
+-- A single platform issuer with the same two counts
+-- ListGlobalRemoteSessionIssuers returns; see the GLOBAL VS TENANT CLIENT
+-- COUNTS note there. Serves the platform-admin detail read, which needs the
+-- counts to describe a delete before it is attempted. The plain
+-- GetGlobalRemoteSessionIssuerByID stays for the update/delete pre-reads, which
+-- only establish that the id names a platform issuer.
+SELECT
+    sqlc.embed(i),
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.project_id IS NULL
+          AND c.organization_id IS NULL
+          AND c.deleted IS FALSE
+    )::bigint AS global_client_count,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
+          AND c.deleted IS FALSE
+    )::bigint AS tenant_client_count
+FROM remote_session_issuers AS i
+WHERE i.id = @id
+  AND i.project_id IS NULL
+  AND i.organization_id IS NULL
+  AND i.deleted IS FALSE;
 
 -- name: GetGlobalRemoteSessionIssuerByIDForUpdate :one
 -- Locks the issuer row so DeleteGlobalIssuer's count-then-delete and

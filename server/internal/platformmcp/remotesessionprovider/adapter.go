@@ -160,10 +160,22 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 		descriptor.Resource,
 	)
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) {
-		return readinessResult(platformmcp.ReadinessNeedsConfiguration, "no_reviewed_client", request, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: descriptor.RemoteSessionIssuerID}, "no_client"), nil
+		return readinessResult(platformmcp.ReadinessNeedsConfiguration, "no_reviewed_client", request, remotesessions.ResolvedAuthorization{
+			AccessToken:            "",
+			RemoteSessionID:        uuid.Nil,
+			RemoteSessionUpdatedAt: time.Time{},
+			RemoteSessionClientID:  uuid.Nil,
+			RemoteSessionIssuerID:  descriptor.RemoteSessionIssuerID,
+		}, "no_client"), nil
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
-		return readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: descriptor.RemoteSessionIssuerID}, "no_session"), nil
+		return readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, remotesessions.ResolvedAuthorization{
+			AccessToken:            "",
+			RemoteSessionID:        uuid.Nil,
+			RemoteSessionUpdatedAt: time.Time{},
+			RemoteSessionClientID:  uuid.Nil,
+			RemoteSessionIssuerID:  descriptor.RemoteSessionIssuerID,
+		}, "no_session"), nil
 	}
 	if err != nil {
 		return platformmcp.ProviderReadinessProbeResult{}, fmt.Errorf("resolve reviewed provider authorization: %w", err)
@@ -184,16 +196,25 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 	httpClient.Timeout = probeTimeout
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirectRejected }
 	authRT := &authorizationRoundTripper{
-		base:          httpClient.Transport,
-		authorization: "Bearer " + token,
+		base:                  httpClient.Transport,
+		authorization:         "Bearer " + token,
+		authorizationRejected: atomic.Bool{},
+		responseTooLarge:      atomic.Bool{},
 	}
 	httpClient.Transport = authRT
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "gram-platform-mcp-readiness", Version: "1.0.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:       "gram-platform-mcp-readiness",
+		Title:      "",
+		Version:    "1.0.0",
+		WebsiteURL: "",
+		Icons:      nil,
+	}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint:             descriptor.StreamableHTTPURL,
 		HTTPClient:           httpClient,
 		MaxRetries:           0,
+		OAuthHandler:         nil,
 		DisableStandaloneSSE: true,
 	}, nil)
 	if err != nil {
@@ -271,7 +292,7 @@ func (rt *authorizationRoundTripper) RoundTrip(request *http.Request) (*http.Res
 	request.Header.Set("Authorization", rt.authorization)
 	response, err := rt.base.RoundTrip(request)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("send reviewed provider request: %w", err)
 	}
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
 		rt.authorizationRejected.Store(true)
@@ -301,12 +322,24 @@ func (r *boundedReadCloser) Read(buffer []byte) (int, error) {
 			}
 			return 0, errResponseTooLarge
 		}
-		return 0, err
+		if errors.Is(err, io.EOF) {
+			return 0, io.EOF
+		}
+		if err != nil {
+			return 0, fmt.Errorf("read reviewed provider response overflow byte: %w", err)
+		}
+		return 0, nil
 	}
 	if int64(len(buffer)) > r.remaining {
 		buffer = buffer[:r.remaining]
 	}
 	n, err := r.ReadCloser.Read(buffer)
 	r.remaining -= int64(n)
-	return n, err
+	if errors.Is(err, io.EOF) {
+		return n, io.EOF
+	}
+	if err != nil {
+		return n, fmt.Errorf("read reviewed provider response: %w", err)
+	}
+	return n, nil
 }

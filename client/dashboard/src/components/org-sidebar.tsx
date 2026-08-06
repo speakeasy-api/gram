@@ -89,13 +89,19 @@ export function OrgSidebar({
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
 
+  const platformAdminActive = [orgRoutes.platformRemoteIdentityProviders].some(
+    (r) => r.active,
+  );
+
   const activeGroup = settingsActive
     ? "Settings"
     : secureActive
       ? "Secure"
       : identityActive
         ? "Identity"
-        : undefined;
+        : platformAdminActive
+          ? "Platform Admin"
+          : undefined;
 
   const allOrgNavRoutes = [
     orgRoutes.home,
@@ -115,6 +121,7 @@ export function OrgSidebar({
     orgRoutes.userSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
+    orgRoutes.platformRemoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -175,11 +182,14 @@ export function OrgSidebar({
                     : []),
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
-                  // Platform-admin only for now; gated on the platform-admin
-                  // flag rather than an org RBAC scope. Later expands to org
-                  // admins managing their own external credentials.
-                  ...(isPlatformAdmin
-                    ? [{ item: orgRoutes.externalServices }]
+                  ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
+                  true
+                    ? [
+                        {
+                          item: orgRoutes.externalServices,
+                          scope: orgReadOrAdmin,
+                        },
+                      ]
                     : []),
                 ]}
               />
@@ -211,6 +221,34 @@ export function OrgSidebar({
                     scope: orgReadOrAdmin,
                   },
                 ]}
+              />
+
+              {/* Platform Admin group — Speakeasy staff only.
+                  These surfaces act on the platform itself rather than on the
+                  organization being viewed, so they sit in their own section
+                  at the bottom instead of among the org's own settings. They
+                  carry no RBAC scope: the platform-admin flag is not a grant,
+                  and staff viewing a customer org usually hold no org grants
+                  at all, so gating on org scopes would hide them from exactly
+                  the people they exist for. Passing an empty item list makes
+                  ScopeGatedNavGroup render nothing, so non-admins get no
+                  header, no group, and no items. */}
+              <ScopeGatedNavGroup
+                label="Platform Admin"
+                Icon={(p) => <Icon {...p} name="crown" />}
+                items={
+                  isPlatformAdmin
+                    ? [
+                        {
+                          item: orgRoutes.platformRemoteIdentityProviders,
+                          // The group header already says "Platform"; the route
+                          // title keeps it for Recents and the command palette,
+                          // which have no header to lean on.
+                          label: "Remote Identity Providers",
+                        },
+                      ]
+                    : []
+                }
               />
             </SidebarMenu>
           </NavGroupProvider>

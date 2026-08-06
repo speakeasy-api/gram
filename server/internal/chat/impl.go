@@ -79,6 +79,16 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
+	// turnStream carries assistant turn frames to dashboard subscribers. Nil
+	// disables streaming — turns still complete and the dashboard falls back
+	// to loading the reply once it lands.
+	turnStream *TurnStream
+}
+
+// WithTurnStream enables streaming assistant turn frames to subscribers.
+func (s *Service) WithTurnStream(stream *TurnStream) *Service {
+	s.turnStream = stream
+	return s
 }
 
 func NewService(
@@ -118,6 +128,7 @@ func NewService(
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
+		turnStream:       nil, // opt in via WithTurnStream
 	}
 }
 
@@ -130,6 +141,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/chat/turnstream", oops.ErrHandle(service.logger, service.HandleTurnStream).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -670,6 +682,62 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	}
 }
 
+// authorizeChatRead decides whether the caller may read a chat's content.
+//
+// It is shared by every path that hands a transcript to a caller — LoadChat
+// and the turn stream — because they expose the same data and so must answer
+// this the same way. The turn stream originally checked only that the chat
+// belonged to the caller's project, which let an embedded chat-session token
+// watch any other user's chat in that project.
+//
+// Project scoping lives here rather than at the call sites so it cannot be
+// dropped by one of them: GetChat looks up by id alone, so without this a chat
+// in another org is readable by anyone who knows its id.
+func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
+	// older chat_messages may not have project_id in the model, but it will
+	// always exist on the chat
+	if chat.ProjectID != *authCtx.ProjectID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// External-user and chat-session-token callers must match the chat owner.
+	// First-party project credentials read any session in their project: the
+	// dashboard session, the managed-assistant runtime, and a direct API key,
+	// which the RBAC engine already treats as self-scoped (see
+	// authz.Engine.ShouldEnforce).
+	//
+	// A chat-session token minted via an API key restores that key's APIKeyID
+	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
+	// caller authenticated *as* the key — treating it as first-party would let
+	// an end user's chat-session token read every project chat. Only direct
+	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
+	// token has none, so gate the exemption on the scopes being present.
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
+	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
+		if !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return oops.C(oops.CodeUnauthorized)
+			}
+		}
+	}
+
+	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
+	// enforced for the org (feature flag + session). Members can
+	// always read sessions they own, so bypass the scope check for the owner;
+	// reading anyone else's session requires an unrestricted chat:read grant,
+	// which only admins hold. The managed-assistant runtime is exempt — it
+	// consumes transcripts programmatically, not as a reviewer.
+	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
+	if !isAssistantCall && !isOwner {
+		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -699,44 +767,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
-	// older chat_messages may not have project_id in the model, but it will always exist on the chat
-	if chat.ProjectID != *authCtx.ProjectID {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	// External-user and chat-session-token callers must match the chat owner.
-	// First-party project credentials read any session in their project: the
-	// dashboard session, the managed-assistant runtime, and a direct API key,
-	// which the RBAC engine already treats as self-scoped (see
-	// authz.Engine.ShouldEnforce).
-	//
-	// A chat-session token minted via an API key restores that key's APIKeyID
-	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
-	// caller authenticated *as* the key — treating it as first-party would let
-	// an end user's chat-session token read every project chat. Only direct
-	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
-	// token has none, so gate the exemption on the scopes being present.
-	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
-	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
-		if !isAssistantCall {
-			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-				return nil, oops.C(oops.CodeUnauthorized)
-			}
-		}
-	}
-
-	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
-	// enforced for the org (feature flag + session). Members can
-	// always read sessions they own, so bypass the scope check for the owner;
-	// reading anyone else's session requires an unrestricted chat:read grant,
-	// which only admins hold. The managed-assistant runtime is exempt — it
-	// consumes transcripts programmatically, not as a reviewer.
-	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
-	if !isAssistantCall && !isOwner {
-		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
-			return nil, err
-		}
+	if err := s.authorizeChatRead(ctx, authCtx, chat); err != nil {
+		return nil, err
 	}
 
 	// Record dashboard session-opens in the audit log. Scroll pagination
@@ -1503,7 +1535,17 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
-		if err := s.streamCompletion(ctx, w, streamBody, getContextWindow); err != nil {
+		// A watchable chat also gets its tokens republished as turn frames on
+		// the way past, so the dashboard renders text as it is generated. The
+		// bytes still reach this caller untouched; the tee is a side channel.
+		src := io.Reader(streamBody)
+		if s.turnStream != nil && chatID != uuid.Nil {
+			teed, done := s.teeStreamText(ctx, chatID)
+			src = io.TeeReader(streamBody, teed)
+			defer done()
+		}
+
+		if err := s.streamCompletion(ctx, w, src, getContextWindow); err != nil {
 			return err
 		}
 
@@ -1518,9 +1560,24 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	/**
 	 * Non-Streaming
 	 */
-	response, err := s.completionClient.GetCompletion(ctx, completionReq)
-	if err != nil {
-		return s.classifyCompletionError(ctx, "completion failed", err)
+	// A watchable chat has its tokens streamed upstream and republished as
+	// they pass, so the dashboard can render text while it is still being
+	// generated; this caller still gets back the assembled JSON it asked for.
+	// With no chat to attribute frames to, or no stream to publish on, this is
+	// an ordinary completion.
+	var response *openrouter.CompletionResponse
+	if s.turnStream != nil && chatID != uuid.Nil {
+		teed, teeErr := s.teedCompletion(ctx, completionReq, chatID)
+		if teeErr != nil {
+			return teeErr
+		}
+		response = teed
+	} else {
+		plain, callErr := s.completionClient.GetCompletion(ctx, completionReq)
+		if callErr != nil {
+			return s.classifyCompletionError(ctx, "completion failed", callErr)
+		}
+		response = plain
 	}
 
 	var gramMetadata *openrouter.GramMetadata

@@ -424,7 +424,17 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil)
 		responseBytes = n
 		if streamErr != nil {
-			return streamErr
+			// The standalone GET stream is idle by nature — most upstreams
+			// never send unsolicited server-initiated messages, so the
+			// per-event idle bound firing is the stream's expected end, not
+			// a fault. End the response cleanly; the client re-opens the
+			// stream per spec § Listening for Messages from the Server.
+			if streamIdledOut(upstreamResp.Body) {
+				p.Logger.DebugContext(ctx, "closing idle remote mcp listen stream",
+					attr.SlogComponent("remotemcp.proxy"))
+				return nil
+			}
+			return oops.E(oops.CodeUnexpected, streamErr, "relay mcp listen stream").LogError(ctx, p.Logger)
 		}
 		return nil
 	}
@@ -585,7 +595,16 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
 		responseBytes = n
 		if streamErr != nil {
-			return streamErr
+			// Unlike the standalone GET stream, a POST response stream going
+			// idle means the upstream stalled mid-reply — the client is still
+			// owed a terminal response event. Surface it as an upstream
+			// fault with the idle bound named, not a bare context error.
+			if streamIdledOut(upstreamResp.Body) {
+				return oops.E(oops.CodeGatewayError, streamErr,
+					"remote MCP server went idle mid-response (no data for %s)", p.StreamingTimeout,
+				).LogWarn(ctx, p.Logger)
+			}
+			return oops.E(oops.CodeUnexpected, streamErr, "relay mcp response stream").LogError(ctx, p.Logger)
 		}
 		return nil
 	}

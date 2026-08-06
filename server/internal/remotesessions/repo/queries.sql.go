@@ -850,6 +850,79 @@ func (q *Queries) GetGlobalRemoteSessionIssuerByIDForUpdate(ctx context.Context,
 	return i, err
 }
 
+const getGlobalRemoteSessionIssuerWithClientCountsByID = `-- name: GetGlobalRemoteSessionIssuerWithClientCountsByID :one
+SELECT
+    i.id, i.project_id, i.organization_id, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.registration_endpoint, i.jwks_uri, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.client_id_metadata_document_supported, i.oidc, i.passthrough, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.created_at, i.updated_at, i.deleted_at, i.deleted,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.project_id IS NULL
+          AND c.organization_id IS NULL
+          AND c.deleted IS FALSE
+    )::bigint AS global_client_count,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
+          AND c.deleted IS FALSE
+    )::bigint AS tenant_client_count
+FROM remote_session_issuers AS i
+WHERE i.id = $1
+  AND i.project_id IS NULL
+  AND i.organization_id IS NULL
+  AND i.deleted IS FALSE
+`
+
+type GetGlobalRemoteSessionIssuerWithClientCountsByIDRow struct {
+	RemoteSessionIssuer RemoteSessionIssuer
+	GlobalClientCount   int64
+	TenantClientCount   int64
+}
+
+// A single platform issuer with the same two counts
+// ListGlobalRemoteSessionIssuers returns; see the GLOBAL VS TENANT CLIENT
+// COUNTS note there. Serves the platform-admin detail read, which needs the
+// counts to describe a delete before it is attempted. The plain
+// GetGlobalRemoteSessionIssuerByID stays for the update/delete pre-reads, which
+// only establish that the id names a platform issuer.
+func (q *Queries) GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx context.Context, id uuid.UUID) (GetGlobalRemoteSessionIssuerWithClientCountsByIDRow, error) {
+	row := q.db.QueryRow(ctx, getGlobalRemoteSessionIssuerWithClientCountsByID, id)
+	var i GetGlobalRemoteSessionIssuerWithClientCountsByIDRow
+	err := row.Scan(
+		&i.RemoteSessionIssuer.ID,
+		&i.RemoteSessionIssuer.ProjectID,
+		&i.RemoteSessionIssuer.OrganizationID,
+		&i.RemoteSessionIssuer.Slug,
+		&i.RemoteSessionIssuer.Issuer,
+		&i.RemoteSessionIssuer.AuthorizationEndpoint,
+		&i.RemoteSessionIssuer.TokenEndpoint,
+		&i.RemoteSessionIssuer.RegistrationEndpoint,
+		&i.RemoteSessionIssuer.JwksUri,
+		&i.RemoteSessionIssuer.ServiceDocumentation,
+		&i.RemoteSessionIssuer.OpPolicyUri,
+		&i.RemoteSessionIssuer.OpTosUri,
+		&i.RemoteSessionIssuer.ScopesSupported,
+		&i.RemoteSessionIssuer.GrantTypesSupported,
+		&i.RemoteSessionIssuer.ResponseTypesSupported,
+		&i.RemoteSessionIssuer.TokenEndpointAuthMethodsSupported,
+		&i.RemoteSessionIssuer.ClientIDMetadataDocumentSupported,
+		&i.RemoteSessionIssuer.Oidc,
+		&i.RemoteSessionIssuer.Passthrough,
+		&i.RemoteSessionIssuer.Name,
+		&i.RemoteSessionIssuer.LogoAssetID,
+		&i.RemoteSessionIssuer.ClientSetupDocumentationUrl,
+		&i.RemoteSessionIssuer.CreatedAt,
+		&i.RemoteSessionIssuer.UpdatedAt,
+		&i.RemoteSessionIssuer.DeletedAt,
+		&i.RemoteSessionIssuer.Deleted,
+		&i.GlobalClientCount,
+		&i.TenantClientCount,
+	)
+	return i, err
+}
+
 const getOAuthProxyProviderForClone = `-- name: GetOAuthProxyProviderForClone :one
 
 SELECT id, project_id, provider_type, secrets, oauth_proxy_server_id
@@ -1740,13 +1813,29 @@ func (q *Queries) ListGlobalRemoteSessionClientsByIssuerID(ctx context.Context, 
 
 const listGlobalRemoteSessionIssuers = `-- name: ListGlobalRemoteSessionIssuers :many
 
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
-FROM remote_session_issuers
-WHERE project_id IS NULL
-  AND organization_id IS NULL
-  AND deleted IS FALSE
-  AND ($1::uuid IS NULL OR id < $1::uuid)
-ORDER BY id DESC
+SELECT
+    i.id, i.project_id, i.organization_id, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.registration_endpoint, i.jwks_uri, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.client_id_metadata_document_supported, i.oidc, i.passthrough, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.created_at, i.updated_at, i.deleted_at, i.deleted,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.project_id IS NULL
+          AND c.organization_id IS NULL
+          AND c.deleted IS FALSE
+    )::bigint AS global_client_count,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
+          AND c.deleted IS FALSE
+    )::bigint AS tenant_client_count
+FROM remote_session_issuers AS i
+WHERE i.project_id IS NULL
+  AND i.organization_id IS NULL
+  AND i.deleted IS FALSE
+  AND ($1::uuid IS NULL OR i.id < $1::uuid)
+ORDER BY i.id DESC
 LIMIT $2
 `
 
@@ -1755,47 +1844,67 @@ type ListGlobalRemoteSessionIssuersParams struct {
 	LimitValue int32
 }
 
+type ListGlobalRemoteSessionIssuersRow struct {
+	RemoteSessionIssuer RemoteSessionIssuer
+	GlobalClientCount   int64
+	TenantClientCount   int64
+}
+
 // Global remote-session admin surface — issuers and clients shared across every
 // organization (project_id NULL AND organization_id NULL). Curated by Speakeasy
 // platform admins. Every query is scoped strictly to that global partition; the
 // create paths reuse CreateRemoteSessionIssuer / CreateRemoteSessionClient with
 // NULL project_id and NULL organization_id.
-func (q *Queries) ListGlobalRemoteSessionIssuers(ctx context.Context, arg ListGlobalRemoteSessionIssuersParams) ([]RemoteSessionIssuer, error) {
+// Platform issuers for the platform-admin catalog, each with the two client
+// counts that decide whether it can be deleted.
+//
+// GLOBAL VS TENANT CLIENT COUNTS (mirrored by
+// GetGlobalRemoteSessionIssuerWithClientCountsByID; change them together):
+//
+// global_client_count covers the clients a platform admin owns and can remove
+// themselves. tenant_client_count covers the clients organizations registered
+// against the shared issuer, which a platform admin can neither see nor delete.
+// The split matches the conflict DeleteGlobalIssuer raises, so the catalog can
+// explain a blocked delete up front instead of only after the 409. A single
+// total would report blockers without saying whose they are.
+func (q *Queries) ListGlobalRemoteSessionIssuers(ctx context.Context, arg ListGlobalRemoteSessionIssuersParams) ([]ListGlobalRemoteSessionIssuersRow, error) {
 	rows, err := q.db.Query(ctx, listGlobalRemoteSessionIssuers, arg.Cursor, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RemoteSessionIssuer
+	var items []ListGlobalRemoteSessionIssuersRow
 	for rows.Next() {
-		var i RemoteSessionIssuer
+		var i ListGlobalRemoteSessionIssuersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.Slug,
-			&i.Issuer,
-			&i.AuthorizationEndpoint,
-			&i.TokenEndpoint,
-			&i.RegistrationEndpoint,
-			&i.JwksUri,
-			&i.ServiceDocumentation,
-			&i.OpPolicyUri,
-			&i.OpTosUri,
-			&i.ScopesSupported,
-			&i.GrantTypesSupported,
-			&i.ResponseTypesSupported,
-			&i.TokenEndpointAuthMethodsSupported,
-			&i.ClientIDMetadataDocumentSupported,
-			&i.Oidc,
-			&i.Passthrough,
-			&i.Name,
-			&i.LogoAssetID,
-			&i.ClientSetupDocumentationUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.RemoteSessionIssuer.ID,
+			&i.RemoteSessionIssuer.ProjectID,
+			&i.RemoteSessionIssuer.OrganizationID,
+			&i.RemoteSessionIssuer.Slug,
+			&i.RemoteSessionIssuer.Issuer,
+			&i.RemoteSessionIssuer.AuthorizationEndpoint,
+			&i.RemoteSessionIssuer.TokenEndpoint,
+			&i.RemoteSessionIssuer.RegistrationEndpoint,
+			&i.RemoteSessionIssuer.JwksUri,
+			&i.RemoteSessionIssuer.ServiceDocumentation,
+			&i.RemoteSessionIssuer.OpPolicyUri,
+			&i.RemoteSessionIssuer.OpTosUri,
+			&i.RemoteSessionIssuer.ScopesSupported,
+			&i.RemoteSessionIssuer.GrantTypesSupported,
+			&i.RemoteSessionIssuer.ResponseTypesSupported,
+			&i.RemoteSessionIssuer.TokenEndpointAuthMethodsSupported,
+			&i.RemoteSessionIssuer.ClientIDMetadataDocumentSupported,
+			&i.RemoteSessionIssuer.Oidc,
+			&i.RemoteSessionIssuer.Passthrough,
+			&i.RemoteSessionIssuer.Name,
+			&i.RemoteSessionIssuer.LogoAssetID,
+			&i.RemoteSessionIssuer.ClientSetupDocumentationUrl,
+			&i.RemoteSessionIssuer.CreatedAt,
+			&i.RemoteSessionIssuer.UpdatedAt,
+			&i.RemoteSessionIssuer.DeletedAt,
+			&i.RemoteSessionIssuer.Deleted,
+			&i.GlobalClientCount,
+			&i.TenantClientCount,
 		); err != nil {
 			return nil, err
 		}
