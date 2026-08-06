@@ -5,7 +5,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SignUpPanel } from "./signup-panel";
 
-afterEach(cleanup);
+const telemetryCapture = vi.hoisted(() => vi.fn());
+
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: telemetryCapture }),
+}));
+
+afterEach(() => {
+  cleanup();
+  telemetryCapture.mockReset();
+});
 
 function renderPanel(initialEntry = "/sign-up") {
   return render(
@@ -112,5 +121,62 @@ describe("SignUpPanel", () => {
   it("surfaces an inbound signin error", () => {
     renderPanel("/sign-up?signin_error=init_error");
     expect(screen.getByText(/failed to initialize account/i)).toBeTruthy();
+  });
+
+  it("captures a signup_started event on handoff", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+    await user.click(
+      screen.getByRole("button", { name: /continue with google/i }),
+    );
+
+    expect(telemetryCapture).toHaveBeenCalledWith("onboarding_event", {
+      action: "signup_started",
+      created_via: "signup",
+    });
+
+    assign.mockRestore();
+  });
+
+  it("locks the CTA after a handoff so a second click cannot double-fire", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+    const cta = screen.getByRole("button", { name: /continue with google/i });
+
+    await user.click(cta);
+    expect(cta.hasAttribute("disabled")).toBe(true);
+
+    // The handoff is a navigation, not an awaited promise, so isSubmitting is
+    // already back to false here. Only isSubmitted keeps the button locked.
+    await user.click(cta);
+
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(telemetryCapture).toHaveBeenCalledTimes(1);
+
+    assign.mockRestore();
+  });
+
+  it("does not capture signup_started when validation fails", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(
+      screen.getByRole("button", { name: /continue with google/i }),
+    );
+
+    expect(await screen.findByText("Company name is required")).toBeTruthy();
+    expect(telemetryCapture).not.toHaveBeenCalled();
   });
 });
