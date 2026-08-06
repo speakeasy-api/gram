@@ -130,6 +130,7 @@ export function firstPartyConnectUrl(
 export function buildLoginRedirectURL(
   redirectTo: string | null,
   orgName?: string,
+  email?: string,
 ): string {
   // The base is only consulted when getServerURL() is relative (empty in
   // tests, per vitest.config.ts) — window.location.origin is always
@@ -145,6 +146,10 @@ export function buildLoginRedirectURL(
   // bar, browser history, and access logs — acceptable for a company name,
   // which is not a secret, and it goes no further than this request.
   if (orgName) url.searchParams.set("org_name", orgName);
+  // Also sign-up only. The server turns this into WorkOS's `login_hint`, which
+  // pre-fills the email field on the hosted AuthKit screen. Never stored —
+  // it lives for one request and is gone.
+  if (email) url.searchParams.set("email", email);
   return url.toString();
 }
 
