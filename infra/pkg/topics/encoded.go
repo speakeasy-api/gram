@@ -33,19 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 )
 
-// failedResult reports a failure that happened before the message reached
-// Pub/Sub. It is defined here rather than reusing an unexported helper from the
-// gcp package so that package stays untouched by this one.
-type failedResult struct{ err error }
-
-func (r failedResult) Ready() <-chan struct{} {
-	ch := make(chan struct{})
-	close(ch)
-	return ch
-}
-
-func (r failedResult) Get(context.Context) (string, error) { return "", r.err }
-
 // ErrUnknownTopic is returned when a name does not correspond to any declared
 // topic. Treat it as retryable, not permanent: writers validate names against
 // the same registry, so an unknown name here almost always means the row was
@@ -140,12 +127,12 @@ func (s *Set) Warm(ctx context.Context) error {
 func (s *Set) Publish(ctx context.Context, name string, data []byte, attrs map[string]string) gcp.PublishResult {
 	topic, ok := Lookup(name)
 	if !ok {
-		return failedResult{err: fmt.Errorf("%w: %s", ErrUnknownTopic, name)}
+		return gcp.NewErrPublishResult(fmt.Errorf("%w: %s", ErrUnknownTopic, name))
 	}
 
 	pub, err := s.publisherFor(ctx, topic)
 	if err != nil {
-		return failedResult{err: err}
+		return gcp.NewErrPublishResult(err)
 	}
 
 	return pub.PublishEncoded(ctx, data, attrs)

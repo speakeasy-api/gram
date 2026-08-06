@@ -105,21 +105,12 @@ func (p *psEncodedPublisher) PublishEncoded(ctx context.Context, data []byte, at
 	})
 }
 
-// Stop flushes buffered messages and releases the publisher's resources. Like
-// psPublisher.Stop, the underlying flush cannot be cancelled, so it runs in a
-// goroutine raced against ctx and is left to finish in the background if the
-// caller's deadline expires first.
+// Stop flushes buffered messages and releases the publisher's resources,
+// bounded by ctx.
 func (p *psEncodedPublisher) Stop(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		p.pub.Stop()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("stop encoded publisher: %w", ctx.Err())
+	if err := stopBlocking(ctx, p.pub); err != nil {
+		return fmt.Errorf("stop encoded publisher: %w", err)
 	}
+
+	return nil
 }
