@@ -2119,15 +2119,20 @@ func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
 	require.Empty(t, canonicalMCPInventoryEntries(payload)[0].ToolPrefix)
 }
 
-func TestCacheCanonicalMCPListStoresReportedEmptyInventory(t *testing.T) {
+func TestIngestStoresExplicitEmptyMCPInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	sessionID := uuid.NewString()
+	payload := canonicalIngestPayload("claude", "mcp.inventory", sessionID)
+	payload.Data = &gen.HookIngestData{McpInventory: []*gen.HookMCPData{}}
 
-	ti.service.cacheCanonicalMCPList(ctx, sessionID, nil, true)
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
 	require.NoError(t, err)
+	require.NotNil(t, entries)
 	require.Empty(t, entries)
 }
 

@@ -62,10 +62,10 @@ func (r *Relay) Login(ctx context.Context, force bool) error {
 }
 
 // NewRunner constructs the agenthooks Runner: gating events (prompt.submitted,
-// tool.requested) POST synchronously and honor deny; every other event is
-// relayed as fire-and-forget telemetry. Handler failures fail open — a broken
-// hook must never wedge the agent — and the credential ratchet governs the
-// unauthenticated case.
+// tool.requested) POST synchronously and honor deny; MCP inventory also waits
+// for delivery so agenthooks can order it before the first related tool call.
+// Handler failures fail open — a broken hook must never wedge the agent — and
+// the credential ratchet governs the unauthenticated case.
 func NewRunner(cfg Config) *agenthooks.Runner {
 	r := NewRelay(cfg)
 	runner := agenthooks.New(agenthooks.WithPolicy(agenthooks.Policy{

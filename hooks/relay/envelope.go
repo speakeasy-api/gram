@@ -418,7 +418,7 @@ func skillNameOf(input json.RawMessage) string {
 func isEmptyData(d *components.HookIngestData) bool {
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil &&
-		len(d.McpAttribution) == 0 && len(d.McpInventory) == 0 &&
+		len(d.McpAttribution) == 0 && d.McpInventory == nil &&
 		len(d.PromptAttachments) == 0
 }
 

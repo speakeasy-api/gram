@@ -230,6 +230,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if observed {
 		s.signalSkillEfficacy(ctx, *authCtx.ProjectID)
 	}
+	mcpInventory := canonicalMCPInventoryEntries(payload)
 	if !s.isHookDuplicate(ctx) {
 		// Detach from request cancellation: the idempotency token is already
 		// claimed, so a client disconnect here would otherwise drop the event
@@ -240,7 +241,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			authCtx.ActiveOrganizationID,
 			authCtx.ProjectID.String(),
 			canonicalSessionID(payload),
-			canonicalMCPInventoryEntries(payload),
+			mcpInventory,
 		)
 		s.recordCanonicalHook(persistCtx, payload, authCtx, actor, timestamp, blockReason)
 	}
@@ -250,7 +251,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
 	// including Gram-hosted targets, with no path to recover.
-	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload), strings.TrimSpace(payload.Event.Type) == "mcp.inventory")
+	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), mcpInventory)
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -803,11 +804,13 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, reported bool) {
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry) {
 	if sessionID == "" {
 		return
 	}
-	if len(entries) == 0 && !reported {
+	if entries == nil {
+		// Nil means this event carried no inventory. A non-nil empty slice is an
+		// authoritative snapshot saying that no servers are configured.
 		// Every other event in the session extends the snapshot's life, as the
 		// legacy endpoints do. Without this a session outliving the TTL loses
 		// its inventory and every later meta-tool call denies.
@@ -1855,7 +1858,7 @@ func canonicalMCPData(payload *gen.IngestPayload) *gen.HookMCPData {
 }
 
 func canonicalMCPInventoryEntries(payload *gen.IngestPayload) []MCPServerEntry {
-	if payload == nil || payload.Data == nil || len(payload.Data.McpInventory) == 0 {
+	if payload == nil || payload.Data == nil || payload.Data.McpInventory == nil {
 		return nil
 	}
 	adapter := strings.TrimSpace(payload.Source.Adapter)
