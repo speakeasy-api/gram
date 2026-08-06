@@ -3,6 +3,7 @@
  */
 
 import { assetsCreateSignedChatAttachmentURL } from "../funcs/assetsCreateSignedChatAttachmentURL.js";
+import { assetsFetchImageFromURL } from "../funcs/assetsFetchImageFromURL.js";
 import { assetsFetchOpenAPIv3FromURL } from "../funcs/assetsFetchOpenAPIv3FromURL.js";
 import { assetsListAssets } from "../funcs/assetsListAssets.js";
 import { assetsServeChatAttachment } from "../funcs/assetsServeChatAttachment.js";
@@ -25,6 +26,10 @@ import {
   CreateSignedChatAttachmentURLRequest,
   CreateSignedChatAttachmentURLSecurity,
 } from "../models/operations/createsignedchatattachmenturl.js";
+import {
+  FetchImageFromURLRequest,
+  FetchImageFromURLSecurity,
+} from "../models/operations/fetchimagefromurl.js";
 import {
   FetchOpenAPIv3FromURLRequest,
   FetchOpenAPIv3FromURLSecurity,
@@ -87,6 +92,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CreateSignedChatAttachmentURLResult> {
     return unwrapAsync(assetsCreateSignedChatAttachmentURL(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * fetchImageFromURL assets
+   *
+   * @remarks
+   * Fetch an image from a URL and upload it to Gram as an image asset.
+   */
+  async fetchImageFromURL(
+    request: FetchImageFromURLRequest,
+    security?: FetchImageFromURLSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UploadImageResult> {
+    return unwrapAsync(assetsFetchImageFromURL(
       this,
       request,
       security,

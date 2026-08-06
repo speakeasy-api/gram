@@ -25,6 +25,7 @@ type Server struct {
 	UpdateServer                      http.Handler
 	DiscoverProtectedResourceMetadata http.Handler
 	VerifyURL                         http.Handler
+	DiscoverServerIcons               http.Handler
 	DeleteServer                      http.Handler
 	ListServerHeaders                 http.Handler
 	GetServerHeader                   http.Handler
@@ -66,6 +67,7 @@ func New(
 			{"UpdateServer", "POST", "/rpc/remoteMcp.updateServer"},
 			{"DiscoverProtectedResourceMetadata", "POST", "/rpc/remoteMcp.discoverProtectedResourceMetadata"},
 			{"VerifyURL", "POST", "/rpc/remoteMcp.verifyURL"},
+			{"DiscoverServerIcons", "POST", "/rpc/remoteMcp.discoverServerIcons"},
 			{"DeleteServer", "DELETE", "/rpc/remoteMcp.deleteServer"},
 			{"ListServerHeaders", "GET", "/rpc/remoteMcp.listServerHeaders"},
 			{"GetServerHeader", "GET", "/rpc/remoteMcp.getServerHeader"},
@@ -79,6 +81,7 @@ func New(
 		UpdateServer:                      NewUpdateServerHandler(e.UpdateServer, mux, decoder, encoder, errhandler, formatter),
 		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataHandler(e.DiscoverProtectedResourceMetadata, mux, decoder, encoder, errhandler, formatter),
 		VerifyURL:                         NewVerifyURLHandler(e.VerifyURL, mux, decoder, encoder, errhandler, formatter),
+		DiscoverServerIcons:               NewDiscoverServerIconsHandler(e.DiscoverServerIcons, mux, decoder, encoder, errhandler, formatter),
 		DeleteServer:                      NewDeleteServerHandler(e.DeleteServer, mux, decoder, encoder, errhandler, formatter),
 		ListServerHeaders:                 NewListServerHeadersHandler(e.ListServerHeaders, mux, decoder, encoder, errhandler, formatter),
 		GetServerHeader:                   NewGetServerHeaderHandler(e.GetServerHeader, mux, decoder, encoder, errhandler, formatter),
@@ -99,6 +102,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateServer = m(s.UpdateServer)
 	s.DiscoverProtectedResourceMetadata = m(s.DiscoverProtectedResourceMetadata)
 	s.VerifyURL = m(s.VerifyURL)
+	s.DiscoverServerIcons = m(s.DiscoverServerIcons)
 	s.DeleteServer = m(s.DeleteServer)
 	s.ListServerHeaders = m(s.ListServerHeaders)
 	s.GetServerHeader = m(s.GetServerHeader)
@@ -118,6 +122,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateServerHandler(mux, h.UpdateServer)
 	MountDiscoverProtectedResourceMetadataHandler(mux, h.DiscoverProtectedResourceMetadata)
 	MountVerifyURLHandler(mux, h.VerifyURL)
+	MountDiscoverServerIconsHandler(mux, h.DiscoverServerIcons)
 	MountDeleteServerHandler(mux, h.DeleteServer)
 	MountListServerHeadersHandler(mux, h.ListServerHeaders)
 	MountGetServerHeaderHandler(mux, h.GetServerHeader)
@@ -427,6 +432,59 @@ func NewVerifyURLHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "verifyURL")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDiscoverServerIconsHandler configures the mux to serve the "remoteMcp"
+// service "discoverServerIcons" endpoint.
+func MountDiscoverServerIconsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteMcp.discoverServerIcons", f)
+}
+
+// NewDiscoverServerIconsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "discoverServerIcons" endpoint.
+func NewDiscoverServerIconsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDiscoverServerIconsRequest(mux, decoder)
+		encodeResponse = EncodeDiscoverServerIconsResponse(encoder)
+		encodeError    = EncodeDiscoverServerIconsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "discoverServerIcons")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

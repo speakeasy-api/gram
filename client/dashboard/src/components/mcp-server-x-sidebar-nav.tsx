@@ -7,6 +7,7 @@ import {
   McpServerReadinessBar,
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
+import { McpServerLogo } from "@/components/mcp/McpServerLogo";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -207,16 +208,24 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   const cardContent = mcpServer && (
     <>
-      <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">
-          {mcpServer.name || "MCP Server"}
-        </Type>
-        {isRemoteBacked && (
-          <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
-        )}
-        {isTunneledBacked && (
-          <McpSidebarInfoLabel>Tunneled MCP</McpSidebarInfoLabel>
-        )}
+      <div className="flex items-center gap-2.5">
+        <McpServerLogo
+          mcpServerId={mcpServer.id}
+          name={mcpServer.name}
+          size="sm"
+          fallback="none"
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <Type className="truncate font-semibold">
+            {mcpServer.name || "MCP Server"}
+          </Type>
+          {isRemoteBacked && (
+            <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
+          )}
+          {isTunneledBacked && (
+            <McpSidebarInfoLabel>Tunneled MCP</McpSidebarInfoLabel>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">

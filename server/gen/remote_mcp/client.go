@@ -22,6 +22,7 @@ type Client struct {
 	UpdateServerEndpoint                      goa.Endpoint
 	DiscoverProtectedResourceMetadataEndpoint goa.Endpoint
 	VerifyURLEndpoint                         goa.Endpoint
+	DiscoverServerIconsEndpoint               goa.Endpoint
 	DeleteServerEndpoint                      goa.Endpoint
 	ListServerHeadersEndpoint                 goa.Endpoint
 	GetServerHeaderEndpoint                   goa.Endpoint
@@ -31,7 +32,7 @@ type Client struct {
 }
 
 // NewClient initializes a "remoteMcp" service client given the endpoints.
-func NewClient(createServer, listServers, getServer, updateServer, discoverProtectedResourceMetadata, verifyURL, deleteServer, listServerHeaders, getServerHeader, createServerHeader, updateServerHeader, deleteServerHeader goa.Endpoint) *Client {
+func NewClient(createServer, listServers, getServer, updateServer, discoverProtectedResourceMetadata, verifyURL, discoverServerIcons, deleteServer, listServerHeaders, getServerHeader, createServerHeader, updateServerHeader, deleteServerHeader goa.Endpoint) *Client {
 	return &Client{
 		CreateServerEndpoint:                      createServer,
 		ListServersEndpoint:                       listServers,
@@ -39,6 +40,7 @@ func NewClient(createServer, listServers, getServer, updateServer, discoverProte
 		UpdateServerEndpoint:                      updateServer,
 		DiscoverProtectedResourceMetadataEndpoint: discoverProtectedResourceMetadata,
 		VerifyURLEndpoint:                         verifyURL,
+		DiscoverServerIconsEndpoint:               discoverServerIcons,
 		DeleteServerEndpoint:                      deleteServer,
 		ListServerHeadersEndpoint:                 listServerHeaders,
 		GetServerHeaderEndpoint:                   getServerHeader,
@@ -179,6 +181,29 @@ func (c *Client) VerifyURL(ctx context.Context, p *VerifyURLPayload) (res *Verif
 		return
 	}
 	return ires.(*VerifyURLResult), nil
+}
+
+// DiscoverServerIcons calls the "discoverServerIcons" endpoint of the
+// "remoteMcp" service.
+// DiscoverServerIcons may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DiscoverServerIcons(ctx context.Context, p *DiscoverServerIconsPayload) (res *DiscoverServerIconsResult, err error) {
+	var ires any
+	ires, err = c.DiscoverServerIconsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DiscoverServerIconsResult), nil
 }
 
 // DeleteServer calls the "deleteServer" endpoint of the "remoteMcp" service.

@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -27,8 +30,19 @@ type initializeResult struct {
 	Instructions    string                     `json:"instructions,omitempty"`
 }
 type serverInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name       string `json:"name"`
+	Title      string `json:"title,omitempty"`
+	Version    string `json:"version"`
+	WebsiteURL string `json:"websiteUrl,omitempty"`
+	Icons      []icon `json:"icons,omitempty"`
+}
+
+// icon is an SEP-973 server icon advertised in serverInfo. Src must be an
+// absolute URL reachable by the MCP client without auth.
+type icon struct {
+	Src      string   `json:"src"`
+	MimeType string   `json:"mimeType,omitempty"`
+	Sizes    []string `json:"sizes,omitempty"`
 }
 
 // initializeParams captures the subset of the MCP initialize request params we
@@ -58,7 +72,7 @@ func parseInitializeParams(raw json.RawMessage) (initializeParams, []string, err
 	return params, slices.Sorted(maps.Keys(params.Capabilities)), nil
 }
 
-func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries) (json.RawMessage, error) {
+func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries, serverURL *url.URL) (json.RawMessage, error) {
 	params, capabilities, err := parseInitializeParams(req.Params)
 	validParams := err == nil
 	if err != nil {
@@ -84,7 +98,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 		}
 	}
 
-	instructions := fetchInstructions(ctx, logger, toolsetsRepoParam, metadataRepoParam, payload.toolset, payload.projectID)
+	identity := fetchServerIdentity(ctx, logger, toolsetsRepoParam, metadataRepoParam, payload.toolset, payload.projectID, serverURL)
 
 	result := &result[initializeResult]{
 		ID: req.ID,
@@ -96,10 +110,13 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 				"resources": json.RawMessage("{}"),
 			},
 			ServerInfo: serverInfo{
-				Name:    "Gram",
-				Version: "0.0.0",
+				Name:       identity.name,
+				Title:      identity.title,
+				Version:    "0.0.0",
+				WebsiteURL: identity.websiteURL,
+				Icons:      identity.icons,
 			},
-			Instructions: instructions,
+			Instructions: identity.instructions,
 		},
 	}
 
@@ -111,8 +128,30 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 	return bs, nil
 }
 
-// fetchInstructions will attempt to find an MCP servers' instructions. If it can't it will just return an empty string.
-func fetchInstructions(ctx context.Context, logger *slog.Logger, toolsetsRepo *toolsets_repo.Queries, metadataRepo *metadata_repo.Queries, toolsetSlug string, projectID uuid.UUID) string {
+// serverIdentity is what an MCP server reports about itself in the
+// initialize response. Fields are zero-valued (and omitted from the wire
+// format) when the toolset or its metadata cannot be resolved.
+type serverIdentity struct {
+	name         string
+	title        string
+	websiteURL   string
+	icons        []icon
+	instructions string
+}
+
+// fetchServerIdentity resolves the toolset-flavored serverInfo fields:
+// name/title from the toolset, and instructions, website URL, and logo icon
+// from its MCP metadata. Lookups are best-effort — a bare "Gram" identity is
+// returned rather than failing the initialize RPC.
+func fetchServerIdentity(ctx context.Context, logger *slog.Logger, toolsetsRepo *toolsets_repo.Queries, metadataRepo *metadata_repo.Queries, toolsetSlug string, projectID uuid.UUID, serverURL *url.URL) serverIdentity {
+	identity := serverIdentity{
+		name:         "Gram",
+		title:        "",
+		websiteURL:   "",
+		icons:        nil,
+		instructions: "",
+	}
+
 	toolset, err := toolsetsRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
 		Slug:      toolsetSlug,
 		ProjectID: projectID,
@@ -120,22 +159,31 @@ func fetchInstructions(ctx context.Context, logger *slog.Logger, toolsetsRepo *t
 	if err != nil {
 		// not finding a toolset is OK - any other errors are unexpected and should be logged
 		if !errors.Is(err, pgx.ErrNoRows) {
-			logger.WarnContext(ctx, "failed to fetch toolset for instructions", attr.SlogError(err))
+			logger.WarnContext(ctx, "failed to fetch toolset for server identity", attr.SlogError(err))
 		}
-		return ""
+		return identity
 	}
+
+	identity.name = toolset.Slug
+	identity.title = toolset.Name
 
 	metadata, err := metadataRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			logger.WarnContext(ctx, "failed to fetch MCP metadata for instructions", attr.SlogError(err))
+			logger.WarnContext(ctx, "failed to fetch MCP metadata for server identity", attr.SlogError(err))
 		}
-		return ""
+		return identity
 	}
 
-	if !metadata.Instructions.Valid {
-		return ""
+	if metadata.Instructions.Valid {
+		identity.instructions = metadata.Instructions.String
+	}
+	if metadata.ExternalDocumentationUrl.Valid {
+		identity.websiteURL = strings.TrimSpace(metadata.ExternalDocumentationUrl.String)
+	}
+	if metadata.LogoID.Valid && serverURL != nil {
+		identity.icons = []icon{{Src: assets.ServeImageURL(serverURL, metadata.LogoID.UUID), MimeType: "", Sizes: nil}}
 	}
 
-	return metadata.Instructions.String
+	return identity
 }

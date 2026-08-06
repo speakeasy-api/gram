@@ -272,6 +272,50 @@ func BuildVerifyURLPayload(remoteMcpVerifyURLBody string, remoteMcpVerifyURLSess
 	return v, nil
 }
 
+// BuildDiscoverServerIconsPayload builds the payload for the remoteMcp
+// discoverServerIcons endpoint from CLI flags.
+func BuildDiscoverServerIconsPayload(remoteMcpDiscoverServerIconsBody string, remoteMcpDiscoverServerIconsSessionToken string, remoteMcpDiscoverServerIconsApikeyToken string, remoteMcpDiscoverServerIconsProjectSlugInput string) (*remotemcp.DiscoverServerIconsPayload, error) {
+	var err error
+	var body DiscoverServerIconsRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpDiscoverServerIconsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpDiscoverServerIconsSessionToken != "" {
+			sessionToken = &remoteMcpDiscoverServerIconsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpDiscoverServerIconsApikeyToken != "" {
+			apikeyToken = &remoteMcpDiscoverServerIconsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpDiscoverServerIconsProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpDiscoverServerIconsProjectSlugInput
+		}
+	}
+	v := &remotemcp.DiscoverServerIconsPayload{
+		URL:           body.URL,
+		TransportType: body.TransportType,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteServerPayload builds the payload for the remoteMcp deleteServer
 // endpoint from CLI flags.
 func BuildDeleteServerPayload(remoteMcpDeleteServerID string, remoteMcpDeleteServerSessionToken string, remoteMcpDeleteServerApikeyToken string, remoteMcpDeleteServerProjectSlugInput string) (*remotemcp.DeleteServerPayload, error) {

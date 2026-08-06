@@ -22,6 +22,7 @@ type Endpoints struct {
 	UpdateServer                      goa.Endpoint
 	DiscoverProtectedResourceMetadata goa.Endpoint
 	VerifyURL                         goa.Endpoint
+	DiscoverServerIcons               goa.Endpoint
 	DeleteServer                      goa.Endpoint
 	ListServerHeaders                 goa.Endpoint
 	GetServerHeader                   goa.Endpoint
@@ -41,6 +42,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateServer:                      NewUpdateServerEndpoint(s, a.APIKeyAuth),
 		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataEndpoint(s, a.APIKeyAuth),
 		VerifyURL:                         NewVerifyURLEndpoint(s, a.APIKeyAuth),
+		DiscoverServerIcons:               NewDiscoverServerIconsEndpoint(s, a.APIKeyAuth),
 		DeleteServer:                      NewDeleteServerEndpoint(s, a.APIKeyAuth),
 		ListServerHeaders:                 NewListServerHeadersEndpoint(s, a.APIKeyAuth),
 		GetServerHeader:                   NewGetServerHeaderEndpoint(s, a.APIKeyAuth),
@@ -58,6 +60,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateServer = m(e.UpdateServer)
 	e.DiscoverProtectedResourceMetadata = m(e.DiscoverProtectedResourceMetadata)
 	e.VerifyURL = m(e.VerifyURL)
+	e.DiscoverServerIcons = m(e.DiscoverServerIcons)
 	e.DeleteServer = m(e.DeleteServer)
 	e.ListServerHeaders = m(e.ListServerHeaders)
 	e.GetServerHeader = m(e.GetServerHeader)
@@ -418,6 +421,65 @@ func NewVerifyURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return s.VerifyURL(ctx, p)
+	}
+}
+
+// NewDiscoverServerIconsEndpoint returns an endpoint function that calls the
+// method "discoverServerIcons" of service "remoteMcp".
+func NewDiscoverServerIconsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DiscoverServerIconsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.DiscoverServerIcons(ctx, p)
 	}
 }
 

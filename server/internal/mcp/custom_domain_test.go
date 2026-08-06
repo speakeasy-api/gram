@@ -12,9 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	assets_repo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -225,4 +228,88 @@ func TestWellKnownOAuth_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "OAuth")
 	require.NotContains(t, err.Error(), "not found")
+}
+
+func TestServeFavicon_CustomDomainRedirectsToLogo(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, domain := createPublicMCPToolsetWithCustomDomain(
+		t, ctx, ti, authCtx,
+		"favicon-logo-"+uuid.New().String()[:8],
+		"favicon-logo.example.com",
+	)
+
+	logo, err := assets_repo.New(ti.conn).CreateAsset(ctx, assets_repo.CreateAssetParams{
+		Name:          "favicon-logo.png",
+		Url:           "https://example.com/logo.png",
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Kind:          "image",
+		ContentType:   "image/png",
+		ContentLength: 1024,
+	})
+	require.NoError(t, err)
+
+	_, err = metadata_repo.New(ti.conn).UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
+		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:                *authCtx.ProjectID,
+		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
+		LogoID:                   uuid.NullUUID{UUID: logo.ID, Valid: true},
+		Instructions:             conv.ToPGText(""),
+	})
+	require.NoError(t, err)
+
+	customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil).WithContext(customCtx)
+	w := httptest.NewRecorder()
+
+	require.NoError(t, ti.service.ServeFavicon(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+	require.Equal(t, "http://0.0.0.0/rpc/assets.serveImage?id="+logo.ID.String(), w.Header().Get("Location"))
+}
+
+func TestServeFavicon_CustomDomainWithoutLogoNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, domain := createPublicMCPToolsetWithCustomDomain(
+		t, ctx, ti, authCtx,
+		"favicon-nologo-"+uuid.New().String()[:8],
+		"favicon-nologo.example.com",
+	)
+
+	customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil).WithContext(customCtx)
+	w := httptest.NewRecorder()
+
+	require.Error(t, ti.service.ServeFavicon(w, req))
+}
+
+func TestServeFavicon_PlatformDomainNotFound(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil)
+	w := httptest.NewRecorder()
+
+	require.Error(t, ti.service.ServeFavicon(w, req))
 }

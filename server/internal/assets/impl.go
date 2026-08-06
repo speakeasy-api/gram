@@ -300,6 +300,188 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	}, nil
 }
 
+// imageContentTypeFromURL infers an image mime type from a URL's file
+// extension. It is the fallback for servers that omit or generalize the
+// Content-Type header on image responses.
+func imageContentTypeFromURL(parsedURL *url.URL) string {
+	switch strings.ToLower(path.Ext(parsedURL.Path)) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".ico":
+		return "image/x-icon"
+	default:
+		return ""
+	}
+}
+
+func (s *Service) FetchImageFromURL(ctx context.Context, payload *gen.FetchImageFromURLForm) (*gen.UploadImageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger
+
+	parsedURL, err := url.Parse(payload.URL)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse url: %w", err), "invalid URL")
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "URL must use http or https scheme")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, payload.URL, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create request: %w", err), "error fetching URL")
+	}
+
+	client := s.guardianPolicy.Client()
+	client.Timeout = 30 * time.Second
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("fetch url: %w", err), "error fetching URL")
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, oops.E(oops.CodeBadRequest, nil, "failed to fetch URL: received status %d", resp.StatusCode)
+	}
+
+	// Prefer the response Content-Type; fall back to the URL extension when the
+	// server sends nothing usable (e.g. application/octet-stream for a .png).
+	contentType := resp.Header.Get("Content-Type")
+	mediaType := ""
+	if contentType != "" {
+		mediaType, _, err = mime.ParseMediaType(contentType)
+		if err != nil {
+			mediaType = ""
+		}
+	}
+	if mediaType == "" || !strings.HasPrefix(mediaType, "image/") {
+		mediaType = imageContentTypeFromURL(parsedURL)
+	}
+	if mediaType == "" {
+		return nil, oops.E(oops.CodeUnsupportedMedia, nil, "unsupported content type: %q. Expected an image", contentType)
+	}
+
+	contentLength := resp.ContentLength
+	if contentLength <= 0 {
+		contentLength = MaxFileSizeImage
+	}
+	if contentLength > MaxFileSizeImage {
+		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 4 MiB limit")
+	}
+
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+		maxLength:     MaxFileSizeImage,
+		contentLength: contentLength,
+		contentType:   mediaType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return result.cleanup()
+	})
+
+	fileInfo, err := result.file.Stat()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("stat temp file: %w", err), "error reading file")
+	}
+	actualContentLength := fileInfo.Size()
+
+	existing, err := s.findExistingAsset(ctx, &findAssetParams{
+		projectID: *authCtx.ProjectID,
+		hash:      result.hash,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return &gen.UploadImageResult{Asset: existing}, nil
+	}
+
+	// Favicons commonly come back as ICO, so the URL-fetch path accepts it in
+	// addition to the manual-upload raster formats.
+	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
+		contentLength: actualContentLength,
+		inputMimeType: mediaType,
+		allowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp", "image/x-icon", "image/vnd.microsoft.icon"},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("image-%s%s", result.hash, ext)
+	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
+		projectID:     *authCtx.ProjectID,
+		filename:      filename,
+		contentType:   mimeType,
+		contentLength: actualContentLength,
+		file:          result.file,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing image assets").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	ar := s.repo.WithTx(dbtx)
+
+	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
+		Name:          filename,
+		Url:           uri.String(),
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        result.hash,
+		Kind:          "image",
+		ContentType:   mimeType,
+		ContentLength: actualContentLength,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving image info").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		AssetURN:  urn.NewAsset(urn.AssetKindImage, asset.ID),
+		AssetName: asset.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset creation audit log").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset").LogError(ctx, logger)
+	}
+
+	return &gen.UploadImageResult{
+		Asset: &gen.Asset{
+			ID:            asset.ID.String(),
+			Kind:          asset.Kind,
+			Sha256:        asset.Sha256,
+			ContentType:   asset.ContentType,
+			ContentLength: asset.ContentLength,
+			CreatedAt:     asset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
+		},
+	}, nil
+}
+
 func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFunctionsForm, reader io.ReadCloser) (*gen.UploadFunctionsResult, error) {
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return reader.Close()
@@ -705,6 +887,8 @@ func sniffMimeType(params sniffMimeTypeParams) (mtype string, ext string, err er
 		exts = []string{".gif"}
 	case "image/webp":
 		exts = []string{".webp"}
+	case "image/x-icon", "image/vnd.microsoft.icon":
+		exts = []string{".ico"}
 	case "application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml":
 		exts = []string{".yaml"}
 	case "application/json", "text/json":

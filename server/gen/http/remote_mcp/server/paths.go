@@ -37,6 +37,11 @@ func VerifyURLRemoteMcpPath() string {
 	return "/rpc/remoteMcp.verifyURL"
 }
 
+// DiscoverServerIconsRemoteMcpPath returns the URL path to the remoteMcp service discoverServerIcons HTTP endpoint.
+func DiscoverServerIconsRemoteMcpPath() string {
+	return "/rpc/remoteMcp.discoverServerIcons"
+}
+
 // DeleteServerRemoteMcpPath returns the URL path to the remoteMcp service deleteServer HTTP endpoint.
 func DeleteServerRemoteMcpPath() string {
 	return "/rpc/remoteMcp.deleteServer"

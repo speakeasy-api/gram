@@ -186,8 +186,11 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, req *raw
 				"tools": json.RawMessage("{}"),
 			},
 			ServerInfo: serverInfo{
-				Name:    "Gram Platform Toolset",
-				Version: "0.0.0",
+				Name:       "Gram Platform Toolset",
+				Title:      "",
+				Version:    "0.0.0",
+				WebsiteURL: "",
+				Icons:      nil,
 			},
 			Instructions: "",
 		},

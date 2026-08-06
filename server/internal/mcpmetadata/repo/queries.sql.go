@@ -101,6 +101,25 @@ func (q *Queries) GetHeaderDisplayNamesByToolsetIDs(ctx context.Context, arg Get
 	return items, nil
 }
 
+const getLogoForCustomDomain = `-- name: GetLogoForCustomDomain :one
+SELECT m.logo_id
+FROM mcp_metadata m
+INNER JOIN toolsets t ON t.id = m.toolset_id
+WHERE t.custom_domain_id = $1
+  AND t.mcp_enabled IS TRUE
+  AND t.deleted IS FALSE
+  AND m.logo_id IS NOT NULL
+ORDER BY t.created_at, t.id
+LIMIT 1
+`
+
+func (q *Queries) GetLogoForCustomDomain(ctx context.Context, customDomainID uuid.NullUUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRow(ctx, getLogoForCustomDomain, customDomainID)
+	var logo_id uuid.NullUUID
+	err := row.Scan(&logo_id)
+	return logo_id, err
+}
+
 const getMetadataByMcpServerID = `-- name: GetMetadataByMcpServerID :one
 SELECT id,
        toolset_id,

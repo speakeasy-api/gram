@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	assets_repo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -234,6 +235,12 @@ func TestServePublic_InitializeSucceeds(t *testing.T) {
 	require.Equal(t, "2025-03-26", result["protocolVersion"])
 	require.NotNil(t, result["capabilities"])
 	require.NotNil(t, result["serverInfo"])
+
+	info, ok := result["serverInfo"].(map[string]any)
+	require.True(t, ok, "serverInfo should be a map")
+	require.Equal(t, "test-mcp", info["name"])
+	require.Equal(t, "Test MCP Server", info["title"])
+	require.NotContains(t, info, "icons", "no logo configured, icons should be omitted")
 }
 
 // TestServePublic_InitializeWithMalformedParamsSucceeds verifies the commit's
@@ -433,12 +440,23 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	logo, err := assets_repo.New(ti.conn).CreateAsset(ctx, assets_repo.CreateAssetParams{
+		Name:          "test-logo.png",
+		Url:           "https://example.com/logo.png",
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Kind:          "image",
+		ContentType:   "image/png",
+		ContentLength: 1024,
+	})
+	require.NoError(t, err)
+
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
 	_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
 		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                *authCtx.ProjectID,
-		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
-		LogoID:                   uuid.NullUUID{Valid: false},
+		ExternalDocumentationUrl: conv.ToPGText("https://docs.example.com"),
+		LogoID:                   uuid.NullUUID{UUID: logo.ID, Valid: true},
 		Instructions:             conv.ToPGText(instructions),
 	})
 	require.NoError(t, err)
@@ -458,6 +476,19 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	require.NotNil(t, result["capabilities"])
 	require.NotNil(t, result["serverInfo"])
 	require.Equal(t, instructions, result["instructions"])
+
+	info, ok := result["serverInfo"].(map[string]any)
+	require.True(t, ok, "serverInfo should be a map")
+	require.Equal(t, "test-mcp-instructions", info["name"])
+	require.Equal(t, "Test MCP Server with Instructions", info["title"])
+	require.Equal(t, "https://docs.example.com", info["websiteUrl"])
+
+	icons, ok := info["icons"].([]any)
+	require.True(t, ok, "icons should be an array")
+	require.Len(t, icons, 1)
+	iconEntry, ok := icons[0].(map[string]any)
+	require.True(t, ok, "icon should be a map")
+	require.Equal(t, "http://0.0.0.0/rpc/assets.serveImage?id="+logo.ID.String(), iconEntry["src"])
 }
 
 func TestServePublic_BatchRequestRejected(t *testing.T) {

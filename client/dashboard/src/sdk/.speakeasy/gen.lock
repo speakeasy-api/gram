@@ -2,8 +2,8 @@ lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.789.1
-  generationVersion: 2.916.4
+  speakeasyVersion: 1.791.0
+  generationVersion: 2.924.0
   releaseVersion: 0.33.8
 features:
   typescript:
@@ -22,7 +22,7 @@ features:
     methodSecurity: 2.82.8
     nameOverrides: 2.81.4
     pagination: 2.83.2
-    reactQueryHooks: 0.2.4
+    reactQueryHooks: 0.3.0
     responseFormat: 0.3.0
     retries: 2.83.1
     sdkHooks: 0.4.0
@@ -89,6 +89,7 @@ trackedFiles:
   src/funcs/aiIntegrationsSetScheduleEnabled.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
+  src/funcs/assetsFetchImageFromURL.ts: {}
   src/funcs/assetsFetchOpenAPIv3FromURL.ts: {}
   src/funcs/assetsListAssets.ts: {}
   src/funcs/assetsServeChatAttachment.ts: {}
@@ -309,6 +310,7 @@ trackedFiles:
   src/funcs/remoteMcpDeleteServer.ts: {}
   src/funcs/remoteMcpDeleteServerHeader.ts: {}
   src/funcs/remoteMcpDiscoverProtectedResourceMetadata.ts: {}
+  src/funcs/remoteMcpDiscoverServerIcons.ts: {}
   src/funcs/remoteMcpGetServer.ts: {}
   src/funcs/remoteMcpGetServerHeader.ts: {}
   src/funcs/remoteMcpListServerHeaders.ts: {}
@@ -640,6 +642,7 @@ trackedFiles:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/discoverremotesessionissuerrequestbody.ts: {}
+  src/models/components/discoverservericonsresult.ts: {}
   src/models/components/distributeskillrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
@@ -664,6 +667,7 @@ trackedFiles:
   src/models/components/externalmcptooldefinition.ts: {}
   src/models/components/externaloauthserver.ts: {}
   src/models/components/externaloauthserverform.ts: {}
+  src/models/components/fetchimagefromurlform2.ts: {}
   src/models/components/fetchopenapiv3fromurlform2.ts: {}
   src/models/components/filteroption.ts: {}
   src/models/components/functionenvironmentvariable.ts: {}
@@ -1333,6 +1337,7 @@ trackedFiles:
   src/models/operations/disablerbac.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
+  src/models/operations/discoverremotemcpservericons.ts: {}
   src/models/operations/discoverremotesessionissuer.ts: {}
   src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
@@ -1344,6 +1349,7 @@ trackedFiles:
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
+  src/models/operations/fetchimagefromurl.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
   src/models/operations/generatetitle.ts: {}
   src/models/operations/generateworkosadminportallink.ts: {}
@@ -1821,6 +1827,7 @@ trackedFiles:
   src/react-query/disableRBAC.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
+  src/react-query/discoverRemoteMcpServerIcons.ts: {}
   src/react-query/discoverRemoteSessionIssuer.ts: {}
   src/react-query/distributeSkill.ts: {}
   src/react-query/enableRBAC.ts: {}
@@ -1829,6 +1836,7 @@ trackedFiles:
   src/react-query/evolveDeployment.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
+  src/react-query/fetchImageFromURL.ts: {}
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
   src/react-query/generateWorkOSAdminPortalLink.ts: {}
   src/react-query/getAssistantMemory.core.ts: {}
@@ -3770,6 +3778,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  discoverRemoteMcpServerIcons:
+    speakeasy-default-discover-remote-mcp-server-icons:
+      requestBody:
+        application/json: {"transport_type": "<value>", "url": "https://feline-pants.com/"}
+      responses:
+        "200":
+          application/json: {"icons": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   discoverRemoteSessionIssuer:
     speakeasy-default-discover-remote-session-issuer:
       requestBody:
@@ -3882,6 +3901,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  fetchImageFromURL:
+    speakeasy-default-fetch-image-from-URL:
+      requestBody:
+        application/json: {"url": "https://early-casement.biz"}
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 716034, "content_type": "<value>", "created_at": "2024-10-20T05:41:34.144Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2026-03-08T00:48:36.490Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   fetchOpenAPIv3FromURL:
     speakeasy-default-fetch-open-AP-iv3-from-URL:
       requestBody:

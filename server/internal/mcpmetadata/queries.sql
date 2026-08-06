@@ -162,3 +162,14 @@ WHERE mcp_metadata_id = @mcp_metadata_id
 -- name: DeleteAllEnvironmentConfigs :exec
 DELETE FROM mcp_environment_configs
 WHERE mcp_metadata_id = @mcp_metadata_id;
+
+-- name: GetLogoForCustomDomain :one
+SELECT m.logo_id
+FROM mcp_metadata m
+INNER JOIN toolsets t ON t.id = m.toolset_id
+WHERE t.custom_domain_id = @custom_domain_id
+  AND t.mcp_enabled IS TRUE
+  AND t.deleted IS FALSE
+  AND m.logo_id IS NOT NULL
+ORDER BY t.created_at, t.id
+LIMIT 1;

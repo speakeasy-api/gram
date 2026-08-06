@@ -6,10 +6,17 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ImageUpload } from "@/components/upload";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
+import type { Asset } from "@gram/client/models/components/asset.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import {
+  invalidateAllGetMcpMetadata,
+  useGetMcpMetadata,
+} from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,41 +47,88 @@ export function BrandingSection({
   const navigate = useNavigate();
   const routes = useRoutes();
 
+  // Logo lives on the server's MCP metadata (mcp_metadata.logo_id) — the same
+  // record catalog installs persist the registry icon into.
+  const { data: metadataData } = useGetMcpMetadata(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    {
+      retry: false,
+      throwOnError: false, // Expected 404 when no metadata exists
+    },
+  );
+  const metadata = metadataData?.metadata;
+  const setMetadata = useMcpMetadataSetMutation();
+
+  // Staged logo asset id ("" = no logo). Picking a file uploads the asset (to
+  // preview it) but the assignment only persists on Save, like the name.
+  const persistedLogoId = metadata?.logoAssetId ?? "";
+  const [logoDraft, setLogoDraft] = useState(persistedLogoId);
+  useEffect(() => {
+    setLogoDraft(persistedLogoId);
+  }, [mcpServer.id, persistedLogoId]);
+
   const trimmedDraft = nameDraft.trim();
-  const dirty = trimmedDraft !== (mcpServer.name ?? "").trim();
+  const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
+  const logoDirty = logoDraft !== persistedLogoId;
+  const saving = update.isPending || setMetadata.isPending;
   const saveDisabled =
-    !dirty ||
+    (!nameDirty && !logoDirty) ||
     trimmedDraft === "" ||
     trimmedDraft.length > NAME_MAX_LENGTH ||
-    update.isPending;
+    saving;
   const characterCount = `${nameDraft.length} of ${NAME_MAX_LENGTH} characters used`;
 
   const handleSave = async () => {
     try {
-      const updated = await update.mutateAsync({
-        request: {
-          updateMcpServerForm: {
-            id: mcpServer.id,
-            name: trimmedDraft,
-            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-            toolsetId: mcpServer.toolsetId ?? undefined,
-            environmentId: mcpServer.environmentId ?? undefined,
-            toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-            visibility: mcpServer.visibility,
+      if (logoDirty) {
+        // The metadata endpoint upserts every field, so carry the existing
+        // values along to avoid wiping instructions or documentation links.
+        // Omitting logoAssetId clears the logo.
+        await setMetadata.mutateAsync({
+          request: {
+            setMcpMetadataRequestBody: {
+              mcpServerId: mcpServer.id,
+              logoAssetId: logoDraft || undefined,
+              externalDocumentationUrl: metadata?.externalDocumentationUrl,
+              externalDocumentationText: metadata?.externalDocumentationText,
+              instructions: metadata?.instructions,
+              installationOverrideUrl: metadata?.installationOverrideUrl,
+            },
           },
-        },
-      });
-      // The server recomputes slug on every update, so a name change produces
-      // a new slug. Replace the route param with the new slug *before*
-      // invalidating queries so the refetch uses the new lookup args and the
-      // page-level not-found guard doesn't bounce the user back to /mcp.
-      const nextParam = mcpServerRouteParam(updated);
-      void navigate(routes.mcp.x.settings.href(nextParam), { replace: true });
-      await Promise.all([
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-      ]);
+        });
+        await invalidateAllGetMcpMetadata(queryClient, { refetchType: "all" });
+      }
+
+      if (nameDirty) {
+        const updated = await update.mutateAsync({
+          request: {
+            updateMcpServerForm: {
+              id: mcpServer.id,
+              name: trimmedDraft,
+              remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+              tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
+              toolsetId: mcpServer.toolsetId ?? undefined,
+              environmentId: mcpServer.environmentId ?? undefined,
+              toolVariationsGroupId:
+                mcpServer.toolVariationsGroupId ?? undefined,
+              visibility: mcpServer.visibility,
+            },
+          },
+        });
+        // The server recomputes slug on every update, so a name change
+        // produces a new slug. Replace the route param with the new slug
+        // *before* invalidating queries so the refetch uses the new lookup
+        // args and the page-level not-found guard doesn't bounce the user
+        // back to /mcp.
+        const nextParam = mcpServerRouteParam(updated);
+        void navigate(routes.mcp.x.settings.href(nextParam), { replace: true });
+        await Promise.all([
+          invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+          invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        ]);
+      }
+
       toast.success("MCP server updated");
     } catch (error) {
       const message =
@@ -109,12 +163,25 @@ export function BrandingSection({
               maxLength={NAME_MAX_LENGTH}
               aria-invalid={update.isError}
             />
-            {dirty && (
+            {nameDirty && (
               <FieldDescription className="pl-1 text-xs">
                 {characterCount}
               </FieldDescription>
             )}
             {update.isError && <FieldError>{update.error.message}</FieldError>}
+          </Field>
+          <Field className="max-w-md">
+            <FieldLabel>Logo</FieldLabel>
+            <FieldDescription>
+              Shown next to this server in the dashboard and advertised to MCP
+              clients. Catalog installs prefill it with the server's catalog
+              icon.
+            </FieldDescription>
+            <ImageUpload
+              key={persistedLogoId || "no-logo"}
+              existingAssetId={metadata?.logoAssetId}
+              onUpload={(asset: Asset) => setLogoDraft(asset.id)}
+            />
           </Field>
         </SettingsSection.Body>
         <SettingsSection.Footer>
@@ -124,7 +191,7 @@ export function BrandingSection({
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
               <FooterSaveButton
-                pending={update.isPending}
+                pending={saving}
                 disabled={saveDisabled}
                 onClick={() => void handleSave()}
               />

@@ -4,11 +4,12 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Badge } from "@speakeasy-api/moonshine";
-import { ArrowRight, Network } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { MCPActivityIndicator } from "./MCPActivityIndicator";
 import type { McpActivityStatus } from "./mcp-activity";
+import { McpServerLogo } from "./McpServerLogo";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
 // Today only Remote-MCP-backed servers reach this component (filtered upstream
@@ -40,7 +41,11 @@ export function MCPServerCard({
       to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
       className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>
+      <DotCard
+        icon={
+          <McpServerLogo mcpServerId={server.id} name={server.name} size="lg" />
+        }
+      >
         {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <Type

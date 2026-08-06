@@ -7,6 +7,7 @@ import { remoteMcpCreateServerHeader } from "../funcs/remoteMcpCreateServerHeade
 import { remoteMcpDeleteServer } from "../funcs/remoteMcpDeleteServer.js";
 import { remoteMcpDeleteServerHeader } from "../funcs/remoteMcpDeleteServerHeader.js";
 import { remoteMcpDiscoverProtectedResourceMetadata } from "../funcs/remoteMcpDiscoverProtectedResourceMetadata.js";
+import { remoteMcpDiscoverServerIcons } from "../funcs/remoteMcpDiscoverServerIcons.js";
 import { remoteMcpGetServer } from "../funcs/remoteMcpGetServer.js";
 import { remoteMcpGetServerHeader } from "../funcs/remoteMcpGetServerHeader.js";
 import { remoteMcpListServerHeaders } from "../funcs/remoteMcpListServerHeaders.js";
@@ -15,6 +16,7 @@ import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
 import { remoteMcpUpdateServerHeader } from "../funcs/remoteMcpUpdateServerHeader.js";
 import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { DiscoverServerIconsResult } from "../models/components/discoverservericonsresult.js";
 import { ListServerHeadersResult } from "../models/components/listserverheadersresult.js";
 import { ListServersResult } from "../models/components/listserversresult.js";
 import { ProtectedResourceMetadataDiscovery } from "../models/components/protectedresourcemetadatadiscovery.js";
@@ -41,6 +43,10 @@ import {
   DiscoverRemoteMcpProtectedResourceMetadataRequest,
   DiscoverRemoteMcpProtectedResourceMetadataSecurity,
 } from "../models/operations/discoverremotemcpprotectedresourcemetadata.js";
+import {
+  DiscoverRemoteMcpServerIconsRequest,
+  DiscoverRemoteMcpServerIconsSecurity,
+} from "../models/operations/discoverremotemcpservericons.js";
 import {
   GetRemoteMcpServerRequest,
   GetRemoteMcpServerSecurity,
@@ -160,6 +166,25 @@ export class RemoteMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ProtectedResourceMetadataDiscovery> {
     return unwrapAsync(remoteMcpDiscoverProtectedResourceMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * discoverServerIcons remoteMcp
+   *
+   * @remarks
+   * Probe a remote MCP server URL with an MCP initialize request and return any icons the server advertises in its serverInfo (SEP-973). Runs server-side under guardian.Policy. Returns an empty list when the server is unreachable, requires auth, or advertises no icons.
+   */
+  async discoverServerIcons(
+    request: DiscoverRemoteMcpServerIconsRequest,
+    security?: DiscoverRemoteMcpServerIconsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DiscoverServerIconsResult> {
+    return unwrapAsync(remoteMcpDiscoverServerIcons(
       this,
       request,
       security,

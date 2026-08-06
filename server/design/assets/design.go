@@ -111,6 +111,25 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenAPIv3"}`)
 	})
 
+	Method("fetchImageFromURL", func() {
+		Description("Fetch an image from a URL and upload it to Gram as an image asset.")
+
+		Payload(FetchImageFromURLForm)
+
+		Result(UploadImageResult)
+
+		HTTP(func() {
+			POST("/rpc/assets.fetchImageFromURL")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+		})
+
+		Meta("openapi:operationId", "fetchImageFromURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchImageFromURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchImageFromURL"}`)
+	})
+
 	Method("fetchOpenAPIv3FromURL", func() {
 		Description("Fetch an OpenAPI v3 document from a URL and upload it to Gram.")
 
@@ -372,6 +391,15 @@ var UploadOpenAPIv3Result = Type("UploadOpenAPIv3Result", func() {
 	Required("asset")
 
 	Attribute("asset", Asset, "The asset entry that was created in Gram")
+})
+
+var FetchImageFromURLForm = Type("FetchImageFromURLForm", func() {
+	Required("url")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+
+	Attribute("url", String, "The URL to fetch the image from")
 })
 
 var UploadImageForm = Type("UploadImageForm", func() {

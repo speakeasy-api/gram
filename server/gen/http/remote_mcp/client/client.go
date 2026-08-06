@@ -41,6 +41,10 @@ type Client struct {
 	// endpoint.
 	VerifyURLDoer goahttp.Doer
 
+	// DiscoverServerIcons Doer is the HTTP client used to make requests to the
+	// discoverServerIcons endpoint.
+	DiscoverServerIconsDoer goahttp.Doer
+
 	// DeleteServer Doer is the HTTP client used to make requests to the
 	// deleteServer endpoint.
 	DeleteServerDoer goahttp.Doer
@@ -91,6 +95,7 @@ func NewClient(
 		UpdateServerDoer:                      doer,
 		DiscoverProtectedResourceMetadataDoer: doer,
 		VerifyURLDoer:                         doer,
+		DiscoverServerIconsDoer:               doer,
 		DeleteServerDoer:                      doer,
 		ListServerHeadersDoer:                 doer,
 		GetServerHeaderDoer:                   doer,
@@ -244,6 +249,30 @@ func (c *Client) VerifyURL() goa.Endpoint {
 		resp, err := c.VerifyURLDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteMcp", "verifyURL", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DiscoverServerIcons returns an endpoint that makes HTTP requests to the
+// remoteMcp service discoverServerIcons server.
+func (c *Client) DiscoverServerIcons() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDiscoverServerIconsRequest(c.encoder)
+		decodeResponse = DecodeDiscoverServerIconsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDiscoverServerIconsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DiscoverServerIconsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "discoverServerIcons", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -13,10 +13,12 @@ import {
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
 import { autoConfigureRemoteMcpAuth } from "@/pages/sources/remote-mcp/autoConfigureAuth";
+import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
@@ -181,6 +183,78 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
       return value ? [{ header, value }] : [];
     }),
   }));
+}
+
+/**
+ * Persist a logo for a freshly installed server as its MCP metadata logo,
+ * best-effort — a logo failure never fails the install. Candidates in
+ * order: the catalog's registry icon; when the registry has none, icons the
+ * server itself advertises in its initialize response (SEP-973); finally
+ * the server origin's favicon. The first candidate that ingests
+ * successfully wins.
+ */
+async function persistServerIconBestEffort(
+  client: Gram,
+  target: InstallTarget,
+  mcpServerId: string,
+  reqOpts: RequestOptions | undefined,
+): Promise<void> {
+  const candidates: string[] = [];
+  if (target.server.iconUrl) {
+    candidates.push(target.server.iconUrl);
+  } else {
+    try {
+      const discovered = await client.remoteMcp.discoverServerIcons(
+        {
+          verifyURLForm: {
+            url: target.remote.url,
+            transportType: "streamable-http",
+          },
+        },
+        undefined,
+        reqOpts,
+      );
+      candidates.push(...discovered.icons);
+    } catch (discoverError) {
+      console.warn("Failed to discover server icons during install.", {
+        mcpServerId,
+        remoteUrl: target.remote.url,
+        discoverError,
+      });
+    }
+    try {
+      candidates.push(new URL(target.remote.url).origin + "/favicon.ico");
+    } catch {
+      // Unparseable remote URL — no favicon candidate.
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const uploaded = await client.assets.fetchImageFromURL(
+        { fetchImageFromURLForm2: { url: candidate } },
+        undefined,
+        reqOpts,
+      );
+      await client.mcpMetadata.set(
+        {
+          setMcpMetadataRequestBody: {
+            mcpServerId,
+            logoAssetId: uploaded.asset.id,
+          },
+        },
+        undefined,
+        reqOpts,
+      );
+      return;
+    } catch (iconError) {
+      console.warn("Failed to persist server icon during install.", {
+        mcpServerId,
+        iconUrl: candidate,
+        iconError,
+      });
+    }
+  }
 }
 
 /**
@@ -488,6 +562,8 @@ export function useRemoteMcpInstallWorkflow({
         }
       }
 
+      await persistServerIconBestEffort(client, target, mcpServer.id, reqOpts);
+
       const authAutoConfig = await autoConfigureRemoteMcpAuth({
         client,
         authedFetch,
@@ -596,6 +672,8 @@ export function useRemoteMcpInstallWorkflow({
       invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
       invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+      // Installs may have persisted a catalog icon into MCP metadata.
+      invalidateAllGetMcpMetadata(queryClient, { refetchType: "all" }),
       // Every create links a fresh user_session_issuer.
       invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
     ];

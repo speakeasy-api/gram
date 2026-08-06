@@ -74,6 +74,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 	nginxIngressClassName := "nginx"
 	pathTypePrefix := networkingv1.PathTypePrefix
 	pathTypeImplementationSpecific := networkingv1.PathTypeImplementationSpecific
+	pathTypeExact := networkingv1.PathTypeExact
 	k8sName, err := SanitizeDomainForK8sName(domain)
 	if err != nil {
 		return "", "", nil, err
@@ -123,6 +124,19 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 								{
 									Path:     "/oauth",
 									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: "gram-server",
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
+									},
+								},
+								{
+									// MCP clients resolve a remote server's display icon
+									// from its domain favicon, served by gram from the
+									// domain's MCP metadata logo.
+									Path:     "/favicon.ico",
+									PathType: &pathTypeExact,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
 											Name: "gram-server",

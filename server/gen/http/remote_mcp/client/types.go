@@ -55,6 +55,15 @@ type VerifyURLRequestBody struct {
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
 }
 
+// DiscoverServerIconsRequestBody is the type of the "remoteMcp" service
+// "discoverServerIcons" endpoint HTTP request body.
+type DiscoverServerIconsRequestBody struct {
+	// The URL of the remote MCP server to probe
+	URL string `form:"url" json:"url" xml:"url"`
+	// The transport type for the remote MCP server (e.g. streamable-http)
+	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+}
+
 // CreateServerHeaderRequestBody is the type of the "remoteMcp" service
 // "createServerHeader" endpoint HTTP request body.
 type CreateServerHeaderRequestBody struct {
@@ -192,6 +201,14 @@ type VerifyURLResponseBody struct {
 	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
 	// Human-readable summary of the verification outcome
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// DiscoverServerIconsResponseBody is the type of the "remoteMcp" service
+// "discoverServerIcons" endpoint HTTP response body.
+type DiscoverServerIconsResponseBody struct {
+	// Absolute icon source URLs, in the order the server advertised them. Empty
+	// when the server is unreachable, requires auth, or advertises no icons.
+	Icons []string `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // ListServerHeadersResponseBody is the type of the "remoteMcp" service
@@ -1352,6 +1369,196 @@ type VerifyURLUnexpectedResponseBody struct {
 // VerifyURLGatewayErrorResponseBody is the type of the "remoteMcp" service
 // "verifyURL" endpoint HTTP response body for the "gateway_error" error.
 type VerifyURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsUnauthorizedResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the
+// "unauthorized" error.
+type DiscoverServerIconsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsForbiddenResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the
+// "forbidden" error.
+type DiscoverServerIconsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsBadRequestResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the
+// "bad_request" error.
+type DiscoverServerIconsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsNotFoundResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the
+// "not_found" error.
+type DiscoverServerIconsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsConflictResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the "conflict"
+// error.
+type DiscoverServerIconsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsUnsupportedMediaResponseBody is the type of the
+// "remoteMcp" service "discoverServerIcons" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DiscoverServerIconsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsInvalidResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the "invalid"
+// error.
+type DiscoverServerIconsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsInvariantViolationResponseBody is the type of the
+// "remoteMcp" service "discoverServerIcons" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DiscoverServerIconsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsUnexpectedResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the
+// "unexpected" error.
+type DiscoverServerIconsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DiscoverServerIconsGatewayErrorResponseBody is the type of the "remoteMcp"
+// service "discoverServerIcons" endpoint HTTP response body for the
+// "gateway_error" error.
+type DiscoverServerIconsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2600,6 +2807,16 @@ func NewVerifyURLRequestBody(p *remotemcp.VerifyURLPayload) *VerifyURLRequestBod
 	return body
 }
 
+// NewDiscoverServerIconsRequestBody builds the HTTP request body from the
+// payload of the "discoverServerIcons" endpoint of the "remoteMcp" service.
+func NewDiscoverServerIconsRequestBody(p *remotemcp.DiscoverServerIconsPayload) *DiscoverServerIconsRequestBody {
+	body := &DiscoverServerIconsRequestBody{
+		URL:           p.URL,
+		TransportType: p.TransportType,
+	}
+	return body
+}
+
 // NewCreateServerHeaderRequestBody builds the HTTP request body from the
 // payload of the "createServerHeader" endpoint of the "remoteMcp" service.
 func NewCreateServerHeaderRequestBody(p *remotemcp.CreateServerHeaderPayload) *CreateServerHeaderRequestBody {
@@ -3618,6 +3835,168 @@ func NewVerifyURLUnexpected(body *VerifyURLUnexpectedResponseBody) *goa.ServiceE
 // NewVerifyURLGatewayError builds a remoteMcp service verifyURL endpoint
 // gateway_error error.
 func NewVerifyURLGatewayError(body *VerifyURLGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsResultOK builds a "remoteMcp" service
+// "discoverServerIcons" endpoint result from a HTTP "OK" response.
+func NewDiscoverServerIconsResultOK(body *DiscoverServerIconsResponseBody) *remotemcp.DiscoverServerIconsResult {
+	v := &remotemcp.DiscoverServerIconsResult{}
+	v.Icons = make([]string, len(body.Icons))
+	for i, val := range body.Icons {
+		v.Icons[i] = val
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsUnauthorized builds a remoteMcp service
+// discoverServerIcons endpoint unauthorized error.
+func NewDiscoverServerIconsUnauthorized(body *DiscoverServerIconsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsForbidden builds a remoteMcp service
+// discoverServerIcons endpoint forbidden error.
+func NewDiscoverServerIconsForbidden(body *DiscoverServerIconsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsBadRequest builds a remoteMcp service
+// discoverServerIcons endpoint bad_request error.
+func NewDiscoverServerIconsBadRequest(body *DiscoverServerIconsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsNotFound builds a remoteMcp service
+// discoverServerIcons endpoint not_found error.
+func NewDiscoverServerIconsNotFound(body *DiscoverServerIconsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsConflict builds a remoteMcp service
+// discoverServerIcons endpoint conflict error.
+func NewDiscoverServerIconsConflict(body *DiscoverServerIconsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsUnsupportedMedia builds a remoteMcp service
+// discoverServerIcons endpoint unsupported_media error.
+func NewDiscoverServerIconsUnsupportedMedia(body *DiscoverServerIconsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsInvalid builds a remoteMcp service discoverServerIcons
+// endpoint invalid error.
+func NewDiscoverServerIconsInvalid(body *DiscoverServerIconsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsInvariantViolation builds a remoteMcp service
+// discoverServerIcons endpoint invariant_violation error.
+func NewDiscoverServerIconsInvariantViolation(body *DiscoverServerIconsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsUnexpected builds a remoteMcp service
+// discoverServerIcons endpoint unexpected error.
+func NewDiscoverServerIconsUnexpected(body *DiscoverServerIconsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDiscoverServerIconsGatewayError builds a remoteMcp service
+// discoverServerIcons endpoint gateway_error error.
+func NewDiscoverServerIconsGatewayError(body *DiscoverServerIconsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4758,6 +5137,15 @@ func ValidateVerifyURLResponseBody(body *VerifyURLResponseBody) (err error) {
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsResponseBody runs the validations defined on
+// DiscoverServerIconsResponseBody
+func ValidateDiscoverServerIconsResponseBody(body *DiscoverServerIconsResponseBody) (err error) {
+	if body.Icons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("icons", "body"))
 	}
 	return
 }
@@ -6306,6 +6694,246 @@ func ValidateVerifyURLUnexpectedResponseBody(body *VerifyURLUnexpectedResponseBo
 // ValidateVerifyURLGatewayErrorResponseBody runs the validations defined on
 // verifyURL_gateway_error_response_body
 func ValidateVerifyURLGatewayErrorResponseBody(body *VerifyURLGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsUnauthorizedResponseBody runs the validations
+// defined on discoverServerIcons_unauthorized_response_body
+func ValidateDiscoverServerIconsUnauthorizedResponseBody(body *DiscoverServerIconsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsForbiddenResponseBody runs the validations
+// defined on discoverServerIcons_forbidden_response_body
+func ValidateDiscoverServerIconsForbiddenResponseBody(body *DiscoverServerIconsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsBadRequestResponseBody runs the validations
+// defined on discoverServerIcons_bad_request_response_body
+func ValidateDiscoverServerIconsBadRequestResponseBody(body *DiscoverServerIconsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsNotFoundResponseBody runs the validations defined
+// on discoverServerIcons_not_found_response_body
+func ValidateDiscoverServerIconsNotFoundResponseBody(body *DiscoverServerIconsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsConflictResponseBody runs the validations defined
+// on discoverServerIcons_conflict_response_body
+func ValidateDiscoverServerIconsConflictResponseBody(body *DiscoverServerIconsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsUnsupportedMediaResponseBody runs the validations
+// defined on discoverServerIcons_unsupported_media_response_body
+func ValidateDiscoverServerIconsUnsupportedMediaResponseBody(body *DiscoverServerIconsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsInvalidResponseBody runs the validations defined
+// on discoverServerIcons_invalid_response_body
+func ValidateDiscoverServerIconsInvalidResponseBody(body *DiscoverServerIconsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsInvariantViolationResponseBody runs the
+// validations defined on discoverServerIcons_invariant_violation_response_body
+func ValidateDiscoverServerIconsInvariantViolationResponseBody(body *DiscoverServerIconsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsUnexpectedResponseBody runs the validations
+// defined on discoverServerIcons_unexpected_response_body
+func ValidateDiscoverServerIconsUnexpectedResponseBody(body *DiscoverServerIconsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDiscoverServerIconsGatewayErrorResponseBody runs the validations
+// defined on discoverServerIcons_gateway_error_response_body
+func ValidateDiscoverServerIconsGatewayErrorResponseBody(body *DiscoverServerIconsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

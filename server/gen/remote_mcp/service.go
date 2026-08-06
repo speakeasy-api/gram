@@ -37,6 +37,11 @@ type Service interface {
 	// they save a new or updated remote MCP server. Treats reachable-but-401/403
 	// responses as verified — auth verification is intentionally out of scope.
 	VerifyURL(context.Context, *VerifyURLPayload) (res *VerifyURLResult, err error)
+	// Probe a remote MCP server URL with an MCP initialize request and return any
+	// icons the server advertises in its serverInfo (SEP-973). Runs server-side
+	// under guardian.Policy. Returns an empty list when the server is unreachable,
+	// requires auth, or advertises no icons.
+	DiscoverServerIcons(context.Context, *DiscoverServerIconsPayload) (res *DiscoverServerIconsResult, err error)
 	// Delete a remote MCP server
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
 	// List the headers configured for a remote MCP server
@@ -71,7 +76,7 @@ const ServiceName = "remoteMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"createServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
+var MethodNames = [13]string{"createServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "discoverServerIcons", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
 
 // CreateServerHeaderPayload is the payload type of the remoteMcp service
 // createServerHeader method.
@@ -140,6 +145,26 @@ type DiscoverProtectedResourceMetadataPayload struct {
 	SessionToken      *string
 	ApikeyToken       *string
 	ProjectSlugInput  *string
+}
+
+// DiscoverServerIconsPayload is the payload type of the remoteMcp service
+// discoverServerIcons method.
+type DiscoverServerIconsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The URL of the remote MCP server to probe
+	URL string
+	// The transport type for the remote MCP server (e.g. streamable-http)
+	TransportType string
+}
+
+// DiscoverServerIconsResult is the result type of the remoteMcp service
+// discoverServerIcons method.
+type DiscoverServerIconsResult struct {
+	// Absolute icon source URLs, in the order the server advertised them. Empty
+	// when the server is unreachable, requires auth, or advertises no icons.
+	Icons []string
 }
 
 // GetServerHeaderPayload is the payload type of the remoteMcp service

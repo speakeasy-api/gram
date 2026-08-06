@@ -172,6 +172,31 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VerifyRemoteMcpURL"}`)
 	})
 
+	Method("discoverServerIcons", func() {
+		Description("Probe a remote MCP server URL with an MCP initialize request and return any icons the server advertises in its serverInfo (SEP-973). Runs server-side under guardian.Policy. Returns an empty list when the server is unreachable, requires auth, or advertises no icons.")
+
+		Payload(func() {
+			Extend(VerifyURLForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(DiscoverServerIconsResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.discoverServerIcons")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "discoverRemoteMcpServerIcons")
+		Meta("openapi:extension:x-speakeasy-name-override", "discoverServerIcons")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscoverRemoteMcpServerIcons"}`)
+	})
+
 	Method("deleteServer", func() {
 		Description("Delete a remote MCP server")
 
@@ -439,6 +464,14 @@ var VerifyURLResult = Type("VerifyURLResult", func() {
 	Attribute("message", String, "Human-readable summary of the verification outcome")
 
 	Required("verified", "message")
+})
+
+var DiscoverServerIconsResult = Type("DiscoverServerIconsResult", func() {
+	Description("Icons advertised by a remote MCP server in its initialize response")
+
+	Attribute("icons", ArrayOf(String), "Absolute icon source URLs, in the order the server advertised them. Empty when the server is unreachable, requires auth, or advertises no icons.")
+
+	Required("icons")
 })
 
 var RemoteMcpServer = Type("RemoteMcpServer", func() {
