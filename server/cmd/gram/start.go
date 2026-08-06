@@ -1298,6 +1298,8 @@ func newStartCommand() *cli.Command {
 				platformAuthorizer,
 				platformOAuth.ProtectedResourceURL(),
 				platformmcp.NewPostgresReader(db),
+				nil, // Catalog descriptors remain fail-closed until a reviewed catalog provider descriptor and OAuth posture are configured.
+				nil, // Catalog registration remains fail-closed until it can use the same reviewed descriptor.
 				platformmcp.NewPostgresReadinessRecorder(db),
 			)
 			platformmcp.Attach(mux, platformmcp.NewService(

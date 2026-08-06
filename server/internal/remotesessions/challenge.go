@@ -167,6 +167,7 @@ func NewChallengeManager(
 // without re-querying.
 type Client struct {
 	ID                    uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
 	ExternalClientID      string
 	ClientSecretEncrypted *string
 	IssuerSlug            string
@@ -210,6 +211,7 @@ func (m *ChallengeManager) ListClients(
 	for _, r := range rows {
 		out = append(out, Client{
 			ID:                    r.ClientID,
+			RemoteSessionIssuerID: r.RemoteSessionIssuerID,
 			ExternalClientID:      r.ExternalClientID,
 			ClientSecretEncrypted: conv.FromPGText[string](r.ClientSecretEncrypted),
 			IssuerSlug:            r.IssuerSlug,

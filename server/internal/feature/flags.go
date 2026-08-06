@@ -46,6 +46,10 @@ const (
 	// FlagPlatformMCPRollout gates the organization-targeted Platform MCP rollout.
 	// It is evaluated in addition to the durable Platform MCP product capability.
 	FlagPlatformMCPRollout Flag = "platform-mcp-rollout"
+	// FlagPlatformMCPCatalogRegistration independently gates Platform MCP catalog
+	// registration and provider-setup handoffs. It is evaluated after the main
+	// Platform MCP gate and is default-off during the mutation rollout.
+	FlagPlatformMCPCatalogRegistration Flag = "platform-mcp-catalog-registration"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.

@@ -67,7 +67,7 @@ type featureUnavailableResult struct {
 	Message string `json:"message"`
 }
 
-func newServer(reader Reader) *mcp.Server {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "gram-platform-mcp",
 		Title:   "Gram Platform MCP",
@@ -78,6 +78,18 @@ func newServer(reader Reader) *mcp.Server {
 	})
 
 	registerReadTools(server, reader)
+	if catalog == nil {
+		registerUnavailableCatalogTools(server)
+	} else {
+		registerCatalogTools(server, catalog)
+	}
+	if registrations == nil || registrations.store == nil {
+		registerUnavailableCatalogRegistrationTool(server)
+		registerUnavailableSetupHandoffTool(server)
+	} else {
+		registerCatalogRegistrationTool(server, registrations)
+		registerSetupHandoffTool(server, registrations)
+	}
 	registerUnavailableTools(server)
 	return server
 }
@@ -89,6 +101,40 @@ func registerReadTools(server *mcp.Server, reader Reader) {
 	registerGetMCPTool(server, reader)
 }
 
+func registerUnavailableCatalogTools(server *mcp.Server) {
+	for _, tool := range []struct {
+		name        string
+		title       string
+		description string
+	}{
+		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout."},
+		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout."},
+	} {
+		mcp.AddTool(server, &mcp.Tool{
+			Name:        tool.name,
+			Title:       tool.title,
+			Description: tool.description,
+			Annotations: readOnlyAnnotations(),
+		}, unavailableTool("catalog"))
+	}
+}
+
+func registerUnavailableCatalogRegistrationTool(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "register_catalog_mcp",
+		Title:       "Register Catalog MCP",
+		Description: "Register an approved catalog MCP in a project. Registration is not enabled in the current rollout.",
+	}, unavailableTool("catalog_registration"))
+}
+
+func registerUnavailableSetupHandoffTool(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_setup_handoff",
+		Title:       "Get Setup Handoff",
+		Description: "Create a secure setup handoff. Provider handoffs are not enabled in the current rollout.",
+	}, unavailableTool("setup_handoff"))
+}
+
 func registerUnavailableTools(server *mcp.Server) {
 	for _, tool := range []struct {
 		name        string
@@ -96,14 +142,11 @@ func registerUnavailableTools(server *mcp.Server) {
 		description string
 		feature     string
 	}{
-		{"search_mcp_catalog", "Search MCP Catalog", "Search the approved MCP catalog. Catalog discovery is not enabled in the read-only rollout.", "catalog_discovery"},
-		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect an MCP catalog candidate. Candidate inspection is not enabled in the read-only rollout.", "catalog_discovery"},
-		{"register_catalog_mcp", "Register Catalog MCP", "Register an approved catalog MCP in a project. Registration is not enabled in the read-only rollout.", "catalog_registration"},
+
 		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not enabled in the read-only rollout.", "plugin_distribution"},
 		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not enabled in the read-only rollout.", "plugin_distribution"},
 		{"get_mcp_readiness", "Get MCP Readiness", "Check configured MCP readiness. Readiness checks are not enabled in the read-only rollout.", "mcp_readiness"},
 		{"get_mcp_repair_plan", "Get MCP Repair Plan", "Get a safe MCP repair plan. Repair planning is not enabled in the read-only rollout.", "mcp_readiness"},
-		{"get_setup_handoff", "Get Setup Handoff", "Create a secure setup handoff. Provider handoffs are not enabled in the read-only rollout.", "setup_handoff"},
 	} {
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        tool.name,

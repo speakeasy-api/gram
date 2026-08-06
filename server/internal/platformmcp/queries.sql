@@ -385,3 +385,341 @@ WHERE server.id = @mcp_server_id
   AND projects.organization_id = @organization_id
   AND projects.deleted IS FALSE
   AND server.deleted IS FALSE;
+
+-- Slice 5B lifecycle state. Every query below is tenant-qualified; callers must
+-- still perform live Platform authorization and mutation-gate checks before use.
+
+-- name: ResolvePlatformMCPProjectBySlug :one
+SELECT id, name, slug
+FROM projects
+WHERE organization_id = @organization_id
+  AND slug = @slug
+  AND deleted IS FALSE;
+
+-- name: LockPlatformMCPOperationReceipt :exec
+-- The receipt table records connection attribution, but RFC idempotency belongs
+-- to the real user and exact target across connection generation/client changes.
+-- Lock before lookup/reclaim/create to serialize that stronger contract.
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt', @organization_id::text, @subject_urn::text, @project_id::text, @operation::text, @idempotency_key::text)::text,
+        0
+    )
+);
+
+-- name: GetPlatformMCPOperationReceipt :one
+SELECT receipt.*
+FROM platform_mcp_operation_receipts AS receipt
+JOIN platform_mcp_connections AS connection
+  ON connection.id = receipt.connection_id
+ AND connection.organization_id = receipt.organization_id
+WHERE receipt.organization_id = @organization_id
+  AND connection.subject_urn = @subject_urn
+  AND receipt.project_id = @project_id
+  AND receipt.operation = @operation
+  AND receipt.idempotency_key = @idempotency_key
+ORDER BY receipt.created_at DESC, receipt.id DESC
+LIMIT 1;
+
+-- name: DeleteExpiredPlatformMCPOperationReceipt :execrows
+DELETE FROM platform_mcp_operation_receipts AS receipt
+USING platform_mcp_connections AS connection
+WHERE receipt.connection_id = connection.id
+  AND receipt.organization_id = connection.organization_id
+  AND receipt.organization_id = @organization_id
+  AND connection.subject_urn = @subject_urn
+  AND receipt.project_id = @project_id
+  AND receipt.operation = @operation
+  AND receipt.idempotency_key = @idempotency_key
+  AND receipt.expires_at <= clock_timestamp();
+
+-- name: CreatePlatformMCPOperationReceipt :one
+INSERT INTO platform_mcp_operation_receipts (
+    organization_id,
+    project_id,
+    registration_id,
+    connection_id,
+    connection_generation,
+    operation,
+    idempotency_key,
+    input_hash,
+    status,
+    result_code,
+    expires_at
+) VALUES (
+    @organization_id,
+    @project_id,
+    @registration_id,
+    @connection_id,
+    @connection_generation,
+    @operation,
+    @idempotency_key,
+    @input_hash,
+    @status,
+    @result_code,
+    @expires_at
+)
+RETURNING *;
+
+-- name: AttachPlatformMCPOperationReceiptRegistration :one
+UPDATE platform_mcp_operation_receipts
+SET registration_id = @registration_id,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND status = 'pending'
+RETURNING *;
+
+-- name: CompletePlatformMCPOperationReceipt :one
+UPDATE platform_mcp_operation_receipts
+SET registration_id = @registration_id,
+    status = @status,
+    result_code = @result_code,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+RETURNING *;
+
+-- name: LockPlatformMCPCatalogRegistration :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-registration', @organization_id::text, @project_id::text, @source_kind::text, @catalog_provider::text, @catalog_reference::text)::text,
+        0
+    )
+);
+
+-- name: GetActivePlatformMCPCatalogRegistration :one
+SELECT *
+FROM platform_mcp_catalog_registrations
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND source_kind = @source_kind
+  AND catalog_provider = @catalog_provider
+  AND catalog_reference = @catalog_reference
+  AND deleted IS FALSE;
+
+-- name: GetPlatformMCPCatalogRegistrationByID :one
+SELECT *
+FROM platform_mcp_catalog_registrations
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
+-- Registrations are project desired state, not permanently owned by the OAuth
+-- client that originally created them. Lifecycle actions require the current
+-- active Platform connection to belong to that same user subject.
+SELECT registration.*
+FROM platform_mcp_catalog_registrations AS registration
+JOIN platform_mcp_connections AS created_connection
+  ON created_connection.id = registration.connection_id
+ AND created_connection.organization_id = registration.organization_id
+JOIN platform_mcp_connections AS current_connection
+  ON current_connection.id = @connection_id
+ AND current_connection.organization_id = registration.organization_id
+WHERE registration.id = @registration_id
+  AND registration.organization_id = @organization_id
+  AND registration.project_id = @project_id
+  AND registration.deleted IS FALSE
+  AND created_connection.subject_urn = @subject_urn
+  AND current_connection.subject_urn = @subject_urn
+  AND current_connection.active_generation = @connection_generation
+  AND current_connection.revoked_at IS NULL;
+
+-- name: CreatePlatformMCPCatalogRegistration :one
+INSERT INTO platform_mcp_catalog_registrations (
+    organization_id,
+    project_id,
+    source_kind,
+    catalog_provider,
+    catalog_reference,
+    status,
+    connection_id,
+    connection_generation
+) VALUES (
+    @organization_id,
+    @project_id,
+    @source_kind,
+    @catalog_provider,
+    @catalog_reference,
+    @status,
+    @connection_id,
+    @connection_generation
+)
+RETURNING *;
+
+-- name: UpdatePlatformMCPCatalogRegistrationComponents :one
+UPDATE platform_mcp_catalog_registrations
+SET status = @status,
+    remote_mcp_server_id = @remote_mcp_server_id,
+    remote_mcp_server_owned = @remote_mcp_server_owned,
+    user_session_issuer_id = @user_session_issuer_id,
+    user_session_issuer_owned = @user_session_issuer_owned,
+    mcp_server_id = @mcp_server_id,
+    mcp_server_owned = @mcp_server_owned,
+    mcp_endpoint_id = @mcp_endpoint_id,
+    mcp_endpoint_owned = @mcp_endpoint_owned,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: LockPlatformMCPSetupHandoff :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-handoff', @registration_id::text, @connection_id::text, @connection_generation::text, @intent::text)::text,
+        0
+    )
+);
+
+-- name: CreatePlatformMCPSetupHandoff :one
+INSERT INTO platform_mcp_setup_handoffs (
+    organization_id,
+    project_id,
+    registration_id,
+    connection_id,
+    connection_generation,
+    provider_key,
+    intent,
+    handoff_hash,
+    expires_at
+)
+SELECT
+    @organization_id,
+    @project_id,
+    @registration_id,
+    @connection_id,
+    @connection_generation,
+    @provider_key,
+    @intent,
+    @handoff_hash,
+    @expires_at
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.id = @registration_id
+      AND registration.organization_id = @organization_id
+      AND registration.project_id = @project_id
+      AND registration.deleted IS FALSE
+)
+RETURNING *;
+
+-- name: InvalidateActivePlatformMCPSetupHandoffs :execrows
+UPDATE platform_mcp_setup_handoffs
+SET invalidated_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND registration_id = @registration_id
+  AND connection_id = @connection_id
+  AND connection_generation = @connection_generation
+  AND intent = @intent
+  AND redeemed_at IS NULL
+  AND invalidated_at IS NULL;
+
+-- name: ConsumePlatformMCPSetupHandoff :one
+UPDATE platform_mcp_setup_handoffs AS handoff
+SET redeemed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE handoff.handoff_hash = @handoff_hash
+  AND handoff.organization_id = @organization_id
+  AND handoff.project_id = @project_id
+  AND handoff.registration_id = @registration_id
+  AND handoff.connection_id = @connection_id
+  AND handoff.connection_generation = @connection_generation
+  AND handoff.provider_key = @provider_key
+  AND handoff.intent = @intent
+  AND handoff.redeemed_at IS NULL
+  AND handoff.invalidated_at IS NULL
+  AND handoff.expires_at > clock_timestamp()
+  AND EXISTS (
+      SELECT 1
+      FROM platform_mcp_catalog_registrations AS registration
+      WHERE registration.id = handoff.registration_id
+        AND registration.organization_id = handoff.organization_id
+        AND registration.project_id = handoff.project_id
+        AND registration.deleted IS FALSE
+  )
+RETURNING handoff.*;
+
+-- name: GetPlatformMCPReadiness :one
+SELECT readiness.*
+FROM platform_mcp_readiness AS readiness
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = readiness.registration_id
+ AND registration.organization_id = readiness.organization_id
+ AND registration.project_id = readiness.project_id
+ AND registration.deleted IS FALSE
+WHERE readiness.organization_id = @organization_id
+  AND readiness.project_id = @project_id
+  AND readiness.registration_id = @registration_id
+  AND readiness.connection_id = @connection_id
+  AND readiness.connection_generation = @connection_generation
+  AND readiness.provider_authorization_fingerprint = @provider_authorization_fingerprint;
+
+-- name: UpsertPlatformMCPReadiness :one
+INSERT INTO platform_mcp_readiness (
+    organization_id,
+    project_id,
+    registration_id,
+    connection_id,
+    connection_generation,
+    provider_authorization_fingerprint,
+    state,
+    evidence_code,
+    checked_at,
+    expires_at
+)
+SELECT
+    @organization_id,
+    @project_id,
+    @registration_id,
+    @connection_id,
+    @connection_generation,
+    @provider_authorization_fingerprint,
+    @state,
+    @evidence_code,
+    @checked_at,
+    @expires_at
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.id = @registration_id
+      AND registration.organization_id = @organization_id
+      AND registration.project_id = @project_id
+      AND registration.deleted IS FALSE
+)
+ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+DO UPDATE SET
+    state = EXCLUDED.state,
+    evidence_code = EXCLUDED.evidence_code,
+    checked_at = EXCLUDED.checked_at,
+    expires_at = EXCLUDED.expires_at,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_readiness.checked_at <= EXCLUDED.checked_at
+RETURNING *;
+
+-- name: RecordPlatformMCPRegistrationSucceeded :exec
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    connection_id,
+    connection_generation,
+    project_id,
+    mcp_key,
+    attempt_id
+) VALUES (
+    @organization_id,
+    'registration_succeeded',
+    @connection_id,
+    @connection_generation,
+    @project_id,
+    @mcp_key,
+    @attempt_id
+)
+ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
+WHERE attempt_id IS NOT NULL
+DO NOTHING;
