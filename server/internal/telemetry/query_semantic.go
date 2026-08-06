@@ -180,6 +180,9 @@ func (s *Service) queryAttributeMetricsSemantic(ctx context.Context, arg repo.At
 			CacheCreationInputTokens: row.Measures["cache_write_tokens"].Int64,
 			TotalToolCalls:           row.Measures["tool_calls"].Uint64,
 			TotalChats:               row.Measures["chats"].Uint64,
+			TotalWorkUnits:           row.Measures["total_work_units"].Float64,
+			ScoredCost:               row.Measures["scored_cost"].Float64,
+			ScoredTokens:             row.Measures["scored_tokens"].Int64,
 			DimensionValues:          legacyDimensionValues(aliases, row.DimensionValues),
 		})
 	}
@@ -196,6 +199,9 @@ func (s *Service) queryAttributeMetricsSemantic(ctx context.Context, arg repo.At
 			CacheCreationInputTokens: row.Measures["cache_write_tokens"].Int64,
 			TotalToolCalls:           row.Measures["tool_calls"].Uint64,
 			TotalChats:               row.Measures["chats"].Uint64,
+			TotalWorkUnits:           row.Measures["total_work_units"].Float64,
+			ScoredCost:               row.Measures["scored_cost"].Float64,
+			ScoredTokens:             row.Measures["scored_tokens"].Int64,
 		})
 	}
 	return table, timeseries, nil

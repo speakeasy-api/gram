@@ -228,9 +228,13 @@ func TestQuerySemantic_RawBindingServesObservedPopulationOnly(t *testing.T) {
 	hookChat := uuid.NewString()
 	apiChat := uuid.NewString()
 	settledChat := uuid.NewString()
+	chatgptChat := uuid.NewString()
+	codexChat := uuid.NewString()
 	insertSemanticProviderUsageLog(t, ctx, projectID, ts, hookChat, "cursor:usage:metrics", "hook", 10, 0.10, 0)
 	insertSemanticProviderUsageLog(t, ctx, projectID, ts, apiChat, "cursor:usage:metrics", "api", 999, 9.99, 0)
 	insertSemanticProviderUsageLog(t, ctx, projectID, ts, settledChat, "claude_chat:usage:metrics", "api", 555, 5.55, 0)
+	insertSemanticProviderUsageLog(t, ctx, projectID, ts, chatgptChat, "chatgpt:usage:metrics", "api", 111, 1.11, 0)
+	insertSemanticProviderUsageLog(t, ctx, projectID, ts, codexChat, "codex:usage:metrics", "api", 222, 2.22, 0)
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -241,7 +245,7 @@ func TestQuerySemantic_RawBindingServesObservedPopulationOnly(t *testing.T) {
 	plan, err := semantic.Plan(def, semantic.Query{
 		Measures:               []string{"turn.usage.cost_usd", "turn.usage.tokens_total"},
 		GroupBy:                "",
-		Filters:                []semantic.Filter{{Dimension: "session", Values: []string{hookChat, apiChat, settledChat}}},
+		Filters:                []semantic.Filter{{Dimension: "session", Values: []string{hookChat, apiChat, settledChat, chatgptChat, codexChat}}},
 		TimeStart:              now.Add(-1 * time.Hour).UnixNano(),
 		TimeEnd:                now.Add(1 * time.Hour).UnixNano(),
 		GranularitySeconds:     0,
@@ -256,7 +260,7 @@ func TestQuerySemantic_RawBindingServesObservedPopulationOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.InDelta(t, 0.10, rows[0].Measures["cost_usd"].Float64, 1e-9,
-		"only the hook-written cursor row is locally observed; API-polled and Claude Chat rows are provider-settled")
+		"only the hook-written cursor row is locally observed; API-polled cursor/codex, Claude Chat, and ChatGPT rows are provider-reported")
 	require.EqualValues(t, 10, rows[0].Measures["tokens_total"].Int64)
 }
 
@@ -279,6 +283,8 @@ func TestQuerySemantic_ProviderUsageServesSettledPopulationOnly(t *testing.T) {
 	insertSemanticProviderUsageLog(t, ctx, projectID, ts, uuid.NewString(), "cursor:usage:metrics", "hook", 10, 0.10, 0)
 	insertSemanticProviderUsageLog(t, ctx, projectID, ts, uuid.NewString(), "cursor:usage:metrics", "api", 999, 9.99, 250)
 	insertSemanticProviderUsageLog(t, ctx, projectID, ts, uuid.NewString(), "claude_chat:usage:metrics", "api", 555, 5.55, 0)
+	insertSemanticProviderUsageLog(t, ctx, projectID, ts, uuid.NewString(), "chatgpt:usage:metrics", "api", 111, 1.11, 0)
+	insertSemanticProviderUsageLog(t, ctx, projectID, ts, uuid.NewString(), "codex:usage:metrics", "api", 222, 2.22, 0)
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -302,9 +308,9 @@ func TestQuerySemantic_ProviderUsageServesSettledPopulationOnly(t *testing.T) {
 	rows, err := semantic.Execute(ctx, ti.chConn, plan)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.EqualValues(t, 999+555, rows[0].Measures["tokens_total"].Int64,
-		"settled tokens are the API-polled cursor row plus the Claude Chat row; the hook row is excluded")
-	require.InDelta(t, 9.99+5.55, rows[0].Measures["cost_usd"].Float64, 1e-9)
+	require.EqualValues(t, 999+555+111+222, rows[0].Measures["tokens_total"].Int64,
+		"settled tokens are the API-polled cursor/codex rows plus the Claude Chat and ChatGPT rows; the hook row is excluded")
+	require.InDelta(t, 9.99+5.55+1.11+2.22, rows[0].Measures["cost_usd"].Float64, 1e-9)
 	require.InDelta(t, 2.50, rows[0].Measures["charged_usd"].Float64, 1e-9,
 		"charged_usd converts cursor.charged_cents on the API-polled row")
 }

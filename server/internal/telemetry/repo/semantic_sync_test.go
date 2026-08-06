@@ -179,17 +179,20 @@ func TestSemanticDefinition_RawRowFilterIsObservedPopulation(t *testing.T) {
 
 	// The raw binding admits the locally-OBSERVED population only. It is built
 	// from the sessions.go predicates but deliberately diverges from
-	// sessionSourceRowPredicate: provider-settled rows are excluded —
-	// claude_chat:usage/claude_chat:cost URNs entirely, and cursor:usage rows
-	// written by the Admin-API poller (gram.event.source = 'api'; the hook
-	// writer stamps 'hook'). Phase 2's provider.usage model serves the settled
-	// complement.
+	// sessionSourceRowPredicate: provider-reported rows are excluded —
+	// claude_chat:usage/claude_chat:cost and chatgpt:usage URNs entirely, and
+	// cursor:usage/codex:usage rows stamped gram.event.source = 'api' by the
+	// Cursor Admin-API poller and the OpenAI compliance COSTS import (the
+	// hook writers stamp 'hook'). The provider-reports model serves the
+	// settled complement.
 	wantRowFilter := "(" + repo.SessionClaudeAPIRequestPredicateForTest +
 		" OR " + repo.SessionClaudeToolResultPredicateForTest +
 		" OR " + repo.SessionCodexAPIRequestPredicateForTest +
 		" OR " + repo.SessionAgentToolCallPredicateForTest +
+		" OR " + repo.SessionOpencodeUsageRowPredicateForTest +
+		" OR " + repo.SessionLiteLLMUsageRowPredicateForTest +
 		" OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) != 'api')" +
-		" OR startsWith(gram_urn, 'codex:usage'))"
+		" OR (startsWith(gram_urn, 'codex:usage') AND toString(attributes.gram.event.source) != 'api'))"
 	require.Equal(t, wantRowFilter, raw.RowFilter,
 		"raw binding row_filter drifted from the observed-population predicate")
 }
@@ -287,12 +290,13 @@ func TestSemanticDefinition_ProviderRowFilterIsSettledComplement(t *testing.T) {
 	def, err := semantic.Load()
 	require.NoError(t, err)
 
-	// provider.usage admits exactly the provider-settled rows the turn.usage
-	// raw binding excludes: the claude_chat URNs and the Admin-API-polled
-	// cursor:usage rows (gram.event.source = 'api').
+	// provider.usage admits exactly the provider-reported rows the turn.usage
+	// raw binding excludes: the claude_chat and chatgpt URNs (polled/imported
+	// only) and the cursor:usage/codex:usage rows the provider-API writers
+	// stamp gram.event.source = 'api'.
 	providerRaw := bindingBySource(t, def, "provider.usage", "telemetry_logs")
 	require.Equal(t,
-		"(startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) = 'api'))",
+		"(startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage') OR (startsWith(gram_urn, 'cursor:usage') AND toString(attributes.gram.event.source) = 'api') OR (startsWith(gram_urn, 'codex:usage') AND toString(attributes.gram.event.source) = 'api'))",
 		providerRaw.RowFilter,
 		"provider.usage row_filter drifted from the settled complement")
 

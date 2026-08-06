@@ -52,6 +52,8 @@ const (
 	SessionClaudeToolResultPredicateForTest = sessionClaudeToolResultPredicate
 	SessionCodexAPIRequestPredicateForTest  = sessionCodexAPIRequestPredicate
 	SessionAgentToolCallPredicateForTest    = sessionAgentToolCallPredicate
+	SessionOpencodeUsageRowPredicateForTest = sessionOpencodeUsageRowPredicate
+	SessionLiteLLMUsageRowPredicateForTest  = sessionLiteLLMUsageRowPredicate
 	SessionCountedToolCallPredicateForTest  = sessionCountedToolCallPredicate
 	SessionToolCallDedupIDExprForTest       = sessionToolCallDedupIDExpr
 	SessionUsageMeasureFilterForTest        = sessionUsageMeasureFilter

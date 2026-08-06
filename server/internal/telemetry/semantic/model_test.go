@@ -57,7 +57,7 @@ func TestLoad_EmbeddedDefinitionIsValid(t *testing.T) {
 	model, ok := def.Model("turn.usage")
 	require.True(t, ok, "turn.usage model must exist")
 	require.Len(t, model.Dimensions, len(def.Dimensions), "turn.usage carries every catalog dimension")
-	require.Len(t, model.Measures, 8)
+	require.Len(t, model.Measures, 11)
 	require.ElementsMatch(t, []string{"agent.usage", "provider.usage"}, model.ExclusiveWith)
 
 	// The canonical measure declaration order drives the compiled SELECT order.
@@ -68,6 +68,7 @@ func TestLoad_EmbeddedDefinitionIsValid(t *testing.T) {
 	require.Equal(t, []string{
 		"cost_usd", "input_tokens", "output_tokens", "tokens_total",
 		"cache_read_tokens", "cache_write_tokens", "tool_calls", "chats",
+		"total_work_units", "scored_cost", "scored_tokens",
 	}, names)
 
 	require.Len(t, model.Bindings, 2)
@@ -90,7 +91,10 @@ func TestLoad_EmbeddedDefinitionIsValid(t *testing.T) {
 	require.NotContains(t, summaries.Dimensions, "turn")
 	require.Len(t, summaries.Dimensions, len(def.Dimensions)-2)
 	require.Len(t, raw.Dimensions, len(def.Dimensions))
-	require.Len(t, summaries.Measures, 8)
+	require.Len(t, summaries.Measures, 11)
+	// The work-units measures exist only in the aggregate (they come from
+	// synthetic chat_analysis score rows the session expressions don't cover),
+	// so the raw binding serves the original 8.
 	require.Len(t, raw.Measures, 8)
 }
 

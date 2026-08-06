@@ -45,6 +45,26 @@ func allTurnUsageMeasures() []string {
 		"turn.usage.cache_write_tokens",
 		"turn.usage.tool_calls",
 		"turn.usage.chats",
+		"turn.usage.total_work_units",
+		"turn.usage.scored_cost",
+		"turn.usage.scored_tokens",
+	}
+}
+
+// rawServedMeasures are the measures the raw telemetry_logs binding serves:
+// everything except the work-units measures, which exist only in the
+// aggregate (they come from synthetic chat_analysis score rows the session
+// expressions don't cover).
+func rawServedMeasures() []string {
+	return []string{
+		"turn.usage.cost_usd",
+		"turn.usage.input_tokens",
+		"turn.usage.output_tokens",
+		"turn.usage.tokens_total",
+		"turn.usage.cache_read_tokens",
+		"turn.usage.cache_write_tokens",
+		"turn.usage.tool_calls",
+		"turn.usage.chats",
 	}
 }
 
@@ -106,7 +126,7 @@ func TestCompile_RawTableGolden(t *testing.T) {
 	require.NoError(t, err)
 
 	plan, err := semantic.Plan(def, semantic.Query{
-		Measures:               allTurnUsageMeasures(),
+		Measures:               rawServedMeasures(),
 		GroupBy:                "user",
 		Filters:                []semantic.Filter{{Dimension: "session", Values: []string{"chat-1", "chat-2"}}},
 		TimeStart:              testTimeStart,
