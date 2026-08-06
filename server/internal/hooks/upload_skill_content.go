@@ -13,6 +13,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
@@ -28,10 +29,6 @@ import (
 const (
 	hookSkillContentSchemaV1       = "hook.skill-content.v1"
 	maxSkillUploadRequestBodyBytes = 512 * 1024
-	// scanNoFindingSource marks a completed scan that found nothing, matching
-	// the sentinel the chat batch path writes (risk_analysis.SourceNone). Kept
-	// as a literal rather than importing the activities package into hooks.
-	scanNoFindingSource = "none"
 )
 
 func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSkillContentPayload) error {
@@ -102,14 +99,8 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 
 // scanCapturedSkillVersion judges a captured skill version for prompt
 // injection and records the outcome. Capture has already committed by the time
-// this runs, so every failure here is logged and swallowed rather than turned
-// into a failed upload.
-//
-// The scan is gated on whether any enabled policy still lacks a record for
-// this version, not on whether the version was newly created. Content is
-// immutable per version, so a recorded scan is never repeated; a judge outage
-// records nothing and leaves the version eligible instead of passing it off as
-// clean.
+// this runs, so every failure here is logged and swallowed rather than failing
+// the upload. See ScanStrict for why a judge failure records nothing.
 //
 // ponytail: synchronous judge call on the upload path; move off-request if
 // upload latency shows up in traces.
@@ -132,9 +123,6 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 	msg := judgemessage.New(message.PromptAttachment, "", content)
 	findings, err := s.piScanner.ScanStrict(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
 	if err != nil {
-		// Deliberately records nothing: an unrecorded version can be judged
-		// again, whereas a found = FALSE row would assert this content is
-		// clean on the strength of a judge that never answered.
 		s.logger.WarnContext(ctx, "skill prompt injection scan failed; leaving version unscanned", attr.SlogError(err))
 		return
 	}
@@ -142,7 +130,7 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 	params := riskRepo.RecordSkillPromptInjectionScanParams{
 		SkillVersionID: anchor,
 		ProjectID:      *authCtx.ProjectID,
-		Source:         scanNoFindingSource,
+		Source:         ra.SourceNone,
 		Found:          false,
 		RuleID:         pgtype.Text{String: "", Valid: false},
 		Description:    pgtype.Text{String: "", Valid: false},

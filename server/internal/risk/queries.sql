@@ -1006,11 +1006,8 @@ VALUES (
 
 -- name: SkillVersionNeedsPromptInjectionScan :one
 -- True when some enabled prompt-injection policy has no recorded scan of this
--- skill version yet. Drives the scan gate: no such policy means judging the
--- content would produce nothing storable, and an already-recorded scan must
--- not be repeated (content is immutable per version, so the verdict cannot
--- change). A policy enabled after capture has no row, so it reports true and
--- the version becomes eligible again.
+-- skill version yet. Gates the judge call: content is immutable per version,
+-- so a recorded scan is never worth repeating.
 SELECT EXISTS (
   SELECT 1
   FROM risk_policies p
@@ -1029,11 +1026,8 @@ SELECT EXISTS (
 -- name: RecordSkillPromptInjectionScan :exec
 -- Records one row per enabled prompt-injection policy that has not yet scanned
 -- this skill version, anchored on the version rather than a chat message.
--- Called for a completed judgement whether or not it found anything: a
--- found = FALSE row is the coverage record that separates "judged clean" from
--- "never judged", mirroring how the chat batch path writes empty result rows.
--- A judge failure records nothing, leaving the version eligible for a later
--- scan rather than silently passing as clean.
+-- Called for any completed judgement: a found = FALSE row is the coverage
+-- record, mirroring the empty result rows the chat batch path writes.
 INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
 SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, @source::text, @found::boolean, sqlc.narg(rule_id)::text, sqlc.narg(description)::text, sqlc.narg(match)::text, sqlc.narg(confidence)::double precision
 FROM risk_policies p

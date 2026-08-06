@@ -17,7 +17,7 @@ import (
 )
 
 // classifierReturning is a fake promptinjection.Classifier: the judge itself is
-// out of scope here, the question is only whether skill content ever reaches it.
+// out of scope, only whether skill content reaches it.
 func classifierReturning(label string) promptinjection.Classifier {
 	return func(_ context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
 		results := make([]promptinjection.Result, len(req.Messages))
@@ -28,8 +28,7 @@ func classifierReturning(label string) promptinjection.Classifier {
 	}
 }
 
-// classifierFailing is a judge that never reaches a verdict, standing in for an
-// outage, a revoked credential, or a DNS failure.
+// classifierFailing is a judge that never reaches a verdict.
 func classifierFailing() promptinjection.Classifier {
 	return func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
 		return nil, errors.New("judge unavailable")
@@ -37,8 +36,7 @@ func classifierFailing() promptinjection.Classifier {
 }
 
 // countSkillScanRecords counts every recorded scan of a version of the named
-// skill, findings and clean records alike. It is the coverage question -
-// "was this content ever judged" - as distinct from "was anything found".
+// skill, findings and clean records alike.
 func countSkillScanRecords(t *testing.T, ctx context.Context, ti *testInstance, skillName string) int {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -72,9 +70,7 @@ func seedPromptInjectionPolicy(t *testing.T, ctx context.Context, ti *testInstan
 }
 
 // countSkillInjectionFindings counts prompt-injection findings attributed to a
-// version of the named skill. Attribution is the whole point: a finding that
-// cannot be traced back to a skill version does not answer "which skill tripped
-// this".
+// version of the named skill.
 func countSkillInjectionFindings(t *testing.T, ctx context.Context, ti *testInstance, skillName string) int {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
