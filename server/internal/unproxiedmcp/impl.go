@@ -281,10 +281,54 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server").LogError(ctx, s.logger)
 	}
 
-	probeCtx, cancel := context.WithTimeout(ctx, listToolsTimeout)
-	defer cancel()
+	// Detached from ctx and raced against its own deadline below: the MCP
+	// SDK's Connect can spend well past listToolsTimeout on its own
+	// synchronous cleanup after a context deadline trips (e.g. trying to
+	// notify the now-unreachable server that the request was cancelled), so
+	// bounding the probe's own context isn't enough to bound *this call's*
+	// latency. The goroutine keeps running to let that cleanup finish
+	// naturally; only the response to the caller is time-boxed.
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout) //nolint:gosec // cancel is deferred inside the goroutine below
+	resultCh := make(chan *gen.ListUnproxiedMcpServerToolsResult, 1)
+	go func() {
+		defer cancel()
+		resultCh <- s.probeListTools(probeCtx, server.Url)
+	}()
 
-	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, server.Url, externalmcptypes.TransportTypeStreamableHTTP, nil)
+	select {
+	case result := <-resultCh:
+		return result, nil
+	case <-probeCtx.Done():
+		// select picks pseudo-randomly when both cases are ready, so a probe
+		// that finishes right at the deadline could otherwise lose the race
+		// and have its real result discarded here. Give resultCh one more
+		// non-blocking check before reporting a timeout.
+		select {
+		case result := <-resultCh:
+			return result, nil
+		default:
+			return &gen.ListUnproxiedMcpServerToolsResult{
+				Status:  "unreachable",
+				Tools:   []*gen.UnproxiedMcpServerTool{},
+				Message: conv.PtrEmpty("Could not connect to the server."),
+			}, nil
+		}
+	}
+}
+
+// probeListTools performs the live MCP handshake and tools/list round trip.
+// Always returns a populated result (auth_required/unreachable/error/success)
+// rather than an error, since ListTools reports live-probe failures as a
+// result status, not a request error.
+func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *gen.ListUnproxiedMcpServerToolsResult {
+	// DisableRetries: this is a one-shot bounded probe, not a resilient
+	// long-lived connection — retries would let an unreachable server take
+	// minutes to report as such instead of ~10s.
+	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
+		Authorization:  "",
+		Headers:        nil,
+		DisableRetries: true,
+	})
 	if err != nil {
 		var authErr *externalmcp.AuthRejectedError
 		if errors.As(err, &authErr) {
@@ -292,13 +336,13 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
 				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
-			}, nil
+			}
 		}
 		return &gen.ListUnproxiedMcpServerToolsResult{
 			Status:  "unreachable",
 			Tools:   []*gen.UnproxiedMcpServerTool{},
 			Message: conv.PtrEmpty("Could not connect to the server."),
-		}, nil
+		}
 	}
 	defer o11y.NoLogDefer(client.Close)
 
@@ -310,13 +354,13 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
 				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
-			}, nil
+			}
 		}
 		return &gen.ListUnproxiedMcpServerToolsResult{
 			Status:  "error",
 			Tools:   []*gen.UnproxiedMcpServerTool{},
 			Message: conv.PtrEmpty("The server didn't respond with a valid tool list."),
-		}, nil
+		}
 	}
 
 	tools := make([]*gen.UnproxiedMcpServerTool, 0, len(discovered))
@@ -331,7 +375,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		Status:  "success",
 		Tools:   tools,
 		Message: nil,
-	}, nil
+	}
 }
 
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {
