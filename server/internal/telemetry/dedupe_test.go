@@ -24,12 +24,13 @@ func TestLogBulkDeduped_DropsRepeatsWithinBatch(t *testing.T) {
 
 	// The compliance feed shape this reproduces: one event delivered in two
 	// different log files inside the same page.
-	dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
+	written, dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
 		newCostEventParams(ti.orgID, projectID, repeated, timestamp),
 		newCostEventParams(ti.orgID, projectID, uuid.NewString(), timestamp),
 		newCostEventParams(ti.orgID, projectID, repeated, timestamp),
 	})
 	require.NoError(t, err)
+	require.Equal(t, 2, written)
 	require.Equal(t, 1, dropped)
 	require.Len(t, listCostEventLogs(t, ctx, ti, projectID, timestamp), 2)
 }
@@ -45,15 +46,17 @@ func TestLogBulkDeduped_SkipsEventsAlreadyIngested(t *testing.T) {
 		newCostEventParams(ti.orgID, projectID, uuid.NewString(), timestamp),
 	}
 
-	dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
+	written, dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
 	require.NoError(t, err)
+	require.Equal(t, 2, written)
 	require.Equal(t, 0, dropped)
 	require.Len(t, listCostEventLogs(t, ctx, ti, projectID, timestamp), 2)
 
 	// Re-importing the same window is the failure that doubles every
 	// downstream token and cost sum.
-	dropped, err = ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
+	written, dropped, err = ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
 	require.NoError(t, err)
+	require.Equal(t, 0, written)
 	require.Equal(t, 2, dropped)
 	require.Len(t, listCostEventLogs(t, ctx, ti, projectID, timestamp), 2)
 }
@@ -71,12 +74,14 @@ func TestLogBulkDeduped_SkipsIngestedEventsAcrossChunkBoundary(t *testing.T) {
 		batch = append(batch, newCostEventParams(ti.orgID, projectID, uuid.NewString(), timestamp))
 	}
 
-	dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
+	written, dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
 	require.NoError(t, err)
+	require.Equal(t, 2500, written)
 	require.Equal(t, 0, dropped)
 
-	dropped, err = ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
+	written, dropped, err = ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, batch)
 	require.NoError(t, err)
+	require.Equal(t, 0, written)
 	require.Equal(t, 2500, dropped, "every event should be recognized, including those past the first chunk")
 }
 
@@ -89,37 +94,65 @@ func TestLogBulkDeduped_KeepsSameEventInDifferentProjects(t *testing.T) {
 	timestamp := time.Now().UTC()
 	shared := uuid.NewString()
 
-	dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
+	written, dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
 		newCostEventParams(ti.orgID, firstProjectID, shared, timestamp),
 		newCostEventParams(ti.orgID, secondProjectID, shared, timestamp),
 	})
 	require.NoError(t, err)
+	require.Equal(t, 2, written)
 	require.Equal(t, 0, dropped)
 	require.Len(t, listCostEventLogs(t, ctx, ti, firstProjectID, timestamp), 1)
 	require.Len(t, listCostEventLogs(t, ctx, ti, secondProjectID, timestamp), 1)
 }
 
+// A batch can mix fingerprinted and unfingerprinted rows. Only the former are
+// deduped: rows carrying nothing under the key are written even when identical
+// to each other, since there is no identity to collapse them on.
 func TestLogBulkDeduped_KeepsRowsCarryingNoFingerprint(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
 	projectID := uuid.New().String()
 	timestamp := time.Now().UTC()
-
+	repeated := uuid.NewString()
 	unfingerprinted := newCostEventParams(ti.orgID, projectID, "", timestamp)
-	delete(unfingerprinted.Attributes, attr.CodexComplianceEventHashKey)
 
-	dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
+	written, dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
 		unfingerprinted,
+		newCostEventParams(ti.orgID, projectID, repeated, timestamp),
 		unfingerprinted,
+		newCostEventParams(ti.orgID, projectID, repeated, timestamp),
 	})
 	require.NoError(t, err)
+	require.Equal(t, 3, written, "both unfingerprinted rows survive; the repeated fingerprint collapses to one")
+	require.Equal(t, 1, dropped)
+	require.Len(t, listCostEventLogs(t, ctx, ti, projectID, timestamp), 3)
+}
+
+// The write drops rows whose organization has telemetry logs disabled, so the
+// written count has to come from the write itself rather than from what the
+// caller handed over — importers reconcile their progress against it.
+func TestLogBulkDeduped_ReportsNothingWrittenWhenLogsDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	projectID := uuid.New().String()
+	timestamp := time.Now().UTC()
+
+	written, dropped, err := ti.telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
+		newCostEventParams(ti.disabledLogsOrgID, projectID, uuid.NewString(), timestamp),
+		newCostEventParams(ti.disabledLogsOrgID, projectID, uuid.NewString(), timestamp),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, written)
 	require.Equal(t, 0, dropped)
-	require.Len(t, listCostEventLogs(t, ctx, ti, projectID, timestamp), 2)
+	require.Empty(t, listCostEventLogs(t, ctx, ti, projectID, timestamp))
 }
 
 // newCostEventParams builds a row shaped like the ones the Codex compliance
 // COSTS importer writes: a codex:usage:metrics row fingerprinted by event id.
+// An empty eventHash omits the fingerprint attribute entirely, standing in for
+// a row the importer wrote before the fingerprint existed.
 func newCostEventParams(orgID, projectID, eventHash string, timestamp time.Time) telemetry.LogParams {
 	attrs := map[attr.Key]any{
 		attr.ResourceURNKey:           codexUsageMetricsURN,

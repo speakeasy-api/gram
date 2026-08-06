@@ -121,7 +121,7 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 		client:    codexapi.New(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
 		cfg:       cfg,
 		pageLimit: codexCompliancePageLimit,
-		processPage: func(ctx context.Context, params []telemetry.LogParams) (int, error) {
+		processPage: func(ctx context.Context, params []telemetry.LogParams) (int, int, error) {
 			return s.telemetryLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, params)
 		},
 		progress: progress,
@@ -158,12 +158,12 @@ type codexCostSource struct {
 	cfg       Config
 	pageLimit int
 
-	// processPage writes a page's cost events and returns how many it dropped
-	// as already ingested. Dropping is not incidental: the compliance feed
-	// repeats an event_id across log files and telemetry_logs has no
-	// uniqueness constraint, so an undeduped write counts a repeated event once
-	// per file it appears in.
-	processPage func(ctx context.Context, payload []telemetry.LogParams) (int, error)
+	// processPage writes a page's cost events and returns how many it wrote and
+	// how many it dropped as already ingested. Dropping is not incidental: the
+	// compliance feed repeats an event_id across log files and telemetry_logs
+	// has no uniqueness constraint, so an undeduped write counts a repeated
+	// event once per file it appears in.
+	processPage func(ctx context.Context, payload []telemetry.LogParams) (written int, dropped int, err error)
 
 	progress *CodexCostSyncProgress
 }
@@ -275,12 +275,12 @@ func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.Lo
 		return nil
 	}
 
-	dropped, err := src.processPage(ctx, logParams)
+	written, dropped, err := src.processPage(ctx, logParams)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert codex cost telemetry logs")
 	}
 	src.progress.CostEventsDeduped += dropped
-	src.progress.CostEventsWritten += len(logParams) - dropped
+	src.progress.CostEventsWritten += written
 	return nil
 }
 
@@ -344,6 +344,9 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	timestamp, err := event.TimestampTime()
 	if err != nil {
 		return telemetry.LogParams{}, false, oops.E(oops.CodeUnexpected, err, "parse codex compliance cost timestamp")
+	}
+	if timestamp.IsZero() {
+		timestamp = codexCostBucketTime(event.Payload)
 	}
 	if timestamp.IsZero() {
 		timestamp = file.EndTime
@@ -468,6 +471,27 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		UserInfo:   telemetry.UserInfoByEmail(userEmail),
 		Attributes: attrs,
 	}, true, nil
+}
+
+// codexCostBucketTime derives an event time from the COSTS payload's own
+// day/hour bucket, used when the event carries no timestamp of its own.
+//
+// It sits ahead of the log file's end time deliberately. The feed delivers the
+// same event_id in more than one file, and a file-derived time would stamp
+// those copies differently — putting the copy already ingested outside the
+// event-time window the dedupe lookup searches, so the repeat would be written
+// anyway. The day/hour bucket belongs to the event, so every delivery of it
+// lands on the same timestamp.
+func codexCostBucketTime(payload codexCostPayload) time.Time {
+	day := strings.TrimSpace(payload.Day)
+	if day == "" || payload.Hour < 0 || payload.Hour > 23 {
+		return time.Time{}
+	}
+	parsed, err := time.ParseInLocation(time.DateOnly, day, time.UTC)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed.Add(time.Duration(payload.Hour) * time.Hour)
 }
 
 func validateCodexLastEndTimeAdvanced(after, lastEndTime time.Time) error {

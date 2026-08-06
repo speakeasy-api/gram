@@ -171,6 +171,60 @@ func TestBuildCodexCostLogParamsRoutesMissingProductToChatGPTURN(t *testing.T) {
 	require.Equal(t, chatgptHookSource, logParams[0].Attributes[attr.HookSourceKey])
 }
 
+// A timestamp-less event must land on a time intrinsic to the event, not on
+// the delivering file's end time. The feed repeats an event_id across files, so
+// a file-derived time would place two copies of one event at different times
+// and the dedupe lookup would miss the copy already written.
+func TestBuildCodexCostLogParamsFallsBackToPayloadBucketNotFileEndTime(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"event_id":"event_1","type":"COSTS","payload":{"day":"2026-07-15","hour":22,"product":"codex","client":"web","model":"gpt-5.5","measures":{"usage":{"text_input_tokens":10,"text_cached_input_tokens":0,"text_output_tokens":5},"billing":[]}}}` + "\n")
+	cfg := codexCostConfig()
+
+	// The same event delivered by two files with different end times.
+	first, err := buildCodexCostLogParams(cfg, codexapi.LogFile{
+		ID:        "eclf_first",
+		EventType: codexComplianceCostsEventType,
+		EndTime:   time.Date(2026, 7, 16, 0, 27, 13, 0, time.UTC),
+	}, body)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	second, err := buildCodexCostLogParams(cfg, codexapi.LogFile{
+		ID:        "eclf_second",
+		EventType: codexComplianceCostsEventType,
+		EndTime:   time.Date(2026, 7, 18, 9, 3, 44, 0, time.UTC),
+	}, body)
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+
+	bucket := time.Date(2026, 7, 15, 22, 0, 0, 0, time.UTC)
+	require.Equal(t, bucket, first[0].Timestamp)
+	require.Equal(t, second[0].Timestamp, first[0].Timestamp, "both deliveries must agree on event time")
+	require.Equal(t,
+		second[0].Attributes[attr.CodexComplianceEventHashKey],
+		first[0].Attributes[attr.CodexComplianceEventHashKey],
+	)
+}
+
+// With neither a timestamp nor a usable day/hour bucket there is nothing
+// intrinsic left, and the file's end time is the last resort.
+func TestBuildCodexCostLogParamsFallsBackToFileEndTimeWithoutBucket(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"event_id":"event_1","type":"COSTS","payload":{"hour":22,"product":"codex","client":"web","model":"gpt-5.5","measures":{"usage":{"text_input_tokens":10,"text_cached_input_tokens":0,"text_output_tokens":5},"billing":[]}}}` + "\n")
+	endTime := time.Date(2026, 7, 16, 0, 27, 13, 0, time.UTC)
+
+	logParams, err := buildCodexCostLogParams(codexCostConfig(), codexapi.LogFile{
+		ID:        "eclf_123",
+		EventType: codexComplianceCostsEventType,
+		EndTime:   endTime,
+	}, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 1)
+	require.Equal(t, endTime, logParams[0].Timestamp)
+}
+
 func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -230,8 +284,8 @@ func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 		client:    client,
 		cfg:       cfg,
 		pageLimit: codexCompliancePageLimit,
-		processPage: func(context.Context, []telemetry.LogParams) (int, error) {
-			return 0, fmt.Errorf("process page should not be called")
+		processPage: func(context.Context, []telemetry.LogParams) (int, int, error) {
+			return 0, 0, fmt.Errorf("process page should not be called")
 		},
 		progress: &CodexCostSyncProgress{},
 	}

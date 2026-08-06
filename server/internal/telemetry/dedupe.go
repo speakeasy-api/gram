@@ -22,7 +22,9 @@ type eventScope struct {
 
 // LogBulkDeduped writes params to telemetry_logs after dropping every row whose
 // event fingerprint is already there, and every repeat within the batch itself.
-// It returns how many rows it dropped.
+// It returns how many rows it wrote and how many it dropped as duplicates.
+// Those two do not have to sum to len(params): rows belonging to an
+// organization with telemetry logs disabled are discarded by the write.
 //
 // This is the enforcement half of the fingerprints usage importers stamp on
 // rows they derive from a provider feed — hashKey being one of
@@ -35,6 +37,12 @@ type eventScope struct {
 // The write is synchronous, unlike LogBulk: the next call's lookup has to see
 // these rows, and the async insert buffer would hide them.
 //
+// The guarantee is against SEQUENTIAL re-reads, which is the failure that
+// happens in practice. Two callers writing the same batch concurrently can
+// still both insert, because each reads before the other has written; callers
+// that can overlap themselves — a Temporal activity whose heartbeat times out
+// while an attempt is still in flight, say — need their own serialization.
+//
 // Repeats are dropped rather than replaced, so a feed that restates a value
 // under a fingerprint already ingested keeps the original. That is the right
 // choice for pure re-emissions and the wrong one for restatements; only the
@@ -42,20 +50,21 @@ type eventScope struct {
 //
 // Rows carrying no fingerprint under hashKey are written as-is, so a mixed
 // batch is safe.
-func (l *Logger) LogBulkDeduped(ctx context.Context, hashKey attr.Key, params []LogParams) (int, error) {
+func (l *Logger) LogBulkDeduped(ctx context.Context, hashKey attr.Key, params []LogParams) (written int, dropped int, err error) {
 	kept, err := l.dropIngestedDuplicates(ctx, hashKey, params)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	dropped := len(params) - len(kept)
+	dropped = len(params) - len(kept)
 	if len(kept) == 0 {
-		return dropped, nil
+		return 0, dropped, nil
 	}
-	if err := l.logBulk(ctx, l.shutdownCtx(), kept, true); err != nil {
-		return dropped, err
+	written, err = l.logBulk(ctx, l.shutdownCtx(), kept, true)
+	if err != nil {
+		return written, dropped, err
 	}
-	return dropped, nil
+	return written, dropped, nil
 }
 
 // dropIngestedDuplicates returns params minus the rows already represented in
