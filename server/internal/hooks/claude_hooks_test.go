@@ -42,6 +42,34 @@ func (stubBlockingShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, 
 func (stubBlockingShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
 }
 
+// stubAllowAllShadowMCPScanner reports an enabled shadow-MCP policy whose
+// disposition is allow_all (permit unless a blocked URL matches).
+type stubAllowAllShadowMCPScanner struct{}
+
+func (stubAllowAllShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+	return nil, nil
+}
+
+func (stubAllowAllShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
+	return &risk.ShadowMCPPolicy{
+		ID:          "00000000-0000-0000-0000-000000000002",
+		Name:        "shadow-mcp-allow-all",
+		Disposition: risk.ShadowMCPDispositionAllowAll,
+		BlockedURLs: []string{"https://blocked.example.com/mcp"},
+	}, nil
+}
+
+func (stubAllowAllShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+func (stubAllowAllShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
+	return false
+}
+
+func (stubAllowAllShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
+}
+
 type userScopedShadowMCPScanner struct {
 	userID string
 }
@@ -219,7 +247,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	userEmail := "claude-authctx@example.com"
 
 	// No MCP list snapshot is cached for this session, so the guard must
-	// deny with the retry/restart message. Reaching that check at all proves
+	// deny with the missing-inventory message. Reaching that check at all proves
 	// the auth-context branch ran — before the fix, the empty Redis cache
 	// would have returned allow without consulting the policy.
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
@@ -242,7 +270,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 
 // When the MCP list snapshot is missing from the cache (SessionStart hasn't
 // finished yet, or the 12h inactivity TTL elapsed), the guard fails closed
-// and surfaces a retry/restart hint to the user. Failing open would let a
+// and tells the user the session's MCP inventory was never received. Failing open would let a
 // shadow MCP server slip past during the snapshot-population window.
 func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	t.Parallel()
@@ -271,8 +299,44 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision)
 	require.NotNil(t, output.PermissionDecisionReason)
-	assert.Contains(t, *output.PermissionDecisionReason, "restart Claude Code",
-		"deny reason should tell the user to retry or restart so they aren't stuck guessing")
+	assert.Contains(t, *output.PermissionDecisionReason, "MCP server inventory was never received",
+		"deny reason should name the missing inventory as the cause")
+	assert.Contains(t, *output.PermissionDecisionReason, "hooks client",
+		"deny reason should point at the hooks client when the outage is chronic, not just suggest retrying")
+}
+
+// An allow-all policy denies only on a blocked-URL match, and a missing
+// inventory yields no URL to match — so the missing-snapshot fail-closed
+// branch must not apply. Before this behavior, one failed SessionStart gather
+// blocked every MCP call for the whole session even under a permit-by-default
+// policy.
+func TestClaude_PreToolUse_AllowsWhenMCPListNotCachedUnderAllowAllPolicy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubAllowAllShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_no_mcp_list_allow_all"
+	userEmail := "claude-allow-all-no-mcp-list@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision,
+		"allow-all policy has no blocked URL to match without an inventory, so the call must not fail closed")
 }
 
 // Gram-hosted MCP servers are permitted by the shadow-MCP guard. A server
@@ -430,7 +494,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 // file by hook.sh — not only the server-side cache. Here no snapshot is
 // cached, yet a payload-supplied inventory that resolves the tool's server to
 // a Gram-hosted URL must ALLOW, proving the payload path is consulted. Before
-// the fix this session would have denied with the retry/restart message
+// the fix this session would have denied with the missing-inventory message
 // because the cache races the async SessionStart snapshot.
 func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T) {
 	t.Parallel()
@@ -474,7 +538,7 @@ func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T
 
 // A payload-supplied inventory that resolves the server to a non-Gram URL must
 // block with the shadow-MCP policy decision — not the "snapshot unavailable"
-// retry/restart message — confirming the inventory was consumed for
+// missing-inventory message — confirming the inventory was consumed for
 // enforcement rather than triggering the fail-closed cache-miss branch.
 func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 	t.Parallel()
@@ -506,7 +570,7 @@ func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision)
 	require.NotNil(t, output.PermissionDecisionReason)
-	assert.NotContains(t, *output.PermissionDecisionReason, "restart Claude Code",
+	assert.NotContains(t, *output.PermissionDecisionReason, "MCP server inventory was never received",
 		"a payload inventory was supplied, so the block must come from the policy, not the cache-miss fail-closed path")
 }
 
@@ -633,7 +697,7 @@ func (c mcpGetErrorCache) Get(ctx context.Context, key string, value any) error 
 // payload carries a non-fresh replayed inventory. A genuine miss legitimately
 // falls back to the replay (DNO-286), but on a transport error we cannot
 // establish cache-authoritative ordering, so enforcing against a possibly-stale
-// replay is unsafe — deny with the retry/restart message instead.
+// replay is unsafe — deny with the missing-inventory message instead.
 func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -674,7 +738,7 @@ func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testin
 	assert.Equal(t, "deny", *output.PermissionDecision,
 		"a cache transport error must fail closed, not fall back to a non-fresh replay")
 	require.NotNil(t, output.PermissionDecisionReason)
-	assert.Contains(t, *output.PermissionDecisionReason, "restart Claude Code",
+	assert.Contains(t, *output.PermissionDecisionReason, "MCP server inventory was never received",
 		"the block must be the cache-unavailable fail-closed message, not a policy decision")
 }
 

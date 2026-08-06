@@ -178,7 +178,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	ctx = withHarnessInfo(ctx, base)
 	if base.Provider == agenthooks.ProviderClaudeCode &&
 		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
-		attachMCPInventory(&payload, collectClaudeMCPInventory(ctx, base.Session.CWD))
+		attachMCPInventory(&payload, r.collectClaudeMCPInventory(ctx, base.Session.CWD))
 	}
 	// Codex needs the same snapshot for the shadow-MCP guard to prove where a
 	// tool call routes. Without it the guard has nothing to check the call

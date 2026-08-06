@@ -538,12 +538,15 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, en
 
 // payloadInventoryIsFresh reports whether the hook payload's MCP inventory was
 // gathered live during this PreToolUse call (additional_data.mcp_inventory_fresh)
-// rather than replayed from the per-session inventory file. hook.sh sets the
-// flag only when it shells out to gather the inventory inline because the file
-// did not exist yet; a replay from the file leaves it unset. A live gather
-// reflects the agent's current MCP configuration and supersedes the cache; a
-// replayed snapshot may lag a ConfigChange the server already cached, so it is
-// only used to fill cache misses (see resolveMCPListForEnforcement).
+// rather than replayed from a per-session inventory file. Only the legacy bash
+// hook clients set this flag — they shell out to gather the inventory inline
+// when their session file does not exist yet, while a replay from the file
+// leaves it unset. The Go relay ships inventory only on SessionStart and
+// ConfigChange (via the ingest surface) and never populates these fields. A
+// live gather reflects the agent's current MCP configuration and supersedes
+// the cache; a replayed snapshot may lag a ConfigChange the server already
+// cached, so it is only used to fill cache misses (see
+// resolveMCPListForEnforcement).
 func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
 	if payload.AdditionalData == nil {
 		return false
@@ -563,7 +566,9 @@ func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
 //
 //  1. A payload inventory gathered live this call (fresh) is authoritative —
 //     it reflects the agent's current MCP configuration — so it supersedes any
-//     cached snapshot and is written back to heal the cache.
+//     cached snapshot and is written back to heal the cache. Only legacy bash
+//     hook clients ship payload inventories on PreToolUse; the Go relay does
+//     not, so for it the cached snapshot below is the only source.
 //  2. Otherwise the cached SessionStart/ConfigChange snapshot when present.
 //     ConfigChange refreshes the cache synchronously server-side, whereas the
 //     per-session file the payload replays is written asynchronously and can
@@ -575,7 +580,10 @@ func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
 //     events. A cache transport error is NOT a miss: it fails closed rather
 //     than enforcing against a possibly-stale replay.
 //
-// Callers treat a returned error as fail-closed.
+// Callers treat a returned error as fail-closed for block-all policies. A
+// returned error can be chronic, not just the startup race: a client whose
+// single SessionStart gather failed never populates the cache for the whole
+// session.
 func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
 	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
 
@@ -1022,25 +1030,45 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return result, nil
 	}
 
-	// Resolve the `claude mcp list` inventory to enforce against. The hook
-	// script replays the SessionStart inventory file on every PreToolUse, so
-	// this normally comes straight from the request payload and is immune to
-	// the SessionStart-snapshot race (DNO-286); it falls back to the cached
-	// snapshot only when the payload carried none. If neither is available we
-	// can't enforce the policy — deny with a retry-or-restart message so the
-	// user knows the guard is fail-closed rather than silently allowing.
+	// Resolve the MCP inventory to enforce against: a payload-carried
+	// inventory when the client ships one (legacy bash hooks replay it on
+	// every PreToolUse and stamp inline gathers as fresh), otherwise the
+	// cached SessionStart/ConfigChange snapshot. Clients that gather only at
+	// SessionStart leave a session with no inventory for its whole life when
+	// that single gather fails (e.g. no `claude` CLI on a GUI hook PATH), so
+	// the missing-snapshot outcome below can be chronic, not just the
+	// DNO-286 startup race.
 	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
 	if cacheErr != nil {
-		auditReason := "missing MCP list snapshot for session"
-		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
-		s.logger.With(
+		logger := s.logger.With(
 			attr.SlogHookSource("claude"),
 			attr.SlogHookEvent(payload.HookEventName),
 			attr.SlogOrganizationID(metadata.GramOrgID),
 			attr.SlogProjectID(metadata.ProjectID),
 			attr.SlogGenAIConversationID(sessionID),
 			attr.SlogToolName(rawToolName),
-		).InfoContext(ctx, "denying claude tool call: no cached MCP list",
+		)
+		// Permit-by-default policies deny only on a blocked-URL match, and a
+		// missing inventory yields no URL to match — the same reasoning that
+		// lets unresolvable evidence fall through to an allow in
+		// enforceShadowMCPToolAccess. Failing closed here would turn one
+		// failed SessionStart gather into a session-long outage of every MCP
+		// tool under a policy whose default posture is allow.
+		if policy.IsAllowAll() {
+			logger.InfoContext(ctx, "allowing claude tool call without MCP list: allow-all policy has no URL to match",
+				attr.SlogEvent("claude_hook_allowed_no_mcp_list"),
+				attr.SlogError(cacheErr),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogRiskPolicyName(policy.Name),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
+		}
+		auditReason := "missing MCP list snapshot for session"
+		userReason := "Speakeasy blocked this tool call: this session's MCP server inventory was never received, so the shadow-MCP policy cannot verify the target. Retry in a moment; if every MCP call in this session stays blocked, the Speakeasy hooks client on this machine is not reporting MCP configuration (update the Speakeasy plugin and make sure the `claude` CLI is reachable from hook processes), or ask your Gram admin about the shadow-MCP policy."
+		logger.WarnContext(ctx, "denying claude tool call: no cached MCP list",
 			attr.SlogEvent("claude_hook_denied_no_mcp_list"),
 			attr.SlogError(cacheErr),
 			attr.SlogRiskPolicyID(policy.ID),

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -28,11 +29,25 @@ type mcpInventoryEntry struct {
 // collectClaudeMCPInventory asks Claude for the effective server list so
 // plugin and claude.ai connector servers, which are absent from config files,
 // are included. Collection is best-effort: hooks must continue when the CLI
-// is unavailable, slow, or returns an unfamiliar format.
-func collectClaudeMCPInventory(ctx context.Context, cwd string) []mcpInventoryEntry {
-	bin, err := exec.LookPath("claude")
-	if err != nil {
-		return nil
+// is unavailable, slow, or returns an unfamiliar format. Every bail-out is
+// logged to the debug log — a session whose gather silently fails carries no
+// inventory for its whole life, and under a block-all shadow-MCP policy that
+// blocks every MCP call in the session (DNO-784), so the failure has to be
+// diagnosable.
+func (r *Relay) collectClaudeMCPInventory(ctx context.Context, cwd string) []mcpInventoryEntry {
+	bin := strings.TrimSpace(os.Getenv("GRAM_HOOKS_CLAUDE_BIN"))
+	if bin == "" {
+		found, err := exec.LookPath("claude")
+		if err != nil {
+			// GUI- and MDM-launched hook processes routinely receive a
+			// minimal PATH without the CLI. The plugin bootstrap repairs
+			// PATH from the documented install locations before exec'ing
+			// this binary; landing here means that repair found nothing
+			// either.
+			r.debugf("mcp-inventory: claude CLI not on PATH (set GRAM_HOOKS_CLAUDE_BIN to override): %v", err)
+			return nil
+		}
+		bin = found
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, claudeMCPInventoryTimeout)
@@ -41,11 +56,18 @@ func collectClaudeMCPInventory(ctx context.Context, cwd string) []mcpInventoryEn
 	if cwd != "" {
 		cmd.Dir = cwd
 	}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil && len(out) == 0 {
+		r.debugf("mcp-inventory: 'claude mcp list' produced no output (err: %v, stderr: %s)", err, strings.TrimSpace(stderr.String()))
 		return nil
 	}
-	return parseClaudeMCPInventory(string(out))
+	entries := parseClaudeMCPInventory(string(out))
+	if len(entries) == 0 {
+		r.debugf("mcp-inventory: 'claude mcp list' output had no parseable entries (err: %v, stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	}
+	return entries
 }
 
 // parseClaudeMCPInventory parses `<name>: <target> (<transport>) - <status>`.
