@@ -140,6 +140,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		sessionEndpoints.Use(m)
 	}
 	sessionssrv.Mount(mux, sessionssrv.New(sessionEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	// Tombstone for the retired OAuth proxy token endpoint: answers
+	// invalid_grant so a client holding a proxy refresh token re-authorizes
+	// against the user_session_issuer these endpoints serve.
+	attachRetiredProxy(mux, service)
 }
 
 // APIKeyAuth implements goa Auther for every Goa service this package backs;
