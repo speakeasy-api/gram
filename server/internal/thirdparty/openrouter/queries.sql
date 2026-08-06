@@ -27,10 +27,12 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: UpdateOpenRouterKey :one
--- Also clears the disabled flag. This is the reinstatement write, and its only
--- caller turns the upstream key back on in the same call.
+-- Clears the disabled flag only when the caller is reinstating, which it signals
+-- with @reinstate. A routine refresh reads the row before it patches upstream, so
+-- an unconditional clear here would revoke a lockdown that landed in between.
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key, disabled = FALSE
+SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key,
+    disabled = disabled AND NOT @reinstate::boolean
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE

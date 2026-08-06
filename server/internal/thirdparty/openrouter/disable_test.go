@@ -22,6 +22,7 @@ type disableTestUpstream struct {
 	server  *httptest.Server
 	mu      sync.Mutex
 	patches []string
+	onPatch func()
 }
 
 // recorded returns the raw patch bodies. They stay raw because the field a
@@ -32,6 +33,15 @@ func (u *disableTestUpstream) recorded() []string {
 	defer u.mu.Unlock()
 
 	return append([]string(nil), u.patches...)
+}
+
+// interceptPatch runs fn while a patch is in flight, which is the window
+// between a refresh reading the key row and writing it back.
+func (u *disableTestUpstream) interceptPatch(fn func()) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	u.onPatch = fn
 }
 
 func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disableTestUpstream, *repo.Queries) {
@@ -51,7 +61,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	})
 	require.NoError(t, err)
 
-	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil}
+	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil}
 	upstream.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -70,7 +80,12 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 
 			upstream.mu.Lock()
 			upstream.patches = append(upstream.patches, string(raw))
+			onPatch := upstream.onPatch
 			upstream.mu.Unlock()
+
+			if onPatch != nil {
+				onPatch()
+			}
 
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]any{"limit": 100.0, "hash": "hash-1"},
@@ -226,4 +241,42 @@ func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	patches = upstream.recorded()
 	require.Len(t, patches, 3)
 	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[2])
+}
+
+// A refresh reads the key row, patches upstream, then writes the row back. A
+// lockdown that commits inside that window has to survive the write: the
+// refresh never sent disabled=false, so clearing the local flag would hand out
+// a key that OpenRouter refuses.
+func TestRefreshAPIKeyLimit_KeepsLockdownThatLandsMidRefresh(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+
+	locked := make(chan error, 1)
+	upstream.interceptPatch(func() {
+		locked <- queries.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+			OrganizationID: orgID,
+			KeyType:        string(KeyTypeInternal),
+		})
+	})
+
+	limit := 42
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+	require.NoError(t, <-locked)
+
+	require.Equal(t, []string{`{"limit":42,"limit_reset":"monthly"}`}, upstream.recorded())
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.True(t, row.Disabled, "a refresh must not clear a lockdown it never saw")
+	require.Equal(t, int64(42), row.MonthlyCredits)
 }
