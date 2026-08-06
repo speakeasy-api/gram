@@ -163,7 +163,7 @@ export function AuditFeedFooter({
   if (count === 0 && !isFetchingNextPage) return null;
 
   return (
-    <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
+    <div className="bg-card flex items-center justify-between border-t px-4 py-3">
       <Text muted small>
         {count.toLocaleString()} {noun}
         {count === 1 ? "" : "s"}

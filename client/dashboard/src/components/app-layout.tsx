@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { Button } from "@/components/ui/Button";
 import { ModalProvider } from "@/components/ui/context/ModalContext";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
@@ -116,26 +117,30 @@ const ImpersonationBanner = () => {
     })();
   };
 
+  // Height must stay 2.25rem (h-9) to match --header-offset / --banner-offset.
+  const toneClasses = isDemo
+    ? "border-information-softest bg-information-softest"
+    : "border-destructive-softest bg-destructive-softest";
+  const labelTone = isDemo
+    ? "text-default-information"
+    : "text-default-destructive";
+
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-3 px-4 py-2 text-sm text-white",
-        isDemo ? "bg-purple-600" : "bg-red-600",
+        "flex h-9 items-center justify-center gap-3 border-b px-4",
+        toneClasses,
       )}
     >
-      <ShieldAlert className="h-4 w-4 shrink-0" />
-      <span className="font-mono font-bold">
+      <ShieldAlert className={cn("h-3.5 w-3.5 shrink-0", labelTone)} />
+      <span className={cn("text-eyebrow", labelTone)}>
         {isDemo
           ? "Demo org — sample data"
           : `Impersonating ${organization.slug}`}
       </span>
-      <button
-        type="button"
-        className="ml-2 bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
-        onClick={exit}
-      >
+      <Button variant="secondary" size="xs" className="ml-2" onClick={exit}>
         {isDemo ? "Exit demo" : "Stop impersonating"}
-      </button>
+      </Button>
     </div>
   );
 };

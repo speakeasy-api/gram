@@ -1,3 +1,4 @@
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
@@ -40,7 +41,18 @@ export default function OrgWebhooks(): React.JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs stage="preview" />
       </Page.Header>
-      <Page.Body>{content}</Page.Body>
+      <Page.Body>
+        <div className="mb-6">
+          <PageEyebrow className="mb-2" />
+          <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+            Webhooks
+          </Heading>
+          <Text muted small className="mt-1">
+            Configure webhook delivery for various platform events.
+          </Text>
+        </div>
+        {content}
+      </Page.Body>
     </Page>
   );
 }
@@ -61,12 +73,6 @@ function OrgWebhooksInner() {
 
   return (
     <>
-      <Heading variant="h3" className="mb-4">
-        Webhooks
-      </Heading>
-      <Text muted small className="mb-6">
-        Configure webhook delivery for various platform events.
-      </Text>
       <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
@@ -113,11 +119,14 @@ function WebhooksDisabled() {
   const { session } = useSessionData();
 
   return (
-    <div className="border-border bg-card border p-4">
+    <div className="border-border bg-card border p-8">
       <Stack gap={4} align="center" justify="center">
         <Webhook className="text-muted-foreground h-10 w-10" />
         <div>
-          <Heading variant="h4" className="text-center font-medium">
+          <Heading
+            variant="h4"
+            className="text-display-xs font-thin text-center"
+          >
             Webhooks are currently in preview
           </Heading>
         </div>
@@ -175,7 +184,9 @@ function WebhookConfigPortal() {
 
   return (
     <>
-      <Heading variant="h4">Webhook Configuration</Heading>
+      <Heading variant="h4" className="mt-8 mb-4 text-display-xs font-thin">
+        Webhook Configuration
+      </Heading>
       <AppPortal
         url={portalURL}
         darkMode={theme}

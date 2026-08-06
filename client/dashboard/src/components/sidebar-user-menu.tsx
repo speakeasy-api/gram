@@ -86,7 +86,7 @@ export function SidebarUserMenu(): JSX.Element {
       </button>
 
       {/* Smaller inline theme switcher — expanded only */}
-      <ThemeSwitcher className="scale-90 group-data-[collapsible=icon]:hidden" />
+      <ThemeSwitcher className="group-data-[collapsible=icon]:hidden" />
 
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>

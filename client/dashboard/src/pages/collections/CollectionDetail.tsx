@@ -382,7 +382,7 @@ function CollectionDetailInner() {
                   <div className="min-w-0 space-y-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="font-display truncate text-3xl font-thin">
+                        <h1 className="text-display-sm truncate font-thin">
                           {collection.name}
                         </h1>
                         <Badge variant="neutral" className="text-xs">

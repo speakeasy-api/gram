@@ -278,7 +278,7 @@ function AuditLogRow({
         >
           {rowContent}
         </div>
-        <div className="bg-background border border-t-0 px-4 pt-2 pb-3">
+        <div className="bg-card border border-t-0 px-4 pt-2 pb-3">
           <StructuredDiff log={log} />
         </div>
       </div>
@@ -871,10 +871,10 @@ function OrgAuditLogsInner() {
         </div>
       </div>
 
-      <div className="bg-background overflow-hidden border">
+      <div className="bg-card overflow-hidden border">
         {/* Search toolbar */}
         {!isLoading && !error && logs.length > 0 && (
-          <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
+          <div className="bg-card flex items-center gap-2 border-b p-2">
             <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
               {searchQuery ? (
                 <>

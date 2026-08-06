@@ -1,5 +1,6 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/Dialog";
 import { Heading } from "@/components/ui/Heading";
@@ -189,14 +190,17 @@ function OrgApiKeysInner() {
 
   return (
     <>
-      <Heading variant="h4" className="mb-2">
-        API Keys
-      </Heading>
-      <Text muted small className="mb-6">
-        Create and manage API keys to authenticate programmatic access to
-        platform services, including MCP service deployments, tool management,
-        and other connections.
-      </Text>
+      <div className="mb-6">
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+          API Keys
+        </Heading>
+        <Text muted small className="mt-1">
+          Create and manage API keys to authenticate programmatic access to
+          platform services, including MCP service deployments, tool management,
+          and other connections.
+        </Text>
+      </div>
       <Stack
         direction="horizontal"
         justify="space-between"

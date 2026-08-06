@@ -984,7 +984,9 @@ export function DeviceAgentSetup(): React.JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Install the agent</Page.Section.Title>
+      {/* The Device Agent page renders the area eyebrow with its own page
+          title above the tab strip, so suppress the section-level one. */}
+      <Page.Section.Title area="">Install the agent</Page.Section.Title>
       <Page.Section.Description>
         The Speakeasy device agent runs on-device and enforces your org's
         required AI-tool plugins and MCP configuration, then reports compliance

@@ -1,4 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -751,13 +752,16 @@ function OrgDomainsInner() {
 
   return (
     <>
-      <Heading variant="h4" className="mb-2">
-        Custom Domain
-      </Heading>
-      <Text muted small className="mb-6">
-        Connect a custom domain to serve your MCP servers from your own branded
-        URL instead of the default platform domain.
-      </Text>
+      <div className="mb-6">
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+          Custom Domain
+        </Heading>
+        <Text muted small className="mt-1">
+          Connect a custom domain to serve your MCP servers from your own
+          branded URL instead of the default platform domain.
+        </Text>
+      </div>
       {domain?.domain ? (
         <div className="border-border bg-card border p-4">
           <Stack direction="horizontal" justify="space-between" align="start">
