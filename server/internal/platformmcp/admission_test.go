@@ -19,6 +19,26 @@ func (e testNewModelEligibility) EligibleForPlatformMCP(_ context.Context, _ str
 	return e.eligible, e.err
 }
 
+type testEvaluationProvider struct {
+	evaluation feature.Evaluation
+}
+
+func (p testEvaluationProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+	return false, nil
+}
+
+func (p testEvaluationProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+	return false, nil
+}
+
+func (p testEvaluationProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	return nil, nil
+}
+
+func (p testEvaluationProvider) EvaluateFlag(context.Context, feature.Flag, string, map[string]string) (feature.Evaluation, error) {
+	return p.evaluation, nil
+}
+
 func TestAdmissionChecker(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +116,20 @@ func TestAdmissionChecker(t *testing.T) {
 		}
 		require.Equal(t, test.want, got, test.name)
 	}
+}
+
+func TestAdmissionCheckerRequiresExplicitEnabledRollout(t *testing.T) {
+	t.Parallel()
+
+	checker := NewAdmissionChecker(
+		testCapabilityChecker{enabled: true},
+		testEvaluationProvider{evaluation: feature.Evaluation(99)},
+		testNewModelEligibility{eligible: true},
+	)
+
+	admission, err := checker.Evaluate(t.Context(), "organization", "organization")
+	require.NoError(t, err)
+	require.Equal(t, AdmissionIndeterminate, admission)
 }
 
 func TestAdmissionCheckerReturnsIndeterminateForInvalidOrCanceledContext(t *testing.T) {

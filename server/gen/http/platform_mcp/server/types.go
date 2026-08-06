@@ -40,6 +40,24 @@ type GetLifecycleResponseBody struct {
 	Ready bool `form:"ready" json:"ready" xml:"ready"`
 }
 
+// GetLifecycleUnavailableResponseBody is the type of the "platformMcp" service
+// "getLifecycle" endpoint HTTP response body for the "unavailable" error.
+type GetLifecycleUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetLifecycleUnauthorizedResponseBody is the type of the "platformMcp"
 // service "getLifecycle" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -209,6 +227,25 @@ type GetLifecycleUnexpectedResponseBody struct {
 // service "getLifecycle" endpoint HTTP response body for the "gateway_error"
 // error.
 type GetLifecycleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeConnectionUnavailableResponseBody is the type of the "platformMcp"
+// service "revokeConnection" endpoint HTTP response body for the "unavailable"
+// error.
+type RevokeConnectionUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -451,6 +488,20 @@ func NewGetLifecycleResponseBody(res *platformmcp.PlatformMCPLifecycle) *GetLife
 	return body
 }
 
+// NewGetLifecycleUnavailableResponseBody builds the HTTP response body from
+// the result of the "getLifecycle" endpoint of the "platformMcp" service.
+func NewGetLifecycleUnavailableResponseBody(res *goa.ServiceError) *GetLifecycleUnavailableResponseBody {
+	body := &GetLifecycleUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetLifecycleUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "getLifecycle" endpoint of the "platformMcp" service.
 func NewGetLifecycleUnauthorizedResponseBody(res *goa.ServiceError) *GetLifecycleUnauthorizedResponseBody {
@@ -581,6 +632,21 @@ func NewGetLifecycleUnexpectedResponseBody(res *goa.ServiceError) *GetLifecycleU
 // the result of the "getLifecycle" endpoint of the "platformMcp" service.
 func NewGetLifecycleGatewayErrorResponseBody(res *goa.ServiceError) *GetLifecycleGatewayErrorResponseBody {
 	body := &GetLifecycleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeConnectionUnavailableResponseBody builds the HTTP response body
+// from the result of the "revokeConnection" endpoint of the "platformMcp"
+// service.
+func NewRevokeConnectionUnavailableResponseBody(res *goa.ServiceError) *RevokeConnectionUnavailableResponseBody {
+	body := &RevokeConnectionUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

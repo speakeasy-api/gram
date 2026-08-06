@@ -5,12 +5,17 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var _ = Service("platformMcp", func() {
 	Description("Read Platform MCP lifecycle state and revoke organization-scoped Platform MCP connections. OAuth credentials and client metadata are never returned.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
 
 	Method("getLifecycle", func() {
 		Description("Get Platform MCP onboarding, publication, authorization, and discovery facts for the active organization. Requires org:admin.")
@@ -25,6 +30,9 @@ var _ = Service("platformMcp", func() {
 			GET("/rpc/platformMcp.getLifecycle")
 			security.SessionHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "getPlatformMcpLifecycle")
@@ -47,6 +55,9 @@ var _ = Service("platformMcp", func() {
 			POST("/rpc/platformMcp.revokeConnection")
 			security.SessionHeader()
 			Response(StatusNoContent)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "revokePlatformMcpConnection")

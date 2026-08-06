@@ -1503,6 +1503,7 @@ SELECT EXISTS (
      AND endpoint.project_id = project.id
      AND endpoint.deleted IS FALSE
     WHERE server.deleted IS FALSE
+      AND server.visibility <> 'disabled'
 )
 `
 

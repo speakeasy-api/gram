@@ -1658,17 +1658,36 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
+	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
+	admission := platformmcp.AdmissionDisabled
+	if projectSlug == "default" {
+		admission = platformmcp.AdmissionIndeterminate
+		if s.platformAdmission != nil {
+			admission, err = s.platformAdmission.Evaluate(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+			if err != nil {
+				s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp admission", attr.SlogError(err))
+				admission = platformmcp.AdmissionIndeterminate
+			}
+		}
+	}
+	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
+	cfg.PlatformMCPEnabled = admission == platformmcp.AdmissionEnabled ||
+		(admission == platformmcp.AdmissionIndeterminate && platformWasPublished)
+
 	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
+	}
+	if admission == platformmcp.AdmissionIndeterminate && platformWasPublished {
+		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
 	}
 
 	// Up to date only when both components match what was last published: the MCP
 	// per-plugin fingerprints, the hooks generator version, and the hook-affecting
 	// config (so a marketplace rename or browser-login toggle that hasn't
 	// propagated to the hooks subtree yet reads as stale rather than current).
-	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
+	upToDate := maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
 		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
 		storedHooksConfigHash(conn.PublishedHooksConfig) == hooksConfigHash(hooksConfigSnapshot(cfg))
 	return &upToDate
@@ -1964,12 +1983,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// An unavailable admission dependency must not mutate the Platform package's
 	// rollout state. Retain its prior fingerprint while the shared marketplace
 	// files continue to be regenerated with the package entry present.
+	currentPlatformMCPFingerprint := mcpFingerprints[mcpPlatformFingerprintKey]
 	if preservePlatformMCP {
 		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
-	}
-	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
 	}
 
 	// Decide which components to (re)generate. A human publish refreshes customer
@@ -2131,6 +2147,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconstruct platform mcp files after missing repo").LogError(ctx, s.logger)
 		}
+		mcpFingerprints[mcpPlatformFingerprintKey] = currentPlatformMCPFingerprint
 	}
 	if admission == platformmcp.AdmissionEnabled && platformOnlyChange && carriedMCP {
 		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
@@ -2239,6 +2256,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	pluginSlugs := make([]string, 0, len(pluginInfos))
 	for _, p := range pluginInfos {
 		pluginSlugs = append(pluginSlugs, p.Slug)
+	}
+
+	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
 	}
 
 	// Persist the API keys, audit logs, and github connection atomically only

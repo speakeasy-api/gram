@@ -119,31 +119,50 @@ func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctI
 		return feature.EvaluationIndeterminate, nil
 	}
 
-	var phGroups posthog.Groups
-	if len(groups) > 0 {
-		phGroups = posthog.NewGroups()
-		for groupType, groupKey := range groups {
-			phGroups.Set(groupType, groupKey)
-		}
+	if p.localEvaluation {
+		return p.evaluateLocalFlag(flag, distinctID, groups)
 	}
 
-	flagState, err := p.client.IsFeatureEnabled(posthog.FeatureFlagPayload{
+	result, err := p.client.GetFeatureFlagResult(posthog.FeatureFlagPayload{
 		Key:        string(flag),
 		DistinctId: distinctID,
-		Groups:     phGroups,
+		Groups:     posthogGroups(groups),
 	})
+	if errors.Is(err, posthog.ErrFlagNotFound) {
+		return feature.EvaluationIndeterminate, nil
+	}
 	if err != nil {
 		return feature.EvaluationIndeterminate, fmt.Errorf("evaluate feature flag: %w", err)
 	}
-
-	encoded, err := json.Marshal(flagState)
-	if err != nil {
-		return feature.EvaluationIndeterminate, fmt.Errorf("marshal feature flag result: %w", err)
+	if result == nil || result.Variant != nil {
+		return feature.EvaluationIndeterminate, nil
 	}
-	if string(encoded) == "true" {
+	if result.Enabled {
 		return feature.EvaluationEnabled, nil
 	}
-	if string(encoded) == "false" {
+	return feature.EvaluationDisabled, nil
+}
+
+func (p *Posthog) evaluateLocalFlag(flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	sendFeatureFlagEvents := false
+	flags, err := p.client.GetAllFlags(posthog.FeatureFlagPayloadNoKey{
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		OnlyEvaluateLocally:   false,
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
+	})
+	if err != nil {
+		return feature.EvaluationIndeterminate, fmt.Errorf("evaluate local feature flags: %w", err)
+	}
+
+	value, ok := flags[string(flag)]
+	if !ok {
+		return feature.EvaluationIndeterminate, nil
+	}
+	if enabled, ok := value.(bool); ok {
+		if enabled {
+			return feature.EvaluationEnabled, nil
+		}
 		return feature.EvaluationDisabled, nil
 	}
 	return feature.EvaluationIndeterminate, nil
