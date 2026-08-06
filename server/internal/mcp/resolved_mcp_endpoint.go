@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -37,6 +38,23 @@ type ResolvedMcpEndpoint struct {
 	// Mint. /mcp uses urn.NewToolset(toolset.ID).String(); /x/mcp uses
 	// urn.NewUserSessionIssuer(issuerID).String().
 	AudienceURN string
+
+	// CIMDAdmissionModeRaw is the issuer's stored
+	// client_id_metadata_admission_mode, carried verbatim so that
+	// admission.ResolveMode stays the single place deciding what it means:
+	// NULL resolves to "presets", and a value outside the enum fails closed
+	// to "disabled".
+	//
+	// Raw rather than a resolved admission.Mode so that resolution stays in
+	// one place. Carrying a resolved Mode would mean resolving at every
+	// stamping site, which is exactly what admission.ResolveMode exists to
+	// prevent.
+	//
+	// The cost is that an unstamped endpoint reads as NULL and therefore as
+	// "presets" — the default, not a denial. Callers must ensure this is
+	// populated before enforcement; RequireUserSessionIssuer is the one
+	// place that does so.
+	CIMDAdmissionModeRaw pgtype.Text
 
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.
 	CustomDomainID uuid.NullUUID
@@ -243,17 +261,19 @@ func NewResolvedMcpEndpointFromMcpServer(
 	organizationID string,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
-		CustomDomainID:      mcpEndpoint.CustomDomainID,
-		IsPublic:            mcpServer.Visibility == mcpservers.VisibilityPublic,
-		McpServerID:         uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
-		OrganizationID:      organizationID,
-		ProjectID:           mcpEndpoint.ProjectID,
-		RouteBase:           "x/mcp",
-		Slug:                mcpEndpoint.Slug,
-		ToolsetID:           mcpServer.ToolsetID,
-		UpstreamResource:    "",
-		UserSessionIssuerID: mcpServer.UserSessionIssuerID.UUID,
+		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
+		// Stamped by RequireUserSessionIssuer, which every path runs next.
+		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
+		CustomDomainID:       mcpEndpoint.CustomDomainID,
+		IsPublic:             mcpServer.Visibility == mcpservers.VisibilityPublic,
+		McpServerID:          uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		OrganizationID:       organizationID,
+		ProjectID:            mcpEndpoint.ProjectID,
+		RouteBase:            "x/mcp",
+		Slug:                 mcpEndpoint.Slug,
+		ToolsetID:            mcpServer.ToolsetID,
+		UpstreamResource:     "",
+		UserSessionIssuerID:  mcpServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -266,17 +286,19 @@ func NewResolvedMcpEndpointFromMcpServer(
 // consent form action all need to match the caller's surface.
 func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase string) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(toolset.ID).String(),
-		CustomDomainID:      toolset.CustomDomainID,
-		IsPublic:            toolset.McpIsPublic,
-		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:      toolset.OrganizationID,
-		ProjectID:           toolset.ProjectID,
-		RouteBase:           routeBase,
-		Slug:                conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
-		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UpstreamResource:    "",
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		AudienceURN: urn.NewToolset(toolset.ID).String(),
+		// Stamped by RequireUserSessionIssuer, which every path runs next.
+		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
+		CustomDomainID:       toolset.CustomDomainID,
+		IsPublic:             toolset.McpIsPublic,
+		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:       toolset.OrganizationID,
+		ProjectID:            toolset.ProjectID,
+		RouteBase:            routeBase,
+		Slug:                 conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
+		ToolsetID:            uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UpstreamResource:     "",
+		UserSessionIssuerID:  toolset.UserSessionIssuerID.UUID,
 	}
 }
 

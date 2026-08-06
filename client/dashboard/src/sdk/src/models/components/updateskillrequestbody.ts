@@ -22,6 +22,10 @@ export type UpdateSkillRequestBody = {
    * The optional skill summary.
    */
   summary?: string | undefined;
+  /**
+   * Registry tags for categorizing the skill. At most 40 tags.
+   */
+  tags: Array<string>;
 };
 
 /** @internal */
@@ -30,6 +34,7 @@ export type UpdateSkillRequestBody$Outbound = {
   id: string;
   name: string;
   summary?: string | undefined;
+  tags: Array<string>;
 };
 
 /** @internal */
@@ -42,6 +47,7 @@ export const UpdateSkillRequestBody$outboundSchema: z.ZodMiniType<
     id: z.string(),
     name: z.string(),
     summary: z.optional(z.string()),
+    tags: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {

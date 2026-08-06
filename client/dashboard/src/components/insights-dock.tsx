@@ -7,7 +7,7 @@ import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
-import { useAssistantRuntime } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import type { ElementsConfig, ElementsTransportFactory } from "@/elements";
 import {
   ActiveChatTitle,
@@ -1164,7 +1164,7 @@ export function InsightsProvider({
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
       // Expose the gated "runtime is mounted" signal, not the raw eager
-      // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
+      // `assistantReady`: chat pages render AUI hooks
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
@@ -1452,11 +1452,14 @@ function PendingPromptBridge({
   pending: { text: string; nonce: number } | null;
   onConsume: () => void;
 }): null {
-  const assistantRuntime = useAssistantRuntime();
+  const thread = useAui().thread();
+  const isThreadReady = useAuiState(
+    ({ thread }) => !thread.isLoading && !thread.isDisabled,
+  );
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!pending || !assistantRuntime) return;
+    if (!pending || !isThreadReady) return;
     if (firedNonceRef.current === pending.nonce) return;
     firedNonceRef.current = pending.nonce;
 
@@ -1471,21 +1474,16 @@ function PendingPromptBridge({
     // asynchronously, so a post-append "did it land?" check races and
     // re-appending duplicates the send.
     let done = false;
-    let unsubscribe: (() => void) | null = null;
 
     const finish = () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
       onConsume();
     };
 
     const attempt = () => {
       if (done) return;
-      const state = assistantRuntime.thread.getState();
-      if (state.isLoading || state.isDisabled) return;
       try {
-        assistantRuntime.thread.append(text);
+        thread.append(text);
       } catch (err) {
         if (!isEmptyThreadError(err)) {
           console.error("Failed to send queued assistant prompt:", err);
@@ -1497,16 +1495,11 @@ function PendingPromptBridge({
     };
 
     attempt();
-    if (!done) {
-      unsubscribe = assistantRuntime.thread.subscribe(attempt);
-    }
 
     return () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
     };
-  }, [pending, assistantRuntime, onConsume]);
+  }, [pending, isThreadReady, thread, onConsume]);
 
   return null;
 }

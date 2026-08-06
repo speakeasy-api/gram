@@ -123,7 +123,7 @@ func TestUpdateDomain_OpenAIAppsChallengeTokenSetReplaceClearAndAudit(t *testing
 	require.NoError(t, err)
 	require.Equal(t, first, requireValue(t, res.OpenaiAppsChallengeToken))
 	require.Equal(t, []string{"10.0.0.0/8"}, res.IPAllowlist)
-	require.Zero(t, ti.temporal.reconcileCalls)
+	require.Equal(t, 1, ti.temporal.reconcileCalls)
 	requireLatestChallengeTokenAuditTransition(t, ctx, ti, nil, &first)
 
 	second := "challenge-token-second"
@@ -134,6 +134,7 @@ func TestUpdateDomain_OpenAIAppsChallengeTokenSetReplaceClearAndAudit(t *testing
 	})
 	require.NoError(t, err)
 	require.Equal(t, second, requireValue(t, res.OpenaiAppsChallengeToken))
+	require.Equal(t, 2, ti.temporal.reconcileCalls)
 	requireLatestChallengeTokenAuditTransition(t, ctx, ti, &first, &second)
 
 	clearToken := ""
@@ -144,6 +145,7 @@ func TestUpdateDomain_OpenAIAppsChallengeTokenSetReplaceClearAndAudit(t *testing
 	})
 	require.NoError(t, err)
 	require.Nil(t, res.OpenaiAppsChallengeToken)
+	require.Equal(t, 3, ti.temporal.reconcileCalls)
 	requireLatestChallengeTokenAuditTransition(t, ctx, ti, &second, nil)
 
 	row, err := ti.repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)

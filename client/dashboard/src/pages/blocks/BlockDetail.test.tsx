@@ -33,7 +33,10 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: { id: "sess-1" } }),
 }));
 
-vi.mock("@/lib/utils", () => ({ buildLoginRedirectURL: () => "/login" }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  buildLoginRedirectURL: () => "/login",
+}));
 
 vi.mock("@/components/gram-logo", () => ({ GramLogo: () => null }));
 
@@ -117,6 +120,21 @@ describe("BlockPage", () => {
     // The reason box renders block.reason exactly as the backend stored it —
     // no client-side parsing of the message wording.
     expect(screen.getByText(sampleBlock.reason)).toBeTruthy();
+  });
+
+  it("falls back to spend-rule framing when the block has no policy name", () => {
+    // Spend-gate blocks carry no risk policy, so policyName is empty; the
+    // headline must not render `Blocked by policy ""`.
+    mockLoadedBlock({
+      ...sampleBlock,
+      policyName: "",
+      reason: `Speakeasy blocked this tool call: spend rule "Intern hard limit" — budget resets Aug 31, 2026 00:00 UTC`,
+    });
+
+    render(<BlockPage />);
+
+    expect(screen.getByText(/Blocked by a Speakeasy spend rule/)).toBeTruthy();
+    expect(screen.queryByText(/Blocked by policy/)).toBeNull();
   });
 
   it("submits 'up' feedback and refetches when Helpful is clicked", async () => {

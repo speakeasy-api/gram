@@ -39,10 +39,12 @@ var (
 // the skill efficacy judge, so every session judge sees the same
 // prompt-injection-hardened shape.
 type JudgeInput struct {
-	OrgID      string
-	ProjectID  string
-	ChatID     uuid.UUID
-	Transcript efficacy.Transcript
+	EvaluationID uuid.UUID
+	OrgID        string
+	ProjectID    string
+	ChatID       uuid.UUID
+	AuthorID     string
+	Transcript   efficacy.Transcript
 }
 
 // Verdict is a judge's normalized answer. Score is the headline metric whose
@@ -73,6 +75,13 @@ type Judge interface {
 	// and score rows, so changing it orphans all three.
 	Name() string
 	Judge(ctx context.Context, in JudgeInput) (JudgeResult, error)
+}
+
+// ScorelessJudge performs its durable work and marks its evaluation scored
+// atomically inside Judge, so it does not publish a verdict to the shared
+// ClickHouse score sink.
+type ScorelessJudge interface {
+	SkipScoreSink() bool
 }
 
 // judgeNamePattern keeps judge names safe to use as settings keys, sink
@@ -144,14 +153,15 @@ type StructuredCall struct {
 }
 
 // CallStructured performs one structured-output completion on the platform's
-// internal key, drawing on the shared per-(org, model) judge rate limiter, and
+// internal key, drawing on the shared key-scoped judge rate limiter, and
 // returns the raw response text plus the model that produced it. Errors wrap
 // ErrModelFailure or ErrRetryable exactly as the publisher expects.
 func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.CompletionClient, limiter *ratelimit.Limiter, in JudgeInput, call StructuredCall) (string, string, error) {
 	// A Store outage is not a throttle: proceed rather than stall the pipeline on
 	// limiter infrastructure. A real throttle is retryable — the unit keeps its
 	// reservation and its attempt budget.
-	switch res, err := limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, call.Model)); {
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, logger, client, in.OrgID, in.ProjectID, billing.ModelUsageSourceChatAnalysis, call.Model)
+	switch res, err := limiter.Allow(ctx, bucket); {
 	case err != nil:
 		logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
 			attr.SlogError(err),

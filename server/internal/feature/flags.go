@@ -47,6 +47,12 @@ const (
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.
 	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
+	// FlagRiskListFromClickHouse serves the project-wide risk events listing
+	// (ListRiskResults without a chat_id) from ClickHouse risk_findings
+	// instead of Postgres risk_results. The chat-scoped listing stays on
+	// Postgres, which is the only store holding raw match content. Per-org
+	// rollout gate; removed once the ClickHouse read path is GA.
+	FlagRiskListFromClickHouse Flag = "risk-list-from-clickhouse"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

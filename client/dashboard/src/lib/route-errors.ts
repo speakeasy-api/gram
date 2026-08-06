@@ -28,6 +28,20 @@ export function isUnauthorizedError(error: unknown): boolean {
   return getHttpStatusCode(error) === 401;
 }
 
+/**
+ * A 401 from the Gram API itself, meaning the dashboard session is dead.
+ *
+ * This is deliberately narrower than {@link isUnauthorizedError}: non-Gram
+ * clients also surface errors with a 401 status — e.g. the AI SDK's
+ * MCPClientError when a proxied MCP upstream rejects its credentials — and
+ * those say nothing about the Gram session. Treating them as session expiry
+ * causes a redirect loop: /login sees a valid session and bounces straight
+ * back to the page whose query 401s again.
+ */
+export function isGramSessionUnauthorizedError(error: unknown): boolean {
+  return error instanceof GramError && error.statusCode === 401;
+}
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

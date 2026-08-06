@@ -19,11 +19,11 @@ export type UpsertConfigRequestBody = {
    */
   enabled: boolean;
   /**
-   * Provider organization identifier. Required for anthropic_compliance and codex_compliance.
+   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID).
    */
   externalOrganizationId?: string | undefined;
   /**
-   * AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
    */
   provider: string;
 };

@@ -9,6 +9,7 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -23,7 +24,11 @@ func TestFallbackPromptPolicyName(t *testing.T) {
 	}{
 		"from prompt": {
 			prompt: "  Block   destructive deletes  ",
-			want:   "Block destructive deletes",
+			// Prefixed and distinct from a raw prompt truncation: the
+			// dashboard's policy table shows the (separately truncated) raw
+			// prompt right next to this name, so a bare truncation of the
+			// same text read as pointless duplication.
+			want: "Prompt Policy: Block destructive deletes",
 		},
 		"fallback": {
 			prompt: "",
@@ -31,12 +36,14 @@ func TestFallbackPromptPolicyName(t *testing.T) {
 		},
 		"dedupe": {
 			prompt:   "Block destructive deletes",
-			existing: []string{"Block destructive deletes"},
-			want:     "Block destructive deletes 2",
+			existing: []string{"Prompt Policy: Block destructive deletes"},
+			want:     "Prompt Policy: Block destructive deletes 2",
 		},
 		"truncates": {
+			// Excerpted much shorter than the 60-rune cap so the prefix
+			// keeps the whole name readable at a glance.
 			prompt: "1234567890123456789012345678901234567890123456789012345678901",
-			want:   "123456789012345678901234567890123456789012345678901234567890",
+			want:   "Prompt Policy: 123456789012345678901234567890…",
 		},
 	}
 
@@ -72,11 +79,11 @@ func TestGeneratePromptPolicyName(t *testing.T) {
 		},
 		"falls back on error": {
 			err:  errors.New("completion failed"),
-			want: "Block destructive deletes",
+			want: "Prompt Policy: Block destructive deletes",
 		},
 		"falls back on empty response": {
 			response: promptNameResponse("   "),
-			want:     "Block destructive deletes",
+			want:     "Prompt Policy: Block destructive deletes",
 		},
 	}
 
@@ -110,8 +117,9 @@ func TestGeneratePromptPolicyNameWithoutCompletionClient(t *testing.T) {
 
 	svc := &Service{logger: testenv.NewLogger(t)}
 	got := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", nil)
-	if got != "Block destructive deletes" {
-		t.Fatalf("generatePromptPolicyName() = %q, want %q", got, "Block destructive deletes")
+	want := "Prompt Policy: Block destructive deletes"
+	if got != want {
+		t.Fatalf("generatePromptPolicyName() = %q, want %q", got, want)
 	}
 }
 
@@ -157,4 +165,8 @@ func promptNameResponse(text string) *openrouter.CompletionResponse {
 		Model:     "test-model",
 		Content:   text,
 	}
+}
+
+func (c *promptNameCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey(), nil
 }

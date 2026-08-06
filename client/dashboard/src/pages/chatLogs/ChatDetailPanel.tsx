@@ -85,6 +85,7 @@ import {
 import {
   buildDisplayItems,
   buildTranscript,
+  displayItemContainsMessage,
   displayItemRows,
   type MessageCategory,
   rowCategory,
@@ -118,6 +119,8 @@ interface ChatDetailPanelProps {
   chatId: string;
   onClose: () => void;
   onDelete: (chatId: string) => void;
+  /** One-based raw transcript message index to load, center, and highlight. */
+  focusedMessageTurn?: number;
   /** Risk-focused view: collapse the transcript to the flagged messages plus a
    * few of context either side, expandable via "show more". Implies dimming. */
   riskFocus?: boolean;
@@ -202,6 +205,7 @@ export function ChatDetailSheet({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus,
   dimNonRisk,
 }: ChatDetailSheetProps): JSX.Element {
@@ -227,6 +231,7 @@ export function ChatDetailSheet({
                   chatId={chatId}
                   onClose={onClose}
                   onDelete={onDelete}
+                  focusedMessageTurn={focusedMessageTurn}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
                 />
@@ -947,6 +952,7 @@ function ChatDetailPanel({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
@@ -1040,6 +1046,43 @@ function ChatDetailPanel({
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const validFocusedMessageTurn =
+    focusedMessageTurn !== undefined &&
+    Number.isInteger(focusedMessageTurn) &&
+    focusedMessageTurn > 0
+      ? focusedMessageTurn
+      : undefined;
+  const transcriptMessageCount = transcript.messages.length;
+  const transcriptLoading = transcript.isLoading;
+  const transcriptFetchingNewer = transcript.isFetchingNewer;
+  const transcriptHasMoreAfter = transcript.hasMoreAfter;
+  const loadNextTranscriptPage = transcript.fetchNewer;
+
+  // Provenance can cite a turn beyond the cheap first transcript page. Load
+  // forward pages only until that raw one-based message index is available.
+  useEffect(() => {
+    if (
+      validFocusedMessageTurn === undefined ||
+      transcriptLoading ||
+      transcriptFetchingNewer ||
+      transcriptMessageCount >= validFocusedMessageTurn ||
+      !transcriptHasMoreAfter
+    ) {
+      return;
+    }
+    loadNextTranscriptPage();
+  }, [
+    validFocusedMessageTurn,
+    transcriptLoading,
+    transcriptFetchingNewer,
+    transcriptMessageCount,
+    transcriptHasMoreAfter,
+    loadNextTranscriptPage,
+  ]);
+  const focusedMessageId =
+    validFocusedMessageTurn === undefined
+      ? null
+      : (transcript.messages[validFocusedMessageTurn - 1]?.id ?? null);
   const { data: membersData } = useMembers();
   const userLabel = chat
     ? chatOwnerLabel(
@@ -1186,17 +1229,25 @@ function ChatDetailPanel({
       }),
     [visibleRows, hasMoreBefore, hasMoreAfter, windowGaps],
   );
+  const focusedItemIndex = useMemo(() => {
+    if (!focusedMessageId) return null;
+    const index = displayItems.findIndex((item) =>
+      displayItemContainsMessage(item, focusedMessageId),
+    );
+    return index >= 0 ? index : null;
+  }, [displayItems, focusedMessageId]);
 
   // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
   // the first finding, however far down it is. Plain cost/default views open at
   // the top (first message) — even when the session happens to have findings.
   const initialScrollIndex = useMemo(() => {
+    if (focusedItemIndex !== null) return focusedItemIndex;
     if (!dimNonRisk) return null;
     const idx = displayItems.findIndex((it) =>
       displayItemRows(it).some((r) => rowIsFlagged(r, riskResultsByMessage)),
     );
     return idx >= 0 ? idx : null;
-  }, [dimNonRisk, displayItems, riskResultsByMessage]);
+  }, [focusedItemIndex, dimNonRisk, displayItems, riskResultsByMessage]);
 
   // Unified per-occurrence search navigation: flat-map the loaded display rows
   // into every query occurrence (message text / tool name / args / output) in
@@ -1287,8 +1338,9 @@ function ChatDetailPanel({
       // mid-thread, so suppress the top-of-list auto-load + jump-to-start button
       // that the plain from-start transcript uses — otherwise the window's top
       // edge eagerly expands older messages on mount.
-      scrollToFinding: riskWindowed || searchActive,
-      scrollToItemIndex: activeOccurrence?.itemIndex ?? null,
+      scrollToFinding:
+        riskWindowed || searchActive || validFocusedMessageTurn !== undefined,
+      scrollToItemIndex: activeOccurrence?.itemIndex ?? focusedItemIndex,
       scrollNonce,
       activeOccurrence: activeOccurrence
         ? {
@@ -1298,17 +1350,21 @@ function ChatDetailPanel({
             indexInField: activeOccurrence.indexInField,
           }
         : null,
+      focusedMessageId,
     };
   }, [
     hasMoreBefore,
     hasMoreAfter,
     riskWindowed,
     searchActive,
+    validFocusedMessageTurn,
     windowed,
     transcript,
     initialScrollIndex,
     scrollNonce,
     activeOccurrence,
+    focusedItemIndex,
+    focusedMessageId,
   ]);
 
   // "Load all messages": shown whenever part of the conversation isn't loaded
@@ -1350,8 +1406,8 @@ function ChatDetailPanel({
     ],
   );
 
-  // "Create exclusion" swaps the transcript for the exclusion editor in-place
-  // (with a back button) rather than stacking a second sheet on top.
+  // "Setup exclusion rule" swaps the transcript for the exclusion editor
+  // in-place (with a back button) rather than stacking a second sheet on top.
   const openExclusion = useCallback((result: RiskResult) => {
     setExclusionState(findingToExclusionState(result));
     setPendingExclusionKey(findingKey(result));
@@ -1583,8 +1639,8 @@ function ChatDetailPanel({
             <SubViewBar
               title={
                 exclusionState.mode === "edit"
-                  ? "Edit exclusion"
-                  : "Create exclusion"
+                  ? "Edit exclusion rule"
+                  : "Set up exclusion rule"
               }
               onBack={closeExclusion}
             />

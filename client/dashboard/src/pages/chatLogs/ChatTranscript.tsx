@@ -22,15 +22,7 @@ import {
   GitBranch,
   Loader2,
   Paperclip,
-  ShieldOff,
-  SlidersHorizontal,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import {
   MessageContent,
@@ -57,6 +49,7 @@ import {
 } from "./claudeUsage";
 import {
   argsToString,
+  displayItemContainsMessage,
   type DisplayItem,
   findQueryRanges,
   messageText,
@@ -79,9 +72,9 @@ import {
   useRowReveal,
 } from "./chatHelpers";
 import { QueryHighlight } from "./QueryHighlight";
-import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
+import { useDismissFinding } from "@/pages/security/useDismissFinding";
 
 type RowDecoration = {
   footer?: ReactNode;
@@ -292,67 +285,13 @@ function ZigZagRule({
   );
 }
 
-// Distinct, excludable findings for a flagged turn (drops llm_judge and dupes),
-// mirroring CreateExclusionButton's selection.
-function useActionableExclusions(results: RiskResult[] | undefined) {
-  const openCreateExclusion = useContext(CreateExclusionContext);
-  const actionable = useMemo(() => {
-    if (!openCreateExclusion || !results) return [];
-    const seen = new Set<string>();
-    const out: RiskResult[] = [];
-    for (const r of results) {
-      const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
-      if (seen.has(key) || r.ruleId === "llm_judge") continue;
-      seen.add(key);
-      out.push(r);
-    }
-    return out;
-  }, [results, openCreateExclusion]);
-  return { openCreateExclusion, actionable };
-}
-
-// Pill-styled (matches the avatar pill) "Actions" dropdown on the turn header,
-// surfacing the create-exclusion action for the turn's findings.
-function TurnActions({ results }: { results: RiskResult[] }) {
-  const { openCreateExclusion, actionable } = useActionableExclusions(results);
-  if (actionable.length === 0) return null;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="bg-background text-muted-foreground hover:text-foreground flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors"
-        >
-          <SlidersHorizontal className="size-3.5" />
-          Actions
-          <ChevronDown className="size-3.5" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {actionable.map((r) => (
-          <DropdownMenuItem
-            key={r.id}
-            className="cursor-pointer"
-            onSelect={() => openCreateExclusion?.(r)}
-          >
-            <ShieldOff className="size-3.5" />
-            Create exclusion
-            {actionable.length > 1 &&
-              `: ${[r.ruleId, getCategoryCodeForFinding(r.source, r.ruleId)]
-                .filter(Boolean)
-                .join(" · ")}`}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // Avatar + name above each turn, separated from the previous turn by a rule.
 // Both speakers are left-aligned and get an avatar here (outside the bubble) so
 // an assistant turn — which may be only tool calls — still reads as one labelled
-// block. A flagged user turn shows its risk badge beside the pill and an
-// "Actions" menu (create exclusion) on the right.
+// block. A flagged user turn shows its risk badge beside the pill; "Setup
+// exclusion rule" and "Mark false positive" both live in that badge's popover
+// menu per finding now (previously a separate "Actions" pill duplicated the
+// exclusion action here for the same findings).
 function TurnHeader({
   author,
   userId,
@@ -431,16 +370,16 @@ function TurnHeader({
             {isUser ? userDisplayName(userName) : "Assistant"}
           </span>
         </div>
-        {flagged && <TurnActions results={results} />}
       </div>
     </div>
   );
 }
 
 // Outgoing turn — left-aligned to match the assistant, but kept in a bg-muted
-// bubble. The avatar/name + risk badge + Actions menu sit in the turn header
-// above; the meta strip below keeps the message time, cost, and reveal toggle
-// (create-exclusion moved to the header Actions menu).
+// bubble. The avatar/name + risk badge sit in the turn header above (the risk
+// badge's popover carries "Mark false positive" and "Setup exclusion rule"
+// per finding); the meta strip below keeps the message time, cost, and
+// reveal toggle.
 function UserMessageRow({
   row,
   ctx,
@@ -801,6 +740,7 @@ function toSectionRisk(
   content: string | undefined,
   field: ToolRiskField,
   openExclusion: ((r: RiskResult) => void) | null,
+  dismiss: (results: RiskResult[]) => void,
 ): { matches: SectionMatch[]; results: RiskResult[] } | undefined {
   const sectionMatches = toolSectionRiskMatches(results, content, field);
   if (sectionMatches.length === 0) return undefined;
@@ -818,6 +758,7 @@ function toSectionRisk(
         openExclusion && result.ruleId !== "llm_judge"
           ? () => openExclusion(result)
           : undefined,
+      onMarkFalsePositive: () => dismiss([result]),
     };
   });
 
@@ -850,6 +791,7 @@ function ToolRowView({
   bare?: boolean;
 }) {
   const openExclusion = useContext(CreateExclusionContext);
+  const { dismiss } = useDismissFinding();
   const name =
     row.toolCall?.function?.name || row.toolCall?.name || "Tool result";
   const request = argsToString(row.toolCall?.function?.arguments);
@@ -863,18 +805,20 @@ function ToolRowView({
 
   // Flag matches inside the tool's own Arguments/Output sections; the elements
   // ToolUI draws the risk badge in the section header, plus the match navigator
-  // and active-match exclusion action.
+  // and active-match "Mark false positive" / "Setup exclusion rule" actions.
   const requestRisk = toSectionRisk(
     callResults,
     request,
     "tool.args",
     openExclusion,
+    dismiss,
   );
   const resultRisk = toSectionRisk(
     resultResults,
     result,
     "tool_result",
     openExclusion,
+    dismiss,
   );
   // Search: which of this tool's sections contain the query (case-insensitive,
   // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
@@ -1082,6 +1026,9 @@ export interface TranscriptPagination {
     fieldKey: SearchFieldKey;
     indexInField: number;
   } | null;
+  /** Raw chat-message ID to persistently highlight. Used by provenance links
+   * that open a session at one cited transcript message. */
+  focusedMessageId?: string | null;
 }
 
 /** A break in the transcript — messages are missing here. Renders a prominent
@@ -1431,22 +1378,33 @@ export function ChatTranscript({
           className="relative w-full"
           style={{ height: `${virtualizer.getTotalSize()}px` }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => (
-            <div
-              key={virtualRow.key}
-              data-index={virtualRow.index}
-              ref={virtualizer.measureElement}
-              className="absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
-            >
-              <DisplayItemView
-                item={items[virtualRow.index]!}
-                index={virtualRow.index}
-                ctx={ctx}
-                pagination={pagination}
-              />
-            </div>
-          ))}
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const item = items[virtualRow.index]!;
+            const focused =
+              pagination.focusedMessageId != null &&
+              displayItemContainsMessage(item, pagination.focusedMessageId);
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                data-focused-message={focused ? "true" : undefined}
+                aria-current={focused ? "location" : undefined}
+                ref={virtualizer.measureElement}
+                className={cn(
+                  "absolute top-0 left-0 w-full rounded-lg transition-colors",
+                  focused && "bg-warning/10 ring-warning/40 ring-1 ring-inset",
+                )}
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <DisplayItemView
+                  item={item}
+                  index={virtualRow.index}
+                  ctx={ctx}
+                  pagination={pagination}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

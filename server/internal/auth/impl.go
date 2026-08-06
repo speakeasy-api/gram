@@ -35,10 +35,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -111,7 +113,7 @@ type Service struct {
 	projectsRepo        *projectsRepo.Queries
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
-	rbac                identity.RBACEnabler
+	authzProvisioner    *authz.Provisioner
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -128,7 +130,7 @@ func NewService(
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
-	rbac identity.RBACEnabler,
+	authzProvisioner *authz.Provisioner,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -147,7 +149,7 @@ func NewService(
 		projectsRepo:        projectsRepo.New(db),
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
-		rbac:                rbac,
+		authzProvisioner:    authzProvisioner,
 	}
 }
 
@@ -576,6 +578,42 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}, nil
 }
 
+// EnterDemo points the current session at the shared read-only demo
+// organization. Any authenticated user may enter — the demo org has no
+// membership rows, so downstream request auth and grant resolution rely on
+// carve-outs keyed off constants.DemoOrganizationID.
+func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) (res *gen.EnterDemoResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "demo organization is not available").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
+	}
+	if orgMetadata.DisabledAt.Valid {
+		return nil, oops.E(oops.CodeNotFound, nil, "demo organization is not available")
+	}
+
+	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
+	}
+	existingSession.ActiveOrganizationID = constants.DemoOrganizationID
+	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
+	}
+
+	return &gen.EnterDemoResult{
+		SessionToken:  *authCtx.SessionID,
+		SessionCookie: *authCtx.SessionID,
+	}, nil
+}
+
 func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *gen.LogoutResult, err error) {
 	// Clears cookie and invalidates session
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -609,10 +647,29 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
 	}
 
-	// For admins overriding into a foreign org (one not in their own membership list),
-	// return only that org to avoid overloaded returns. When admins are in one of their
-	// own orgs, return all real memberships so the org-switcher works normally.
-	if userInfo.Admin {
+	// Sessions in the shared demo org: append the demo org alongside real
+	// memberships (there is no membership row for it), so the dashboard can
+	// resolve the active org AND still offer the user's own orgs to exit to.
+	// A failed lookup is an error, not a silent omission — without the entry
+	// the dashboard cannot resolve the active org or offer an exit.
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
+		orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
+		}
+		userInfo.Organizations = append(userInfo.Organizations, sessions.Organization{
+			ID:                 orgMeta.ID,
+			Name:               orgMeta.Name,
+			Slug:               orgMeta.Slug,
+			WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
+			UserWorkspaceSlugs: nil,
+			SSOEnabled:         orgMeta.SsoEnabled.Bool,
+			SCIMEnabled:        orgMeta.ScimEnabled.Bool,
+		})
+	} else if userInfo.Admin {
+		// For admins overriding into a foreign org (one not in their own membership list),
+		// return only that org to avoid overloaded returns. When admins are in one of their
+		// own orgs, return all real memberships so the org-switcher works normally.
 		inOwnOrg := false
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
@@ -733,36 +790,14 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	}
 
 	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
-	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
+	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").LogError(ctx, s.logger)
 	}
 
-	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          gramOrgID,
-		Name:        payload.OrgName,
-		Slug:        slug,
-		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
-		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
-	})
+	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, payload.OrgName, slug, authCtx.UserID, false)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
-	}
-
-	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: org.ID,
-		UserID:         conv.ToPGText(authCtx.UserID),
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").LogError(ctx, s.logger)
-	}
-
-	// Enable RBAC for the new org so access control is on from the start. Fail
-	// closed: a newly created org must not come up without RBAC seeded. The
-	// nil guard is only for tests that do not wire an enabler. Idempotent.
-	if s.rbac != nil {
-		if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "enable RBAC for new organization").LogError(ctx, s.logger.With(attr.SlogOrganizationID(org.ID)))
-		}
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
@@ -790,35 +825,14 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	}
 
 	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
-	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userInfo.UserID)
+	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userInfo.UserID)
 	if err != nil {
 		return "", fmt.Errorf("provision org in WorkOS: %w", err)
 	}
 
-	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          gramOrgID,
-		Name:        orgName,
-		Slug:        slug,
-		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
-		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
-	})
+	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, orgName, slug, userInfo.UserID, true)
 	if err != nil {
 		return "", fmt.Errorf("create organization: %w", err)
-	}
-
-	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: org.ID,
-		UserID:         conv.ToPGText(userInfo.UserID),
-	}); err != nil {
-		return "", fmt.Errorf("create org-user relationship: %w", err)
-	}
-
-	// Enable RBAC for the new org so access control is on from the start. Fail
-	// closed, mirroring Register. The nil guard is only for tests. Idempotent.
-	if s.rbac != nil {
-		if err := s.rbac.EnableRBAC(ctx, org.ID); err != nil {
-			return "", fmt.Errorf("enable RBAC for new organization: %w", err)
-		}
 	}
 
 	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, userInfo.UserID); invalidationErr != nil {
@@ -864,6 +878,54 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	}
 
 	return fmt.Sprintf("/%s/projects/%s/assistants/new?disposition=%s", org.Slug, projects[0].Slug, dispositionAssistants), nil
+}
+
+func (s *Service) persistProvisionedOrganization(
+	ctx context.Context,
+	provisionedOrg identity.ProvisionedOrganization,
+	orgName string,
+	slug string,
+	userID string,
+	whitelisted bool,
+) (orgRepo.OrganizationMetadatum, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("begin organization provisioning transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := orgRepo.New(tx)
+	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          provisionedOrg.GramOrganizationID,
+		Name:        orgName,
+		Slug:        slug,
+		WorkosID:    pgtype.Text{String: provisionedOrg.WorkOSOrganizationID, Valid: provisionedOrg.WorkOSOrganizationID != ""},
+		Whitelisted: pgtype.Bool{Bool: whitelisted, Valid: true},
+	})
+	if err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
+	}
+
+	if _, err := queries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: org.ID,
+		UserID:         conv.ToPGText(userID),
+	}); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization user relationship: %w", err)
+	}
+
+	if err := s.authzProvisioner.ProvisionOrganizationAdminTx(ctx, tx, org.ID, authz.InitialOrganizationAdmin{
+		UserID:             userID,
+		WorkOSUserID:       provisionedOrg.WorkOSUserID,
+		WorkOSMembershipID: provisionedOrg.WorkOSMembershipID,
+	}); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("commit organization provisioning transaction: %w", err)
+	}
+
+	return org, nil
 }
 
 func dispositionFromState(payload *gen.CallbackPayload) string {

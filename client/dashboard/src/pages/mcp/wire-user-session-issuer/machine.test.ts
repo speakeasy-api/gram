@@ -59,6 +59,10 @@ function userSessionIssuer(id = "usi-1"): UserSessionIssuer {
     slug: defaults.userSessionIssuerSlug,
     authnChallengeMode: "interactive",
     sessionDurationHours: defaults.sessionDurationHours,
+    // The effective CIMD admission mode is always populated by the API.
+    // "reporting" is the current default for an issuer that has never had
+    // one configured, which is what a freshly wired issuer looks like.
+    clientIdMetadataAdmissionMode: "reporting",
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

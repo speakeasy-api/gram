@@ -11,6 +11,7 @@ function server(
   return {
     access: "none",
     allowedPolicyIds: [],
+    blockedPolicyIds: [],
     canonicalServerUrl: "https://example.com/mcp",
     firstSeen: new Date("2026-01-01T00:00:00Z"),
     lastCalled: new Date("2026-01-01T00:00:00Z"),
@@ -66,5 +67,49 @@ describe("shadowMCPInventoryActions", () => {
     expect(actions).toEqual([
       expect.objectContaining({ label: "Review Request", disabled: false }),
     ]);
+  });
+});
+
+describe("shadowMCPInventoryActions under allow_all", () => {
+  const options = {
+    canManageAllowRules: true,
+    disabled: false,
+    disposition: "allow_all" as const,
+    onOpenAction: vi.fn(() => {}),
+  };
+
+  it("offers Block Server for an unblocked server", () => {
+    expect(
+      shadowMCPInventoryActions(server({ access: "allowed" }), options),
+    ).toEqual([
+      expect.objectContaining({ label: "Block Server", destructive: true }),
+    ]);
+  });
+
+  it("offers Unblock Server for a blocked server", () => {
+    expect(
+      shadowMCPInventoryActions(server({ access: "blocked" }), options),
+    ).toEqual([expect.objectContaining({ label: "Unblock Server" })]);
+  });
+
+  it("keeps Review Request first for a server with a pending request", () => {
+    const actions = shadowMCPInventoryActions(
+      server({ access: "blocked", requestCount: 1 }),
+      options,
+    );
+    expect(actions.map((action) => action.label)).toEqual([
+      "Review Request",
+      "Unblock Server",
+    ]);
+  });
+
+  it("never offers allow-rule actions", () => {
+    const labels = shadowMCPInventoryActions(
+      server({ access: "allowed" }),
+      options,
+    ).map((action) => action.label);
+    expect(labels).not.toContain("Add Allow Rule");
+    expect(labels).not.toContain("Edit Rule");
+    expect(labels).not.toContain("Delete Rule");
   });
 });

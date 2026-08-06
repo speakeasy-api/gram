@@ -20,26 +20,23 @@ workinit = "mise run git:workinit"
 # Background: brings the worktree's stack up on the ports workinit just
 # assigned — compose infra, migrations, dev-idp, the pitchfork daemons, then
 # seed. Non-blocking, so worktree creation returns without waiting on it;
-# `wt config state logs` has the output.
-#
-# INFRA_READINESS_TIMEOUT is raised from its 30s default because a new worktree
-# always starts from a cold volume: Postgres has to finish initdb before it
-# accepts queries, and several worktree stacks may be booting at once. At 30s
-# infra:start gives up mid-initdb and zero aborts before migrations run,
-# leaving the daemons pointed at an empty database.
+# `wt config state logs` has the output. The task also publishes a pid marker
+# while it runs, which is what lets `wt status` say "booting" rather than
+# "down". Keep the hook key `stack` — the log file is named after it.
 #
 # Set GRAM_WT_NO_BOOT=1 to skip the stack for branches that don't need it (a
 # README tweak, a config change). `new-branch <branch> --no-boot` sets it.
 # workinit still runs, so the worktree is complete — boot it later with
 # `./zero --agent`.
 [post-start]
-stack = 'if [ -n "$GRAM_WT_NO_BOOT" ]; then echo "GRAM_WT_NO_BOOT set — skipping stack boot. Run ./zero --agent when you need it."; else INFRA_READINESS_TIMEOUT=300 ./zero --agent; fi'
+stack = "mise run git:workboot"
 
 # Runs inside the worktree before deletion — nuke needs this worktree's
 # COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right
 # compose stack. post-remove would run in the primary worktree instead.
+# --keep-shared leaves the shared Presidio stack up for the other worktrees.
 [[pre-remove]]
-nuke = "mise run nuke"
+nuke = "mise run nuke --keep-shared"
 
 # Dashboard URL in the `wt list` URL column, dimmed when the port isn't
 # listening — so it doubles as a "is this worktree's stack up?" indicator.
@@ -53,8 +50,12 @@ url = "https://localhost:{{ vars.siteport | default('5173') }}"
 # `wt status` — one line per worktree: is its stack up, and where. The built-in
 # table can't express this: liveness is only in `url_active` in the JSON, not
 # in any column template.
+# `wt status` — interactive TUI: live-updating stack states, per-worktree boot
+# logs (enter), multi-select remove (space + d). Without a TTY (pipes, agents)
+# it prints a single plain-text frame instead, so scripting keeps working.
+# The old one-shot table remains at `mise run git:workstatus` / `gwst`.
 [aliases]
-status = "mise run git:workstatus"
+status = "mise run git:worktui"
 
 #
 # ## Dev server URL

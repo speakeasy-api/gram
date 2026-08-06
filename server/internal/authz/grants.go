@@ -63,8 +63,8 @@ func GrantsSatisfy(grants []Grant, check Check) bool {
 }
 
 // SystemRoleGrants defines the canonical grant sets for the built-in system
-// roles. These are seeded when RBAC is enabled and replace any existing grants
-// for these roles (idempotent, won't clobber custom roles).
+// roles. These are seeded when an organization is provisioned. Existing grants
+// for a built-in role are preserved, and custom roles are never touched.
 var SystemRoleGrants = map[string][]*RoleGrant{
 	SystemRoleAdmin:  roleGrantsForScopes(adminScopes),
 	SystemRoleMember: roleGrantsForScopes(memberScopes),
@@ -553,6 +553,24 @@ func allScopeGrants() []Grant {
 		if visibility != scopeVisibilityUserVisible {
 			continue
 		}
+		grants = append(grants, NewGrant(s, WildcardResource))
+	}
+	return grants
+}
+
+// DemoScopeGrants returns the fixed read-only grant set for sessions pointed
+// at the shared demo organization. Deliberately excludes environment:read
+// (secrets-adjacent) and every write scope.
+func DemoScopeGrants() []Grant {
+	scopes := []Scope{
+		ScopeOrgRead,
+		ScopeProjectRead,
+		ScopeMCPRead,
+		ScopeSkillRead,
+		ScopeChatRead,
+	}
+	grants := make([]Grant, 0, len(scopes))
+	for _, s := range scopes {
 		grants = append(grants, NewGrant(s, WildcardResource))
 	}
 	return grants

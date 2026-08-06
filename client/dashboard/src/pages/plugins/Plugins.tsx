@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { DotCard } from "@/components/ui/DotCard";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Plugin } from "@gram/client/models/components/plugin.js";
@@ -125,7 +126,7 @@ export default function Plugins(): JSX.Element {
         action: {
           label: "Open",
           onClick: () => {
-            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+            openSafeExternalUrl(data.repoUrl);
           },
         },
       });
@@ -279,7 +280,7 @@ export default function Plugins(): JSX.Element {
   const createCard = (
     <CreateResourceCard
       title="New Plugin"
-      description="Bundle MCP servers and hooks for distribution to Claude Code, Cursor, and Codex."
+      description="Bundle MCP servers and hooks for distribution to supported coding agents."
       onClick={() => setIsCreateDialogOpen(true)}
     />
   );
@@ -294,8 +295,8 @@ export default function Plugins(): JSX.Element {
           <Page.Section.Title>Plugins</Page.Section.Title>
           <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
             Create distributable plugin bundles that package MCP servers and
-            skills together. Assign plugins to roles and publish them to Claude
-            Code, Cursor, and Codex marketplaces via GitHub.
+            skills together. Assign plugins to roles and publish them to
+            supported agent marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={8}>
@@ -458,8 +459,9 @@ export default function Plugins(): JSX.Element {
               <Dialog.Title>Marketplace settings</Dialog.Title>
               <Dialog.Description>
                 The marketplace name is the identifier your team types after the
-                plugin slug ({"<plugin>@<marketplace>"}) when installing from
-                Claude Code or Codex. Applies to all plugins in this project.
+                plugin slug ({"<plugin>@<marketplace>"}) when installing from a
+                supported agent marketplace. Applies to all plugins in this
+                project.
               </Dialog.Description>
             </Dialog.Header>
             <form
@@ -575,9 +577,8 @@ function ObservabilityPluginCard({
       </div>
 
       <Text small muted className="mb-3 line-clamp-3">
-        Forwards tool events from your team&apos;s Claude Code, Cursor and Codex
-        installs to your project dashboard. Ships first in your marketplace,
-        marked Required.
+        Forwards tool events from your team&apos;s coding agent installs to your
+        project dashboard. Ships first in your marketplace, marked Required.
       </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">

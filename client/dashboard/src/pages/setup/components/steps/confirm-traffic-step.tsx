@@ -27,6 +27,8 @@ const SOURCE_ICONS: Record<string, string> = {
   cowork: "/icons/platforms/claude.svg",
   cursor: "/icons/platforms/cursor.svg",
   codex: "/icons/platforms/openai.svg",
+  chatgpt: "/icons/platforms/openai.svg",
+  "chatgpt-work": "/icons/platforms/openai.svg",
 };
 
 function eventKey(ev: OnboardingHookEvent): string {
@@ -45,6 +47,10 @@ function sourceLabel(source: string): string {
       return "Cursor";
     case "codex":
       return "Codex";
+    case "chatgpt":
+      return "ChatGPT";
+    case "chatgpt-work":
+      return "ChatGPT Work";
     case "cowork":
       return "Cowork";
     default:
@@ -165,7 +171,7 @@ export function ConfirmTrafficStep({
             </div>
           </div>
           <p className="text-muted-foreground text-sm">
-            Listening for Claude Code, Cursor, and Codex hooks…
+            Listening for agent hooks…
           </p>
         </div>
       </StepContainer>
@@ -180,7 +186,7 @@ export function ConfirmTrafficStep({
         </div>
       }
       title="Confirm traffic"
-      description="We're listening for events from your agent platforms. Trigger any action in Claude Code, Cursor, or Codex on a managed machine to confirm the instrumentation works."
+      description="We're listening for events from your agent platforms. Trigger any action in a managed coding agent to confirm the instrumentation works."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack

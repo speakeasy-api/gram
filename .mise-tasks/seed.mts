@@ -12,7 +12,6 @@ import path from "node:path";
 
 import { intro, log as clackLog, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
-import { accessEnableRBAC } from "#gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "#gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "#gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
@@ -307,6 +306,7 @@ async function seedShadowMCPInventoryData(init: {
 
   const inventoryRows: string[] = [];
   const telemetryRows: string[] = [];
+  const hookSources = ["claude-code", "cursor", "codex"];
   const clickhouseDateTime64 = (date: Date) =>
     date.toISOString().replace("T", " ").replace("Z", "");
   for (const [serverIndex, [serverName, serverURL]] of servers.entries()) {
@@ -320,7 +320,18 @@ async function seedShadowMCPInventoryData(init: {
     const userCount = 3 + (serverIndex % 6);
     const callCount = 8 + serverIndex * 3;
     for (let callIndex = 0; callIndex < callCount; callIndex++) {
-      const userEmail = users[(serverIndex * 2 + callIndex) % userCount];
+      const userCallIndex = serverIndex * 2 + callIndex;
+      const userSlot = userCallIndex % userCount;
+      const userEmail = users[userSlot];
+      const primaryHookSource =
+        hookSources[(serverIndex + userSlot) % hookSources.length];
+      const isMultiSourceUser = userSlot === serverIndex % userCount;
+      const hookSource = isMultiSourceUser
+        ? hookSources[
+            (serverIndex + userSlot + Math.floor(userCallIndex / userCount)) %
+              hookSources.length
+          ]
+        : primaryHookSource;
       const calledAt = new Date(
         lastSeen.getTime() - callIndex * (35 + serverIndex * 4) * 60 * 1000,
       );
@@ -335,7 +346,7 @@ async function seedShadowMCPInventoryData(init: {
         "gen_ai.tool.call.result": "ok",
         "gram.event.source": "hook",
         "gram.hook.event": "PostToolUse",
-        "gram.hook.source": "claude-code",
+        "gram.hook.source": hookSource,
         "gram.mcp.server_url": serverURL,
         "gram.project.id": projectId,
         "gram.tool.name": toolName,
@@ -442,6 +453,109 @@ SELECT COUNT(*) FROM upserted;
     });
   }
   log.info("Assigned current user to seeded Admin role");
+}
+
+// Mirrors authz.SeedSystemRoleGrants for local databases that predate RBAC.
+// Keep these scope lists in sync with authz.SystemRoleGrants. As in the Go
+// seeder, an existing role with any grants is left unchanged.
+async function seedSystemRoleGrants(organizationId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+BEGIN;
+
+INSERT INTO global_roles (
+  workos_slug,
+  workos_name,
+  workos_description,
+  workos_created_at,
+  workos_updated_at,
+  workos_last_event_id
+)
+VALUES
+  ('admin', 'Admin', 'Administrator role', clock_timestamp(), clock_timestamp(), NULL),
+  ('member', 'Member', 'Member role', clock_timestamp(), clock_timestamp(), NULL)
+ON CONFLICT (workos_slug) DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
+  deleted_at = NULL,
+  workos_deleted_at = NULL,
+  updated_at = clock_timestamp()
+WHERE global_roles.deleted IS TRUE
+   OR global_roles.workos_deleted IS TRUE;
+
+WITH system_role_scopes (role_slug, scope, resource_kind) AS (
+  VALUES
+    ('admin', 'org:read', 'org'),
+    ('admin', 'org:admin', 'org'),
+    ('admin', 'project:read', 'project'),
+    ('admin', 'project:write', 'project'),
+    ('admin', 'mcp:read', 'mcp'),
+    ('admin', 'mcp:write', 'mcp'),
+    ('admin', 'mcp:connect', 'mcp'),
+    ('admin', 'environment:read', 'environment'),
+    ('admin', 'environment:write', 'environment'),
+    ('admin', 'skill:read', 'skill'),
+    ('admin', 'skill:write', 'skill'),
+    ('member', 'org:read', 'org'),
+    ('member', 'project:read', 'project'),
+    ('member', 'mcp:read', 'mcp'),
+    ('member', 'mcp:connect', 'mcp'),
+    ('member', 'skill:read', 'skill')
+),
+roles_without_grants AS (
+  SELECT global_roles.id, global_roles.workos_slug
+  FROM global_roles
+  WHERE global_roles.workos_slug IN ('admin', 'member')
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM principal_grants
+      WHERE principal_grants.organization_id = :'organization_id'
+        AND principal_grants.principal_urn IN (
+          'role:global:' || global_roles.id::text,
+          'role:' || global_roles.workos_slug
+        )
+    )
+)
+INSERT INTO principal_grants (
+  organization_id,
+  principal_urn,
+  scope,
+  effect,
+  selectors
+)
+SELECT
+  :'organization_id',
+  'role:global:' || roles_without_grants.id::text,
+  system_role_scopes.scope,
+  NULL,
+  jsonb_build_object(
+    'resource_kind', system_role_scopes.resource_kind,
+    'resource_id', '*'
+  )
+FROM roles_without_grants
+JOIN system_role_scopes
+  ON system_role_scopes.role_slug = roles_without_grants.workos_slug
+ON CONFLICT (
+  organization_id,
+  principal_urn,
+  scope,
+  COALESCE(effect, 'allow'),
+  selectors
+)
+DO NOTHING;
+
+COMMIT;
+`;
+  await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -f -`.quiet();
+
+  log.info("Seeded built-in roles and grants");
 }
 
 async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
@@ -2302,43 +2416,16 @@ async function seedNonCorporateAccountFindings(init: {
   }
 }
 
-// enableRBACForDevUser turns on RBAC, reconciles the built-in system-role grants,
-// and gives the local dev user unrestricted chat:read. The Admin role assigned
-// during early seed setup supplies the normal admin scopes; chat:read is a direct
-// grant because it is intentionally not part of any system role. Idempotent:
-// enableRBAC no-ops if already enabled and the grant insert uses ON CONFLICT.
-async function enableRBACForDevUser(init: {
-  sessionId: string;
+// grantDevUserFullSessionVisibility gives the local dev user unrestricted
+// chat:read. Organization provisioning supplies the built-in roles and grants,
+// while chat:read remains a direct grant because it is intentionally not part
+// of any system role. The insert is idempotent.
+async function grantDevUserFullSessionVisibility(init: {
   organizationId: string;
   userId: string;
-  gram: GramCore;
 }): Promise<void> {
-  const { sessionId, organizationId, userId, gram } = init;
-  log.info("Enabling RBAC + granting dev user full session visibility...");
-
-  // EnableRBAC is gated by requirePlatformAdmin (access/impl.go): the caller
-  // must have a @speakeasy.com/@speakeasyapi.dev email OR the users.admin flag.
-  // Locally the dev user's email is neither (e.g. a personal gmail address) and
-  // admin defaults to false, so the call 403s. Promote the dev user to admin in
-  // the DB first so the platform-admin check passes. Idempotent.
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; stdout?: string; message?: string };
-    abort(
-      `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
-    );
-  }
-
-  // EnableRBAC seeds the built-in system roles and flips the org feature flag.
-  const res = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!res.ok) {
-    abort("Failed to enable RBAC", res.error);
-  }
+  const { organizationId, userId } = init;
+  log.info("Granting dev user full session visibility...");
 
   // The Admin system role intentionally omits chat:read, so grant it directly to
   // the user principal. The selector mirrors authz.NewSelector and effect NULL
@@ -2372,7 +2459,7 @@ async function enableRBACForDevUser(init: {
       await fs.unlink(tmpFile).catch(() => {});
     }
     log.info(
-      "Enabled RBAC and granted the dev user chat:read; Agent Sessions now shows all org sessions.",
+      "Granted the dev user chat:read; Agent Sessions now shows all org sessions.",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
@@ -3821,6 +3908,35 @@ async function seedObservabilityData(init: {
   const todayUtcStart = Math.floor(now / msPerDay) * msPerDay;
   const rawTtlBoundaryMs = todayUtcStart - RAW_TTL_SAFETY_DAYS * msPerDay;
   const rawTtlBoundaryNano = BigInt(rawTtlBoundaryMs) * BigInt(1_000_000);
+
+  // Days inside the ACTIVE billing cycle (anchor day 1 → the current UTC
+  // month) run heavier so the cycle lands clearly past the 50M contracted
+  // allowance and the billing page renders a real overage segment. The boost
+  // targets ~100M BILLED tokens for the cycle's elapsed days regardless of
+  // when the seed runs. The billed TUM population is much narrower than the
+  // raw telemetry inserted here (registry exclusions, cache reads dropped,
+  // stored-evidence gating): an unboosted seed bills ~350k tokens/day, the
+  // divisor below. The cap only guards against pathological division — it
+  // sits above the worst-case single-elapsed-day boost (~286x) so the
+  // overage renders whether the cycle is a day old or nearly sealed. Sole
+  // gap: on the cycle's first day the history (which ends yesterday) has no
+  // rows inside the cycle yet, so overage appears from day two. Run-date
+  // dependent, which is fine: the full-project delete preamble in chSQL
+  // resets every re-run.
+  const nowUtc = new Date(now);
+  const currentCycleStartMs = Date.UTC(
+    nowUtc.getUTCFullYear(),
+    nowUtc.getUTCMonth(),
+    1,
+  );
+  const elapsedCycleDays = Math.max(
+    1,
+    Math.floor((todayUtcStart - currentCycleStartMs) / msPerDay),
+  );
+  const currentCycleBoost = Math.min(
+    300,
+    Math.max(1, 100_000_000 / (elapsedCycleDays * 350_000)),
+  );
   const chBackfillInserts: string[] = [];
   // Risky history sessions also get a Postgres chat + one message so
   // seedRiskFindings can attach findings (risk_results FKs to chat_messages).
@@ -3885,14 +4001,28 @@ async function seedObservabilityData(init: {
           : null;
 
       // Cache-heavy token mix (agent sessions replay large cached prompts);
-      // ~15% are light API-style calls with little cache traffic.
+      // ~15% are light API-style calls with little cache traffic. Sessions
+      // in the active billing cycle carry the overage boost, divided by the
+      // day's weekend session damping so every in-cycle day contributes
+      // roughly the same volume — otherwise an early-month seed whose only
+      // elapsed days are a weekend would miss the overage target.
+      const cycleBoost =
+        dayStartMs >= currentCycleStartMs
+          ? currentCycleBoost / weekendFactor
+          : 1;
       const cacheDiv = r() < 0.15 ? 10 : 1;
-      const inputTokens = (800 + Math.floor(r() * 7_000)) * anonBoost;
-      const outputTokens = (300 + Math.floor(r() * 3_500)) * anonBoost;
-      const cacheReadTokens =
-        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost;
-      const cacheCreationTokens =
-        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
+      const inputTokens = Math.round(
+        (800 + Math.floor(r() * 7_000)) * anonBoost * cycleBoost,
+      );
+      const outputTokens = Math.round(
+        (300 + Math.floor(r() * 3_500)) * anonBoost * cycleBoost,
+      );
+      const cacheReadTokens = Math.round(
+        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
+      const cacheCreationTokens = Math.round(
+        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
       const cost = computeUsageCost(
@@ -4650,12 +4780,29 @@ function chatSessionBackfillSQL(
             is_claude_otel_row
             AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
         ) AS is_claude_tool_result,
-        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+        (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+        (
+            is_codex_otel_row
+            AND toString(attributes.event.name) = 'codex.sse_event'
+            AND toString(attributes.event.kind) = 'response.completed'
+            AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
+        ) AS is_codex_api_request,
+        least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
+        (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
         (
             hook_source = 'opencode'
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
             AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
         ) AS is_opencode_usage_row,
+        (
+            gram_urn = 'litellm:otel:traces'
+            AND event_urn IN (
+                'urn:telemetry:provider_otel:span:chat',
+                'urn:telemetry:provider_otel:span:embeddings',
+                'urn:telemetry:provider_otel:span:text_completion'
+            )
+        ) AS is_litellm_usage_row,
         (
             hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
@@ -4663,7 +4810,7 @@ function chatSessionBackfillSQL(
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
         ) AS is_agent_tool_call,
         (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-        (is_claude_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
+        (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
         (
             (is_claude_tool_result AND toString(attributes.success) = 'false')
             OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
@@ -4673,10 +4820,18 @@ function chatSessionBackfillSQL(
             toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
             toString(id)
         ) AS tool_call_dedup_id,
-        multiIf(is_claude_api_request, toString(attributes.prompt.id), is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(
+            is_claude_api_request, toString(attributes.prompt.id),
+            is_litellm_usage_row AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id),
+            is_codex_api_request OR is_opencode_usage_row OR is_litellm_usage_row, toString(id),
+            toString(attributes.gen_ai.response.id)
+        ) AS session_message_id,
         multiIf(
             is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
             is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model),
+            is_litellm_usage_row, toString(attributes.gen_ai.request.model),
             toString(attributes.gen_ai.response.model)
         ) AS effective_model
     SELECT
@@ -4691,10 +4846,10 @@ function chatSessionBackfillSQL(
         uniqExactIfState(session_message_id, session_message_id != '') AS message_count,
         uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS tool_call_count,
         countIf(is_failed_tool_call) AS failed_tool_call_count,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), is_codex_api_request, codex_input_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), is_codex_api_request, toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), is_codex_api_request, codex_input_tokens + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), is_codex_api_request, codex_cache_read_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
         sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
         sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
         groupUniqArray(toString(attributes.user.attributes.department_name)) AS department_names,
@@ -4716,7 +4871,7 @@ function chatSessionBackfillSQL(
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
       AND chat_id != ''
-      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
+      AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
     GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }
@@ -5050,20 +5205,18 @@ async function seed() {
     );
   }
 
-  // RBAC may already be enabled from an earlier seed. Establish the user's
-  // organization-level authorization before the first protected API call:
-  // platform super-admin status does not bypass ordinary org RBAC. Assigning
-  // Admin first lets enableRBAC reconcile system grants safely, and both steps
-  // are idempotent for clean and previously seeded databases.
+  // Establish the user's organization-level authorization before the first
+  // protected API call. Platform super-admin status does not bypass ordinary
+  // org RBAC. Seed the system roles first so databases created before RBAC was
+  // enabled can still assign the user to Admin. All writes are idempotent.
+  await seedSystemRoleGrants(activeOrgID);
   await seedCurrentUserAdminRole({
     organizationId: activeOrgID,
     userId: activeUserID,
   });
-  await enableRBACForDevUser({
-    sessionId,
+  await grantDevUserFullSessionVisibility({
     organizationId: activeOrgID,
     userId: activeUserID,
-    gram,
   });
 
   // oxlint-disable-next-line no-unused-vars

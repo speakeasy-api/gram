@@ -1,4 +1,4 @@
-import { GramLogo } from "@/components/gram-logo";
+import { FullScreenPage } from "@/components/full-screen-page";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
@@ -111,19 +111,16 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   });
 
   return (
-    <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
-      <Stack gap={8} align="center" className="w-full max-w-sm">
-        <GramLogo className="w-25" variant="vertical" />
-        <RequestAccessMessage
-          state={state}
-          isPending={state === "submitting"}
-          onRetry={() => {
-            setSubmissionResult("idle");
-            setRetryCount((count) => count + 1);
-          }}
-        />
-      </Stack>
-    </div>
+    <FullScreenPage>
+      <RequestAccessMessage
+        state={state}
+        isPending={state === "submitting"}
+        onRetry={() => {
+          setSubmissionResult("idle");
+          setRetryCount((count) => count + 1);
+        }}
+      />
+    </FullScreenPage>
   );
 }
 
@@ -162,9 +159,6 @@ function RequestAccessMessage({
   if (state === "complete") {
     return (
       <Stack gap={3} align="center">
-        <div className="bg-primary/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="check" className="text-primary h-5 w-5" />
-        </div>
         <Stack gap={1} align="center">
           <Text variant="subheading" className="text-center">
             Request sent
@@ -194,9 +188,6 @@ function RequestAccessMessage({
   if (state === "missing-token") {
     return (
       <Stack gap={3} align="center">
-        <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="circle-x" className="text-destructive h-5 w-5" />
-        </div>
         <Stack gap={1} align="center">
           <Text variant="subheading" className="text-center">
             Link expired
@@ -213,9 +204,6 @@ function RequestAccessMessage({
   if (state === "error") {
     return (
       <Stack gap={3} align="center">
-        <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="circle-x" className="text-destructive h-5 w-5" />
-        </div>
         <Stack gap={1} align="center">
           <Text variant="subheading" className="text-center">
             Request failed

@@ -111,7 +111,9 @@ export function MCPOverviewTab({
   );
 
   return (
-    <Stack gap={6} className="mb-4">
+    // Container queries, not viewport ones: the side panel narrows this column
+    // without narrowing the window, and `lg:`/`xl:` would not notice.
+    <Stack gap={6} className="@container mb-4">
       <PluginStatusBanner server={server} />
 
       <div className="flex justify-end">
@@ -136,7 +138,7 @@ export function MCPOverviewTab({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
             {isLoading && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
@@ -188,7 +190,7 @@ export function MCPOverviewTab({
             onExpand={setExpandedChart}
           />
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
             <div className="rounded-lg border p-5">
               <Heading variant="h5" className="mb-3">
                 Top tools by call count

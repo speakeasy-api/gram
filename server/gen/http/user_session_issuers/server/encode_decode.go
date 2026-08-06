@@ -1439,13 +1439,14 @@ func EncodeMigrateLegacyGramRegistrationsError(encoder func(context.Context, htt
 // *types.UserSessionIssuer.
 func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserSessionIssuer) *UserSessionIssuerResponseBody {
 	res := &UserSessionIssuerResponseBody{
-		ID:                   v.ID,
-		ProjectID:            v.ProjectID,
-		Slug:                 v.Slug,
-		AuthnChallengeMode:   v.AuthnChallengeMode,
-		SessionDurationHours: v.SessionDurationHours,
-		CreatedAt:            v.CreatedAt,
-		UpdatedAt:            v.UpdatedAt,
+		ID:                            v.ID,
+		ProjectID:                     v.ProjectID,
+		Slug:                          v.Slug,
+		AuthnChallengeMode:            v.AuthnChallengeMode,
+		SessionDurationHours:          v.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     v.CreatedAt,
+		UpdatedAt:                     v.UpdatedAt,
 	}
 
 	return res

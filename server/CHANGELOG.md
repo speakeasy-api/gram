@@ -1,5 +1,86 @@
 # server
 
+## 1.4.0
+
+### Minor Changes
+
+- ca05169: Add an authenticated LiteLLM Generic Guardrail endpoint that enforces prompt policies before model calls and captures blocked prompts.
+- 7f4e1b8: Capture LiteLLM model responses with consistent per-call session and user attribution for asynchronous risk analysis.
+- 73b9590: Requests and approvals now understand allow-all shadow MCP policies. Approving a bypass request (from the approvals page or the inventory review flow) on an allow_all policy revokes the server URL's risk_policy:block grant — a project-wide unblock with no principal-scoped bypass grants. Revoking restores the block grant; denying leaves it untouched. The request status change is audited like every other bypass-request decision. The approval UIs skip the audience/policy pickers for these requests and explain that approval unblocks the server for everyone in the project.
+
+### Patch Changes
+
+- 798db6b: The project assistant can now distribute the skills it creates. `platform_distribute_skill` and `platform_undistribute_skill` attach a skill to a plugin or assistant and revoke it again, and `platform_list_plugins` resolves a plugin by name to the ID they take. All three reuse the same permissions, feature gating, and audit logging as the dashboard.
+- bd3aac6: Shadow MCP inventory and status surfaces are now disposition-aware. Under an allow-all policy the inventory reports servers as allowed by default and blocked only when a block rule lists them, the policy status banner explains the allow-by-default posture, and the primary per-server action flips from managing allow rules to Block Server / Unblock Server — which add and remove the policy's risk_policy:block grants through dedicated inventory endpoints.
+
+## 1.3.0
+
+### Minor Changes
+
+- 18bc769: Enforce allow-all shadow MCP policies in the hook path. Under an allow_all policy every non-Gram-hosted MCP server is permitted unless a risk_policy:block grant names its URL; bypass grants and the fail-closed inventory checks remain block_all concepts and are skipped. Projects are now limited to one enabled shadow MCP blocking policy so dispositions can never conflict at enforcement time.
+- becc03b: Add `shadow_mcp_blocked_urls` to risk policy create/update payloads. Allow-all shadow MCP policies carry a canonical blocked-URL list stored as `risk_policy:block` RBAC grants held by the all-users principal — the mirror of `shadow_mcp_allowed_urls`, which reconciles into `risk_policy:bypass` grants on block-all policies. The two lists are disposition-exclusive: blocked URLs are only valid on allow_all policies and allowed URLs only on block_all policies. Blocked URLs may name servers not yet observed in the project inventory (proactive blocking).
+
+### Patch Changes
+
+- 679d489: Let the project's managed assistant act on risk findings, not just read them.
+  Adds `platform_list_risk_exclusions` and `platform_create_risk_exclusion` for
+  suppressing a whole class of findings, plus
+  `platform_mark_risk_false_positive` and
+  `platform_unmark_risk_false_positive` for dismissing (and restoring)
+  specific findings. The writes go through the same risk service methods the
+  dashboard uses, so they stay gated on org admin and audited against the
+  invoking user. Exact and regex match values are fingerprinted before they reach
+  the model, so `platform_create_risk_exclusion` reuses an equivalent existing
+  exclusion rather than duplicating one the model had no way to recognise.
+
+  Also keeps the assistant's context from ballooning while it triages: the
+  agent-facing findings listing now defaults to 25 results and caps at 50
+  (a 200-row page was tens of thousands of tokens that stayed in context for the
+  rest of the turn), and the new `platform_get_risk_rule_breakdown` answers
+  "which rules fire most" in one small call instead of many large pages.
+
+- 6ca548f: Add the `chatgpt` and `chatgpt-work` sources to the product-surface taxonomy now that ChatGPT/Work compliance usage is admitted to the summaries. The compliance importer now routes Work rows to the `chatgpt-work` hook source (ChatGPT and unknown surfaces stay `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while the raw `codex.compliance.product` attribute is not, and summaries outlive the raw-row TTL. Also: a `chatgpt` chat source alias, ChatGPT/ChatGPT Work labels and the OpenAI mark in the dashboard label/icon maps and onboarding live-tail, broadened "OpenAI Compliance Logs" settings copy, and local seed fixtures emitting compliance-shaped `chatgpt:usage:metrics` rows for both products.
+- f8ff561: Codex-product compliance COSTS rows (`codex:usage:metrics`) now meter cost only. Their token counts previously rode on `gen_ai.usage.*` keys, which the ClickHouse agent-usage predicates sum on top of the Codex OTEL stream — the token source of truth — double counting token metering for orgs running both feeds. The raw counts are preserved under new `codex.compliance.*_tokens` attributes (summed by nothing) because the compliance feed also covers surfaces OTEL never sees (cloud-delegated tasks, GitHub code review); a future surface-partitioned metering pass can promote them. Parked non-Codex rows (`chatgpt:usage:metrics`) keep their `gen_ai.usage.*` token counts since the compliance feed is ChatGPT/Work's only usage source.
+- 62fce4c: Emit OpenTelemetry metrics for the device-integration sync pipeline: `gram.device_integration.sync.outcome` (sync runs by provider and outcome) and `gram.device_integration.sync.auto_pause` (schedules auto-paused after a streak of credential rejections). These back the sync-failure-rate and auto-pause monitors for the MDM integrations rollout.
+- 11b3586: Fix OAuth token exchanges failing with invalid_client against providers that strictly decode HTTP Basic credentials (e.g. Snowflake): client id and secret are now form-urlencoded before being placed in the Authorization header, per RFC 6749 §2.3.1.
+- d4d8de2: The project assistant can now create project skills from complete `SKILL.md` content. The new `platform_create_skill` tool uses the same validation, versioning, permissions, feature gating, and audit logging as manual skill creation.
+- 9161dc7: Internal data changes to the risk findings backfill tooling.
+- af439f5: Internal schema changes to the risk findings store.
+- 1dbad64: Internal data changes to risk finding ingestion.
+- ae3979c: Admit `chatgpt:usage` rows (ChatGPT/Work usage+spend from the OpenAI compliance COSTS import, previously retained but unread) into the agent-usage predicates of `attribute_metrics_summaries_mv` and `chat_session_summaries_mv`, via atomic MODIFY QUERY migrations. ChatGPT tokens now count toward tokens-under-management and appear in usage/cost analytics going forward, matching how Claude Chat (Anthropic Admin Analytics) and Cursor (Admin API) polled usage already bill. Applies to new rows only — previously parked rows are retained but not backfilled into the summaries. Also updates the stale MV comments that claimed no new `codex:usage` rows are written (the compliance import writes them, cost-only since the token double-count fix).
+- 3e1ad9e: Exclude unattributed authz challenges from the challenge buckets endpoint so the Challenges page pagination and totals match what is rendered
+- b131cea: Project assistant tool calls now render Claude-style: the assistant precedes each tool batch with a terse activity phrase ("Investigating failures in the last 30 days") which becomes the heading of a single collapsed tool group. Consecutive batches merge into one group whose heading advances (with shimmer) as the investigation progresses, groups never auto-expand, and the global thinking loader hides while a tool group is streaming. The dashboard output-channel guidance instructs the model to emit the phrase before every tool call.
+
+## 1.2.0
+
+### Minor Changes
+
+- c0395b5: Selectively extract high-value, reusable business memories from completed chats, omit semantic duplicates, and add an organization-admin corpus browser with semantic search, source-transcript navigation, and a complete content-scope tree with distinct-memory counts.
+- eed5e6a: Add a weekly usage summary email for customer billing contacts. Every Monday a Temporal sweep emails each organization's billing alert contact their tokens-under-management total for the active billing cycle, with a percent-change badge against the same elapsed point of the previous cycle. The TUM token components are now defined once in a `billing.TumComponents` registry that the ClickHouse billing measure and the email's total both derive from, so changes to the TUM definition propagate to billing and reporting in lockstep. Organizations with no usage in either compared window are skipped, and sends are deduplicated per organization and run date.
+- e9dc39b: Add `mcpRegistries.getSetupDocs`, which returns the published setup documentation for an upstream MCP server from the `github.com/speakeasy-api/mcp-setup-docs/go` catalog. A guide can be located by the upstream server's endpoint URL, by its registry specifier as returned by `listCatalog`, or by both at once. Matches from the two lookup keys are deduplicated by guide slug and returned in descending specificity, and each guide reports how it matched and which documented endpoint the lookup selected. Servers with no published guide return an empty list rather than an error.
+
+### Patch Changes
+
+- 59a371a: Saving an OpenAI app-submission verification token now reconciles the custom domain's ingress. Domains provisioned before the challenge feature shipped were missing the `/.well-known/openai-apps-challenge` route, so the token endpoint returned a 404 until an unrelated setting change rebuilt the ingress; setting or clearing the token now triggers that rebuild directly.
+- 1359212: Serve the hooks@0.3.12 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 9d0f259: The project assistant can now read the AI control plane product documentation. Two new managed-assistant tools, `platform_list_docs` and `platform_get_doc`, expose the ~110 pages under speakeasy.com/docs/ai-control-plane: the first returns the page index (built from the docs sitemap and cached hourly), the second returns one page's markdown along with its public permalink to cite. `platform_get_doc` only serves paths present in the index, so it reads documentation rather than acting as a general-purpose fetcher.
+- 92d743b: Serve the project-wide Risk Events listing from ClickHouse behind the new
+  `risk-list-from-clickhouse` per-org flag, keeping the same ordering, filters
+  and pagination behavior as before. Also fixes a pagination bug where the first
+  result after a page boundary was skipped.
+
+## 1.1.0
+
+### Minor Changes
+
+- 9373aea: Support OAuth Client ID Metadata Documents (CIMD) on the Gram Session OAuth authorization server, gated per organization behind the `gram-user-session-cimd` feature flag. MCP clients that identify themselves with a URL-shaped `client_id`, such as Claude Code and VS Code, can now complete the OAuth flow without Dynamic Client Registration, including loopback redirects on any port.
+- 3b66258: Custom domains can now route their root URL to a default MCP server. Pick one of the domain's MCP endpoints as the default and `https://your-domain.com/` serves that server directly — MCP clients connect at the root and browsers see the installation page — while renaming the endpoint's slug updates the routing automatically. Custom domains can also serve an OpenAI app-submission verification token at `/.well-known/openai-apps-challenge`, so ChatGPT app reviews can verify domain ownership without any changes on your site. Both settings live on the custom domain page; the default server can also be set from an MCP server's own settings.
+
+### Patch Changes
+
+- debaf8e: Shadow MCP inventory server names now resolve reliably after renames. Name updates written in quick succession could previously tie on their stored version and intermittently revert to an older observed name; versions are now stored at full nanosecond precision and each update is guaranteed to supersede the state it was based on.
+- 80b855f: Stop enumerating supported coding agents (Cursor, Claude Code, Codex, …) in Shadow MCP detector copy and other user-facing product strings. Prefer generic wording so new agents like opencode do not require list updates.
+
 ## 1.0.0
 
 ### Major Changes

@@ -317,15 +317,15 @@ func newWorkerCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, redisFlags...)
-	flags = append(flags, clickHouseFlags...)
-	flags = append(flags, functionsFlags...)
-	flags = append(flags, pulseMCPFlags...)
-	flags = append(flags, assistantRuntimeFlags...)
-	flags = append(flags, svixFlags...)
-	flags = append(flags, pluginsFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, gcpFlags...)
+	flags = append(flags, redisFlags()...)
+	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, functionsFlags()...)
+	flags = append(flags, pulseMCPFlags()...)
+	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -534,7 +534,6 @@ func newWorkerCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
-			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 
 			// Create ClickHouse client and telemetry service for resolution events
@@ -549,7 +548,6 @@ func newWorkerCommand() *cli.Command {
 				logger,
 				db,
 				chDB,
-				rbacEnabled,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
@@ -675,7 +673,6 @@ func newWorkerCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
-				productFeatures,
 				cache.SuffixNone,
 			)
 

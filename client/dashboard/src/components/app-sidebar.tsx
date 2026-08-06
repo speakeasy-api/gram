@@ -15,13 +15,13 @@ import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
@@ -75,14 +75,19 @@ export function AppSidebar({
   // While grants reload (e.g. right after switching projects, when the query
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
   const { isLoading: rbacLoading } = useRBAC();
-  const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
-  const isOrgMemoryEnabled = telemetry.isFeatureEnabled("org-memory") ?? false;
-  // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
-  const isDeploymentsPageEnabled =
-    telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
+  // useProjectNavRoutes owns feature-flag and scope decisions for both the
+  // sidebar and command palette so the two surfaces cannot drift.
+  const allNavRoutes = useProjectNavRoutes();
+  const navAccess = useMemo(() => {
+    const map = new Map<string, ProjectNavRoute>();
+    for (const entry of allNavRoutes) map.set(entry.route.url, entry);
+    return map;
+  }, [allNavRoutes]);
+  const isAssistantsEnabled = navAccess.has(routes.assistants.url);
+  const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
+  const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
 
   const connectActive = [
     routes.sources,
@@ -130,15 +135,7 @@ export function AppSidebar({
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
-  const allNavRoutes = useProjectNavRoutes();
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
-  // Single source of truth for per-page scopes, shared with the command palette
-  // via useProjectNavRoutes so nav visibility and palette visibility can't drift.
-  const navAccess = useMemo(() => {
-    const map = new Map<string, ProjectNavRoute>();
-    for (const entry of allNavRoutes) map.set(entry.route.url, entry);
-    return map;
-  }, [allNavRoutes]);
   const accessFor = (
     route: AppRoute,
   ): Pick<ProjectNavRoute, "scope" | "resourceId"> => {
@@ -156,7 +153,8 @@ export function AppSidebar({
     routes.mcp.details.active ||
     routes.mcp.x.active ||
     routes.mcp.builtIn.active ||
-    routes.skills.detail.active;
+    routes.skills.detail.active ||
+    routes.plugins.detail.active;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
@@ -169,6 +167,8 @@ export function AppSidebar({
     sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
     sidebarContent = <SkillDetailSidebarNav />;
+  } else if (routes.plugins.detail.active) {
+    sidebarContent = <PluginDetailSidebarNav />;
   } else {
     sidebarContent = (
       <NavGroupProvider

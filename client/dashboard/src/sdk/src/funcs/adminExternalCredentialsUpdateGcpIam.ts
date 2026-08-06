@@ -103,9 +103,11 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateGcpIamCredentialRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON(
+    "body",
+    payload.UpdateGcpIamPlatformCredentialRequestBody,
+    { explode: true },
+  );
 
   const path = pathToFunc("/rpc/adminExternalCredentials.updateGcpIam")();
 

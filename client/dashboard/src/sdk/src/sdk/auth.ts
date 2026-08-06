@@ -3,6 +3,7 @@
  */
 
 import { authCallback } from "../funcs/authCallback.js";
+import { authEnterDemo } from "../funcs/authEnterDemo.js";
 import { authInfo } from "../funcs/authInfo.js";
 import { authLogin } from "../funcs/authLogin.js";
 import { authLogout } from "../funcs/authLogout.js";
@@ -17,6 +18,11 @@ import {
   AuthLoginRequest,
   AuthLoginResponse,
 } from "../models/operations/authlogin.js";
+import {
+  EnterDemoRequest,
+  EnterDemoResponse,
+  EnterDemoSecurity,
+} from "../models/operations/enterdemo.js";
 import {
   LogoutRequest,
   LogoutResponse,
@@ -52,6 +58,25 @@ export class Auth extends ClientSDK {
     return unwrapAsync(authCallback(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * enterDemo auth
+   *
+   * @remarks
+   * Switches the current session into the shared read-only demo organization.
+   */
+  async enterDemo(
+    request?: EnterDemoRequest | undefined,
+    security?: EnterDemoSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<EnterDemoResponse | undefined> {
+    return unwrapAsync(authEnterDemo(
+      this,
+      request,
+      security,
       options,
     ));
   }

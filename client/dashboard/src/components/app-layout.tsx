@@ -4,6 +4,8 @@ import {
   useSession,
 } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
+import { cn } from "@/lib/utils";
+import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { ModalProvider } from "@/components/ui/context/ModalContext";
@@ -17,6 +19,10 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
+import {
+  SidePanelProvider,
+  SidePanelSurface,
+} from "./side-panel/SidePanel.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
@@ -38,9 +44,7 @@ export const LoginCheck = (): JSX.Element => {
 };
 
 export const AppLayout = (): JSX.Element => {
-  const isAdmin = useIsPlatformAdmin();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  const isImpersonating = isAdmin && !!overrideSlug;
+  const isImpersonating = useShowsImpersonationBanner();
 
   return (
     <SidebarProvider
@@ -53,7 +57,9 @@ export const AppLayout = (): JSX.Element => {
       }
     >
       <ModalProvider>
-        <AppLayoutContent isImpersonating={isImpersonating} />
+        <SidePanelProvider>
+          <AppLayoutContent isImpersonating={isImpersonating} />
+        </SidePanelProvider>
       </ModalProvider>
     </SidebarProvider>
   );
@@ -68,28 +74,67 @@ function getAdminOverrideCookie(): string | null {
   return value || null;
 }
 
+// The shared demo org isn't a customer org being impersonated — brand it as
+// a demo instead of an impersonation warning. It is entered either through
+// the admin override cookie or session-side via auth.enterDemo (any user),
+// so demo detection keys off the active org slug, not the cookie.
+
+/** Banner shows for admin cookie-impersonation or any session in the demo org. */
+const useShowsImpersonationBanner = (): boolean => {
+  const isAdmin = useIsPlatformAdmin();
+  const organization = useOrganization();
+  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
+  return (isAdmin && !!overrideSlug) || organization.slug === DEMO_ORG_SLUG;
+};
+
 const ImpersonationBanner = () => {
   const organization = useOrganization();
+  const session = useSession();
   const client = useSdkClient();
+  const isDemo = organization.slug === DEMO_ORG_SLUG;
+
+  const exit = () => {
+    void (async () => {
+      document.cookie = "gram_admin_override=; path=/; max-age=0;";
+      // Exiting the demo switches back to the org the user came from (stashed
+      // by /explore-demo), or their first real org — no logout round-trip.
+      // Falls through to logout otherwise (e.g. admin cookie-impersonation,
+      // or a user with no other org).
+      const preDemoOrgId = localStorage.getItem(PRE_DEMO_ORG_KEY);
+      const ownOrg =
+        session.organizations.find(
+          (org) => org.id === preDemoOrgId && org.slug !== DEMO_ORG_SLUG,
+        ) ?? session.organizations.find((org) => org.slug !== DEMO_ORG_SLUG);
+      if (isDemo && ownOrg) {
+        localStorage.removeItem(PRE_DEMO_ORG_KEY);
+        await client.auth.switchScopes({ organizationId: ownOrg.id });
+        window.location.replace("/");
+        return;
+      }
+      await client.auth.logout();
+      window.location.href = "/login";
+    })();
+  };
 
   return (
-    <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-sm text-white">
+    <div
+      className={cn(
+        "flex items-center justify-center gap-3 px-4 py-2 text-sm text-white",
+        isDemo ? "bg-purple-600" : "bg-red-600",
+      )}
+    >
       <ShieldAlert className="h-4 w-4 shrink-0" />
       <span className="font-mono font-bold">
-        Impersonating {organization.slug}
+        {isDemo
+          ? "Demo org — sample data"
+          : `Impersonating ${organization.slug}`}
       </span>
       <button
         type="button"
         className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
-        onClick={() => {
-          void (async () => {
-            document.cookie = "gram_admin_override=; path=/; max-age=0;";
-            await client.auth.logout();
-            window.location.href = "/login";
-          })();
-        }}
+        onClick={exit}
       >
-        Stop impersonating
+        {isDemo ? "Exit demo" : "Stop impersonating"}
       </button>
     </div>
   );
@@ -117,6 +162,9 @@ const AppLayoutContent = ({
             />
           </GlobalInsightsWrapper>
         </SidebarInset>
+        {/* Sibling of the content, not an overlay: the page reflows into the
+            remaining width so nothing sits behind the panel. */}
+        <SidePanelSurface />
       </div>
       {/* Above the outlet so the suggestion → chat bubble morph survives the
           navigation into the chat route. */}
@@ -189,9 +237,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const OrgLayout = (): JSX.Element => {
-  const isAdmin = useIsPlatformAdmin();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  const isImpersonating = isAdmin && !!overrideSlug;
+  const isImpersonating = useShowsImpersonationBanner();
 
   return (
     <SidebarProvider

@@ -45,6 +45,11 @@ type Finding struct {
 	xxx_hidden_Confidence        float64                `protobuf:"fixed64,16,opt,name=confidence"`
 	xxx_hidden_DeadLetterReason  *string                `protobuf:"bytes,17,opt,name=dead_letter_reason,json=deadLetterReason"`
 	xxx_hidden_ContentPartId     *string                `protobuf:"bytes,18,opt,name=content_part_id,json=contentPartId"`
+	xxx_hidden_FalsePositiveAt   *string                `protobuf:"bytes,19,opt,name=false_positive_at,json=falsePositiveAt"`
+	xxx_hidden_Surface           *string                `protobuf:"bytes,20,opt,name=surface"`
+	xxx_hidden_Field             *string                `protobuf:"bytes,21,opt,name=field"`
+	xxx_hidden_Path              *string                `protobuf:"bytes,22,opt,name=path"`
+	xxx_hidden_ToolCallId        *string                `protobuf:"bytes,23,opt,name=tool_call_id,json=toolCallId"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -241,69 +246,119 @@ func (x *Finding) GetContentPartId() string {
 	return ""
 }
 
+func (x *Finding) GetFalsePositiveAt() string {
+	if x != nil {
+		if x.xxx_hidden_FalsePositiveAt != nil {
+			return *x.xxx_hidden_FalsePositiveAt
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding) GetSurface() string {
+	if x != nil {
+		if x.xxx_hidden_Surface != nil {
+			return *x.xxx_hidden_Surface
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding) GetField() string {
+	if x != nil {
+		if x.xxx_hidden_Field != nil {
+			return *x.xxx_hidden_Field
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding) GetPath() string {
+	if x != nil {
+		if x.xxx_hidden_Path != nil {
+			return *x.xxx_hidden_Path
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding) GetToolCallId() string {
+	if x != nil {
+		if x.xxx_hidden_ToolCallId != nil {
+			return *x.xxx_hidden_ToolCallId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Finding) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 23)
 }
 
 func (x *Finding) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 23)
 }
 
 func (x *Finding) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 23)
 }
 
 func (x *Finding) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 23)
 }
 
 func (x *Finding) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 23)
 }
 
 func (x *Finding) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 23)
 }
 
 func (x *Finding) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 23)
 }
 
 func (x *Finding) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 23)
 }
 
 func (x *Finding) SetRuleId(v string) {
 	x.xxx_hidden_RuleId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 23)
 }
 
 func (x *Finding) SetDescription(v string) {
 	x.xxx_hidden_Description = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 23)
 }
 
 func (x *Finding) SetMatch(v string) {
 	x.xxx_hidden_Match = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 23)
 }
 
 func (x *Finding) SetStartPos(v int32) {
 	x.xxx_hidden_StartPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 23)
 }
 
 func (x *Finding) SetEndPos(v int32) {
 	x.xxx_hidden_EndPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 23)
 }
 
 func (x *Finding) SetTags(v []string) {
@@ -312,22 +367,47 @@ func (x *Finding) SetTags(v []string) {
 
 func (x *Finding) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 23)
 }
 
 func (x *Finding) SetConfidence(v float64) {
 	x.xxx_hidden_Confidence = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 23)
 }
 
 func (x *Finding) SetDeadLetterReason(v string) {
 	x.xxx_hidden_DeadLetterReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 23)
 }
 
 func (x *Finding) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 18)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 23)
+}
+
+func (x *Finding) SetFalsePositiveAt(v string) {
+	x.xxx_hidden_FalsePositiveAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 23)
+}
+
+func (x *Finding) SetSurface(v string) {
+	x.xxx_hidden_Surface = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 23)
+}
+
+func (x *Finding) SetField(v string) {
+	x.xxx_hidden_Field = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 23)
+}
+
+func (x *Finding) SetPath(v string) {
+	x.xxx_hidden_Path = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 23)
+}
+
+func (x *Finding) SetToolCallId(v string) {
+	x.xxx_hidden_ToolCallId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 23)
 }
 
 func (x *Finding) HasId() bool {
@@ -449,6 +529,41 @@ func (x *Finding) HasContentPartId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 17)
 }
 
+func (x *Finding) HasFalsePositiveAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 18)
+}
+
+func (x *Finding) HasSurface() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 19)
+}
+
+func (x *Finding) HasField() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 20)
+}
+
+func (x *Finding) HasPath() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 21)
+}
+
+func (x *Finding) HasToolCallId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 22)
+}
+
 func (x *Finding) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -534,6 +649,31 @@ func (x *Finding) ClearContentPartId() {
 	x.xxx_hidden_ContentPartId = nil
 }
 
+func (x *Finding) ClearFalsePositiveAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 18)
+	x.xxx_hidden_FalsePositiveAt = nil
+}
+
+func (x *Finding) ClearSurface() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 19)
+	x.xxx_hidden_Surface = nil
+}
+
+func (x *Finding) ClearField() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 20)
+	x.xxx_hidden_Field = nil
+}
+
+func (x *Finding) ClearPath() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 21)
+	x.xxx_hidden_Path = nil
+}
+
+func (x *Finding) ClearToolCallId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 22)
+	x.xxx_hidden_ToolCallId = nil
+}
+
 type Finding_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -555,6 +695,23 @@ type Finding_builder struct {
 	Confidence        *float64
 	DeadLetterReason  *string
 	ContentPartId     *string
+	// Set only when this message re-publishes an already-persisted finding to
+	// record a manual false-positive dismissal/undo (risk.markResultsFalsePositive
+	// / risk.unmarkResultsFalsePositive). Empty on every finding produced by a
+	// scanner. Must be UTC RFC3339 when present, e.g. 2023-01-01T00:00:00Z.
+	FalsePositiveAt *string
+	// Reveal metadata: which text start_pos/end_pos index. One of content,
+	// scan_surface, tool_args, json_path, derived or none; empty means
+	// unknown/legacy, where reveal falls back to a verified candidate cascade.
+	Surface *string
+	// Scanner field name the finding was detected in (e.g. content, tool.args),
+	// copied from the matched span. Empty when the scanner records no spans.
+	Field *string
+	// gjson path of the extracted value within field for json_path extractions.
+	Path *string
+	// Recorded tool call id anchoring the finding when the scanned text belongs
+	// to a tool call. Empty when not applicable or unknown.
+	ToolCallId *string
 }
 
 func (b0 Finding_builder) Build() *Finding {
@@ -562,73 +719,93 @@ func (b0 Finding_builder) Build() *Finding {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 23)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 23)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 23)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 23)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 23)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 23)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 23)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 23)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.RuleId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 23)
 		x.xxx_hidden_RuleId = b.RuleId
 	}
 	if b.Description != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 23)
 		x.xxx_hidden_Description = b.Description
 	}
 	if b.Match != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 23)
 		x.xxx_hidden_Match = b.Match
 	}
 	if b.StartPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 23)
 		x.xxx_hidden_StartPos = *b.StartPos
 	}
 	if b.EndPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 23)
 		x.xxx_hidden_EndPos = *b.EndPos
 	}
 	x.xxx_hidden_Tags = b.Tags
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 23)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.Confidence != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 23)
 		x.xxx_hidden_Confidence = *b.Confidence
 	}
 	if b.DeadLetterReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 23)
 		x.xxx_hidden_DeadLetterReason = b.DeadLetterReason
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 18)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 23)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
+	}
+	if b.FalsePositiveAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 23)
+		x.xxx_hidden_FalsePositiveAt = b.FalsePositiveAt
+	}
+	if b.Surface != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 23)
+		x.xxx_hidden_Surface = b.Surface
+	}
+	if b.Field != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 23)
+		x.xxx_hidden_Field = b.Field
+	}
+	if b.Path != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 23)
+		x.xxx_hidden_Path = b.Path
+	}
+	if b.ToolCallId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 23)
+		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	return m0
 }
@@ -637,7 +814,7 @@ var File_gram_risk_v1_finding_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\n" +
-	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xd2\x04\n" +
+	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xe4\x05\n" +
 	"\aFinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -662,7 +839,13 @@ const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"confidence\x18\x10 \x01(\x01R\n" +
 	"confidence\x12,\n" +
 	"\x12dead_letter_reason\x18\x11 \x01(\tR\x10deadLetterReason\x12&\n" +
-	"\x0fcontent_part_id\x18\x12 \x01(\tR\rcontentPartId:\n" +
+	"\x0fcontent_part_id\x18\x12 \x01(\tR\rcontentPartId\x12*\n" +
+	"\x11false_positive_at\x18\x13 \x01(\tR\x0ffalsePositiveAt\x12\x18\n" +
+	"\asurface\x18\x14 \x01(\tR\asurface\x12\x14\n" +
+	"\x05field\x18\x15 \x01(\tR\x05field\x12\x12\n" +
+	"\x04path\x18\x16 \x01(\tR\x04path\x12 \n" +
+	"\ftool_call_id\x18\x17 \x01(\tR\n" +
+	"toolCallId:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_finding_proto_msgTypes = make([]protoimpl.MessageInfo, 1)

@@ -2,8 +2,6 @@ package keys
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -97,12 +95,14 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	// Plugin distribution reserves plugins- names. Hook ingestion recognizes
-	// the stricter generated name shape so legacy user-created prefixed keys
-	// retain owner attribution, but reserving the whole namespace prevents new
-	// keys from becoming ambiguous with present or future plugin key purposes.
-	if strings.HasPrefix(payload.Name, auth.PluginAPIKeyNamePrefix) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", auth.PluginAPIKeyNamePrefix).LogError(ctx, s.logger)
+	// Plugin distribution reserves plugins- names and LiteLLM instance minting
+	// reserves litellm- names; both prefixes act as provenance discriminators
+	// during ingestion, so reserving the namespaces prevents user-created keys
+	// from becoming ambiguous with server-minted key purposes.
+	for _, reserved := range []string{auth.PluginAPIKeyNamePrefix, auth.LiteLLMAPIKeyNamePrefix} {
+		if strings.HasPrefix(payload.Name, reserved) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", reserved).LogError(ctx, s.logger)
+		}
 	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
@@ -135,16 +135,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		}
 	}
 
-	token, err := s.generateToken()
+	fullKey, keyHash, displayPrefix, err := auth.GenerateAPIKeyMaterial(s.keyPrefix)
 	if err != nil {
-		return nil, err
-	}
-
-	fullKey := s.keyPrefix + token
-
-	keyHash, err := auth.GetAPIKeyHash(fullKey)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error hashing api key").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error generating api key").LogError(ctx, s.logger)
 	}
 
 	var projectID uuid.NullUUID
@@ -166,7 +159,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            payload.Name,
 		KeyHash:         keyHash,
-		KeyPrefix:       s.keyPrefix + token[:5],
+		KeyPrefix:       displayPrefix,
 		Scopes:          finalScopes,
 		CreatedByUserID: authCtx.UserID,
 		ProjectID:       projectID,
@@ -269,6 +262,17 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
 	}
 
+	managed, err := kr.IsAPIKeyManagedByActiveLiteLLMInstance(ctx, repo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{
+		ID:             keyID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check API key ownership").LogError(ctx, s.logger)
+	}
+	if managed {
+		return oops.E(oops.CodeConflict, nil, "API key is managed by an active LiteLLM instance; revoke the instance instead")
+	}
+
 	deleted, err := kr.DeleteAPIKey(ctx, repo.DeleteAPIKeyParams{
 		ID:             keyID,
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -348,14 +352,4 @@ func parseProjects(rawProjects []project_repo.Project) []*gen.ValidateKeyProject
 	}
 
 	return projects
-}
-
-func (s *Service) generateToken() (string, error) {
-	const randomKeyLength = 64
-	randomBytes := make([]byte, randomKeyLength/2) // there are 2 hex chars per byte, we can guarantee output of 64 chars this way
-	_, err := rand.Read(randomBytes)
-	if err != nil {
-		return "", fmt.Errorf("generate random token bytes: %w", err)
-	}
-	return hex.EncodeToString(randomBytes), nil
 }

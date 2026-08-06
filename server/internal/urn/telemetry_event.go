@@ -50,11 +50,13 @@ type TelemetryEventKind string
 const (
 	TelemetryEventKindLog    TelemetryEventKind = "log"
 	TelemetryEventKindMetric TelemetryEventKind = "metric"
+	TelemetryEventKindSpan   TelemetryEventKind = "span"
 )
 
 var telemetryEventKinds = map[TelemetryEventKind]struct{}{
 	TelemetryEventKindLog:    {},
 	TelemetryEventKindMetric: {},
+	TelemetryEventKindSpan:   {},
 }
 
 // telemetryEventPrefix namespaces the canonical event identity. The scheme is

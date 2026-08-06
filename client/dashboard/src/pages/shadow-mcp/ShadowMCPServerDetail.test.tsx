@@ -15,6 +15,7 @@ import {
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import ShadowMCPServerDetail from "./ShadowMCPServerDetail";
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   useResolveShadowMCPInventoryRequestMutation: vi.fn(),
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
+  useNavigate: vi.fn(),
+  useRoutes: vi.fn(),
   useShadowMCPInventoryServer: vi.fn(),
   useShadowMCPInventoryUsers: vi.fn(),
   useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
@@ -33,12 +36,18 @@ const mocks = vi.hoisted(() => ({
   invalidateShadowMCPInventoryUsers: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
+  useNavigate: mocks.useNavigate,
   useParams: () => ({
     serverSlug: "github-example-com-mcp-d8860eea",
   }),
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: mocks.useRoutes,
 }));
 
 vi.mock("@/components/page-layout", () => {
@@ -86,6 +95,20 @@ vi.mock("@/components/require-scope", () => ({
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPolicies: mocks.useRiskListPolicies,
+}));
+
+vi.mock("@gram/client/react-query/blockShadowMCPInventoryServer.js", () => ({
+  useBlockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
+vi.mock("@gram/client/react-query/unblockShadowMCPInventoryServer.js", () => ({
+  useUnblockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
 }));
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -245,6 +268,9 @@ vi.mock("@/components/ui/Table", () => ({
         data,
         handleLoadMore,
         hasMore,
+        isRowClickable,
+        onRowClick,
+        renderRow,
         rowKey,
       }: {
         columns: Array<{
@@ -254,16 +280,36 @@ vi.mock("@/components/ui/Table", () => ({
         data: Array<{ userKey: string }>;
         handleLoadMore?: () => void;
         hasMore?: boolean;
+        isRowClickable?: (row: { userKey: string }) => boolean;
+        onRowClick?: (row: { userKey: string }) => void;
+        renderRow?: (
+          row: { userKey: string },
+          rowElement: ReactElement,
+        ) => ReactNode;
         rowKey: (row: { userKey: string }) => string;
       }) => (
         <tbody>
-          {data.map((row) => (
-            <tr key={rowKey(row)}>
-              {columns.map((column) => (
-                <td key={column.key}>{column.render?.(row)}</td>
-              ))}
-            </tr>
-          ))}
+          {data.map((row) => {
+            const rowElement = (
+              <tr
+                className={
+                  isRowClickable?.(row) === false ? undefined : "cursor-pointer"
+                }
+                key={rowKey(row)}
+                onClick={
+                  isRowClickable?.(row) === false
+                    ? undefined
+                    : () => onRowClick?.(row)
+                }
+              >
+                {columns.map((column) => (
+                  <td key={column.key}>{column.render?.(row)}</td>
+                ))}
+              </tr>
+            );
+
+            return renderRow ? renderRow(row, rowElement) : rowElement;
+          })}
           {hasMore && handleLoadMore ? (
             <tr>
               <td colSpan={columns.length}>
@@ -362,6 +408,7 @@ function inventoryServer(
   return {
     access: "allowed",
     allowedPolicyIds: ["policy-1"],
+    blockedPolicyIds: [],
     canonicalServerUrl: "https://github.example.com/mcp",
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: new Date("2026-01-04T10:00:00Z"),
@@ -424,6 +471,10 @@ describe("ShadowMCPServerDetail", () => {
       isError: false,
       isLoading: false,
     });
+    mocks.useNavigate.mockReturnValue(mocks.navigate);
+    mocks.useRoutes.mockReturnValue({
+      costs: { href: () => "/costs" },
+    });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer(),
       error: null,
@@ -434,8 +485,14 @@ describe("ShadowMCPServerDetail", () => {
         nextCursor: undefined,
         users: [
           {
+            email: "alex@example.com",
             lastCalled: new Date("2026-01-04T10:00:00Z"),
-            observedUseCount: 5,
+            observedUseCount: 15,
+            sources: [
+              { source: "claude-code", observedUseCount: 12 },
+              { source: "cursor", observedUseCount: 3 },
+              { source: "", observedUseCount: 1 },
+            ],
             userKey: "alex@example.com",
           },
           {
@@ -483,7 +540,7 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByText("2 users")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "User" })).toBeTruthy();
     expect(screen.getByText("alex@example.com")).toBeTruthy();
-    expect(screen.getByText("5 calls")).toBeTruthy();
+    expect(screen.getByText("15 calls")).toBeTruthy();
     expect(screen.getByText("sam@example.com")).toBeTruthy();
 
     expect(mocks.useShadowMCPInventoryServer).toHaveBeenCalledWith(
@@ -503,6 +560,34 @@ describe("ShadowMCPServerDetail", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  it("renders user sources and only links email-backed users to Costs", () => {
+    const lastCalled = new Date("2026-01-04T10:00:00Z");
+    renderDetailPage();
+
+    const emailRow = screen.getByText("alex@example.com").closest("tr");
+    expect(emailRow).toBeTruthy();
+    expect(within(emailRow!).getByText("Claude Code")).toBeTruthy();
+    expect(within(emailRow!).getByText("Cursor")).toBeTruthy();
+    expect(within(emailRow!).getByText("Unknown")).toBeTruthy();
+    expect(within(emailRow!).getByText("12")).toBeTruthy();
+    expect(within(emailRow!).getByText("3")).toBeTruthy();
+    expect(within(emailRow!).getByText("1")).toBeTruthy();
+    expect(within(emailRow!).getByText("15 calls")).toBeTruthy();
+    expect(
+      within(emailRow!).getByText(formatShortDate(lastCalled)),
+    ).toBeTruthy();
+    fireEvent.click(emailRow!);
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/costs/email~alex%40example.com",
+    );
+
+    const noEmailRow = screen.getByText("sam@example.com").closest("tr");
+    expect(noEmailRow).toBeTruthy();
+    expect(noEmailRow!.classList.contains("cursor-pointer")).toBe(false);
+    fireEvent.click(noEmailRow!);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
   });
 
   it("exposes the current server name and Policy-style editor attributes", () => {
@@ -823,6 +908,7 @@ describe("ShadowMCPServerDetail", () => {
       data: inventoryServer({
         access: "none",
         allowedPolicyIds: [],
+        blockedPolicyIds: [],
       }),
       error: null,
       isLoading: false,
@@ -963,6 +1049,7 @@ describe("ShadowMCPServerDetail", () => {
       data: inventoryServer({
         access: "none",
         allowedPolicyIds: [],
+        blockedPolicyIds: [],
         latestRequest: {
           id: "request-1",
           policyId: "cached-policy",

@@ -34,6 +34,12 @@ type PluginServerInfo struct {
 	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
 	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
 	IsOAuth bool
+	// IsUnproxied indicates the server is an unproxied MCP server: MCPURL
+	// points directly at the vendor, never through Gram's gateway. No
+	// Authorization header may be attached — the Gram API key would leak to
+	// the vendor's own server, which was never meant to receive it, and
+	// Gram has no way to inject vendor-specific credentials on its behalf.
+	IsUnproxied bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -362,7 +368,7 @@ const mcpGeneratorVersion = "10"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "25"
+const hooksGeneratorVersion = "27"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -745,7 +751,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
 	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
-	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code, Cursor, and Codex marketplaces.\n\n")
+	b.WriteString("Each plugin bundles MCP servers for distribution via supported coding agent marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
 	b.WriteString("- **Auto-managed by Speakeasy.** Each publish from the Speakeasy dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Speakeasy instead.\n\n")
@@ -873,6 +879,10 @@ func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateC
 // APIKey plus all-public-no-env servers means the plugin is install-silent.
 func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 	for _, s := range p.Servers {
+		if s.IsUnproxied {
+			// No credential of any kind is ever collected for these.
+			continue
+		}
 		if s.IsPublic {
 			if len(s.EnvConfigs) > 0 {
 				return "ON_INSTALL"
@@ -948,18 +958,22 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			EnvHTTPHeaders:    nil,
 		}
 
-		if s.IsOAuth {
+		switch {
+		case s.IsUnproxied:
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		case s.IsOAuth:
 			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
-		} else if s.IsPublic {
+		case s.IsPublic:
 			if len(s.EnvConfigs) > 0 {
 				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
 				for _, ec := range s.EnvConfigs {
 					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
 				}
 			}
-		} else if cfg.APIKey != "" {
+		case cfg.APIKey != "":
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
-		} else {
+		default:
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
@@ -1695,10 +1709,15 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
   fi
   local codex_home="${CODEX_HOME:-$HOME/.codex}"
   local candidate
+  # ChatGPT.app is the unified desktop app (Chat + Work + Codex modes) OpenAI
+  # merged the standalone Codex app into on 2026-07-09; it embeds the same
+  # codex CLI and still reads ~/.codex/config.toml. It is probed before the
+  # legacy Codex.app bundle, which is frozen post-merge.
   for candidate in \
     "${codex_home}/packages/standalone/current/bin/codex" \
     "${HOME}/.local/bin/codex" \
     /usr/local/bin/codex \
+    "/Applications/ChatGPT.app/Contents/Resources/codex" \
     "/Applications/Codex.app/Contents/Resources/codex"; do
     if [ -f "${candidate}" ] && [ -x "${candidate}" ]; then
       printf '%s\n' "${candidate}"
@@ -1869,7 +1888,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
+		if !s.IsUnproxied && !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
 		// Public non-OAuth servers may need user-provided env vars.
@@ -1911,7 +1930,10 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -2050,7 +2072,10 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -2111,7 +2136,10 @@ func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p Plugi
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OpenCode auto-detects OAuth on remote servers and runs the
 			// authorization flow itself — no headers needed.
 		} else if s.IsPublic {

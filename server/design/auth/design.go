@@ -108,6 +108,33 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SwitchScopes"}`)
 	})
 
+	Method("enterDemo", func() {
+		Description("Switches the current session into the shared read-only demo organization.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Attribute("session_token", String, "The authentication session")
+			Attribute("session_cookie", String, "The authentication session")
+			Required("session_token", "session_cookie")
+		})
+
+		HTTP(func() {
+			POST("/rpc/auth.enterDemo")
+			security.SessionHeader()
+			Response(StatusOK, func() {
+				security.WriteSessionCookie()
+				security.SessionHeader()
+			})
+		})
+
+		Meta("openapi:operationId", "enterDemo")
+		Meta("openapi:extension:x-speakeasy-name-override", "enterDemo")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnterDemo"}`)
+	})
+
 	Method("logout", func() {
 		Description("Logs out the current user by clearing their session.")
 

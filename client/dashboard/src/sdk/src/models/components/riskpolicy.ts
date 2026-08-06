@@ -55,14 +55,14 @@ export const RiskPolicyPolicyType = {
 export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
 
 /**
- * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
 export const RiskPolicyShadowMcpDisposition = {
   BlockAll: "block_all",
   AllowAll: "allow_all",
 } as const;
 /**
- * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
 export type RiskPolicyShadowMcpDisposition = ClosedEnum<
   typeof RiskPolicyShadowMcpDisposition
@@ -163,7 +163,7 @@ export type RiskPolicy = {
    */
   score: number;
   /**
-   * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+   * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
    */
   shadowMcpDisposition?: RiskPolicyShadowMcpDisposition | undefined;
   /**

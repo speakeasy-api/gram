@@ -36,6 +36,14 @@ type Service interface {
 	GetAwsIamCredential(context.Context, *GetAwsIamCredentialPayload) (res *AwsIamCredential, err error)
 	// Get a GCP IAM external credential by ID. Requires org:read.
 	GetGcpIamCredential(context.Context, *GetGcpIamCredentialPayload) (res *GcpIamCredential, err error)
+	// Probe that Gram can impersonate the service account a GCP IAM credential
+	// names, and report the principal it resolves to. Ephemeral: nothing is
+	// persisted. Rate limited per organization. Requires org:admin.
+	VerifyGcpIamCredential(context.Context, *VerifyGcpIamCredentialPayload) (res *VerifyCredentialResult, err error)
+	// Report what the customer must grant in their own GCP project before Gram can
+	// impersonate a service account there. Readable before any credential exists,
+	// since impersonation is a precondition of creating one. Requires org:read.
+	GetGcpSetupInfo(context.Context, *GetGcpSetupInfoPayload) (res *GcpSetupInfo, err error)
 	// Soft-delete an AWS IAM external credential by ID. Requires org:admin.
 	DeleteAwsIamCredential(context.Context, *DeleteAwsIamCredentialPayload) (err error)
 	// Soft-delete a GCP IAM external credential by ID. Requires org:admin.
@@ -62,7 +70,7 @@ const ServiceName = "externalCredentials"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"createAwsIamCredential", "updateAwsIamCredential", "createGcpIamCredential", "updateGcpIamCredential", "listExternalCredentials", "listAwsIamCredentials", "listGcpIamCredentials", "getAwsIamCredential", "getGcpIamCredential", "deleteAwsIamCredential", "deleteGcpIamCredential"}
+var MethodNames = [13]string{"createAwsIamCredential", "updateAwsIamCredential", "createGcpIamCredential", "updateGcpIamCredential", "listExternalCredentials", "listAwsIamCredentials", "listGcpIamCredentials", "getAwsIamCredential", "getGcpIamCredential", "verifyGcpIamCredential", "getGcpSetupInfo", "deleteAwsIamCredential", "deleteGcpIamCredential"}
 
 // AwsIamCredential is the result type of the externalCredentials service
 // createAwsIamCredential method.
@@ -115,18 +123,10 @@ type CreateGcpIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
-	ImpersonateServiceAccount *string
-	// Workload Identity Federation pool ID. Set together with the other wif_*
-	// fields.
-	WifPoolID *string
-	// Workload Identity Federation provider ID. Set together with the other wif_*
-	// fields.
-	WifProviderID *string
-	// GCP project number backing the WIF pool. Set together with the other wif_*
-	// fields.
-	WifProjectNumber *string
+	// The service account in your project that Gram impersonates. Grant Gram's own
+	// service account roles/iam.serviceAccountTokenCreator on it — see
+	// externalCredentials.getGcpSetupInfo.
+	ImpersonateServiceAccount string
 }
 
 // DeleteAwsIamCredentialPayload is the payload type of the externalCredentials
@@ -187,6 +187,18 @@ type GcpIamCredential struct {
 	UpdatedAt string
 }
 
+// GcpSetupInfo is the result type of the externalCredentials service
+// getGcpSetupInfo method.
+type GcpSetupInfo struct {
+	// Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on
+	// the service account you want Gram to impersonate. Empty when the running
+	// environment cannot report one (local development backed by a user login
+	// rather than a service-account key).
+	ServiceAccountEmail *string
+	// The IAM role to grant Gram's service account on the target service account.
+	RequiredRole string
+}
+
 // GetAwsIamCredentialPayload is the payload type of the externalCredentials
 // service getAwsIamCredential method.
 type GetAwsIamCredentialPayload struct {
@@ -200,6 +212,12 @@ type GetAwsIamCredentialPayload struct {
 type GetGcpIamCredentialPayload struct {
 	// The ID of the credential to get.
 	ID           string
+	SessionToken *string
+}
+
+// GetGcpSetupInfoPayload is the payload type of the externalCredentials
+// service getGcpSetupInfo method.
+type GetGcpSetupInfoPayload struct {
 	SessionToken *string
 }
 
@@ -257,18 +275,30 @@ type UpdateGcpIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
-	ImpersonateServiceAccount *string
-	// Workload Identity Federation pool ID. Set together with the other wif_*
-	// fields.
-	WifPoolID *string
-	// Workload Identity Federation provider ID. Set together with the other wif_*
-	// fields.
-	WifProviderID *string
-	// GCP project number backing the WIF pool. Set together with the other wif_*
-	// fields.
-	WifProjectNumber *string
+	// The service account in your project that Gram impersonates. Grant Gram's own
+	// service account roles/iam.serviceAccountTokenCreator on it — see
+	// externalCredentials.getGcpSetupInfo.
+	ImpersonateServiceAccount string
+}
+
+// VerifyCredentialResult is the result type of the externalCredentials service
+// verifyGcpIamCredential method.
+type VerifyCredentialResult struct {
+	// Whether Gram could assume the credential's identity.
+	Verified bool
+	// The principal the credential resolves to — the impersonated service account.
+	Principal *string
+	// Human-readable detail about the probe outcome, including the failure reason
+	// when it did not verify.
+	Detail *string
+}
+
+// VerifyGcpIamCredentialPayload is the payload type of the externalCredentials
+// service verifyGcpIamCredential method.
+type VerifyGcpIamCredentialPayload struct {
+	// The ID of the credential to verify.
+	ID           string
+	SessionToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

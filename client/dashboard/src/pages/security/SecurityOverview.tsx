@@ -504,10 +504,6 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
     return next;
   }, [location.search]);
 
-  const agentsParams = new URLSearchParams(carriedRangeParams);
-  agentsParams.set("has_risk", "true");
-  const agentsHref = `${routes.agentSessions.href()}?${agentsParams.toString()}`;
-
   const riskEventsHref = carriedRangeParams.toString()
     ? `${routes.riskEvents.href()}?${carriedRangeParams.toString()}`
     : routes.riskEvents.href();
@@ -520,24 +516,14 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
         changes over time.
       </Page.Section.Description>
       <Page.Section.CTA>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" asChild>
-            <Link to={agentsHref}>
-              <Button.Text>View Sessions with Risk</Button.Text>
-              <Button.RightIcon>
-                <Icon name="arrow-right" />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-          <Button variant="secondary" asChild>
-            <Link to={riskEventsHref}>
-              <Button.Text>View All Events</Button.Text>
-              <Button.RightIcon>
-                <Icon name="arrow-right" />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-        </div>
+        <Button variant="secondary" asChild>
+          <Link to={riskEventsHref}>
+            <Button.Text>View All Events</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" />
+            </Button.RightIcon>
+          </Link>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-8">{children}</div>
@@ -682,6 +668,12 @@ function RiskTrendChart({
         borderWidth: 1,
         padding: 12,
         boxPadding: 4,
+        // Index-mode hover activates every series at that x. Drop zeros so a
+        // sparse multi-series chart doesn't list every inactive category
+        // (which balloons the tooltip until it covers the chart). Returning
+        // `undefined` from `label` is not enough — Chart.js treats that as
+        // "use the default callback" and still renders the line.
+        filter: (item) => (item.parsed.y ?? 0) !== 0,
         callbacks: {
           title: (items) => {
             const x = items[0]?.parsed.x;
@@ -694,12 +686,10 @@ function RiskTrendChart({
               minute: "2-digit",
             });
           },
-          label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return undefined;
-            return item.formattedValue
+          label: (item) =>
+            item.formattedValue
               ? `${item.dataset.label}: ${item.formattedValue}`
-              : "";
-          },
+              : "",
         },
       },
       zoom: zoomPluginOptions,

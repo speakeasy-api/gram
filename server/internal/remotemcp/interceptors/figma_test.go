@@ -39,6 +39,10 @@ func TestFigma_AllowsCatalogClients(t *testing.T) {
 		"Visual Studio Code/1.128.0",
 		"copilot/1.0.70 (darwin v24.16.0) term/Apple_Terminal",
 		"codex_cli_rs/0.144.1 (Mac OS 26.4.0; arm64) iTerm.app/3.6.7",
+		// Captured from the shipped unified ChatGPT desktop app's codex 0.146
+		// by pointing an MCP server at a local listener; the earlier
+		// codex_cli_rs/ token does not match it (DNO-765).
+		"codex-mcp-client/0.146.0-alpha.9.2",
 		"openai-mcp/1.0.0 (ChatGPT)",
 		"Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
 		"Zed/1.9.0+stable.316.ced90fc636c4ede05402befc38a63bae7fd741bd (macos; aarch64)",

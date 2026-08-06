@@ -24,9 +24,9 @@ type Service interface {
 	// NULL). Requires platform admin.
 	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// List global remote_session_issuers. Requires platform admin.
-	ListGlobalIssuers(context.Context, *ListGlobalIssuersPayload) (res *ListRemoteSessionIssuersResult, err error)
+	ListGlobalIssuers(context.Context, *ListGlobalIssuersPayload) (res *ListGlobalRemoteSessionIssuersResult, err error)
 	// Get a global remote_session_issuer by id. Requires platform admin.
-	GetGlobalIssuer(context.Context, *GetGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	GetGlobalIssuer(context.Context, *GetGlobalIssuerPayload) (res *GlobalRemoteSessionIssuer, err error)
 	// Update a global remote_session_issuer. Requires platform admin.
 	UpdateGlobalIssuer(context.Context, *UpdateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// Soft-delete a global remote_session_issuer. Blocked when any global
@@ -196,6 +196,21 @@ type GetGlobalIssuerPayload struct {
 	SessionToken *string
 }
 
+// GlobalRemoteSessionIssuer is the result type of the adminRemoteSessions
+// service getGlobalIssuer method.
+type GlobalRemoteSessionIssuer struct {
+	// The remote_session_issuer record.
+	Issuer *types.RemoteSessionIssuer
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount int
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount int
+}
+
 // ListGlobalClientsPayload is the payload type of the adminRemoteSessions
 // service listGlobalClients method.
 type ListGlobalClientsPayload struct {
@@ -218,18 +233,18 @@ type ListGlobalIssuersPayload struct {
 	SessionToken *string
 }
 
-// ListRemoteSessionClientsResult is the result type of the adminRemoteSessions
-// service listGlobalClients method.
-type ListRemoteSessionClientsResult struct {
-	Items []*types.RemoteSessionClient
+// ListGlobalRemoteSessionIssuersResult is the result type of the
+// adminRemoteSessions service listGlobalIssuers method.
+type ListGlobalRemoteSessionIssuersResult struct {
+	Items []*GlobalRemoteSessionIssuer
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
 }
 
-// ListRemoteSessionIssuersResult is the result type of the adminRemoteSessions
-// service listGlobalIssuers method.
-type ListRemoteSessionIssuersResult struct {
-	Items []*types.RemoteSessionIssuer
+// ListRemoteSessionClientsResult is the result type of the adminRemoteSessions
+// service listGlobalClients method.
+type ListRemoteSessionClientsResult struct {
+	Items []*types.RemoteSessionClient
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
 }
