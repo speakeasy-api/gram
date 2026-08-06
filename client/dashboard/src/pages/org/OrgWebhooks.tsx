@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { Switch } from "@/components/ui/Switch";
@@ -19,7 +20,7 @@ export default function OrgWebhooks(): React.JSX.Element {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs stage="preview" />
+        <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read"]} level="page">
@@ -46,9 +47,10 @@ function OrgWebhooksInner() {
 
   return (
     <>
-      <Heading variant="h3" className="mb-4">
-        Webhooks
-      </Heading>
+      <Stack direction="horizontal" align="center" gap={2} className="mb-4">
+        <Heading variant="h3">Webhooks</Heading>
+        <ReleaseStageBadge stage="beta" />
+      </Stack>
       <Text muted small className="mb-6">
         Configure webhook delivery for various platform events.
       </Text>
