@@ -61,8 +61,6 @@ type GetProductFeaturesResult struct {
 	SessionCaptureEnabled bool
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool
-	// Whether webhooks are enabled
-	Webhooks bool
 	// Whether SSO setup is enabled for the organization
 	SsoEnabled bool
 	// Whether SCIM/directory sync setup is enabled for the organization

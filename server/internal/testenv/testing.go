@@ -45,9 +45,8 @@ func NewLogger(*testing.T) *slog.Logger {
 			Pretty:      true,
 			DataDogAttr: false,
 		}))
-	} else {
-		return slog.New(slog.DiscardHandler)
 	}
+	return slog.New(slog.DiscardHandler)
 }
 
 func isTestingVerbose() bool {

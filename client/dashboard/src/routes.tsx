@@ -956,6 +956,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Webhooks",
     url: "webhooks",
     icon: "webhook",
+    stage: "beta",
     component: OrgWebhooks,
   },
   externalServices: {

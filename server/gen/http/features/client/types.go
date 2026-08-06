@@ -32,8 +32,6 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
-	// Whether webhooks are enabled
-	Webhooks *bool `form:"webhooks,omitempty" json:"webhooks,omitempty" xml:"webhooks,omitempty"`
 	// Whether SSO setup is enabled for the organization
 	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
 	// Whether SCIM/directory sync setup is enabled for the organization
@@ -455,7 +453,6 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		ToolIoLogsEnabled:                    *body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                *body.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled:         *body.AuthzChallengeLoggingEnabled,
-		Webhooks:                             *body.Webhooks,
 		SsoEnabled:                           *body.SsoEnabled,
 		ScimEnabled:                          *body.ScimEnabled,
 		HooksBrowserLoginEnabled:             *body.HooksBrowserLoginEnabled,
@@ -786,9 +783,6 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.AuthzChallengeLoggingEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "body"))
-	}
-	if body.Webhooks == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("webhooks", "body"))
 	}
 	if body.SsoEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sso_enabled", "body"))

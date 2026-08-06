@@ -504,9 +504,9 @@ mcp:connect
 skill:read
 ```
 
-`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled for an RBAC-enabled organization. If Skills is enabled before RBAC, an RBAC off-to-on transition seeds the complete system-role defaults and explicitly patches missing Skills defaults when retained role grants cause the general seed to skip a role. Repeated RBAC enable calls, including recurring WorkOS events, intentionally do not restore customized or removed Skills grants. The legacy base seeder continues to preserve any existing customized system-role grant set. Disabling Skills does not remove grants. The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
+`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled. Repeated provisioning intentionally does not restore customized or removed system-role grants. Disabling Skills does not remove grants. The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
 
-System roles are seeded when RBAC is enabled for an organization. They are not meant to be edited like custom roles. Changing the default grants of a system role is a product behavior change and should be treated carefully, especially for existing organizations.
+System roles are seeded when an organization is provisioned, and the first user is assigned the Admin role. WorkOS organization reconciliation also seeds the defaults as an idempotent backstop. System roles are not meant to be edited like custom roles. Changing their default grants is a product behavior change and should be treated carefully, especially for existing organizations.
 
 ## Dashboard Grant Reference
 
@@ -554,11 +554,11 @@ Handlers do not query grants directly. Their job is to describe the access they 
 
 ### When RBAC is enforced
 
-`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. RBAC is enforced for authenticated requests when the RBAC feature flag is enabled for the active organization, regardless of account tier, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
+`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. RBAC is always enforced for authenticated requests, regardless of account tier, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
 
 Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only platform admins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
 
-That means RBAC is not currently enforced for API key requests or organizations where the RBAC feature flag is disabled. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
+RBAC is not currently enforced for API key requests. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
 
 ### Add checks at the handler boundary
 

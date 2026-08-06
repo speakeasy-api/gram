@@ -20,7 +20,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it returns project successfully", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t, true)
+		ctx, ti := newTestProjectsService(t)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
@@ -43,28 +43,10 @@ func TestProjectsService_GetProject(t *testing.T) {
 		assert.NotEmpty(t, result.Project.UpdatedAt)
 	})
 
-	t.Run("it skips RBAC when feature is disabled", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, ti := newTestProjectsService(t, false)
-
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
-		require.NotNil(t, authCtx.ProjectSlug)
-
-		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
-			Slug: types.Slug(*authCtx.ProjectSlug),
-		})
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.NotNil(t, result.Project)
-	})
-
 	t.Run("it returns not found when build read access is missing", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t, true)
+		ctx, ti := newTestProjectsService(t)
 		ctx = authz.GrantsToContext(ctx, nil)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -86,7 +68,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it rejects without auth context", func(t *testing.T) {
 		t.Parallel()
 
-		_, ti := newTestProjectsService(t, true)
+		_, ti := newTestProjectsService(t)
 
 		result, err := ti.service.GetProject(context.Background(), &gen.GetProjectPayload{
 			Slug: "some-slug",
@@ -103,7 +85,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it rejects without active organization", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t, true)
+		ctx, ti := newTestProjectsService(t)
 
 		// Get the existing auth context and clear the organization ID
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -125,7 +107,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it returns not found for non-existent project", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t, true)
+		ctx, ti := newTestProjectsService(t)
 
 		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
 			Slug: "non-existent-project-slug",
@@ -142,7 +124,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 	t.Run("it returns not found for project in different organization", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, ti := newTestProjectsService(t, true)
+		ctx, ti := newTestProjectsService(t)
 
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)

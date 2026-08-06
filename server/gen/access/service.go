@@ -63,13 +63,6 @@ type Service interface {
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
-	// Returns whether RBAC is currently enabled for the current organization.
-	GetRBACStatus(context.Context, *GetRBACStatusPayload) (res *RBACStatus, err error)
-	// Enable RBAC for the current organization. Seeds default grants for system
-	// roles.
-	EnableRBAC(context.Context, *EnableRBACPayload) (err error)
-	// Disable RBAC enforcement for the current organization.
-	DisableRBAC(context.Context, *DisableRBACPayload) (err error)
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
 	ListChallenges(context.Context, *ListChallengesPayload) (res *ListChallengesResult, err error)
@@ -102,7 +95,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [25]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "requestAccess", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [22]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -276,24 +269,6 @@ type DeleteRolePayload struct {
 type DeleteShadowMCPInventoryPolicyBypassPayload struct {
 	ProjectID    string
 	ServerURL    string
-	SessionToken *string
-}
-
-// DisableRBACPayload is the payload type of the access service disableRBAC
-// method.
-type DisableRBACPayload struct {
-	SessionToken *string
-}
-
-// EnableRBACPayload is the payload type of the access service enableRBAC
-// method.
-type EnableRBACPayload struct {
-	SessionToken *string
-}
-
-// GetRBACStatusPayload is the payload type of the access service getRBACStatus
-// method.
-type GetRBACStatusPayload struct {
 	SessionToken *string
 }
 
@@ -475,12 +450,6 @@ type ListShadowMCPInventoryUsersResult struct {
 type ListUserGrantsResult struct {
 	// The user's effective grants in this organization.
 	Grants []*ListRoleGrant
-}
-
-// RBACStatus is the result type of the access service getRBACStatus method.
-type RBACStatus struct {
-	// Whether RBAC enforcement is currently enabled for this organization.
-	RbacEnabled bool
 }
 
 // RequestAccessPayload is the payload type of the access service requestAccess
