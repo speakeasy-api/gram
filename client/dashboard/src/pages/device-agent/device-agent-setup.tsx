@@ -108,16 +108,6 @@ function psVersionAssign(version: string | null) {
     : `$VERSION = (Invoke-RestMethod ${MANIFEST_URL}).latest.speakeasyd.version`;
 }
 
-// Every Linux artifact — the raw binaries and both helper package flavors —
-// ships amd64 + arm64 under the same *_linux_{arch} naming, so the swap note
-// is shared by the download step and the helper-package step.
-const LINUX_ARCH_SWAP_NOTE = (
-  <>
-    amd64 shown — swap <code>linux_amd64</code> for <code>linux_arm64</code> on
-    ARM.
-  </>
-);
-
 type OsSpec = {
   label: string;
   tileDesc: string;
@@ -201,7 +191,12 @@ Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile spea
     logo: "/icons/platforms/linux.svg",
     logoSize: "h-9 w-9",
     lang: "bash",
-    archNote: LINUX_ARCH_SWAP_NOTE,
+    archNote: (
+      <>
+        amd64 shown — swap <code>linux_amd64</code> for <code>linux_arm64</code>{" "}
+        on ARM.
+      </>
+    ),
     download: (version) => `${bashVersionAssign(version)}
 BASE=${RELEASES_BASE}/v$VERSION
 curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64"
@@ -476,15 +471,28 @@ function HelperPackageStep() {
   const { data } = useAgentReleases();
   const version = data?.latest["speakeasyd"]?.version ?? null;
 
+  // The package installs as root, so the snippet is hardened where the
+  // user-context download script isn't: ARCH is detected at run time (uname -m
+  // mapped to the release's amd64/arm64 naming) instead of hand-edited, and
+  // the sha256 is checked against the release's published checksums.txt with
+  // the install chained behind the check — a missing or tampered package never
+  // reaches the package manager.
   const script = (fmt: "deb" | "rpm", install: string) =>
     `${bashVersionAssign(version)}
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 BASE=${RELEASES_BASE}/v$VERSION
-curl -fSLO "$BASE/speakeasy-helper_\${VERSION}_linux_amd64.${fmt}"
-${install}`;
+PKG="speakeasy-helper_\${VERSION}_linux_\${ARCH}.${fmt}"
+curl -fSLO "$BASE/$PKG"
+curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
+  ${install}`;
 
-  // The swap note sits above each snippet it applies to, matching the
-  // archNote convention in DownloadStep.
-  const archNote = <StepNote>{LINUX_ARCH_SWAP_NOTE}</StepNote>;
+  // Sits above each snippet, matching the archNote convention in DownloadStep.
+  const verifyNote = (
+    <StepNote>
+      Detects your architecture and verifies the package's <code>sha256</code>{" "}
+      against the release's <code>checksums.txt</code> before installing.
+    </StepNote>
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -498,23 +506,17 @@ ${install}`;
       </Text>
       <div className="flex flex-col gap-2">
         <SubLabel>Debian / Ubuntu (.deb)</SubLabel>
-        {archNote}
+        {verifyNote}
         <CodeBlock language="bash">
-          {script(
-            "deb",
-            `sudo apt install "./speakeasy-helper_\${VERSION}_linux_amd64.deb"`,
-          )}
+          {script("deb", `sudo apt install "./$PKG"`)}
         </CodeBlock>
       </div>
       <OrDivider />
       <div className="flex flex-col gap-2">
         <SubLabel>RHEL / Fedora (.rpm)</SubLabel>
-        {archNote}
+        {verifyNote}
         <CodeBlock language="bash">
-          {script(
-            "rpm",
-            `sudo rpm -i "speakeasy-helper_\${VERSION}_linux_amd64.rpm"`,
-          )}
+          {script("rpm", `sudo rpm -i "$PKG"`)}
         </CodeBlock>
       </div>
       <Text small muted>
