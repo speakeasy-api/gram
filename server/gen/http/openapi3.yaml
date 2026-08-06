@@ -51415,7 +51415,7 @@ paths:
                 name: UpdateUserSessionIssuer
     /rpc/userSessionIssuersCimdClients.create:
         post:
-            description: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.
+            description: 'Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor''s host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.'
             operationId: createUserSessionIssuerCimdClient
             parameters:
                 - allowEmptyValue: true
@@ -51956,6 +51956,110 @@ paths:
             x-speakeasy-name-override: listPresets
             x-speakeasy-react-hook:
                 name: CimdClientPresets
+    /rpc/userSessionIssuersCimdClients.verifyURL:
+        post:
+            description: 'Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.'
+            operationId: verifyUserSessionIssuerCimdClientURL
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/VerifyURLRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyCimdURLResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: verifyURL userSessionIssuersCimdClients
+            tags:
+                - userSessionIssuersCimdClients
+            x-speakeasy-name-override: verifyURL
+            x-speakeasy-react-hook:
+                name: VerifyUserSessionIssuerCimdClientURL
     /rpc/userSessions.list:
         get:
             description: List issued user_sessions in the caller's project. refresh_token_hash is never returned.
@@ -56931,10 +57035,7 @@ components:
             properties:
                 client:
                     $ref: '#/components/schemas/UserSessionIssuerCimdClient'
-                probe_warning:
-                    type: string
-                    description: Set when Gram could not fetch or validate the document at this URL. The entry was still saved; the URL will be admitted, but a client presenting it will fail at authorization time until the document is reachable and valid.
-            description: Result of allowing a CIMD document URL, including any non-fatal probe warning.
+            description: Result of allowing a CIMD document URL. Reachability is not reported here — call verifyURL for that.
             required:
                 - client
         CreateUserSessionIssuerForm:
@@ -74967,6 +75068,39 @@ components:
                 - organization
                 - projects
                 - scopes
+        VerifyCimdURLResult:
+            type: object
+            properties:
+                client_name:
+                    type: string
+                    description: The document's client_name, set only when verified. Lets an operator confirm the URL names the client they intended.
+                detail:
+                    type: string
+                    description: Human-readable explanation, safe to display to the operator.
+                http_status:
+                    type: integer
+                    description: Status the document endpoint returned; omitted when no response was received.
+                    format: int64
+                outcome:
+                    type: string
+                    description: Why the probe ended as it did.
+                    enum:
+                        - valid
+                        - invalid_url
+                        - unreachable
+                        - unparseable
+                        - invalid_document
+                reason:
+                    type: string
+                    description: Stable machine label for the rule that rejected the document, e.g. client_id_mismatch. Set only for invalid_url and invalid_document.
+                verified:
+                    type: boolean
+                    description: True when the document was fetched and passed every check the authorization server applies. A client presenting this URL will not be rejected for its document.
+            description: Outcome of probing a CIMD document URL. Nothing is persisted.
+            required:
+                - verified
+                - outcome
+                - detail
         VerifyCredentialResult:
             type: object
             properties:
@@ -75037,6 +75171,14 @@ components:
             required:
                 - url
                 - transport_type
+        VerifyURLRequestBody:
+            type: object
+            properties:
+                client_id_metadata_uri:
+                    type: string
+                    description: The https URL to probe.
+            required:
+                - client_id_metadata_uri
         VerifyURLResult:
             type: object
             properties:

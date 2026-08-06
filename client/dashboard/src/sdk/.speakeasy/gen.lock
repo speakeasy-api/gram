@@ -535,6 +535,7 @@ trackedFiles:
   src/funcs/userSessionIssuersCimdClientsGet.ts: {}
   src/funcs/userSessionIssuersCimdClientsList.ts: {}
   src/funcs/userSessionIssuersCimdClientsListPresets.ts: {}
+  src/funcs/userSessionIssuersCimdClientsVerifyURL.ts: {}
   src/funcs/userSessionIssuersCreate.ts: {}
   src/funcs/userSessionIssuersDelete.ts: {}
   src/funcs/userSessionIssuersGet.ts: {}
@@ -1327,10 +1328,12 @@ trackedFiles:
   src/models/components/validatekeyorganization.ts: {}
   src/models/components/validatekeyproject.ts: {}
   src/models/components/validatekeyresult.ts: {}
+  src/models/components/verifycimdurlresult.ts: {}
   src/models/components/verifycredentialresult.ts: {}
   src/models/components/verifyonboardinghookssetupresult.ts: {}
   src/models/components/verifyplatformcredentialresult.ts: {}
   src/models/components/verifyurlform.ts: {}
+  src/models/components/verifyurlrequestbody.ts: {}
   src/models/components/verifyurlresult.ts: {}
   src/models/components/workosdomainverificationintentoptions.ts: {}
   src/models/components/workosintentoptions.ts: {}
@@ -1858,6 +1861,7 @@ trackedFiles:
   src/models/operations/verifygcpiamplatformcredential.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
   src/models/operations/verifyremotemcpurl.ts: {}
+  src/models/operations/verifyusersessionissuercimdclienturl.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
   src/react-query/activeDeployment.core.ts: {}
@@ -2608,6 +2612,7 @@ trackedFiles:
   src/react-query/verifyOnboardingHooksSetup.core.ts: {}
   src/react-query/verifyOnboardingHooksSetup.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
+  src/react-query/verifyUserSessionIssuerCimdClientURL.ts: {}
   src/react-query/workUnitsTrend.core.ts: {}
   src/react-query/workUnitsTrend.ts: {}
   src/sdk/access.ts: {}
@@ -8589,5 +8594,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  verifyUserSessionIssuerCimdClientURL:
+    speakeasy-default-verify-user-session-issuer-cimd-client-URL:
+      requestBody:
+        application/json: {"client_id_metadata_uri": "https://wasteful-community.name/"}
+      responses:
+        "200":
+          application/json: {"detail": "<value>", "outcome": "unreachable", "verified": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
