@@ -560,7 +560,6 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
-
 	return nil
 }
 

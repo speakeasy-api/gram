@@ -116,7 +116,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		enc,
 		envEntries,
 		guardianPolicy,

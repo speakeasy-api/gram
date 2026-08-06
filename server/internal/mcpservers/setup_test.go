@@ -87,7 +87,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	dispositions := mcpservers.NewToolDispositionCache(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
