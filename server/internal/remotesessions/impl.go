@@ -8,6 +8,7 @@ package remotesessions
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,6 +40,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type Service struct {
@@ -46,6 +49,7 @@ type Service struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
 	auth         *auth.Auth
+	sessions     *sessions.Manager
 	authz        *authz.Engine
 	enc          *encryption.Client
 	environments *environments.EnvironmentEntries
@@ -80,6 +84,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:       logger,
 		db:           db,
 		auth:         auth.New(logger, db, sessionManager, authzEngine),
+		sessions:     sessionManager,
 		authz:        authzEngine,
 		enc:          enc,
 		environments: env,
@@ -137,6 +142,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		adminEndpoints.Use(m)
 	}
 	adminrssrv.Mount(mux, adminrssrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	// Upstream Dynamic Client Registration helper. A raw handler (not a Goa
+	// method) so the dashboard can register a client against an upstream
+	// provider's registration_endpoint without hitting it from the browser
+	// (CORS), and so the SSRF gate on the outbound call runs through
+	// guardianPolicy. Relocated here from the retired oauth proxy serving path;
+	// the path is unchanged so the dashboard's proxyRegisterUpstreamClient
+	// surfaces keep working.
+	o11y.AttachHandler(mux, "POST", "/oauth/proxy-register", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.handleProxyRegister).ServeHTTP(w, r)
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

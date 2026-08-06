@@ -36,6 +36,17 @@ func AudienceAttribute() {
 	MaxLength(512)
 }
 
+// Companion endpoint: POST /oauth/proxy-register. The dashboard mints the
+// client_id/client_secret it hands to createRemoteSessionClient by running
+// Dynamic Client Registration against the upstream provider through that
+// endpoint — a raw HTTP handler in the remotesessions package, not a Goa
+// method, because it proxies an arbitrary upstream registration_endpoint under
+// the guardian SSRF gate rather than a typed Gram payload.
+//
+// The path stays under /oauth/ even though the handler no longer lives in the
+// retired oauth proxy package: it is a stable contract the dashboard's
+// proxyRegisterUpstreamClient helper already calls from several surfaces, so
+// renaming it would break those clients for no behavioural gain.
 var _ = Service("remoteSessionClients", func() {
 	Description("Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.")
 	Security(security.Session, security.ProjectSlug)
