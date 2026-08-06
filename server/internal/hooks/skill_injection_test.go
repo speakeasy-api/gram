@@ -14,6 +14,7 @@ import (
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // classifierReturning is a fake promptinjection.Classifier: the judge itself is
@@ -57,19 +58,12 @@ func countSkillInjectionFindings(t *testing.T, ctx context.Context, ti *testInst
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	var count int
-	err := ti.conn.QueryRow(ctx, `
-		SELECT count(*)
-		FROM risk_results rr
-		JOIN skill_versions sv ON sv.id = rr.skill_version_id
-		JOIN skills s ON s.id = sv.skill_id
-		WHERE s.project_id = $1
-		  AND s.name = $2
-		  AND rr.source = 'prompt_injection'
-		  AND rr.found IS TRUE
-	`, *authCtx.ProjectID, skillName).Scan(&count)
+	count, err := testrepo.New(ti.conn).CountSkillPromptInjectionResults(ctx, testrepo.CountSkillPromptInjectionResultsParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillName: skillName,
+	})
 	require.NoError(t, err)
-	return count
+	return int(count)
 }
 
 // activateAndUploadSkill walks the real capture handshake: a harness activates a

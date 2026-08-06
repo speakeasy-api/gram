@@ -352,3 +352,16 @@ WHERE id = @id;
 SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
 FROM tool_call_blocks
 WHERE id = @id;
+
+-- name: CountSkillPromptInjectionResults :one
+-- Test-only fixture: counts prompt-injection findings anchored to a version of
+-- the named skill. Attribution is what makes the finding useful, so tests
+-- assert on the skill_versions join rather than on the finding alone.
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.name = @skill_name
+  AND rr.source = 'prompt_injection'
+  AND rr.found IS TRUE;

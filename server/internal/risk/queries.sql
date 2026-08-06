@@ -1004,6 +1004,14 @@ VALUES (
   , @dead_letter_reason
 );
 
+-- name: InsertSkillPromptInjectionResults :exec
+-- Records one finding per enabled policy that subscribes to prompt injection,
+-- anchored on the captured skill version rather than a chat message.
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, 'prompt_injection', TRUE, @rule_id::text, @description::text, @match::text, @confidence::double precision
+FROM risk_policies p
+WHERE p.project_id = @project_id AND p.enabled IS TRUE AND p.deleted IS FALSE AND 'prompt_injection' = ANY (p.sources);
+
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id

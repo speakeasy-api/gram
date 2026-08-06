@@ -103,6 +103,32 @@ func (q *Queries) CountPublishOutboxRows(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countSkillPromptInjectionResults = `-- name: CountSkillPromptInjectionResults :one
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.name = $2
+  AND rr.source = 'prompt_injection'
+  AND rr.found IS TRUE
+`
+
+type CountSkillPromptInjectionResultsParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+}
+
+// Test-only fixture: counts prompt-injection findings anchored to a version of
+// the named skill. Attribution is what makes the finding useful, so tests
+// assert on the skill_versions join rather than on the finding alone.
+func (q *Queries) CountSkillPromptInjectionResults(ctx context.Context, arg CountSkillPromptInjectionResultsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkillPromptInjectionResults, arg.ProjectID, arg.SkillName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
 INSERT INTO organization_metadata (
     id,

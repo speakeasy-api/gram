@@ -2309,6 +2309,36 @@ type InsertRiskResultsParams struct {
 	DeadLetterReason  pgtype.Text
 }
 
+const insertSkillPromptInjectionResults = `-- name: InsertSkillPromptInjectionResults :exec
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, $1, 'prompt_injection', TRUE, $2::text, $3::text, $4::text, $5::double precision
+FROM risk_policies p
+WHERE p.project_id = $6 AND p.enabled IS TRUE AND p.deleted IS FALSE AND 'prompt_injection' = ANY (p.sources)
+`
+
+type InsertSkillPromptInjectionResultsParams struct {
+	SkillVersionID uuid.NullUUID
+	RuleID         string
+	Description    string
+	Match          string
+	Confidence     float64
+	ProjectID      uuid.UUID
+}
+
+// Records one finding per enabled policy that subscribes to prompt injection,
+// anchored on the captured skill version rather than a chat message.
+func (q *Queries) InsertSkillPromptInjectionResults(ctx context.Context, arg InsertSkillPromptInjectionResultsParams) error {
+	_, err := q.db.Exec(ctx, insertSkillPromptInjectionResults,
+		arg.SkillVersionID,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Confidence,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const linkChatUserAccountForTest = `-- name: LinkChatUserAccountForTest :exec
 UPDATE chats
 SET user_account_id = $1

@@ -150,6 +150,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		captureEnabledFeatures{},
 		nil,
 		scanner,
+		nil,
 		risk.NewPolicyBypassEvaluator(logger, conn),
 		spendGate,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
