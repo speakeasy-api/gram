@@ -180,15 +180,19 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 }
 
 func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
-	return l.logBulk(ctx, l.shutdownCtx(), params)
+	return l.logBulk(ctx, l.shutdownCtx(), params, false)
 }
 
 // LogBulkBounded respects the caller's context for every part of the write.
 func (l *Logger) LogBulkBounded(ctx context.Context, params []LogParams) error {
-	return l.logBulk(ctx, ctx, params)
+	return l.logBulk(ctx, ctx, params, false)
 }
 
-func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params []LogParams) error {
+// logBulk writes params to telemetry_logs. When synchronous is set the rows are
+// committed before the call returns instead of being queued in ClickHouse's
+// async insert buffer, which callers whose next read must see these rows
+// require.
+func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params []LogParams, synchronous bool) error {
 	logParams := l.buildBulkParams(ctx, writeCtx, params)
 	if len(logParams) == 0 {
 		if err := writeCtx.Err(); err != nil {
@@ -197,7 +201,12 @@ func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params [
 		return nil
 	}
 	writeCtx = trace.ContextWithSpan(writeCtx, trace.SpanFromContext(ctx))
-	err := repo.New(l.chConn).InsertTelemetryLogs(writeCtx, logParams)
+	queries := repo.New(l.chConn)
+	insert := queries.InsertTelemetryLogs
+	if synchronous {
+		insert = queries.InsertTelemetryLogsSync
+	}
+	err := insert(writeCtx, logParams)
 	if err != nil {
 		return fmt.Errorf("insert telemetry logs: %w", err)
 	}

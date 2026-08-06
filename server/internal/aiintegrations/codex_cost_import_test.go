@@ -230,8 +230,8 @@ func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 		client:    client,
 		cfg:       cfg,
 		pageLimit: codexCompliancePageLimit,
-		processPage: func(context.Context, []telemetry.LogParams) error {
-			return fmt.Errorf("process page should not be called")
+		processPage: func(context.Context, []telemetry.LogParams) (int, error) {
+			return 0, fmt.Errorf("process page should not be called")
 		},
 		progress: &CodexCostSyncProgress{},
 	}

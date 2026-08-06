@@ -113,15 +113,18 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 		LogFiles:          0,
 		CostEvents:        0,
 		CostEventsWritten: 0,
+		CostEventsDeduped: 0,
 		WatermarkReached:  cfg.PollWatermarkAt,
 	}
 
 	source := &codexCostSource{
-		client:      codexapi.New(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
-		cfg:         cfg,
-		pageLimit:   codexCompliancePageLimit,
-		processPage: s.telemetryLogger.LogBulk,
-		progress:    progress,
+		client:    codexapi.New(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
+		cfg:       cfg,
+		pageLimit: codexCompliancePageLimit,
+		processPage: func(ctx context.Context, params []telemetry.LogParams) (int, error) {
+			return s.telemetryLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, params)
+		},
+		progress: progress,
 	}
 
 	runner := &timewindowpoller.Poller[[]codexapi.LogFile]{
@@ -151,11 +154,18 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 }
 
 type codexCostSource struct {
-	client      codexComplianceClient
-	cfg         Config
-	pageLimit   int
-	processPage func(ctx context.Context, payload []telemetry.LogParams) error
-	progress    *CodexCostSyncProgress
+	client    codexComplianceClient
+	cfg       Config
+	pageLimit int
+
+	// processPage writes a page's cost events and returns how many it dropped
+	// as already ingested. Dropping is not incidental: the compliance feed
+	// repeats an event_id across log files and telemetry_logs has no
+	// uniqueness constraint, so an undeduped write counts a repeated event once
+	// per file it appears in.
+	processPage func(ctx context.Context, payload []telemetry.LogParams) (int, error)
+
+	progress *CodexCostSyncProgress
 }
 
 func (src *codexCostSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
@@ -264,10 +274,13 @@ func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.Lo
 	if len(logParams) == 0 {
 		return nil
 	}
-	if err := src.processPage(ctx, logParams); err != nil {
+
+	dropped, err := src.processPage(ctx, logParams)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert codex cost telemetry logs")
 	}
-	src.progress.CostEventsWritten += len(logParams)
+	src.progress.CostEventsDeduped += dropped
+	src.progress.CostEventsWritten += len(logParams) - dropped
 	return nil
 }
 
