@@ -4439,6 +4439,7 @@ WHERE p.project_id = $8
     WHERE rr.skill_version_id = $1
       AND rr.risk_policy_id = p.id
   )
+ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL DO NOTHING
 `
 
 type RecordSkillPromptInjectionScanParams struct {
@@ -4456,6 +4457,8 @@ type RecordSkillPromptInjectionScanParams struct {
 // this skill version, anchored on the version rather than a chat message.
 // Called for any completed judgement: a found = FALSE row is the coverage
 // record, mirroring the empty result rows the chat batch path writes.
+// The NOT EXISTS gate is not atomic against a concurrent upload of the same
+// content, so ON CONFLICT defers the last word to the partial unique index.
 func (q *Queries) RecordSkillPromptInjectionScan(ctx context.Context, arg RecordSkillPromptInjectionScanParams) error {
 	_, err := q.db.Exec(ctx, recordSkillPromptInjectionScan,
 		arg.SkillVersionID,
