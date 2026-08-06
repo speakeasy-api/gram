@@ -360,6 +360,9 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
+	if acPre.ActiveOrganizationID == "" {
+		return &gen.ListUserGrantsResult{Grants: nil}, nil
+	}
 	// Sessions in the shared demo org have no membership rows. Return the
 	// full user-visible scope set so every dashboard page is browsable in the
 	// demo (page gates like Costs require org:admin). This is display-only:

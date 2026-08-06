@@ -153,10 +153,11 @@ This keeps the service dependency simple and avoids baking `repo.Queries` into t
 
 ## Auth context assumptions
 
-- When reading `authctx`, assume `ActiveOrganisationID` is present.
-- Do NOT add defensive empty checks for `ActiveOrganisationID` unless there is a concrete code path proving otherwise.
+- In organization-scoped handlers, assume `ActiveOrganizationID` is present.
+- Session authentication can briefly produce an org-less context during login. The auth middleware handles that boundary by installing zero RBAC grants; do not spread empty-org checks into handlers.
+- Do NOT add defensive empty checks for `ActiveOrganizationID` outside that boundary unless there is another concrete code path proving otherwise.
 
-Avoid patterns that treat `ActiveOrganisationID` as optional when reading `authctx`. That adds defensive code around an invariant that should already hold.
+Avoid patterns that treat `ActiveOrganizationID` as optional when reading `authctx`. That adds defensive code around an invariant that should already hold.
 
 ## Third-party clients
 
