@@ -36,6 +36,8 @@ func canonicalEventType(e *agenthooks.Event) components.Type {
 		return components.TypeSessionStarted
 	case agenthooks.KindSessionEnd:
 		return components.TypeSessionEnded
+	case agenthooks.KindMCPInventory:
+		return components.TypeMcpInventory
 	case agenthooks.KindPromptSubmitted:
 		return components.TypePromptSubmitted
 	case agenthooks.KindToolPre, agenthooks.KindPermission:
@@ -84,6 +86,8 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	}
 
 	switch ev := typed.(type) {
+	case *agenthooks.MCPInventoryEvent:
+		attachMCPInventory(data, ev.Servers)
 	case *agenthooks.PromptEvent:
 		if ev.Prompt != "" {
 			data.Prompt = &components.HookPromptData{Text: new(ev.Prompt)}

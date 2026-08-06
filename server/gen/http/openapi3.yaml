@@ -60262,6 +60262,7 @@ components:
                         - session.started
                         - session.updated
                         - session.ended
+                        - mcp.inventory
                         - prompt.submitted
                         - tool.requested
                         - tool.completed

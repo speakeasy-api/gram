@@ -84,6 +84,7 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	runner.OnStop(r.onStop)
 	runner.OnSubagentStop(r.onStop)
 	runner.OnSessionStart(r.onSessionStart)
+	runner.OnMCPInventory(r.onMCPInventory)
 	runner.OnSessionEnd(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {
 		return r.onObserve(ctx, e)
 	})
@@ -176,17 +177,6 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 	base := agenthooks.EventOf(typed)
 	ctx = withHarnessInfo(ctx, base)
-	if base.Provider == agenthooks.ProviderClaudeCode &&
-		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
-		attachMCPInventory(&payload, collectClaudeMCPInventory(ctx, base.Session.CWD))
-	}
-	// Codex needs the same snapshot for the shadow-MCP guard to prove where a
-	// tool call routes. Without it the guard has nothing to check the call
-	// against, so a block_all policy cannot tell a Gram-hosted server from a
-	// shadow one (DNO-767).
-	if base.Provider == agenthooks.ProviderCodex && base.Kind == agenthooks.KindSessionStart {
-		attachMCPInventory(&payload, collectCodexMCPInventory(ctx, base.Session.CWD))
-	}
 	promptAttachmentAdvance := promptAttachmentHighWaterAdvance{}
 	if entries, advance, err := collectClaudePromptAttachments(base); err == nil {
 		attachPromptAttachments(&payload, entries)
@@ -430,6 +420,14 @@ func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEv
 	}
 	r.deliver(ctx, e)
 	return agenthooks.ContinueSession(), nil
+}
+
+func (r *Relay) onMCPInventory(ctx context.Context, e *agenthooks.MCPInventoryEvent) error {
+	res, state := r.deliver(ctx, e)
+	if state != stateReady || res.statusCode < 200 || res.statusCode >= 300 {
+		return fmt.Errorf("report MCP inventory: %s", httpMessage(res))
+	}
+	return nil
 }
 
 func (r *Relay) onObserve(ctx context.Context, typed any) error {

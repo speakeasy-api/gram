@@ -739,89 +739,6 @@ func TestClaudeConfigChangeIsRelayed(t *testing.T) {
 	require.Nil(t, fs.last().Data, "a missing Claude CLI must fail open without inventory")
 }
 
-func TestParseClaudeMCPInventory(t *testing.T) {
-	entries := parseClaudeMCPInventory(strings.Join([]string{
-		"Checking MCP server health...",
-		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
-		"plugin:linear:issues: npx -y mcp-remote https://linear.example.com/mcp?token=secret (STDIO) - connected",
-		"claude.ai Notion (Acme): https://mcp.notion.com/mcp (HTTP) - needs authentication",
-	}, "\n"))
-
-	require.Len(t, entries, 3)
-	require.Equal(t, "remote", entries[0].Name)
-	require.Equal(t, "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", entries[0].URL)
-	require.Empty(t, entries[0].Command)
-	require.Equal(t, "issues", entries[1].Name)
-	require.Equal(t, "npx -y mcp-remote https://linear.example.com/mcp?token=secret", entries[1].Command)
-	require.Equal(t, "Notion (Acme)", entries[2].Name)
-}
-
-func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake claude executable uses a POSIX shell")
-	}
-
-	binDir := t.TempDir()
-	claudePath := filepath.Join(binDir, "claude")
-	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\npwd > \"$FAKE_CLAUDE_CWD_FILE\"\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
-	t.Setenv("PATH", binDir)
-	cwdFile := filepath.Join(t.TempDir(), "cwd")
-	t.Setenv("FAKE_CLAUDE_CWD_FILE", cwdFile)
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", strings.Join([]string{
-		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
-		"local: env GITHUB_TOKEN=ghp_secret local-mcp --auth token (STDIO) - connected",
-		"malformed: https://user:leaked@example.com/%zz?token=leaked (HTTP) - connected",
-	}, "\n"))
-
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart","source":"startup"}`)
-
-	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, 1, fs.count())
-	require.NotNil(t, fs.last().Data)
-	require.Len(t, fs.last().Data.McpInventory, 2)
-	require.Equal(t, "remote", *fs.last().Data.McpInventory[0].ServerName)
-	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *fs.last().Data.McpInventory[0].URL)
-	require.NotContains(t, *fs.last().Data.McpInventory[0].URL, "password")
-	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *fs.last().Data.McpInventory[1].Command)
-	invocationCWD, err := os.ReadFile(cwdFile)
-	require.NoError(t, err)
-	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)))
-}
-
-func TestClaudeConfigChangeCollectsFreshMCPInventory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake claude executable uses a POSIX shell")
-	}
-
-	binDir := t.TempDir()
-	claudePath := filepath.Join(binDir, "claude")
-	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
-	t.Setenv("PATH", binDir)
-
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	runner := NewRunner(cfg)
-	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory-refresh","cwd":"` + cwd + `","hook_event_name":"ConfigChange","source":"project_settings"}`)
-
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", "first: https://first.example.com/mcp (HTTP) - connected")
-	first := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, first.ExitCode)
-
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", "second: https://second.example.com/mcp (HTTP) - connected")
-	second := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, second.ExitCode)
-
-	require.Equal(t, 2, fs.count())
-	require.Equal(t, "https://first.example.com/mcp", *fs.requests[0].Data.McpInventory[0].URL)
-	require.Equal(t, "https://second.example.com/mcp", *fs.requests[1].Data.McpInventory[0].URL)
-}
-
 // TestLoginCommandQuotesUnsafePaths ensures the nudge command survives shell
 // parsing when the plugin lives under a path with spaces.
 func TestLoginCommandQuotesUnsafePaths(t *testing.T) {
@@ -1564,69 +1481,6 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
 }
 
-// TestParseCodexMCPInventory: the guard uses this snapshot to decide whether a
-// tool call routes to a Gram-hosted server, so a stdio server must surface its
-// full command and a disabled server must not appear at all — a disabled entry
-// left in the list would vouch for a call that routed somewhere else.
-func TestParseCodexMCPInventory(t *testing.T) {
-	// Verbatim `codex mcp list --json` from the shipped 0.146 build (server
-	// names and the disabled entry are ours; every key, the null-heavy
-	// transport fields, and the auth_status values are as Codex emitted them).
-	entries := parseCodexMCPInventory([]byte(`[
-	  {
-	    "name": "everything",
-	    "enabled": true,
-	    "disabled_reason": null,
-	    "transport": {
-	      "type": "stdio",
-	      "command": "npx",
-	      "args": ["-y", "@modelcontextprotocol/server-everything"],
-	      "env": null,
-	      "env_vars": [],
-	      "cwd": null
-	    },
-	    "startup_timeout_sec": null,
-	    "tool_timeout_sec": null,
-	    "auth_status": "unsupported"
-	  },
-	  {
-	    "name": "remote_example",
-	    "enabled": true,
-	    "disabled_reason": null,
-	    "transport": {
-	      "type": "streamable_http",
-	      "url": "https://mcp.example.test/mcp",
-	      "bearer_token_env_var": null,
-	      "http_headers": null,
-	      "env_http_headers": null
-	    },
-	    "startup_timeout_sec": null,
-	    "tool_timeout_sec": null,
-	    "auth_status": "o_auth"
-	  },
-	  {
-	    "name": "disabled_example",
-	    "enabled": false,
-	    "disabled_reason": null,
-	    "transport": {"type": "stdio", "command": "npx", "args": [], "env": null, "env_vars": [], "cwd": null},
-	    "startup_timeout_sec": null,
-	    "tool_timeout_sec": null,
-	    "auth_status": "unsupported"
-	  }
-	]`))
-
-	require.Len(t, entries, 2)
-	require.Equal(t, "everything", entries[0].Name)
-	require.Equal(t, "npx -y @modelcontextprotocol/server-everything", entries[0].Command)
-	require.Empty(t, entries[0].URL)
-	require.Equal(t, "remote_example", entries[1].Name)
-	require.Equal(t, "https://mcp.example.test/mcp", entries[1].URL)
-	require.Empty(t, entries[1].Command)
-
-	require.Empty(t, parseCodexMCPInventory([]byte("not json")))
-	require.Empty(t, parseCodexMCPInventory(nil))
-}
-
 // TestEnvelopeReportsBinaryVersion: the server reads adapter_version's presence
 // as "this relay can report MCP inventory" and degrades the codex meta-tool
 // shadow-MCP guard without it. Dropping this field would silently disable that
@@ -1650,50 +1504,23 @@ func TestEnvelopeReportsBinaryVersion(t *testing.T) {
 	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
 }
 
-// TestCodexSessionStartRelaysMCPInventoryFromSessionCWD: Codex merges managed,
-// user and project config layers, and resolves the project layer relative to
-// the working directory — so the inventory must be listed from the session's
-// cwd, not the hook host's. Getting this wrong yields a snapshot missing the
-// session's real servers, and the shadow-MCP guard then denies meta-tool reads
-// of servers that are in fact Gram-hosted. Mirrors the Claude coverage.
-func TestCodexSessionStartRelaysMCPInventoryFromSessionCWD(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake codex executable uses a POSIX shell")
-	}
+func TestMCPInventoryEnvelopeRedactsCredentials(t *testing.T) {
+	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderClaudeCode,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "inventory-session"},
+		},
+		Servers: []agenthooks.MCPServer{
+			{Name: "remote", URL: "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", Command: ""},
+			{Name: "local", URL: "", Command: "env GITHUB_TOKEN=secret local-mcp --auth token"},
+		},
+	}, "host")
 
-	binDir := t.TempDir()
-	// Only the `mcp` invocation records its cwd: SessionStart also shells out
-	// to `codex app-server` for identity, and letting that write would race the
-	// assertion with the hook host's directory.
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(
-		"#!/bin/sh\n"+
-			"if [ \"$1\" = \"mcp\" ]; then\n"+
-			"  pwd > \"$FAKE_CODEX_CWD_FILE\"\n"+
-			"  printf '%s\\n' \"$FAKE_CODEX_MCP_LIST\"\n"+
-			"  exit 0\n"+
-			"fi\n"+
-			"exit 1\n"), 0o700))
-	t.Setenv("PATH", binDir)
-	cwdFile := filepath.Join(t.TempDir(), "cwd")
-	t.Setenv("FAKE_CODEX_CWD_FILE", cwdFile)
-	t.Setenv("FAKE_CODEX_MCP_LIST",
-		`[{"name":"gram","enabled":true,"transport":{"type":"streamable_http","url":"https://app.example.test/mcp"}}]`)
-
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"sess-codex-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart"}`)
-
-	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
-
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, 1, fs.count())
-	require.NotNil(t, fs.last().Data)
-	require.Len(t, fs.last().Data.McpInventory, 1)
-	require.Equal(t, "gram", *fs.last().Data.McpInventory[0].ServerName)
-
-	invocationCWD, err := os.ReadFile(cwdFile)
-	require.NoError(t, err)
-	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)),
-		"codex mcp list must run from the session cwd so the project config layer resolves")
+	require.Equal(t, components.TypeMcpInventory, payload.Event.Type)
+	require.NotNil(t, payload.Data)
+	require.Len(t, payload.Data.McpInventory, 2)
+	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *payload.Data.McpInventory[0].URL)
+	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *payload.Data.McpInventory[1].Command)
 }

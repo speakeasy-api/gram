@@ -2119,6 +2119,18 @@ func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
 	require.Empty(t, canonicalMCPInventoryEntries(payload)[0].ToolPrefix)
 }
 
+func TestCacheCanonicalMCPListStoresReportedEmptyInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+
+	ti.service.cacheCanonicalMCPList(ctx, sessionID, nil, true)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}
+
 // TestIngest_ShadowMCPMetaToolGateDegradesForIncapableClients: the server-side
 // deny ships independently of the hooks release that starts collecting the
 // Codex MCP inventory. A relay predating that release sends no inventory, so

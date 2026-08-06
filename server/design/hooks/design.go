@@ -160,7 +160,7 @@ var HookIngestEvent = Type("HookIngestEvent", func() {
 	Description("Canonical Gram feature event.")
 	Required("type")
 	Attribute("type", String, "Canonical Gram hook event type.", func() {
-		Enum("session.started", "session.updated", "session.ended", "prompt.submitted",
+		Enum("session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted",
 			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
 			"assistant.thought", "usage.reported", "skill.activated", "notification.reported")
 	})

@@ -250,7 +250,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
 	// including Gram-hosted targets, with no path to recover.
-	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload))
+	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload), strings.TrimSpace(payload.Event.Type) == "mcp.inventory")
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -803,11 +803,11 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry) {
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, reported bool) {
 	if sessionID == "" {
 		return
 	}
-	if len(entries) == 0 {
+	if len(entries) == 0 && !reported {
 		// Every other event in the session extends the snapshot's life, as the
 		// legacy endpoints do. Without this a session outliving the TTL loses
 		// its inventory and every later meta-tool call denies.
