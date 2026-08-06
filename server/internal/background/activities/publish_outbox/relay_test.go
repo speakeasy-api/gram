@@ -14,7 +14,6 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -80,6 +79,38 @@ func TestDrain_TransientFailureSchedulesRetry(t *testing.T) {
 
 	require.Empty(t, inst.pub.messages(),
 		"a row kept for retry must not also have been delivered, or the retry duplicates it")
+}
+
+// TestDrain_RetryingRowsRecordEachRowsOwnError is the dead letter requirement
+// applied to rows that are still pending. `last_error` is what anyone looking
+// into a stuck row reads, and the relay names the topic it could not reach in
+// it — so one shared string labels most of the batch with a topic they have
+// nothing to do with, even when a single outage is what stopped all of them.
+func TestDrain_RetryingRowsRecordEachRowsOwnError(t *testing.T) {
+	t.Parallel()
+
+	inst := newRelayTestInstance(t)
+	orgID := seedOrg(t, inst.conn)
+
+	rows := []testrepo.SeedPublishOutboxRowRow{
+		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.alpha.v1.Event"}),
+		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.beta.v1.Event"}),
+	}
+
+	inst.pub.failWith = func(protoreflect.FullName, int) error {
+		return errors.New("pubsub unavailable")
+	}
+
+	result, err := inst.relay.Drain(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Retrying)
+
+	for _, row := range rows {
+		stored, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), row.ID)
+		require.NoError(t, err)
+		require.Contains(t, stored.LastError.String, stored.Topic,
+			"a retrying row must record why it failed, not why the last row in the batch did")
+	}
 }
 
 // TestDrain_RetryBackoffFollowsEachRowsOwnAttemptCount pins the back-off to the
@@ -178,6 +209,40 @@ func TestDrain_UnknownTopicDeadLetters(t *testing.T) {
 
 	require.Empty(t, inst.pub.messages(),
 		"an unresolvable topic never reaches Pub/Sub, so nothing was delivered")
+}
+
+// TestDrain_DeadLettersRecordEachRowsOwnError pins the recorded error to the
+// row it belongs to. One batch can hold an unregistered topic next to an
+// oversized payload, and the dead letter table is the only surviving account of
+// why a row was given up on — a row stamped with its neighbour's failure sends
+// whoever triages it after a problem that row does not have.
+func TestDrain_DeadLettersRecordEachRowsOwnError(t *testing.T) {
+	t.Parallel()
+
+	inst := newRelayTestInstance(t)
+	orgID := seedOrg(t, inst.conn)
+
+	rows := []testrepo.SeedPublishOutboxRowRow{
+		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.alpha.v1.Missing"}),
+		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.beta.v1.Missing"}),
+	}
+
+	// The relay names the topic it could not reach in the error it records, so
+	// two unresolvable topics in one batch produce two distinct messages.
+	inst.pub.failWith = func(protoreflect.FullName, int) error {
+		return gcp.ErrUnknownTopic
+	}
+
+	result, err := inst.relay.Drain(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 2, result.DeadLettered)
+
+	for _, row := range rows {
+		dead, err := testrepo.New(inst.conn).GetPublishOutboxDeadLetter(t.Context(), row.PublicID)
+		require.NoError(t, err)
+		require.Contains(t, dead.LastError, dead.Topic,
+			"a dead letter must record why its own row failed, not why the last row in the batch did")
+	}
 }
 
 func TestDrain_ExhaustedAttemptsDeadLetters(t *testing.T) {
@@ -451,15 +516,15 @@ func TestSettlementIgnoresRowsReclaimedAfterLeaseExpiry(t *testing.T) {
 
 	deadLettered, err := q.DeadLetterPublishOutboxRows(t.Context(), repo.DeadLetterPublishOutboxRowsParams{
 		Ids:        ids,
-		LastError:  "stale",
+		Errors:     []string{"stale"},
 		LeaseToken: staleToken,
 	})
 	require.NoError(t, err)
 	require.Zero(t, deadLettered)
 
 	require.NoError(t, q.MarkPublishOutboxFailed(t.Context(), repo.MarkPublishOutboxFailedParams{
-		Ids:       ids,
-		LastError: conv.ToPGTextEmpty("stale"),
+		Ids:    ids,
+		Errors: []string{"stale"},
 		RetryAfters: []pgtype.Timestamptz{
 			{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		},

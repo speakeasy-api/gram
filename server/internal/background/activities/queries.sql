@@ -288,19 +288,23 @@ WHERE id = ANY(@ids::bigint[])
 -- Records a transient publish failure and releases the lease so the row is
 -- eligible again once retry_after elapses.
 --
--- retry_after arrives per row, expanded in lockstep with the ids. A claim is
--- ordered by id, so one batch mixes rows on their first attempt with rows deep
--- into their back-off; a single timestamp for the batch would hand every row
--- the shortest delay among them, and back-off would never escalate for as long
--- as new rows kept arriving.
+-- Both the delay and the error arrive per row, expanded in lockstep with the
+-- ids. A claim is ordered by id, so one batch mixes rows on their first attempt
+-- with rows deep into their back-off; a single timestamp for the batch would
+-- hand every row the shortest delay among them, and back-off would never
+-- escalate for as long as new rows kept arriving. The error names the topic the
+-- row could not reach, so one shared string labels most of the batch with a
+-- topic they have nothing to do with — and last_error is what anyone looking
+-- into a stuck row reads.
 UPDATE publish_outbox SET
-    last_error = @last_error,
+    last_error = settlement.last_error,
     retry_after = settlement.retry_after,
     locked_until = NULL,
     lease_token = NULL,
     updated_at = clock_timestamp()
 FROM (
   SELECT unnest(@ids::bigint[]) AS id,
+         unnest(@errors::text[]) AS last_error,
          unnest(@retry_afters::timestamptz[]) AS retry_after
 ) AS settlement
 WHERE publish_outbox.id = settlement.id
@@ -309,19 +313,29 @@ WHERE publish_outbox.id = settlement.id
 -- name: DeadLetterPublishOutboxRows :execrows
 -- Moves rows that can never publish out of the queue in one statement, so a
 -- crash cannot leave a row both dead-lettered and still pending.
-WITH moved AS (
+--
+-- Each row carries the error that stopped it, expanded in lockstep with the
+-- ids. One batch can hold an unregistered topic next to an oversized payload,
+-- and this table is the permanent forensic record: an operator triaging a dead
+-- letter has nothing else to read, so a row stamped with its neighbour's
+-- failure sends them after a problem that row does not have.
+WITH failures AS (
+  SELECT unnest(@ids::bigint[]) AS id,
+         unnest(@errors::text[]) AS last_error
+), moved AS (
   DELETE FROM publish_outbox
   WHERE id = ANY(@ids::bigint[])
     AND lease_token = @lease_token::uuid
-  RETURNING public_id, organization_id, topic, message, attributes, attempts,
+  RETURNING id, public_id, organization_id, topic, message, attributes, attempts,
             created_at AS row_enqueued_at
 )
 INSERT INTO publish_outbox_dead_letters (
   public_id, organization_id, topic, message, attributes, attempts, last_error, enqueued_at
 )
 SELECT moved.public_id, moved.organization_id, moved.topic, moved.message,
-       moved.attributes, moved.attempts, @last_error, moved.row_enqueued_at
-FROM moved;
+       moved.attributes, moved.attempts, failures.last_error, moved.row_enqueued_at
+FROM moved
+JOIN failures ON failures.id = moved.id;
 
 -- name: GCPublishOutboxDeadLetters :execrows
 -- Bounds the dead letter table. Batched via LIMIT to keep lock time short.

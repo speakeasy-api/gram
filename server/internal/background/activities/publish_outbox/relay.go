@@ -41,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -247,13 +246,12 @@ func (r *Relay) publishAll(ctx context.Context, rows []repo.ClaimPublishOutboxBa
 // settle applies the outcome of a batch: published rows are deleted, permanent
 // failures move to the dead letter table, and the rest get a retry window.
 func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPublishOutboxBatchRow, failures []error, hasMore bool, leaseToken uuid.UUID) (DrainResult, error) {
+	// Nothing about an outcome is shared across the batch, even though each
+	// outcome is settled in a single statement. An error names the topic its own
+	// row could not reach, and a retry window is only as long as that row's own
+	// history warrants — one value for the batch would mislabel most of it.
 	var published, deadLetter, retry []int64
-	// Retries share a single error message per batch because they are settled in
-	// one UPDATE. The per-row error is logged in full below.
-	var lastRetryErr, lastDeadLetterErr error
-	// Retry windows do not share: a batch spans rows on their first attempt and
-	// rows deep into their back-off, and one delay for all of them would be the
-	// shortest one in the batch.
+	var deadLetterErrs, retryErrs []string
 	var retryAfters []pgtype.Timestamptz
 
 	for i, row := range rows {
@@ -263,7 +261,7 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 			published = append(published, row.ID)
 		case isPermanent(err) || row.Attempts >= r.maxAttempts:
 			deadLetter = append(deadLetter, row.ID)
-			lastDeadLetterErr = err
+			deadLetterErrs = append(deadLetterErrs, errString(err))
 			r.logger.ErrorContext(ctx, "publish outbox row dead lettered",
 				attr.SlogOrganizationID(row.OrganizationID),
 				attr.SlogOutboxID(row.ID),
@@ -273,8 +271,8 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 			)
 		default:
 			retry = append(retry, row.ID)
+			retryErrs = append(retryErrs, errString(err))
 			retryAfters = append(retryAfters, calcRetryAfter(row.Attempts))
-			lastRetryErr = err
 			r.logger.WarnContext(ctx, "publish outbox row failed, will retry",
 				attr.SlogOrganizationID(row.OrganizationID),
 				attr.SlogOutboxID(row.ID),
@@ -300,7 +298,7 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 	if len(deadLetter) > 0 {
 		if _, err := q.DeadLetterPublishOutboxRows(ctx, repo.DeadLetterPublishOutboxRowsParams{
 			Ids:        deadLetter,
-			LastError:  errString(lastDeadLetterErr),
+			Errors:     deadLetterErrs,
 			LeaseToken: leaseToken,
 		}); err != nil {
 			return DrainResult{}, fmt.Errorf("dead letter publish outbox rows: %w", err)
@@ -313,7 +311,7 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 	if len(retry) > 0 {
 		if err := q.MarkPublishOutboxFailed(ctx, repo.MarkPublishOutboxFailedParams{
 			Ids:         retry,
-			LastError:   conv.ToPGTextEmpty(errString(lastRetryErr)),
+			Errors:      retryErrs,
 			RetryAfters: retryAfters,
 			LeaseToken:  leaseToken,
 		}); err != nil {

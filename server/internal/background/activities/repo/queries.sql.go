@@ -136,31 +136,41 @@ func (q *Queries) CountPendingPublishOutboxRows(ctx context.Context) (int64, err
 }
 
 const deadLetterPublishOutboxRows = `-- name: DeadLetterPublishOutboxRows :execrows
-WITH moved AS (
+WITH failures AS (
+  SELECT unnest($1::bigint[]) AS id,
+         unnest($2::text[]) AS last_error
+), moved AS (
   DELETE FROM publish_outbox
-  WHERE id = ANY($2::bigint[])
+  WHERE id = ANY($1::bigint[])
     AND lease_token = $3::uuid
-  RETURNING public_id, organization_id, topic, message, attributes, attempts,
+  RETURNING id, public_id, organization_id, topic, message, attributes, attempts,
             created_at AS row_enqueued_at
 )
 INSERT INTO publish_outbox_dead_letters (
   public_id, organization_id, topic, message, attributes, attempts, last_error, enqueued_at
 )
 SELECT moved.public_id, moved.organization_id, moved.topic, moved.message,
-       moved.attributes, moved.attempts, $1, moved.row_enqueued_at
+       moved.attributes, moved.attempts, failures.last_error, moved.row_enqueued_at
 FROM moved
+JOIN failures ON failures.id = moved.id
 `
 
 type DeadLetterPublishOutboxRowsParams struct {
-	LastError  string
 	Ids        []int64
+	Errors     []string
 	LeaseToken uuid.UUID
 }
 
 // Moves rows that can never publish out of the queue in one statement, so a
 // crash cannot leave a row both dead-lettered and still pending.
+//
+// Each row carries the error that stopped it, expanded in lockstep with the
+// ids. One batch can hold an unregistered topic next to an oversized payload,
+// and this table is the permanent forensic record: an operator triaging a dead
+// letter has nothing else to read, so a row stamped with its neighbour's
+// failure sends them after a problem that row does not have.
 func (q *Queries) DeadLetterPublishOutboxRows(ctx context.Context, arg DeadLetterPublishOutboxRowsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deadLetterPublishOutboxRows, arg.LastError, arg.Ids, arg.LeaseToken)
+	result, err := q.db.Exec(ctx, deadLetterPublishOutboxRows, arg.Ids, arg.Errors, arg.LeaseToken)
 	if err != nil {
 		return 0, err
 	}
@@ -818,39 +828,43 @@ func (q *Queries) MarkOutboxRelayProcessed(ctx context.Context, arg MarkOutboxRe
 
 const markPublishOutboxFailed = `-- name: MarkPublishOutboxFailed :exec
 UPDATE publish_outbox SET
-    last_error = $1,
+    last_error = settlement.last_error,
     retry_after = settlement.retry_after,
     locked_until = NULL,
     lease_token = NULL,
     updated_at = clock_timestamp()
 FROM (
-  SELECT unnest($3::bigint[]) AS id,
+  SELECT unnest($2::bigint[]) AS id,
+         unnest($3::text[]) AS last_error,
          unnest($4::timestamptz[]) AS retry_after
 ) AS settlement
 WHERE publish_outbox.id = settlement.id
-  AND publish_outbox.lease_token = $2::uuid
+  AND publish_outbox.lease_token = $1::uuid
 `
 
 type MarkPublishOutboxFailedParams struct {
-	LastError   pgtype.Text
 	LeaseToken  uuid.UUID
 	Ids         []int64
+	Errors      []string
 	RetryAfters []pgtype.Timestamptz
 }
 
 // Records a transient publish failure and releases the lease so the row is
 // eligible again once retry_after elapses.
 //
-// retry_after arrives per row, expanded in lockstep with the ids. A claim is
-// ordered by id, so one batch mixes rows on their first attempt with rows deep
-// into their back-off; a single timestamp for the batch would hand every row
-// the shortest delay among them, and back-off would never escalate for as long
-// as new rows kept arriving.
+// Both the delay and the error arrive per row, expanded in lockstep with the
+// ids. A claim is ordered by id, so one batch mixes rows on their first attempt
+// with rows deep into their back-off; a single timestamp for the batch would
+// hand every row the shortest delay among them, and back-off would never
+// escalate for as long as new rows kept arriving. The error names the topic the
+// row could not reach, so one shared string labels most of the batch with a
+// topic they have nothing to do with — and last_error is what anyone looking
+// into a stuck row reads.
 func (q *Queries) MarkPublishOutboxFailed(ctx context.Context, arg MarkPublishOutboxFailedParams) error {
 	_, err := q.db.Exec(ctx, markPublishOutboxFailed,
-		arg.LastError,
 		arg.LeaseToken,
 		arg.Ids,
+		arg.Errors,
 		arg.RetryAfters,
 	)
 	return err
