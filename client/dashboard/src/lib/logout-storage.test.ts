@@ -2,10 +2,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  PREFERRED_THEME_STORAGE_KEY,
-  PROJECT_FAVORITES_STORAGE_PREFIX,
-} from "./local-storage-keys";
+import { PREFERRED_THEME_STORAGE_KEY } from "./local-storage-keys";
 import {
   clearLegacyUserStorage,
   clearStorageForLogout,
@@ -44,11 +41,13 @@ describe("clearStorageForLogout", () => {
     window.sessionStorage.clear();
   });
 
-  it("preserves preferred theme and organization favorites while clearing other local storage", () => {
-    const favoritesKey = `${PROJECT_FAVORITES_STORAGE_PREFIX}org_123`;
-
+  it("preserves the theme while clearing user-scoped local storage", () => {
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
-    window.localStorage.setItem(favoritesKey, '["project_123"]');
+    window.localStorage.setItem(
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
+    );
+    window.localStorage.setItem("gram:recents:<USER_ID>", '["/recent-page"]');
     window.localStorage.setItem("preferredProject", "project-slug");
     window.localStorage.setItem("pylon_user_email", "user@example.com");
     window.localStorage.setItem("pylon_user_display_name", "Example User");
@@ -58,12 +57,13 @@ describe("clearStorageForLogout", () => {
     expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
       "light",
     );
-    expect(window.localStorage.getItem(favoritesKey)).toBe('["project_123"]');
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<ORG_ID>"),
+    ).toBeNull();
+    expect(window.localStorage.getItem("gram:recents:<USER_ID>")).toBeNull();
     expect(window.localStorage.getItem("preferredProject")).toBeNull();
     expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
-    expect(
-      window.localStorage.getItem("pylon_user_display_name"),
-    ).toBeNull();
+    expect(window.localStorage.getItem("pylon_user_display_name")).toBeNull();
   });
 
   it("clears session storage", () => {
@@ -83,9 +83,7 @@ describe("clearStorageForLogout", () => {
     clearLegacyUserStorage();
 
     expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
-    expect(
-      window.localStorage.getItem("pylon_user_display_name"),
-    ).toBeNull();
+    expect(window.localStorage.getItem("pylon_user_display_name")).toBeNull();
     expect(window.sessionStorage.getItem("pylon_user_email")).toBeNull();
     expect(window.localStorage.getItem("unrelated")).toBe("value");
   });
