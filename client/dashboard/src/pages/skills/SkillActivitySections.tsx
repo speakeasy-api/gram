@@ -131,10 +131,7 @@ export function SkillActivitySections({
         </SettingsSection.Header>
         <div className="space-y-3">
           <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
-            <Metric
-              label="Versions"
-              value={metricValue(skill.versionCount)}
-            />
+            <Metric label="Versions" value={metricValue(skill.versionCount)} />
             <Metric
               label="Active machines"
               value={metricValue(adoption.distinctHostnames)}
