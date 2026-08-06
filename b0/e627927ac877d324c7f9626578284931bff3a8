@@ -1,0 +1,267 @@
+server/internal/skills/repo/models.go
+  s_34233f620b8dad::t_131865157e98ae 20
+client/dashboard/src/pages/org/litellm-config.ts
+  s_34233f620b8dad::t_131865157e98ae 33-36
+infra/gen_py/gram/webhooks/v1/event_pb2.pyi
+  s_34233f620b8dad::t_131865157e98ae 1-20
+server/internal/skills/service_test.go
+  s_34233f620b8dad::t_131865157e98ae 523-539
+server/migrations/20260805211101_enterprise-trials.sql
+  s_34233f620b8dad::t_131865157e98ae 1-11
+server/internal/unproxiedmcp/list_tools_test.go
+  s_34233f620b8dad::t_131865157e98ae 26-33,41
+go.mod
+  s_34233f620b8dad::t_131865157e98ae 74
+client/dashboard/src/pages/plugins/plugins-filter-schema.ts
+  s_34233f620b8dad::t_131865157e98ae 16-21
+.changeset/codex-relay-mcp-inventory.md
+  s_34233f620b8dad::t_131865157e98ae 1-18
+infra/gen_py/gram/webhooks/v1/svix_relay_pb2.pyi
+  s_34233f620b8dad::t_131865157e98ae 1-10
+server/design/skills/design.go
+  s_34233f620b8dad::t_131865157e98ae 105,112-115,150,169,183-206,789-797,902,919
+client/dashboard/src/pages/skills/EditSkillDetailsDialog.tsx
+  s_34233f620b8dad::t_131865157e98ae 5-6,8,15-21,33,37,45,49-53,70,131-155,174-175
+server/internal/externalmcp/impl.go
+  s_34233f620b8dad::t_131865157e98ae 44,50,62,297-300,302
+.changeset/unproxied-mcp-list-tools-timeout.md
+  s_34233f620b8dad::t_131865157e98ae 1-5
+.mise-tasks/hooks/e2e.js
+  s_34233f620b8dad::t_131865157e98ae 11-13
+client/dashboard/src/pages/skills/invalidate-skill-queries.ts
+  s_34233f620b8dad::t_131865157e98ae 6,22
+server/internal/database/models.go
+  s_34233f620b8dad::t_131865157e98ae 697-705,1645-1681,1942
+server/internal/externalmcp/proxytoolexecutor.go
+  s_34233f620b8dad::t_131865157e98ae 157-159
+server/cmd/gram/start.go
+  s_34233f620b8dad::t_131865157e98ae 1285
+server/internal/hooks/shadow_mcp_access.go
+  s_34233f620b8dad::t_131865157e98ae 140,145-162,167-178,183
+client/dashboard/src/pages/skills/SkillDetail.test.tsx
+  s_34233f620b8dad::t_131865157e98ae 110,165-166
+  s_34233f620b8dad::t_254974ad4dcc40 167
+server/internal/remotemcp/proxy/proxy.go
+  s_34233f620b8dad::t_131865157e98ae 427-437,598-607
+server/internal/skillefficacy/impl.go
+  s_34233f620b8dad::t_131865157e98ae 137
+client/dashboard/src/pages/catalog/useRemoteMcpInstallWorkflow.ts
+  s_34233f620b8dad::t_131865157e98ae 13,17,31-34,192-259,279-281,285-287,291-294,296-299,491-494,660,666,699-706
+server/internal/unproxiedmcp/impl.go
+  s_34233f620b8dad::t_131865157e98ae 284-317,319-331,339,345,357,363,378
+hooks/relay/mcp_inventory.go
+  s_34233f620b8dad::t_131865157e98ae 4,6,15-20,98-171,173
+  s_34233f620b8dad::t_96cf57513eb04a 172,174
+client/dashboard/src/pages/skills/SkillsList.test.ts
+  s_34233f620b8dad::t_131865157e98ae 14,59-67
+  s_34233f620b8dad::t_2c29885736e7f6 68-69
+server/internal/audit/skills.go
+  s_34233f620b8dad::t_131865157e98ae 40
+infra/gen/kcc.yaml
+  s_34233f620b8dad::t_131865157e98ae 404-418,554-571,685-700
+server/internal/externalmcp/get_setup_docs_test.go
+  s_34233f620b8dad::t_131865157e98ae 17-22,28,42,87-91,94-96
+server/internal/externalmcp/setupdocs.go
+  s_34233f620b8dad::t_131865157e98ae 41,69,83,99-100,110-111
+server/internal/externalmcp/setup_test.go
+  s_34233f620b8dad::t_131865157e98ae 6,28-31,81-85
+server/internal/middleware/logging_test.go
+  s_34233f620b8dad::t_131865157e98ae 4-5,82-124
+client/dashboard/src/pages/catalog/remotes.test.ts
+  s_34233f620b8dad::t_131865157e98ae 11,34-37,40,86-93
+  s_34233f620b8dad::t_285b0dc4147769 94-95
+hooks/relay/runner.go
+  s_34233f620b8dad::t_131865157e98ae 183-189
+server/internal/remotemcp/proxy/proxy_test.go
+  s_34233f620b8dad::t_131865157e98ae 769-774,798-810,820,823,828-853
+  s_34233f620b8dad::t_9e3c1072593d38 854
+client/dashboard/src/pages/skills/skills-list-helpers.ts
+  s_34233f620b8dad::t_131865157e98ae 8,21-25
+client/dashboard/src/pages/org/litellm-config.test.ts
+  s_34233f620b8dad::t_131865157e98ae 19-24
+server/internal/background/activities/outbox_relay/relay_test.go
+  s_34233f620b8dad::t_131865157e98ae 318,365,401,431
+client/dashboard/src/pages/skills/SkillsList.page.test.tsx
+  s_34233f620b8dad::t_131865157e98ae 51,196-203,366
+.changeset/codex-mcp-meta-tools-shadow-guard.md
+  s_34233f620b8dad::t_131865157e98ae 1-33
+client/dashboard/src/pages/skills/SkillManifestDialog.test.tsx
+  s_34233f620b8dad::t_131865157e98ae 75-77
+server/database/schema.sql
+  s_34233f620b8dad::t_131865157e98ae 78-98,297,316,4900,4921,4951-5027
+  s_34233f620b8dad::t_f8f3c2f68818e1 5028
+.changeset/quiet-sdk-lint.md
+  s_34233f620b8dad::t_131865157e98ae 1-5
+infra/proto/gram/webhooks/v1/event.proto
+  s_34233f620b8dad::t_131865157e98ae 1-37
+docs/pubsub-topology.md
+  s_34233f620b8dad::t_131865157e98ae 30-31,41,74-75,112-113,128,134-135
+server/internal/hooks/ingest_hooks.go
+  s_34233f620b8dad::t_131865157e98ae 247-253,596,733-744,770-776,786-873,1861-1862,1868-1878,1881,1883,1890
+server/internal/platformtools/skills/tools.go
+  s_34233f620b8dad::t_131865157e98ae 109
+server/migrations/20260805191625_publish-outbox.sql
+  s_34233f620b8dad::t_131865157e98ae 1-50
+tsconfig.json
+  s_34233f620b8dad::t_131865157e98ae 22,95-98
+server/internal/audit/skills_test.go
+  s_34233f620b8dad::t_131865157e98ae 21,41,60
+server/internal/middleware/logging.go
+  s_34233f620b8dad::t_131865157e98ae 24-29,36,41-44,50,65-70
+client/dashboard/package.json
+  s_34233f620b8dad::t_131865157e98ae 12,57
+server/internal/gateway/proxy.go
+  s_34233f620b8dad::t_131865157e98ae 838-840
+infra/proto/gram/webhooks/v1/svix_relay.proto
+  s_34233f620b8dad::t_131865157e98ae 1-31
+hooks/relay/envelope.go
+  s_34233f620b8dad::t_131865157e98ae 142-148
+.changeset/mcp-proxy-idle-stream-classification.md
+  s_34233f620b8dad::t_131865157e98ae 1-5
+local/litellm/contract-fixtures/config.yaml
+  s_34233f620b8dad::t_131865157e98ae 45-50
+server/internal/skills/impl.go
+  s_34233f620b8dad::t_131865157e98ae 50-51,199,208-240,743-746,770,839,872,886-901
+  s_34233f620b8dad::t_6368b8fb37506c 902
+client/dashboard/src/pages/catalog/remotes.ts
+  s_34233f620b8dad::t_131865157e98ae 5-14
+client/dashboard/src/pages/skills/EditSkillDetailsDialog.test.tsx
+  s_34233f620b8dad::t_131865157e98ae 22,31-38,60-81,94,112,149,175
+  s_34233f620b8dad::t_d982a5742079de 176-177
+.changeset/catalog-figma-unproxied.md
+  s_34233f620b8dad::t_131865157e98ae 1-5
+server/internal/litellm/fixtures/litellm-v1.94.0/README.md
+  s_34233f620b8dad::t_131865157e98ae 29-34,37,70
+server/internal/litellm/litellm_proxy_e2e_test.go
+  s_34233f620b8dad::t_131865157e98ae 281,482-488,548,564-569,671,678-716,719,732,742,754,762,772,783
+client/dashboard/src/pages/skills/SkillsList.tsx
+  s_34233f620b8dad::t_131865157e98ae 18,52-58,132-143,151,163,202-203,235-243,469,497,504-505
+server/internal/mv/skill.go
+  s_34233f620b8dad::t_131865157e98ae 50,63-67
+  s_34233f620b8dad::t_3ee3517889bb07 68-69
+server/internal/thirdparty/svix/svixtest/server.go
+  s_34233f620b8dad::t_131865157e98ae 92-98,113
+.changeset/render-setup-docs-callback-url.md
+  s_34233f620b8dad::t_131865157e98ae 1-5
+server/internal/remotemcp/proxy/stream_reader.go
+  s_34233f620b8dad::t_131865157e98ae 91-100
+server/internal/platformtools/skills/insights.go
+  s_34233f620b8dad::t_131865157e98ae 183
+client/dashboard/src/pages/skills/SkillDetail.tsx
+  s_34233f620b8dad::t_131865157e98ae 247-262
+server/internal/litellm/impl.go
+  s_34233f620b8dad::t_131865157e98ae 418-428
+client/dashboard/src/pages/catalog/useRemoteMcpInstallWorkflow.test.ts
+  s_34233f620b8dad::t_131865157e98ae 11-12,28-31,51-54,146-152,356-394
+  s_34233f620b8dad::t_7e5f494a9e2c63 395-396
+server/internal/litellm/ingest_test.go
+  s_34233f620b8dad::t_131865157e98ae 280-303
+server/internal/skills/queries.sql
+  s_34233f620b8dad::t_131865157e98ae 1245,1353-1356,1359-1366,1396-1399,1430-1433
+server/migrations/20260805222807_publish-outbox-lease-token.sql
+  s_34233f620b8dad::t_131865157e98ae 1-4
+server/migrations/atlas.sum
+  s_34233f620b8dad::t_131865157e98ae 1,318-321
+hooks/relay/relay_test.go
+  s_34233f620b8dad::t_131865157e98ae 1566-1699
+server/migrations/20260805161737_skills-add-tags.sql
+  s_34233f620b8dad::t_131865157e98ae 1-6
+server/internal/externalmcp/mcpclient.go
+  s_34233f620b8dad::t_131865157e98ae 36-43,60-62,68-73,93-100,107
+server/internal/hooks/ingest_hooks_test.go
+  s_34233f620b8dad::t_131865157e98ae 1955-2159
+server/internal/thirdparty/svix/svixtest/server_test.go
+  s_34233f620b8dad::t_131865157e98ae 131,140-143,151,171
+.speakeasy/out.openapi.yaml
+  s_34233f620b8dad::t_3f36e4cf75b2b3 38758-38767,39408-39506,40285,61894-61903,68877-68881,68898,73606-73612,73617
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_34233f620b8dad::t_cc353133cfe236 425,899,1674,2477-2478,2770,3475,5077,6410-6418,6440,7061,8181,8184
+client/dashboard/src/sdk/src/funcs/skillsList.ts
+  s_34233f620b8dad::t_fc818d664a2820 126
+client/dashboard/src/sdk/src/funcs/skillsListTags.ts
+  s_34233f620b8dad::t_e9f7534a81c798 1-221
+client/dashboard/src/sdk/src/funcs/skillsUpdate.ts
+  s_34233f620b8dad::t_02d08d3ed659ec 42
+client/dashboard/src/sdk/src/models/components/listskilltagsresult.ts
+  s_34233f620b8dad::t_27c6c941b186ec 1-33
+client/dashboard/src/sdk/src/models/components/skill.ts
+  s_34233f620b8dad::t_38728d2caa6cd1 71-74,109
+client/dashboard/src/sdk/src/models/components/updateskillrequestbody.ts
+  s_34233f620b8dad::t_ece1184295cfe5 25-28,37,50
+client/dashboard/src/sdk/src/models/operations/listskills.ts
+  s_34233f620b8dad::t_865837b40753c4 76-79,214,232
+client/dashboard/src/sdk/src/models/operations/listskilltags.ts
+  s_34233f620b8dad::t_fede88c2024ec6 1-171
+client/dashboard/src/sdk/src/react-query/skillTags.core.ts
+  s_34233f620b8dad::t_13f8c6caab4f83 1-84
+client/dashboard/src/sdk/src/react-query/skillTags.ts
+  s_34233f620b8dad::t_abdddd64f8abcb 1-145
+client/dashboard/src/sdk/src/react-query/skills.core.ts
+  s_34233f620b8dad::t_ff8fcd6e499763 90,136,179,196
+client/dashboard/src/sdk/src/react-query/skills.ts
+  s_34233f620b8dad::t_e14b2dd00dbfef 205,228
+client/dashboard/src/sdk/src/react-query/updateSkill.ts
+  s_34233f620b8dad::t_1a744c68455af1 57
+client/dashboard/src/sdk/src/sdk/skills.ts
+  s_34233f620b8dad::t_2aeee0f91e7595 19,33,99-102,405-423,563
+go.sum
+  s_34233f620b8dad::t_a1f346ce64e0f1 697-698
+infra/gen/gram/webhooks/v1/event.pb.go
+  s_34233f620b8dad::t_95d5e229dfc63b 1-299
+infra/gen/gram/webhooks/v1/svix_relay.pb.go
+  s_34233f620b8dad::t_3ff08a50675c2b 1-119
+infra/gen_py/gram/webhooks/v1/event_pb2.py
+  s_34233f620b8dad::t_68c4f4ef5c8634 1-40
+infra/gen_py/gram/webhooks/v1/svix_relay_pb2.py
+  s_34233f620b8dad::t_7b46141d2599c7 1-40
+pnpm-lock.yaml
+  s_34233f620b8dad::t_33a545d2408cae 190-191,4197-4198,4270-4271,11768,11770,11898
+server/gen/http/cli/gram/cli.go
+  s_34233f620b8dad::t_737009da5c9faa 148,2397,2403-2407,3732,5469-5471,7373-7376,17592,17594,17699,17709,17720,17737,17745-17767
+server/gen/http/openapi3.yaml
+  s_34233f620b8dad::t_a740badcddc333 39138-39147,39783-39880,40652,62143-62152,69126-69130,69147,73855-73861,73866
+server/gen/http/skills/client/cli.go
+  s_34233f620b8dad::t_3ca9b620b6ed73 160-163,177-184,213-220,230,304-320,357,366-394
+server/gen/http/skills/client/client.go
+  s_34233f620b8dad::t_21d36782d5e533 37-40,132,278-301
+server/gen/http/skills/client/encode_decode.go
+  s_34233f620b8dad::t_c4038027d4e253 1040-1042,1248-1485,5596-5599
+server/gen/http/skills/client/paths.go
+  s_34233f620b8dad::t_b498fb021f8627 35-39
+server/gen/http/skills/client/types.go
+  s_34233f620b8dad::t_f7a1be185a1861 56-57,201-202,234-240,1333-1512,4639-4640,4979-4986,5592-5595,5907-6066,8955-8957,9015-9023,10623-10862,14966-14968
+server/gen/http/skills/server/encode_decode.go
+  s_34233f620b8dad::t_c2bbf29c72f652 996,1047-1052,1077,1260-1476,5564-5571
+server/gen/http/skills/server/paths.go
+  s_34233f620b8dad::t_cd98ee6e5f0e40 35-39
+server/gen/http/skills/server/server.go
+  s_34233f620b8dad::t_7d2faa561faa41 27,79,103,134,164,454-506
+server/gen/http/skills/server/types.go
+  s_34233f620b8dad::t_47bef8ae91fc81 58-59,203-204,236-242,1335-1514,4641-4642,5011-5018,5044-5058,6052-6191,8659-8662,8671,8678,8687-8696,8980-8982,9001-9008
+server/gen/skills/client.go
+  s_34233f620b8dad::t_2bea19e09ef2d0 24,45,52,183-204
+server/gen/skills/endpoints.go
+  s_34233f620b8dad::t_4a3bc5192ac9a6 24,54,82,397-455
+server/gen/skills/service.go
+  s_34233f620b8dad::t_695d384c308110 32,38-40,117,300-301,347-352,398-404,676-678
+server/gen/types/skill.go
+  s_34233f620b8dad::t_7687c23e8a6f2d 26-27
+server/internal/skills/repo/queries.sql.go
+  s_34233f620b8dad::t_ccf1295d0b805f 70,89,638-641,649,660,705,731,760,780,894,920,1604,1627,1974,1997,2046,2070,2083,2148,2615,2639,3189-3217,4075,4128,4756,4783-4786,4817-4820,4823,4825-4826,4830,4832,4834-4835,4841-4844,4852,4875,4897,5286,5305,6100,6120,6241,6243-6244,6246,6253,6263,6276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b0e627927ac877d324c7f9626578284931bff3a8",
+  "prompts": {},
+  "sessions": {
+    "s_34233f620b8dad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb3af-21fb-7e50-b84d-eb4bdbafa9cc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
