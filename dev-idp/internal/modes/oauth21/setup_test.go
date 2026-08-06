@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -220,4 +221,105 @@ func signClientAssertion(t *testing.T, opts clientAssertionOpts) string {
 	signed, err := token.SignedString(opts.Key)
 	require.NoError(t, err, "sign client assertion")
 	return signed
+}
+
+// cimdClient stands up a client that publishes its own metadata document,
+// which is where its keys come from. `inline` chooses whether the document
+// carries the JWKS directly or points at a jwks_uri; both are allowed and the
+// difference is one extra fetch.
+type cimdClient struct {
+	clientID string
+	key      *rsa.PrivateKey
+	kid      string
+	// fetches counts document reads, so a test can prove the resolver caches.
+	fetches *atomic.Int32
+}
+
+func newCIMDClient(t *testing.T, inline bool, withKeys bool) *cimdClient {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err, "generate cimd client key")
+	const kid = "cimd-key-1"
+
+	var fetches atomic.Int32
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	clientID := server.URL + "/client.json"
+	jwksJSON := map[string]any{
+		"keys": []map[string]string{{
+			"kty": "RSA",
+			"use": "sig",
+			"alg": "RS256",
+			"kid": kid,
+			"n":   base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+			"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
+		}},
+	}
+
+	mux.HandleFunc("GET /client.json", func(w http.ResponseWriter, _ *http.Request) {
+		fetches.Add(1)
+		doc := map[string]any{
+			"client_id":   clientID,
+			"client_name": "CIMD Client",
+		}
+		switch {
+		case !withKeys:
+			// A document with no key material describes a public client.
+		case inline:
+			doc["jwks"] = jwksJSON
+			doc["token_endpoint_auth_method"] = "private_key_jwt"
+		default:
+			doc["jwks_uri"] = server.URL + "/jwks.json"
+			doc["token_endpoint_auth_method"] = "private_key_jwt"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	})
+
+	mux.HandleFunc("GET /jwks.json", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(jwksJSON)
+	})
+
+	return &cimdClient{clientID: clientID, key: key, kid: kid, fetches: &fetches}
+}
+
+// seedCIMDApp registers an app whose client_id is a metadata document URL and
+// which therefore stores no JWKS of its own.
+func (h *dbHandler) seedCIMDApp(t *testing.T, clientID string) repo.EmaApp {
+	t.Helper()
+	app, err := h.queries.CreateEmaApp(t.Context(), repo.CreateEmaAppParams{
+		ID:           uuid.New(),
+		ClientID:     clientID,
+		ClientSecret: "",
+		Jwks:         "",
+		Name:         "CIMD Client",
+		Enabled:      true,
+	})
+	require.NoError(t, err, "seed cimd app")
+	return app
+}
+
+// newLyingCIMDClient publishes a document whose client_id names someone else,
+// which the draft says a server must reject.
+func newLyingCIMDClient(t *testing.T) *cimdClient {
+	t.Helper()
+
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	clientID := server.URL + "/client.json"
+	mux.HandleFunc("GET /client.json", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id": "https://someone-else.example/client.json",
+		})
+	})
+
+	var fetches atomic.Int32
+	return &cimdClient{clientID: clientID, key: nil, kid: "", fetches: &fetches}
 }

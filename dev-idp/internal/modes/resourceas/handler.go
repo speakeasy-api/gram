@@ -54,6 +54,9 @@ const (
 	// still be accepted, covering ordinary clock drift between the issuing
 	// IdP and this server.
 	idJAGClockSkew = 60 * time.Second
+
+	// cimdCacheTTL bounds how long a client metadata document is reused.
+	cimdCacheTTL = 60 * time.Second
 )
 
 // Config carries the static configuration for the resource servers.
@@ -72,9 +75,11 @@ type Handler struct {
 	logger   *slog.Logger
 	db       *sql.DB
 	keystore *keystore.Keystore
-	// httpClient dereferences CIMD client_id URLs and, for ID-JAGs from an
-	// issuer that is not this dev-idp, that issuer's metadata and JWKS.
+	// httpClient fetches an issuer's metadata and JWKS when an ID-JAG comes
+	// from an issuer that is not this dev-idp.
 	httpClient *http.Client
+	// cimd dereferences a CIMD client_id presented on the redeem leg.
+	cimd *cimd.Resolver
 }
 
 func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
@@ -85,6 +90,7 @@ func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerPr
 		db:         db,
 		keystore:   ks,
 		httpClient: &http.Client{Timeout: 5 * time.Second},
+		cimd:       cimd.NewResolver(&http.Client{Timeout: 5 * time.Second}, cimdCacheTTL),
 	}
 }
 
@@ -501,7 +507,7 @@ func (h *Handler) authenticateClient(ctx context.Context, r *http.Request, claim
 		return fmt.Errorf("client_id %q is not the client this grant was issued to", presented)
 	}
 	if cimd.IsClientID(presented) {
-		if _, err := cimd.Fetch(ctx, h.httpClient, presented); err != nil {
+		if _, err := h.cimd.Document(ctx, presented); err != nil {
 			return fmt.Errorf("client metadata document is not usable: %w", err)
 		}
 	}

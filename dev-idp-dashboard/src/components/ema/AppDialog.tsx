@@ -33,6 +33,17 @@ function methodOf(app: EmaApp | undefined): Method {
   return "public";
 }
 
+/**
+ * A client_id that is a URL is a Client ID Metadata Document. The draft
+ * forbids pairing one with a shared secret — the document is public, so a
+ * secret alongside it would be a credential its readers are not meant to
+ * have — and the server rejects the combination, so the tab goes away rather
+ * than failing on save.
+ */
+function isCIMD(clientID: string): boolean {
+  return /^https?:\/\/\S+$/.test(clientID.trim());
+}
+
 export function AppDialog({
   app,
   onClose,
@@ -53,10 +64,15 @@ export function AppDialog({
   const pending = create.isPending || update.isPending || remove.isPending;
   const error = create.error ?? update.error ?? remove.error;
 
-  // Exactly one credential survives, decided by the tab.
+  const cimd = isCIMD(clientID);
+  const effectiveMethod: Method = cimd && method === "secret" ? "jwt" : method;
+
+  // Exactly one credential survives, decided by the tab. A CIMD client stores
+  // no JWKS at all: its keys are read from its own document at each request,
+  // so rotation is the client republishing rather than an edit here.
   const credentials = {
-    client_secret: method === "secret" ? clientSecret : "",
-    jwks: method === "jwt" ? jwks : "",
+    client_secret: effectiveMethod === "secret" ? clientSecret : "",
+    jwks: effectiveMethod === "jwt" && !cimd ? jwks : "",
   };
 
   const submit = () => {
@@ -75,8 +91,8 @@ export function AppDialog({
 
   const ready =
     clientID.trim() !== "" &&
-    (method !== "jwt" || jwks.trim() !== "") &&
-    (method !== "secret" || clientSecret.trim() !== "");
+    (effectiveMethod !== "jwt" || cimd || jwks.trim() !== "") &&
+    (effectiveMethod !== "secret" || clientSecret.trim() !== "");
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -117,9 +133,22 @@ export function AppDialog({
 
           <section className="flex flex-col gap-2">
             <Label>Authenticates with</Label>
-            <Tabs value={method} onValueChange={(v) => setMethod(v as Method)}>
+            <Tabs
+              value={effectiveMethod}
+              onValueChange={(v) => setMethod(v as Method)}
+            >
               <TabsList className="w-full">
-                <TabsTrigger value="secret">Client Secret</TabsTrigger>
+                <TabsTrigger
+                  value="secret"
+                  disabled={cimd}
+                  title={
+                    cimd
+                      ? "A metadata document client_id cannot hold a shared secret"
+                      : undefined
+                  }
+                >
+                  Client Secret
+                </TabsTrigger>
                 <TabsTrigger value="jwt">Private Key JWT</TabsTrigger>
                 <TabsTrigger value="public">Public</TabsTrigger>
               </TabsList>
@@ -128,7 +157,11 @@ export function AppDialog({
                 <SecretPane value={clientSecret} onChange={setClientSecret} />
               </TabsContent>
               <TabsContent value="jwt">
-                <PrivateKeyPane value={jwks} onChange={setJwks} />
+                {cimd ? (
+                  <CIMDPane clientID={clientID.trim()} />
+                ) : (
+                  <PrivateKeyPane value={jwks} onChange={setJwks} />
+                )}
               </TabsContent>
               <TabsContent value="public">
                 <PublicPane />
@@ -168,6 +201,28 @@ export function AppDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * When the client_id is a metadata document there is nothing to paste: the
+ * keys are whatever the document publishes, read fresh on each request.
+ */
+function CIMDPane({ clientID }: { clientID: string }) {
+  return (
+    <div className="flex flex-col gap-2 pt-3 text-xs text-muted-foreground">
+      <p>
+        This client_id is a Client ID Metadata Document, so its keys come from
+        the document itself — <code className="break-all">{clientID}</code> —
+        via its <code>jwks</code> or <code>jwks_uri</code>. Nothing is stored
+        here.
+      </p>
+      <p>
+        Rotation is the client republishing its document; this dev-idp re-reads
+        it within a minute. A document that publishes no keys describes a
+        public client, and the mint leg treats it as one.
+      </p>
+    </div>
   );
 }
 
