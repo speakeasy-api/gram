@@ -1,4 +1,4 @@
-h1:1mBgA8S8MVaO9VzTWbAsk8iU0HYYEiVM+0Vxs8+Ma9U=
+h1:ogJ2BAoCi/MEIwUpxn1y5WGQFbsqMxcOB58oJQBX4YA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -320,3 +320,4 @@ h1:1mBgA8S8MVaO9VzTWbAsk8iU0HYYEiVM+0Vxs8+Ma9U=
 20260805211101_enterprise-trials.sql h1:7NH6ss0phB6SS9BuHVEgy8fq7j3Ca0Sq10cgdDADW3A=
 20260805222807_publish-outbox-lease-token.sql h1:UkZ7i59bP6G3xZBSOQUlepqDLK4yjJMplJcUkBS3i5Y=
 20260806201654_risk-results-skill-version-anchor.sql h1:NtwEAg7bEImMwlDI9qhf/h3K+VU0CtSZ0MiEKkiOOBs=
+20260806220230_risk-results-skill-version-index.sql h1:yUF3Pwrkg39QZA8q8dQbfcuuC5BZrR+F3RtqozEplh4=
