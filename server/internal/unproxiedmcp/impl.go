@@ -299,11 +299,20 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	case result := <-resultCh:
 		return result, nil
 	case <-probeCtx.Done():
-		return &gen.ListUnproxiedMcpServerToolsResult{
-			Status:  "unreachable",
-			Tools:   []*gen.UnproxiedMcpServerTool{},
-			Message: conv.PtrEmpty("Could not connect to the server."),
-		}, nil
+		// select picks pseudo-randomly when both cases are ready, so a probe
+		// that finishes right at the deadline could otherwise lose the race
+		// and have its real result discarded here. Give resultCh one more
+		// non-blocking check before reporting a timeout.
+		select {
+		case result := <-resultCh:
+			return result, nil
+		default:
+			return &gen.ListUnproxiedMcpServerToolsResult{
+				Status:  "unreachable",
+				Tools:   []*gen.UnproxiedMcpServerTool{},
+				Message: conv.PtrEmpty("Could not connect to the server."),
+			}, nil
+		}
 	}
 }
 
