@@ -74,7 +74,17 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 	g.SetLimit(openRouterCreditsPollConcurrency)
 	for i, row := range rows {
 		g.Go(func() error {
-			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, row.ApiKey)
+			apiKey, err := c.openRouter.ProvisionAPIKey(gctx, row.OrganizationID, openrouter.KeyType(row.KeyType))
+			if err != nil {
+				c.logger.ErrorContext(gctx, "read openrouter key for usage polling",
+					attr.SlogOrganizationID(row.OrganizationID),
+					attr.SlogOrganizationSlug(row.OrganizationSlug),
+					attr.SlogError(err),
+				)
+				return nil
+			}
+
+			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, apiKey)
 			if err != nil {
 				// Skip on a per-org failure so one bad key does not blank the
 				// whole batch. The error is logged for diagnosis and swallowed

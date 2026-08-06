@@ -645,7 +645,7 @@ func newStartCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(
+				openRouterClient := openrouter.New(
 					logger,
 					tracerProvider,
 					guardianPolicy,
@@ -655,7 +655,12 @@ func newStartCommand() *cli.Command {
 					&background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv},
 					productFeatures,
 					billingTracker,
+					encryptionClient,
 				)
+				if err := openRouterClient.BackfillAPIKeyEncryption(ctx); err != nil {
+					return fmt.Errorf("backfill openrouter API key encryption: %w", err)
+				}
+				openRouter = openRouterClient
 			}
 
 			serverURL, err := url.Parse(c.String("server-url"))

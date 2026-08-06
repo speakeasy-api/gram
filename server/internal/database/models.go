@@ -1228,6 +1228,7 @@ type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
 	Key            string
+	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
 	Disabled       bool
