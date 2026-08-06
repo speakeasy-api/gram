@@ -198,12 +198,32 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests:
 		return fmt.Errorf("svix message create: %w", err)
 
+	// The relay's own credentials being refused, not this message. A missing,
+	// stale or under-scoped API key answers every Create this way, so acking
+	// would quietly consume and destroy the entire topic for as long as the key
+	// is wrong — and the response stops the moment it is fixed, which is the
+	// opposite of the permanence the ack below relies on. Nacking hands the
+	// event to the subscription's backoff, and anything that outlives the
+	// delivery budget lands in the dead letter topic instead of nowhere.
+	//
+	// Logged per event rather than sampled: an event that reaches this branch is
+	// undeliverable until an operator acts, and no other signal names the cause.
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		h.logger.ErrorContext(ctx, "svix refused the relay's credentials",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogOutboxPublicID(eventID),
+			attr.SlogSvixAppID(appID),
+			attr.SlogHTTPResponseStatusCode(status),
+			attr.SlogError(err),
+		)
+		return fmt.Errorf("svix message create: %w", err)
+
 	// Any other 4xx is a rejection of this specific message. Nacking would burn
 	// the whole delivery budget re-sending something Svix has already refused.
 	// Note what acking costs: this path has no dead letter, so the event is
 	// discarded outright. That is only defensible for a response that will be
-	// identical next time, which is why the transient codes are split out
-	// above rather than left to an exclusion list.
+	// identical next time, which is why the transient codes and the credential
+	// failures are split out above rather than left to an exclusion list.
 	case status >= 400 && status < 500:
 		h.drop(ctx, dropReasonRejected)
 		h.logger.ErrorContext(ctx, "svix rejected webhook event",

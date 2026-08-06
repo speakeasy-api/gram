@@ -186,7 +186,7 @@ func TestHandle_AcksDuplicate(t *testing.T) {
 func TestHandle_AcksPermanentRejections(t *testing.T) {
 	t.Parallel()
 
-	for _, status := range []int{400, 403, 404, 422} {
+	for _, status := range []int{400, 404, 422} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			t.Parallel()
 
@@ -199,6 +199,32 @@ func TestHandle_AcksPermanentRejections(t *testing.T) {
 			err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
 			require.NoError(t, err,
 				"nacking would burn the whole delivery budget resending something Svix already refused")
+		})
+	}
+}
+
+// TestHandle_NacksCredentialFailures covers the codes that say the relay's key
+// is wrong rather than the message. They are indistinguishable from a permanent
+// rejection at the call site and are answered for every event alike, so acking
+// them would drain the whole topic into nothing for as long as the key stayed
+// rotated or unset — the one 4xx class where the response is guaranteed to
+// change once someone fixes the deployment.
+func TestHandle_NacksCredentialFailures(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{401, 403} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			t.Parallel()
+
+			inst := newHandlerTestInstance(t)
+			orgID := seedOrg(t, inst.conn, "app_123", true)
+
+			inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil, &svixtest.HTTPStatusError{Code: status, Msg: "unauthorized"})
+
+			err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{})
+			require.Error(t, err,
+				"a bad api key is fixed by an operator, not by discarding every event that hits it")
 		})
 	}
 }
