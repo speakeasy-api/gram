@@ -1140,15 +1140,15 @@ jobs:
             ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
           path: ${{ env.UV_CACHE_DIR }}
 
-      # TODO: re-enable once buf.yaml + infra/proto exist on main. The breaking
-      # check compares against origin/main, which has no protos until this
-      # scaffolding lands, so `buf breaking` fails with "no .proto files" on the
-      # bootstrap PR. Uncomment both steps in a follow-up after the initial merge.
-      # - name: Fetch main branch
-      #   run: git fetch --depth=1 origin main
-      #
-      # - name: Lint proto files
-      #   run: mise run lint:infra --against ".git#ref=origin/main"
+      - name: Fetch main branch
+        run: git fetch --depth=1 origin main
+
+      # buf breaking against main is what catches a wire-incompatible proto
+      # change (field renumbering, type change) that would corrupt already
+      # published messages — including outbox rows, which store marshaled bytes
+      # and republish them verbatim after a deploy.
+      - name: Lint proto files
+        run: mise run lint:infra --against ".git#ref=origin/main"
 
       - name: Install uv dependencies
         run: mise run install:uv --all-packages --locked
