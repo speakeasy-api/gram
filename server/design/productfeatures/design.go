@@ -25,7 +25,6 @@ var _ = Service("features", func() {
 			Attribute("tool_io_logs_enabled", Boolean, "Whether tool I/O logging is enabled")
 			Attribute("session_capture_enabled", Boolean, "Whether Claude Code session capture is enabled")
 			Attribute("authz_challenge_logging_enabled", Boolean, "Whether authz challenge logging to ClickHouse is enabled")
-			Attribute("webhooks", Boolean, "Whether webhooks are enabled")
 			Attribute("sso_enabled", Boolean, "Whether SSO setup is enabled for the organization")
 			Attribute("scim_enabled", Boolean, "Whether SCIM/directory sync setup is enabled for the organization")
 			Attribute("hooks_browser_login_enabled", Boolean, "Whether generated hook plugins may mint per-user keys via the interactive browser login")
@@ -36,7 +35,7 @@ var _ = Service("features", func() {
 			Attribute("ai_platform_push_integrations_enabled", Boolean, "Whether the organization can provision push integrations for AI platforms")
 			Attribute("customer_managed_encryption_keys_enabled", Boolean, "Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption")
 			Attribute("device_agent", Boolean, "Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.")
-			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "webhooks", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "customer_managed_encryption_keys_enabled", "device_agent")
+			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "customer_managed_encryption_keys_enabled", "device_agent")
 		})
 
 		HTTP(func() {
@@ -56,7 +55,7 @@ var _ = Service("features", func() {
 		Payload(func() {
 			Attribute("feature_name", String, "Name of the feature to update", func() {
 				MaxLength(60)
-				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "customer_managed_encryption_keys")
+				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "customer_managed_encryption_keys")
 			})
 			Attribute("enabled", Boolean, "Whether the feature should be enabled")
 			Required("feature_name", "enabled")

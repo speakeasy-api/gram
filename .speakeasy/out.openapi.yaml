@@ -59347,15 +59347,11 @@ components:
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
-        webhooks:
-          type: boolean
-          description: Whether webhooks are enabled
       required:
         - logs_enabled
         - tool_io_logs_enabled
         - session_capture_enabled
         - authz_challenge_logging_enabled
-        - webhooks
         - sso_enabled
         - scim_enabled
         - hooks_browser_login_enabled
@@ -68397,7 +68393,6 @@ components:
             - tool_io_logs
             - session_capture
             - authz_challenge_logging
-            - webhooks
             - sso
             - scim
             - hooks_browser_login
