@@ -6,7 +6,10 @@ import {
   PREFERRED_THEME_STORAGE_KEY,
   PROJECT_FAVORITES_STORAGE_PREFIX,
 } from "./local-storage-keys";
-import { clearStorageForLogout } from "./logout-storage";
+import {
+  clearLegacyUserStorage,
+  clearStorageForLogout,
+} from "./logout-storage";
 
 function createStorage(): Storage {
   const items = new Map<string, string>();
@@ -48,6 +51,7 @@ describe("clearStorageForLogout", () => {
     window.localStorage.setItem(favoritesKey, '["project_123"]');
     window.localStorage.setItem("preferredProject", "project-slug");
     window.localStorage.setItem("pylon_user_email", "user@example.com");
+    window.localStorage.setItem("pylon_user_display_name", "Example User");
 
     clearStorageForLogout();
 
@@ -57,6 +61,9 @@ describe("clearStorageForLogout", () => {
     expect(window.localStorage.getItem(favoritesKey)).toBe('["project_123"]');
     expect(window.localStorage.getItem("preferredProject")).toBeNull();
     expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
+    expect(
+      window.localStorage.getItem("pylon_user_display_name"),
+    ).toBeNull();
   });
 
   it("clears session storage", () => {
@@ -65,5 +72,21 @@ describe("clearStorageForLogout", () => {
     clearStorageForLogout();
 
     expect(window.sessionStorage.getItem("temporary")).toBeNull();
+  });
+
+  it("removes legacy Pylon PII without clearing unrelated storage", () => {
+    window.localStorage.setItem("pylon_user_email", "user@example.com");
+    window.localStorage.setItem("pylon_user_display_name", "Example User");
+    window.localStorage.setItem("unrelated", "value");
+    window.sessionStorage.setItem("pylon_user_email", "user@example.com");
+
+    clearLegacyUserStorage();
+
+    expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
+    expect(
+      window.localStorage.getItem("pylon_user_display_name"),
+    ).toBeNull();
+    expect(window.sessionStorage.getItem("pylon_user_email")).toBeNull();
+    expect(window.localStorage.getItem("unrelated")).toBe("value");
   });
 });

@@ -10,11 +10,32 @@ const PRESERVED_LOCAL_STORAGE_PREFIXES = [
   RECENTS_STORAGE_PREFIX,
 ];
 
+const LEGACY_USER_STORAGE_KEYS = [
+  "pylon_user_email",
+  "pylon_user_display_name",
+];
+
 function shouldPreserveLocalStorageKey(key: string) {
   return (
     PRESERVED_LOCAL_STORAGE_KEYS.has(key) ||
     PRESERVED_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
   );
+}
+
+/**
+ * Removes user-identifying values written by older dashboard versions.
+ *
+ * This runs during auth initialization as well as session teardown so users
+ * who logged out before the cleanup shipped do not retain stale PII.
+ */
+export function clearLegacyUserStorage(): void {
+  if (typeof window === "undefined") return;
+
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of LEGACY_USER_STORAGE_KEYS) {
+      storage.removeItem(key);
+    }
+  }
 }
 
 export function clearStorageForLogout(): void {
