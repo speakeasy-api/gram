@@ -1032,12 +1032,21 @@ func (s *Service) persistProvisionedOrganization(
 	return org, nil
 }
 
-// redirectSignupError sends a failed signup back to the sign-up page. Task 6
-// gives this its real body.
+// redirectSignupError sends a failed signup back to the page it started on.
+// The user is authenticated by this point but has no org, so /sign-up renders
+// the error and a retry: hitting the CTA again is a fast bounce through the
+// identity provider, since the browser still holds a live IDP session.
+//
+// Only the immediate redirect is origin-aware. Any later visit to the app hits
+// the blanket zero-org redirect in the dashboard's app layout and lands on
+// /register — making that split persist would mean storing the flow origin on
+// the session, which is not worth it for this path.
 func (s *Service) redirectSignupError(ctx context.Context, err error) (*gen.CallbackResult, error) {
-	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err))
+	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err), attr.SlogReason(string(authErrInit)))
+
+	base := strings.TrimRight(s.cfg.SignInRedirectURL, "/")
 	return &gen.CallbackResult{
-		Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, "init_error"),
+		Location:      fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit),
 		SessionToken:  "",
 		SessionCookie: "",
 	}, nil
