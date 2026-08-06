@@ -433,7 +433,6 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
 	if key.Disabled {
 		// Setting a limit on a disabled key does not bring it back upstream.
-		// UpdateOpenRouterKey clears the local flag.
 		patch.Disabled = new(false)
 	}
 
@@ -448,6 +447,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
 		Key:            key.Key,
+		Reinstate:      key.Disabled,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)

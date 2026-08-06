@@ -129,9 +129,10 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = $1, key_hash = $2, key = $3, disabled = FALSE
-WHERE organization_id = $4
-  AND key_type = $5
+SET monthly_credits = $1, key_hash = $2, key = $3,
+    disabled = disabled AND NOT $4::boolean
+WHERE organization_id = $5
+  AND key_type = $6
   AND deleted IS FALSE
 RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
@@ -140,17 +141,20 @@ type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
 	Key            string
+	Reinstate      bool
 	OrganizationID string
 	KeyType        string
 }
 
-// Also clears the disabled flag. This is the reinstatement write, and its only
-// caller turns the upstream key back on in the same call.
+// Clears the disabled flag only when the caller is reinstating, which it signals
+// with @reinstate. A routine refresh reads the row before it patches upstream, so
+// an unconditional clear here would revoke a lockdown that landed in between.
 func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterKeyParams) (OpenrouterApiKey, error) {
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,
 		arg.KeyHash,
 		arg.Key,
+		arg.Reinstate,
 		arg.OrganizationID,
 		arg.KeyType,
 	)
