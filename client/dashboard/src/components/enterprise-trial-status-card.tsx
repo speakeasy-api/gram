@@ -1,11 +1,13 @@
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
-import { getEnterpriseTrialStatus } from "@/lib/enterprise-trial";
+import {
+  getEnterpriseTrialStatus,
+  MILLISECONDS_PER_DAY,
+} from "@/lib/enterprise-trial";
 import { useEffect, useState } from "react";
 
 const SALES_URL = "https://www.speakeasy.com/talk-to-us";
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function EnterpriseTrialStatusCard(): React.ReactNode {
   const { enterpriseTrial } = useSession();
@@ -64,7 +66,7 @@ export function EnterpriseTrialStatusCard(): React.ReactNode {
   const progressLabel = `Day ${status.dayNumber} of ${status.totalDays}`;
 
   return (
-    <div className="border-border/60 rounded-lg border bg-card shadow-sm p-3">
+    <div className="border-border/60 rounded-lg border bg-card p-3 shadow-sm group-data-[collapsible=icon]:hidden">
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between tracking-wide">
           <Text mono small className="uppercase">

@@ -642,18 +642,12 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	trial, err := s.orgRepo.GetActiveEnterpriseTrial(ctx, authCtx.ActiveOrganizationID)
-	var enterpriseTrial *gen.EnterpriseTrial
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error loading active enterprise trial").LogError(ctx, s.logger)
-	default:
-		enterpriseTrial = &gen.EnterpriseTrial{
-			StartedAt: conv.FromPGTimestamptz(trial.CreatedAt),
-			EndsAt:    conv.FromPGTimestamptz(trial.EndsAt),
-		}
-	}
+	enterpriseTrial := loadActiveEnterpriseTrial(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		s.orgRepo.GetActiveEnterpriseTrial,
+		s.logger,
+	)
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
@@ -778,6 +772,32 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		IsAdmin:               userInfo.Admin,
 		Organizations:         organizations,
 	}, nil
+}
+
+func loadActiveEnterpriseTrial(
+	ctx context.Context,
+	organizationID string,
+	getTrial func(context.Context, string) (orgRepo.GetActiveEnterpriseTrialRow, error),
+	logger *slog.Logger,
+) *gen.EnterpriseTrial {
+	trial, err := getTrial(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		logger.ErrorContext(
+			ctx,
+			"error loading active enterprise trial; continuing without trial status",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+		)
+		return nil
+	default:
+		return &gen.EnterpriseTrial{
+			StartedAt: conv.FromPGTimestamptz(trial.CreatedAt),
+			EndsAt:    conv.FromPGTimestamptz(trial.EndsAt),
+		}
+	}
 }
 
 func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (err error) {

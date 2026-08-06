@@ -114,6 +114,16 @@ describe("EnterpriseTrialStatusCard", () => {
     ).toBe("width: 21.43%;");
   });
 
+  it("hides the card when the sidebar is collapsed", () => {
+    const { container } = render(<EnterpriseTrialStatusCard />);
+
+    expect(
+      container.firstElementChild?.classList.contains(
+        "group-data-[collapsible=icon]:hidden",
+      ),
+    ).toBe(true);
+  });
+
   it("opens the Sales conversation safely in a new tab", () => {
     render(<EnterpriseTrialStatusCard />);
 
