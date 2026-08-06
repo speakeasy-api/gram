@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -51,6 +52,14 @@ func (m *mockPlatformExecutor) ExecuteTool(_ context.Context, _ *ToolCallPlan, _
 		Body:        []byte(`{"ok":true}`),
 	}, nil
 }
+
+// stubCallerFaultError stands in for a typed upstream API error that attributes
+// an outcome to the caller, e.g. Slack answering ok=false with thread_not_found.
+type stubCallerFaultError struct{}
+
+func (e *stubCallerFaultError) Error() string { return "upstream refused: thread_not_found" }
+
+func (e *stubCallerFaultError) ClientFault() bool { return true }
 
 func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
@@ -1720,6 +1729,49 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 
 	require.JSONEq(t, string(bodyBytes), string(platformExecutor.requestBody))
 	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+// A platform tool failure the caller has to fix must still be recognizable as
+// one after the proxy wraps it, so the MCP boundary can answer it as a bad
+// request logged at warn rather than as a server fault.
+func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	descriptor := newTestToolDescriptor()
+	descriptor.URN = urn.NewTool(urn.ToolKindPlatform, "slack", "read_thread_messages")
+
+	toolCallPlan := NewPlatformToolCallPlan(descriptor, &PlatformToolCallPlan{
+		SourceSlug:  "slack",
+		InputSchema: []byte(`{"type":"object","additionalProperties":true}`),
+	})
+
+	platformExecutor := &mockPlatformExecutor{
+		err: fmt.Errorf("execute platform tool %s: %w", descriptor.URN, &stubCallerFaultError{}),
+	}
+
+	proxy := NewToolProxy(
+		testenv.NewLogger(t),
+		tracerProvider,
+		testenv.NewMeterProvider(t),
+		ToolCallSourceDirect,
+		testenv.NewEncryptionClient(t),
+		nil,
+		policy,
+		funcs,
+		platformExecutor,
+	)
+
+	err = proxy.Do(ctx, httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+	}, toolCallPlan, tm.HTTPLogAttributes{})
+	require.Error(t, err)
+	require.True(t, oops.IsClientFault(err))
 }
 
 func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
