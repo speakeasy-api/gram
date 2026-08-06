@@ -159,6 +159,28 @@ func TestBuildTopicsTemplateData_DisambiguatesAliases(t *testing.T) {
 	}
 }
 
+// TestBuildTopicsTemplateData_ReservesTemplateIdentifiers covers a package
+// whose preferred alias matches an identifier the generated file already uses.
+// Emitting it verbatim would shadow the fixed import: still valid syntax, so
+// generation would succeed and the break would only show up as a repo-wide
+// compile error.
+func TestBuildTopicsTemplateData_ReservesTemplateIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	data, err := buildTopicsTemplateData([]TopicBinding{
+		{ProtoFullName: "a.v1.A", GoImportPath: "example.com/gcp/v1", GoPackageAlias: "gcp", GoTypeName: "A", ConstName: "AV1A"},
+		{ProtoFullName: "b.v1.B", GoImportPath: "example.com/b/pubsub", GoPackageAlias: "pubsub", GoTypeName: "B", ConstName: "BV1B"},
+		{ProtoFullName: "c.v1.C", GoImportPath: "example.com/c/topics", GoPackageAlias: "topics", GoTypeName: "C", ConstName: "CV1C"},
+	})
+	require.NoError(t, err)
+
+	reserved := map[string]bool{"context": true, "fmt": true, "pubsub": true, "gcp": true, "topics": true}
+	for _, imp := range data.Imports {
+		require.Falsef(t, reserved[imp.Alias],
+			"alias %q for %s collides with an identifier the generated file declares", imp.Alias, imp.Path)
+	}
+}
+
 func TestRenderTopics_CompilesAgainstRealDescriptors(t *testing.T) {
 	t.Parallel()
 

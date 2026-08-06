@@ -121,7 +121,19 @@ func RenderTopics(descriptorBytes []byte) ([]byte, error) {
 // collisions so two packages that prefer the same identifier can coexist.
 func buildTopicsTemplateData(bindings []TopicBinding) (topicsTemplateData, error) {
 	aliasByPath := map[string]string{}
-	takenAliases := map[string]string{}
+	// Seeded with every identifier the template itself declares — its fixed
+	// imports and its own package name. A topic package that prefers one of
+	// these would otherwise shadow it: duplicate import names are valid syntax,
+	// so format.Source would pass and the break would only surface as a
+	// repo-wide compile error in the generated file. The empty owner can never
+	// equal an import path, so these entries always force a suffix.
+	takenAliases := map[string]string{
+		"context": "",
+		"fmt":     "",
+		"pubsub":  "",
+		"gcp":     "",
+		"topics":  "",
+	}
 
 	paths := make([]string, 0, len(bindings))
 	for _, binding := range bindings {
