@@ -27,9 +27,6 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: UpdateOpenRouterKey :one
--- Clears the disabled flag only when the caller is reinstating, which it signals
--- with @reinstate. A routine refresh reads the row before it patches upstream, so
--- an unconditional clear here would revoke a lockdown that landed in between.
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key,
     disabled = disabled AND NOT @reinstate::boolean

@@ -447,7 +447,9 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
 		Key:            key.Key,
-		Reinstate:      key.Disabled,
+		// Not an unconditional clear: that would drop a lockdown committed
+		// after the read above.
+		Reinstate: key.Disabled,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)

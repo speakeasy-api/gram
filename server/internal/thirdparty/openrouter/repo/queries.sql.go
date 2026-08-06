@@ -146,9 +146,6 @@ type UpdateOpenRouterKeyParams struct {
 	KeyType        string
 }
 
-// Clears the disabled flag only when the caller is reinstating, which it signals
-// with @reinstate. A routine refresh reads the row before it patches upstream, so
-// an unconditional clear here would revoke a lockdown that landed in between.
 func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterKeyParams) (OpenrouterApiKey, error) {
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,
