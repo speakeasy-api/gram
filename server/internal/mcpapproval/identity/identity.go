@@ -153,6 +153,22 @@ func absoluteHTTPURL(reference string) (*url.URL, bool) {
 // server share an artifact ref. A remote endpoint is never version-pinned:
 // nothing links a URL to a fixed revision of what serves it.
 func remoteIdentity(u *url.URL) Identity {
+	return Identity{
+		Kind:           KindRemote,
+		ArtifactRef:    "url:" + redactedURL(u),
+		VersionPinned:  false,
+		Host:           strings.ToLower(u.Hostname()),
+		Registry:       "",
+		PackageName:    "",
+		PackageVersion: "",
+	}
+}
+
+// redactedURL renders a URL with everything that is per-install or secret
+// removed: credentials in the userinfo, the query string, and the fragment.
+// What remains is the part two references to the same server share, and it is
+// safe to store and show.
+func redactedURL(u *url.URL) string {
 	canonical := &url.URL{
 		Scheme:      u.Scheme,
 		Opaque:      "",
@@ -167,15 +183,7 @@ func remoteIdentity(u *url.URL) Identity {
 		RawFragment: "",
 	}
 
-	return Identity{
-		Kind:           KindRemote,
-		ArtifactRef:    "url:" + canonical.String(),
-		VersionPinned:  false,
-		Host:           strings.ToLower(u.Hostname()),
-		Registry:       "",
-		PackageName:    "",
-		PackageVersion: "",
-	}
+	return canonical.String()
 }
 
 // resolveCommand extracts the package a stdio launch command runs.
@@ -228,15 +236,44 @@ func resolveCommand(command string) Identity {
 // from it, so the bare word after them is a binary name, not a package.
 // mcp-remote's own documented invocation takes that form.
 func firstPackageSpec(args []string, registry Registry) Identity {
-	for i, arg := range args {
-		if spec, ok := packageFlagValue(arg); ok {
-			return packageSpec(spec, args[i+1:], registry)
+	// The selector is npx-specific. uv spells -p as --python and uses it to
+	// choose an interpreter, so reading it as a package there would resolve
+	// `uvx -p 3.12 mcp-server` to the Python version.
+	if registry == RegistryNPM {
+		spec, rest, count := npmPackageSelector(args)
+		switch {
+		case count > 1, count == 1 && spec == "":
+			// Repeated selectors install several packages and the binary may
+			// come from any of them; a selector with no value names nothing.
+			// Both are unidentifiable offline, and guessing would attach
+			// evidence to the wrong artifact.
+			return unresolved
+		case count == 1:
+			return packageSpec(spec, rest, registry)
 		}
-		if isPackageFlag(arg) {
-			if i+1 >= len(args) {
-				return unresolved
+	}
+
+	// uv's own selector. `uvx --from <pkg> <bin>` is the counterpart of npx's
+	// -p: the package is named by the flag and the bare word after it is a
+	// binary.
+	if registry == RegistryPyPI {
+		for i, arg := range args {
+			if value, ok := strings.CutPrefix(arg, "--from="); ok && value != "" {
+				return packageSpec(value, args[i+1:], registry)
 			}
-			return packageSpec(args[i+1], args[i+2:], registry)
+			if arg == "--from" && i+1 < len(args) {
+				return packageSpec(args[i+1], args[i+2:], registry)
+			}
+		}
+	}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if takesSeparateValue(arg, registry) {
+			// Skip the flag's value so it is not mistaken for the package.
+			// `uvx -p 3.12 mcp-server` names an interpreter, not a package.
+			i++
+			continue
 		}
 		if strings.HasPrefix(arg, "-") {
 			continue
@@ -248,22 +285,53 @@ func firstPackageSpec(args []string, registry Registry) Identity {
 	return unresolved
 }
 
-// isPackageFlag reports whether an argument is the separated form of npx's
-// package selector, whose value is the following argument.
-func isPackageFlag(arg string) bool {
-	return arg == "-p" || arg == "--package"
+// takesSeparateValue reports whether a launcher flag consumes the argument
+// after it. Only the flags that could otherwise be misread as a package are
+// listed; an unknown value-taking flag degrades to naming its own value as the
+// package, which resolution treats as any other unrecognised spec.
+func takesSeparateValue(arg string, registry Registry) bool {
+	if registry != RegistryPyPI {
+		return false
+	}
+
+	return arg == "-p" || arg == "--python" || arg == "--with"
 }
 
-// packageFlagValue extracts the value from the joined form of npx's package
-// selector (`--package=foo`, `-p=foo`).
-func packageFlagValue(arg string) (string, bool) {
-	for _, prefix := range []string{"--package=", "-p="} {
-		if value, ok := strings.CutPrefix(arg, prefix); ok && value != "" {
-			return value, true
+// npmPackageSelector finds npx's package selector in both its spellings,
+// `-p <pkg>` / `--package <pkg>` and `-p=<pkg>` / `--package=<pkg>`.
+//
+// It returns the first selector's value, the arguments following it, and how
+// many selectors appeared in total. The count is what lets the caller reject
+// an invocation naming several packages rather than picking one arbitrarily.
+func npmPackageSelector(args []string) (string, []string, int) {
+	spec := ""
+	var rest []string
+	count := 0
+
+	record := func(value string, remaining []string) {
+		count++
+		if count == 1 {
+			spec = value
+			rest = remaining
 		}
 	}
 
-	return "", false
+	for i, arg := range args {
+		switch {
+		case arg == "-p", arg == "--package":
+			if i+1 >= len(args) {
+				record("", nil)
+				continue
+			}
+			record(args[i+1], args[i+2:])
+		case strings.HasPrefix(arg, "-p="):
+			record(strings.TrimPrefix(arg, "-p="), args[i+1:])
+		case strings.HasPrefix(arg, "--package="):
+			record(strings.TrimPrefix(arg, "--package="), args[i+1:])
+		}
+	}
+
+	return spec, rest, count
 }
 
 // packageSpec resolves a package spec, diverting to the proxy's target when
@@ -310,6 +378,15 @@ func mcpRemoteIdentity(args []string) Identity {
 // packageIdentity builds the identity for a package spec such as
 // `@scope/name@1.2.3` or `name==1.2.3`.
 func packageIdentity(spec string, registry Registry) Identity {
+	// npm and pip both accept a URL in place of a registry name, and such a
+	// URL can carry a token in its userinfo or query
+	// (`https://TOKEN@github.com/org/pkg.git`). The artifact ref is stored and
+	// shown to reviewers, so strip those the same way an endpoint reference is
+	// stripped rather than persisting a credential.
+	if u, ok := absoluteHTTPURL(spec); ok {
+		spec = redactedURL(u)
+	}
+
 	name, version := splitPackageSpec(spec, registry)
 	if name == "" {
 		return unresolved

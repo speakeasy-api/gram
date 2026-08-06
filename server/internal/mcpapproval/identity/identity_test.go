@@ -258,3 +258,38 @@ func TestResolve_PackageFlagWithNoValueIsUnresolved(t *testing.T) {
 	require.Equal(t, identity.KindUnresolved, identity.Resolve("npx -p").Kind)
 	require.Equal(t, identity.KindUnresolved, identity.Resolve("npx --package").Kind)
 }
+
+// Several selectors install several packages and the binary may come from any
+// of them. Picking the first would attach evidence to the wrong artifact.
+func TestResolve_MultiplePackageSelectorsAreUnresolved(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, identity.KindUnresolved, identity.Resolve("npx -p pkg-a -p pkg-b some-binary").Kind)
+	require.Equal(t, identity.KindUnresolved, identity.Resolve("npx --package=pkg-a --package=pkg-b some-binary").Kind)
+}
+
+// uv spells -p as --python and uses it to choose an interpreter, so npx's
+// package-selector reading must not leak into the PyPI launchers.
+func TestResolve_UvxPythonFlagIsNotAPackageSelector(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("uvx -p 3.12 mcp-server")
+	require.Equal(t, identity.KindPackage, got.Kind)
+	require.Equal(t, "mcp-server", got.PackageName, "-p selects the interpreter, not the package")
+
+	joined := identity.Resolve("uvx -p=3.12 mcp-server")
+	require.Equal(t, "mcp-server", joined.PackageName)
+}
+
+// npm and pip accept a URL in place of a registry name, and such a URL can
+// carry a token. The artifact ref is stored and shown, so it must not persist
+// one.
+func TestResolve_CredentialsInAURLPackageSpecAreStripped(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("npx -y https://tok3n@github.example/org/pkg.git?auth=s3cret")
+	require.NotContains(t, got.ArtifactRef, "tok3n")
+	require.NotContains(t, got.ArtifactRef, "s3cret")
+	require.NotContains(t, got.PackageName, "tok3n")
+	require.NotContains(t, got.PackageName, "s3cret")
+}
