@@ -539,65 +539,6 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RequestAccess", "type": "mutation"}`)
 	})
 
-	Method("getRBACStatus", func() {
-		Description("Returns whether RBAC is currently enabled for the current organization.")
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-		})
-
-		Result(RBACStatus)
-
-		HTTP(func() {
-			GET("/rpc/access.getRBACStatus")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getRBACStatus")
-		Meta("openapi:extension:x-speakeasy-name-override", "getRBACStatus")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RBACStatus"}`)
-	})
-
-	Method("enableRBAC", func() {
-		Description("Enable RBAC for the current organization. Seeds default grants for system roles.")
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-		})
-
-		HTTP(func() {
-			POST("/rpc/access.enableRBAC")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "enableRBAC")
-		Meta("openapi:extension:x-speakeasy-name-override", "enableRBAC")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnableRBAC"}`)
-	})
-
-	Method("disableRBAC", func() {
-		Description("Disable RBAC enforcement for the current organization.")
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-		})
-
-		HTTP(func() {
-			POST("/rpc/access.disableRBAC")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "disableRBAC")
-		Meta("openapi:extension:x-speakeasy-name-override", "disableRBAC")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DisableRBAC"}`)
-	})
-
 	Method("listChallenges", func() {
 		Description("List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.")
 		Security(security.ByKey, func() {
@@ -1026,11 +967,6 @@ var ResolveShadowMCPInventoryRequestForm = Type("ResolveShadowMCPInventoryReques
 			Format(FormatUUID)
 		})
 	})
-})
-
-var RBACStatus = Type("RBACStatus", func() {
-	Required("rbac_enabled")
-	Attribute("rbac_enabled", Boolean, "Whether RBAC enforcement is currently enabled for this organization.")
 })
 
 var AuthzChallengeModel = Type("AuthzChallenge", func() {

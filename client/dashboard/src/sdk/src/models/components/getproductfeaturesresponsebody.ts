@@ -69,10 +69,6 @@ export type GetProductFeaturesResponseBody = {
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
-  /**
-   * Whether webhooks are enabled
-   */
-  webhooks: boolean;
 };
 
 /** @internal */
@@ -96,7 +92,6 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
-    webhooks: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {

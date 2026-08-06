@@ -26,7 +26,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithNoGrants(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	err = authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
@@ -43,7 +43,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString())})
 
 	err = authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
@@ -60,7 +60,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithWriteGrant(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Selector: authz.NewSelector(authz.ScopeMCPWrite, toolset.ID.String())})
 
 	err = authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
@@ -75,7 +75,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String())})
 
 	err = authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
@@ -108,7 +108,7 @@ func TestServePublic_RBAC_ToolLevelGrant_AllowsMatchingTool(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
@@ -135,7 +135,7 @@ func TestServePublic_RBAC_ToolLevelGrant_DeniesWrongTool(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
@@ -164,7 +164,7 @@ func TestServePublic_RBAC_ServerLevelGrant_AllowsAnyTool(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	// Server-level grant (no tool key) should allow any tool.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope:    authz.ScopeMCPConnect,
@@ -187,7 +187,7 @@ func TestServePublic_RBAC_ToolLevelGrant_DeniesWrongServer(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
@@ -216,7 +216,7 @@ func TestServePublic_RBAC_ProjectScopedGrant_AllowsServerInProject(t *testing.T)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	// Project-scoped grant: resource_id=*, project_id=toolset's project
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope: authz.ScopeMCPConnect,
@@ -240,7 +240,7 @@ func TestServePublic_RBAC_ProjectScopedGrant_DeniesServerInOtherProject(t *testi
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	// Project-scoped grant for a *different* project
 	otherProjectID := uuid.New()
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -267,7 +267,7 @@ func TestServePublic_RBAC_ProjectScopedGrant_AllowsToolCallInProject(t *testing.
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{

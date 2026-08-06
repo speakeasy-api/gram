@@ -12,7 +12,6 @@ import path from "node:path";
 
 import { intro, log as clackLog, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
-import { accessEnableRBAC } from "#gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "#gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "#gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
@@ -454,6 +453,109 @@ SELECT COUNT(*) FROM upserted;
     });
   }
   log.info("Assigned current user to seeded Admin role");
+}
+
+// Mirrors authz.SeedSystemRoleGrants for local databases that predate RBAC.
+// Keep these scope lists in sync with authz.SystemRoleGrants. As in the Go
+// seeder, an existing role with any grants is left unchanged.
+async function seedSystemRoleGrants(organizationId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+BEGIN;
+
+INSERT INTO global_roles (
+  workos_slug,
+  workos_name,
+  workos_description,
+  workos_created_at,
+  workos_updated_at,
+  workos_last_event_id
+)
+VALUES
+  ('admin', 'Admin', 'Administrator role', clock_timestamp(), clock_timestamp(), NULL),
+  ('member', 'Member', 'Member role', clock_timestamp(), clock_timestamp(), NULL)
+ON CONFLICT (workos_slug) DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
+  deleted_at = NULL,
+  workos_deleted_at = NULL,
+  updated_at = clock_timestamp()
+WHERE global_roles.deleted IS TRUE
+   OR global_roles.workos_deleted IS TRUE;
+
+WITH system_role_scopes (role_slug, scope, resource_kind) AS (
+  VALUES
+    ('admin', 'org:read', 'org'),
+    ('admin', 'org:admin', 'org'),
+    ('admin', 'project:read', 'project'),
+    ('admin', 'project:write', 'project'),
+    ('admin', 'mcp:read', 'mcp'),
+    ('admin', 'mcp:write', 'mcp'),
+    ('admin', 'mcp:connect', 'mcp'),
+    ('admin', 'environment:read', 'environment'),
+    ('admin', 'environment:write', 'environment'),
+    ('admin', 'skill:read', 'skill'),
+    ('admin', 'skill:write', 'skill'),
+    ('member', 'org:read', 'org'),
+    ('member', 'project:read', 'project'),
+    ('member', 'mcp:read', 'mcp'),
+    ('member', 'mcp:connect', 'mcp'),
+    ('member', 'skill:read', 'skill')
+),
+roles_without_grants AS (
+  SELECT global_roles.id, global_roles.workos_slug
+  FROM global_roles
+  WHERE global_roles.workos_slug IN ('admin', 'member')
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM principal_grants
+      WHERE principal_grants.organization_id = :'organization_id'
+        AND principal_grants.principal_urn IN (
+          'role:global:' || global_roles.id::text,
+          'role:' || global_roles.workos_slug
+        )
+    )
+)
+INSERT INTO principal_grants (
+  organization_id,
+  principal_urn,
+  scope,
+  effect,
+  selectors
+)
+SELECT
+  :'organization_id',
+  'role:global:' || roles_without_grants.id::text,
+  system_role_scopes.scope,
+  NULL,
+  jsonb_build_object(
+    'resource_kind', system_role_scopes.resource_kind,
+    'resource_id', '*'
+  )
+FROM roles_without_grants
+JOIN system_role_scopes
+  ON system_role_scopes.role_slug = roles_without_grants.workos_slug
+ON CONFLICT (
+  organization_id,
+  principal_urn,
+  scope,
+  COALESCE(effect, 'allow'),
+  selectors
+)
+DO NOTHING;
+
+COMMIT;
+`;
+  await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -f -`.quiet();
+
+  log.info("Seeded built-in roles and grants");
 }
 
 async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
@@ -2314,43 +2416,16 @@ async function seedNonCorporateAccountFindings(init: {
   }
 }
 
-// enableRBACForDevUser turns on RBAC, reconciles the built-in system-role grants,
-// and gives the local dev user unrestricted chat:read. The Admin role assigned
-// during early seed setup supplies the normal admin scopes; chat:read is a direct
-// grant because it is intentionally not part of any system role. Idempotent:
-// enableRBAC no-ops if already enabled and the grant insert uses ON CONFLICT.
-async function enableRBACForDevUser(init: {
-  sessionId: string;
+// grantDevUserFullSessionVisibility gives the local dev user unrestricted
+// chat:read. Organization provisioning supplies the built-in roles and grants,
+// while chat:read remains a direct grant because it is intentionally not part
+// of any system role. The insert is idempotent.
+async function grantDevUserFullSessionVisibility(init: {
   organizationId: string;
   userId: string;
-  gram: GramCore;
 }): Promise<void> {
-  const { sessionId, organizationId, userId, gram } = init;
-  log.info("Enabling RBAC + granting dev user full session visibility...");
-
-  // EnableRBAC is gated by requirePlatformAdmin (access/impl.go): the caller
-  // must have a @speakeasy.com/@speakeasyapi.dev email OR the users.admin flag.
-  // Locally the dev user's email is neither (e.g. a personal gmail address) and
-  // admin defaults to false, so the call 403s. Promote the dev user to admin in
-  // the DB first so the platform-admin check passes. Idempotent.
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; stdout?: string; message?: string };
-    abort(
-      `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
-    );
-  }
-
-  // EnableRBAC seeds the built-in system roles and flips the org feature flag.
-  const res = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!res.ok) {
-    abort("Failed to enable RBAC", res.error);
-  }
+  const { organizationId, userId } = init;
+  log.info("Granting dev user full session visibility...");
 
   // The Admin system role intentionally omits chat:read, so grant it directly to
   // the user principal. The selector mirrors authz.NewSelector and effect NULL
@@ -2384,7 +2459,7 @@ async function enableRBACForDevUser(init: {
       await fs.unlink(tmpFile).catch(() => {});
     }
     log.info(
-      "Enabled RBAC and granted the dev user chat:read; Agent Sessions now shows all org sessions.",
+      "Granted the dev user chat:read; Agent Sessions now shows all org sessions.",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
@@ -5130,20 +5205,18 @@ async function seed() {
     );
   }
 
-  // RBAC may already be enabled from an earlier seed. Establish the user's
-  // organization-level authorization before the first protected API call:
-  // platform super-admin status does not bypass ordinary org RBAC. Assigning
-  // Admin first lets enableRBAC reconcile system grants safely, and both steps
-  // are idempotent for clean and previously seeded databases.
+  // Establish the user's organization-level authorization before the first
+  // protected API call. Platform super-admin status does not bypass ordinary
+  // org RBAC. Seed the system roles first so databases created before RBAC was
+  // enabled can still assign the user to Admin. All writes are idempotent.
+  await seedSystemRoleGrants(activeOrgID);
   await seedCurrentUserAdminRole({
     organizationId: activeOrgID,
     userId: activeUserID,
   });
-  await enableRBACForDevUser({
-    sessionId,
+  await grantDevUserFullSessionVisibility({
     organizationId: activeOrgID,
     userId: activeUserID,
-    gram,
   });
 
   // oxlint-disable-next-line no-unused-vars
