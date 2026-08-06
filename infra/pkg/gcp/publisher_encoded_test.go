@@ -21,7 +21,7 @@ func TestEncodedMessageAttributes_CallerAttributesSurvive(t *testing.T) {
 	attrs := encodedMessageAttributes(map[string]string{
 		"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 		"event_type":  "audit_log.asset_event_v1",
-	}, &pingv2.Message{})
+	}, string(proto.MessageName(&pingv2.Message{})))
 
 	require.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", attrs["traceparent"])
 	require.Equal(t, "audit_log.asset_event_v1", attrs["event_type"])
@@ -33,7 +33,7 @@ func TestEncodedMessageAttributes_DerivedMarkersCannotBeOverridden(t *testing.T)
 	attrs := encodedMessageAttributes(map[string]string{
 		"content-type": "application/json",
 		"schema":       "gram.lies.v1.NotThis",
-	}, &pingv2.Message{})
+	}, string(proto.MessageName(&pingv2.Message{})))
 
 	require.Equal(t, "application/x-protobuf", attrs["content-type"],
 		"a stored attribute map must not be able to misdeclare the wire format of its own payload")

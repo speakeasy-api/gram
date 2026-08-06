@@ -42,11 +42,13 @@ func WithEncodedPublishSettings(settings *pubsub.PublishSettings) func(*psEncode
 	}
 }
 
-type psEncodedPublisher[M proto.Message] struct {
-	// zero is retained so the derived content-type and schema attributes stay
-	// available without ever decoding a payload.
-	zero M
-	pub  *pubsub.Publisher
+type psEncodedPublisher struct {
+	// schema is the message full name derived once at construction: it is
+	// constant for the publisher's lifetime, and deriving it per publish would
+	// walk the descriptor on the outbox relay's hot path. No type parameter is
+	// needed here — the payload is bytes, never a message value.
+	schema string
+	pub    *pubsub.Publisher
 }
 
 // PubSubEncodedPublisherForMessage returns a publisher that carries
@@ -76,7 +78,7 @@ func PubSubEncodedPublisherForMessage[M proto.Message](ctx context.Context, brok
 		publisher.PublishSettings = *o.publishSettings
 	}
 
-	return &psEncodedPublisher[M]{zero: msg, pub: publisher}, nil
+	return &psEncodedPublisher{schema: string(proto.MessageName(msg)), pub: publisher}, nil
 }
 
 // encodedMessageAttributes merges the caller's attributes with the markers
@@ -87,19 +89,19 @@ func PubSubEncodedPublisherForMessage[M proto.Message](ctx context.Context, brok
 // not be able to misdeclare the wire format of the payload it travels with.
 // Everything else, traceparent included, is the caller's to set — that is what
 // lets an outbox row carry its producer's trace across the database hop.
-func encodedMessageAttributes(attributes map[string]string, zero proto.Message) map[string]string {
+func encodedMessageAttributes(attributes map[string]string, schema string) map[string]string {
 	attrs := make(map[string]string, len(attributes)+2)
 	maps.Copy(attrs, attributes)
 	attrs["content-type"] = "application/x-protobuf"
-	attrs["schema"] = string(proto.MessageName(zero))
+	attrs["schema"] = schema
 
 	return attrs
 }
 
-func (p *psEncodedPublisher[M]) PublishEncoded(ctx context.Context, data []byte, attributes map[string]string) PublishResult {
+func (p *psEncodedPublisher) PublishEncoded(ctx context.Context, data []byte, attributes map[string]string) PublishResult {
 	return p.pub.Publish(ctx, &pubsub.Message{
 		Data:       data,
-		Attributes: encodedMessageAttributes(attributes, p.zero),
+		Attributes: encodedMessageAttributes(attributes, p.schema),
 	})
 }
 
@@ -107,7 +109,7 @@ func (p *psEncodedPublisher[M]) PublishEncoded(ctx context.Context, data []byte,
 // psPublisher.Stop, the underlying flush cannot be cancelled, so it runs in a
 // goroutine raced against ctx and is left to finish in the background if the
 // caller's deadline expires first.
-func (p *psEncodedPublisher[M]) Stop(ctx context.Context) error {
+func (p *psEncodedPublisher) Stop(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		p.pub.Stop()
