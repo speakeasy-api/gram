@@ -9,7 +9,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { EmaApp } from "@/lib/devidp";
+import { generateSigningKey, type GeneratedKey } from "@/lib/keygen";
 import {
   useCreateEmaApp,
   useDeleteEmaApp,
@@ -17,10 +19,20 @@ import {
 } from "@/hooks/use-ema";
 
 /**
- * Create or edit a requesting app. Which credential is filled in decides how
- * the app authenticates, so the fields say so rather than leaving an operator
- * to infer it from the server's behaviour.
+ * How an app authenticates is one choice, not three independent fields, so
+ * it is one tab strip. The tab is authoritative: submitting clears the
+ * credentials the other tabs own, otherwise a leftover JWKS would keep
+ * forcing private_key_jwt after switching to a secret.
  */
+type Method = "secret" | "jwt" | "public";
+
+function methodOf(app: EmaApp | undefined): Method {
+  if (!app) return "secret";
+  if (app.jwks) return "jwt";
+  if (app.client_secret) return "secret";
+  return "public";
+}
+
 export function AppDialog({
   app,
   onClose,
@@ -31,6 +43,7 @@ export function AppDialog({
   const editing = app !== undefined;
   const [clientID, setClientID] = useState(app?.client_id ?? "");
   const [name, setName] = useState(app?.name ?? "");
+  const [method, setMethod] = useState<Method>(methodOf(app));
   const [clientSecret, setClientSecret] = useState(app?.client_secret ?? "");
   const [jwks, setJwks] = useState(app?.jwks ?? "");
 
@@ -40,34 +53,34 @@ export function AppDialog({
   const pending = create.isPending || update.isPending || remove.isPending;
   const error = create.error ?? update.error ?? remove.error;
 
+  // Exactly one credential survives, decided by the tab.
+  const credentials = {
+    client_secret: method === "secret" ? clientSecret : "",
+    jwks: method === "jwt" ? jwks : "",
+  };
+
   const submit = () => {
     if (editing) {
       update.mutate(
-        {
-          id: app.id,
-          client_id: clientID,
-          name,
-          client_secret: clientSecret,
-          jwks,
-        },
+        { id: app.id, client_id: clientID, name, ...credentials },
         { onSuccess: onClose },
       );
     } else {
       create.mutate(
-        {
-          client_id: clientID,
-          name: name || undefined,
-          client_secret: clientSecret || undefined,
-          jwks: jwks || undefined,
-        },
+        { client_id: clientID, name: name || undefined, ...credentials },
         { onSuccess: onClose },
       );
     }
   };
 
+  const ready =
+    clientID.trim() !== "" &&
+    (method !== "jwt" || jwks.trim() !== "") &&
+    (method !== "secret" || clientSecret.trim() !== "");
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <form
           className="flex flex-col gap-4"
           onSubmit={(e) => {
@@ -78,6 +91,7 @@ export function AppDialog({
           <DialogHeader>
             <DialogTitle>{editing ? "Edit app" : "Register app"}</DialogTitle>
           </DialogHeader>
+
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="app-client-id">Client ID</Label>
@@ -99,34 +113,35 @@ export function AppDialog({
                 placeholder="defaults to the client id"
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="app-secret">Client secret</Label>
-              <Input
-                id="app-secret"
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                placeholder="blank = public client"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="app-jwks">JWKS</Label>
-              <Input
-                id="app-jwks"
-                value={jwks}
-                onChange={(e) => setJwks(e.target.value)}
-                placeholder='{"keys":[…]}'
-              />
-              <p className="text-xs text-muted-foreground">
-                Set this and the app must authenticate with private_key_jwt; its
-                secret stops working.
-              </p>
-            </div>
-            {error && (
-              <div className="text-xs text-destructive">
-                {(error as Error).message}
-              </div>
-            )}
           </div>
+
+          <section className="flex flex-col gap-2">
+            <Label>Authenticates with</Label>
+            <Tabs value={method} onValueChange={(v) => setMethod(v as Method)}>
+              <TabsList className="w-full">
+                <TabsTrigger value="secret">Client Secret</TabsTrigger>
+                <TabsTrigger value="jwt">Private Key JWT</TabsTrigger>
+                <TabsTrigger value="public">Public</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="secret">
+                <SecretPane value={clientSecret} onChange={setClientSecret} />
+              </TabsContent>
+              <TabsContent value="jwt">
+                <PrivateKeyPane value={jwks} onChange={setJwks} />
+              </TabsContent>
+              <TabsContent value="public">
+                <PublicPane />
+              </TabsContent>
+            </Tabs>
+          </section>
+
+          {error && (
+            <div className="text-xs text-destructive">
+              {(error as Error).message}
+            </div>
+          )}
+
           <DialogFooter className="justify-between">
             {editing ? (
               <Button
@@ -145,7 +160,7 @@ export function AppDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending || !clientID.trim()}>
+              <Button type="submit" disabled={pending || !ready}>
                 {editing ? "Save" : "Register"}
               </Button>
             </div>
@@ -153,5 +168,151 @@ export function AppDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SecretPane({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 pt-3">
+      <Label htmlFor="app-secret">Client secret</Label>
+      <Input
+        id="app-secret"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="s3cret"
+      />
+      <p className="text-xs text-muted-foreground">
+        Sent as <code>client_secret</code> on the form (client_secret_post).
+      </p>
+    </div>
+  );
+}
+
+function PrivateKeyPane({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [generated, setGenerated] = useState<GeneratedKey | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+
+  const generate = async () => {
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const key = await generateSigningKey();
+      setGenerated(key);
+      onChange(key.jwks);
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 pt-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Register the app's public key; it signs a client assertion to
+          authenticate. Paste a JWKS, or generate a keypair here.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={generate}
+          disabled={generating}
+        >
+          {generating ? "Generating…" : "Generate"}
+        </Button>
+      </div>
+
+      {genError && <p className="text-xs text-destructive">{genError}</p>}
+
+      {generated && (
+        <div className="flex flex-col gap-1.5 rounded-md border border-[var(--retro-orange)]/40 p-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[var(--retro-orange)]">Private key</Label>
+            <CopyButton text={generated.privateKeyPEM} />
+          </div>
+          <pre className="max-h-40 overflow-auto rounded-sm bg-muted/40 p-2 font-mono text-[10px] leading-tight break-all whitespace-pre-wrap">
+            {generated.privateKeyPEM}
+          </pre>
+          <p className="text-xs text-muted-foreground">
+            Generated in your browser and never sent to dev-idp — only the JWKS
+            below is. Copy it now; closing this dialog loses it.
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="app-jwks">JWKS</Label>
+        <textarea
+          id="app-jwks"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={5}
+          spellCheck={false}
+          placeholder='{"keys":[{"kty":"RSA","kid":"…","n":"…","e":"AQAB"}]}'
+          className="rounded-md border border-border bg-background p-2 font-mono text-xs"
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The honest version: a public client is weaker, but it is not the free-for-all
+ * it looks like, and the copy should say which part it does and does not gate.
+ */
+function PublicPane() {
+  return (
+    <div className="flex flex-col gap-2 pt-3 text-xs text-muted-foreground">
+      <p>
+        The app presents only its <code>client_id</code>, which is not a secret.
+        Anything that can reach this IdP can claim to be it.
+      </p>
+      <p>
+        Minting still needs a valid <code>subject_token</code> — an id_token or
+        refresh token this IdP issued — plus an assignment for the user it
+        names. So a caller holding no user credential cannot mint either way;
+        what client authentication adds is a second barrier if a subject token
+        leaks.
+      </p>
+      <p className="text-[var(--retro-orange)]">
+        Real enterprise IdPs generally require one of the other two. Pick this
+        for convenience while exercising policy, not when checking what a client
+        will meet in production.
+      </p>
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="xs"
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    >
+      {copied ? "Copied" : "Copy"}
+    </Button>
   );
 }

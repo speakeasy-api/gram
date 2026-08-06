@@ -287,11 +287,13 @@ function isRelated(
 }
 
 function AppBody({ app }: { app: EmaApp }) {
+  // A public app is a legitimate configuration but the weakest of the three,
+  // so it is toned to catch the eye when scanning the column.
   const method = app.jwks
-    ? "private_key_jwt"
+    ? { label: "private_key_jwt", tone: "default" as const }
     : app.client_secret
-      ? "client_secret_post"
-      : "public";
+      ? { label: "client_secret_post", tone: "default" as const }
+      : { label: "public", tone: "warn" as const };
 
   return (
     <div className="min-w-0">
@@ -300,7 +302,16 @@ function AppBody({ app }: { app: EmaApp }) {
         {app.client_id}
       </div>
       <div className="mt-1 flex flex-wrap gap-1">
-        <Chip>{method}</Chip>
+        <Chip
+          tone={method.tone}
+          title={
+            method.tone === "warn"
+              ? "Authenticates with its client_id alone. Minting still needs a valid subject_token and an assignment."
+              : undefined
+          }
+        >
+          {method.label}
+        </Chip>
         {!app.enabled && <Chip tone="warn">disabled</Chip>}
       </div>
     </div>
