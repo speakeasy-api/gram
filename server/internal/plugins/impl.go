@@ -2050,7 +2050,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
-	if input.SkipIfUnchanged && !mcpChanged && !platformOnlyChange && !hooksChanged {
+	// Indeterminate Platform admission must inspect an already-published subtree
+	// before skipping. A stored fingerprint alone cannot establish that its files
+	// still exist, and the preservation path below reconstructs incomplete repos.
+	if input.SkipIfUnchanged && !preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
 		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
 	}
 
