@@ -14,6 +14,28 @@ const DEEP_GREEN_PROGRESS_CLASS = "bg-[var(--color-brand-c)]";
 const ORANGE_PROGRESS_CLASS = "bg-[var(--color-brand-ruby)]";
 const RED_PROGRESS_CLASS = "bg-[var(--color-brand-swift)]";
 
+function getTrialStatus(
+  trial: { startedAt: Date; endsAt: Date } | null | undefined,
+  now: Date,
+) {
+  if (
+    trial === null ||
+    trial === undefined ||
+    !Number.isFinite(trial.startedAt.getTime()) ||
+    !Number.isFinite(trial.endsAt.getTime())
+  ) {
+    return null;
+  }
+
+  return getEnterpriseTrialStatus(
+    {
+      startedAt: trial.startedAt.toISOString(),
+      endsAt: trial.endsAt.toISOString(),
+    },
+    now,
+  );
+}
+
 function getTrialProgressColorClass(
   dayNumber: number,
   totalDays: number,
@@ -38,13 +60,12 @@ function getTrialProgressColorClass(
 export function EnterpriseTrialStatusCard(): React.ReactNode {
   const { enterpriseTrial } = useSession();
   const [now, setNow] = useState(() => new Date());
-  const status = getEnterpriseTrialStatus(
-    enterpriseTrial && {
-      startedAt: enterpriseTrial.startedAt.toISOString(),
-      endsAt: enterpriseTrial.endsAt.toISOString(),
-    },
-    now,
-  );
+  const status = getTrialStatus(enterpriseTrial, now);
+  const startedAt = enterpriseTrial?.startedAt.getTime();
+  const endsAt = enterpriseTrial?.endsAt.getTime();
+  const nowTime = now.getTime();
+  const dayNumber = status?.dayNumber;
+  const remainingDays = status?.remainingDays;
 
   useEffect(() => {
     setNow(new Date());
@@ -52,43 +73,39 @@ export function EnterpriseTrialStatusCard(): React.ReactNode {
 
   useEffect(() => {
     if (
-      enterpriseTrial === null ||
-      enterpriseTrial === undefined ||
-      status === null
+      startedAt === undefined ||
+      endsAt === undefined ||
+      dayNumber === undefined ||
+      remainingDays === undefined
     ) {
       return;
     }
 
-    const currentTime = now.getTime();
-    const startsAt = enterpriseTrial.startedAt.getTime();
-    const endsAt = enterpriseTrial.endsAt.getTime();
-    const nextDayBoundary = startsAt + status.dayNumber * MILLISECONDS_PER_DAY;
+    const nextDayBoundary = startedAt + dayNumber * MILLISECONDS_PER_DAY;
     const nextRemainingDaysBoundary =
-      endsAt - (status.remainingDays - 1) * MILLISECONDS_PER_DAY;
+      endsAt - (remainingDays - 1) * MILLISECONDS_PER_DAY;
     const nextUpdateAt = Math.min(
       endsAt,
-      nextDayBoundary > currentTime ? nextDayBoundary : Infinity,
-      nextRemainingDaysBoundary > currentTime
+      nextDayBoundary > nowTime ? nextDayBoundary : Infinity,
+      nextRemainingDaysBoundary > nowTime
         ? nextRemainingDaysBoundary
         : Infinity,
     );
     const timer = window.setTimeout(
       () => setNow(new Date()),
-      nextUpdateAt - currentTime,
+      nextUpdateAt - nowTime,
     );
 
     return () => window.clearTimeout(timer);
-  }, [enterpriseTrial, now, status]);
+  }, [dayNumber, endsAt, nowTime, remainingDays, startedAt]);
 
   if (status === null) {
     return null;
   }
 
-  const daysLeft = Math.max(status.totalDays - status.dayNumber, 0);
+  const daysLeft = status.remainingDays;
   const daysLeftLabel = `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`;
-  const progressValue = Number(
-    Math.min((status.dayNumber / status.totalDays) * 100, 100).toFixed(2),
-  );
+  const progressValue = Number((status.progress * 100).toFixed(2));
   const progressLabel = `Day ${status.dayNumber} of ${status.totalDays}`;
   const progressColorClass = getTrialProgressColorClass(
     status.dayNumber,

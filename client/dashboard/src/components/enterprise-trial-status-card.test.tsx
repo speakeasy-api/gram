@@ -43,22 +43,22 @@ describe("EnterpriseTrialStatusCard", () => {
 
     expect(screen.getByText("Trial")).toBeTruthy();
     expect(screen.getByText("Day 1/14")).toBeTruthy();
-    expect(screen.getByText("13 days left")).toBeTruthy();
+    expect(screen.getByText("14 days left")).toBeTruthy();
     const progressBar = screen.getByRole("progressbar", {
       name: "Day 1 of 14",
     });
-    expect(progressBar.getAttribute("aria-valuenow")).toBe("7.14");
+    expect(progressBar.getAttribute("aria-valuenow")).toBe("0");
     expect(progressBar.firstElementChild?.getAttribute("style")).toBe(
-      "width: 7.14%;",
+      "width: 0%;",
     );
   });
 
-  it("shows zero days left on the final trial day", () => {
+  it("shows one day left on the final trial day", () => {
     vi.setSystemTime(new Date("2026-08-18T00:00:00.000Z"));
 
     render(<EnterpriseTrialStatusCard />);
 
-    expect(screen.getByText("0 days left")).toBeTruthy();
+    expect(screen.getByText("1 day left")).toBeTruthy();
   });
 
   it("renders nothing without an enterprise trial", () => {
@@ -77,12 +77,28 @@ describe("EnterpriseTrialStatusCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it.each([
+    ["start", new Date("invalid"), activeTrial.endsAt],
+    ["end", activeTrial.startedAt, new Date("invalid")],
+  ])(
+    "renders nothing when the trial %s date is invalid",
+    (_, startedAt, endsAt) => {
+      mocks.useSession.mockReturnValue({
+        enterpriseTrial: { startedAt, endsAt },
+      });
+
+      const { container } = render(<EnterpriseTrialStatusCard />);
+
+      expect(container.firstChild).toBeNull();
+    },
+  );
+
   it("removes the card when the trial expires without a parent rerender", async () => {
     vi.setSystemTime(new Date("2026-08-18T23:59:59.999Z"));
 
     const { container } = render(<EnterpriseTrialStatusCard />);
 
-    expect(screen.getByText("0 days left")).toBeTruthy();
+    expect(screen.getByText("1 day left")).toBeTruthy();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
@@ -99,7 +115,18 @@ describe("EnterpriseTrialStatusCard", () => {
     });
 
     expect(screen.getByText("Day 2/14")).toBeTruthy();
-    expect(screen.getByText("12 days left")).toBeTruthy();
+    expect(screen.getByText("13 days left")).toBeTruthy();
+  });
+
+  it("does not recreate the timer on an unrelated rerender", () => {
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    const { rerender } = render(<EnterpriseTrialStatusCard />);
+    setTimeoutSpy.mockClear();
+
+    rerender(<EnterpriseTrialStatusCard />);
+
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    setTimeoutSpy.mockRestore();
   });
 
   it("visually advances the elapsed-time bar", () => {
@@ -111,7 +138,7 @@ describe("EnterpriseTrialStatusCard", () => {
       screen
         .getByRole("progressbar", { name: "Day 3 of 14" })
         .firstElementChild?.getAttribute("style"),
-    ).toBe("width: 21.43%;");
+    ).toBe("width: 14.29%;");
   });
 
   it("changes the brand color as the trial progresses", () => {
