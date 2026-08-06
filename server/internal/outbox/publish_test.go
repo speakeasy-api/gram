@@ -46,18 +46,18 @@ func TestPublish_StoresTopicAndMarshaledMessage(t *testing.T) {
 	require.JSONEq(t, `{"a":1}`, string(decoded.GetPayload()))
 }
 
-func TestPublish_RejectsUnregisteredTopic(t *testing.T) {
+func TestPublish_RejectsUndeclaredTopic(t *testing.T) {
 	t.Parallel()
 
 	inst := newOutboxTestInstance(t)
 	orgID := inst.seedOrg(t)
 
-	// AuditLogCreatedPayloadV1 is a Go struct, not a topic; use a proto that
-	// nothing registered instead.
+	// SvixRelay is a subscription marker: it declares no topic option, so it is
+	// absent from the generated registry and must be rejected at the write.
 	_, err := outbox.Publish(t.Context(), inst.conn, orgID, outbox.Message{Proto: &webhooksv1.SvixRelay{}})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "not registered",
-		"an unregistered topic should fail at the write, where the mistake is still attached to its cause")
+	require.Contains(t, err.Error(), "not a declared pubsub topic",
+		"an undeclared topic should fail at the write, where the mistake is still attached to its cause")
 }
 
 func TestPublish_RejectsOversizedMessage(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -13,7 +13,7 @@ import (
 // failure is dead-lettered immediately instead of burning its retry budget.
 //
 // Two markers rather than one: oops.Permanent is the repo-wide convention and
-// covers failures this package raises, while gcp.ErrUnknownTopic comes from
+// covers failures this package raises, while topics.ErrUnknownTopic comes from
 // infra/, which cannot import server/internal/oops (Go internal visibility —
 // same module, different subtree).
 //
@@ -27,7 +27,7 @@ func isPermanent(err error) bool {
 		return false
 	}
 
-	return errors.Is(err, oops.ErrPermanent) || errors.Is(err, gcp.ErrUnknownTopic)
+	return errors.Is(err, oops.ErrPermanent) || errors.Is(err, topics.ErrUnknownTopic)
 }
 
 // unmarshalAttributes decodes the stored Pub/Sub attribute map. A row with an

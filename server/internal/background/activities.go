@@ -17,6 +17,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -80,7 +81,7 @@ type Publishers struct {
 	// Outbox publishes whatever the publish_outbox table holds. It resolves its
 	// topic per message rather than being bound to one, because the destination
 	// is a property of the row and not of this wiring.
-	Outbox gcp.RawPublisher
+	Outbox topics.Publisher
 }
 
 type Activities struct {

@@ -10,9 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -45,7 +44,7 @@ func TestDrain_DeletesPublishedRows(t *testing.T) {
 
 	published := inst.pub.messages()
 	require.Len(t, published, 1)
-	require.Equal(t, protoreflect.FullName(webhooksTopic), published[0].Topic)
+	require.Equal(t, webhooksTopic, published[0].Topic)
 	require.Equal(t, "audit_log.asset_event_v1", published[0].Attributes["event_type"],
 		"stored attributes must reach the publisher so subscription filters and trace context survive the database hop")
 
@@ -60,7 +59,7 @@ func TestDrain_TransientFailureSchedulesRetry(t *testing.T) {
 	orgID := seedOrg(t, inst.conn)
 	row := seedRow(t, inst.conn, orgID, seedOptions{})
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("pubsub unavailable")
 	}
 
@@ -97,7 +96,7 @@ func TestDrain_RetryingRowsRecordEachRowsOwnError(t *testing.T) {
 		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.beta.v1.Event"}),
 	}
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("pubsub unavailable")
 	}
 
@@ -139,7 +138,7 @@ func TestDrain_RetryBackoffFollowsEachRowsOwnAttemptCount(t *testing.T) {
 		aged = append(aged, seedRow(t, inst.conn, orgID, seedOptions{attempts: 8}))
 	}
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("pubsub unavailable")
 	}
 
@@ -190,8 +189,8 @@ func TestDrain_UnknownTopicDeadLetters(t *testing.T) {
 	orgID := seedOrg(t, inst.conn)
 	row := seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.nope.v1.Missing"})
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
-		return gcp.ErrUnknownTopic
+	inst.pub.failWith = func(string, int) error {
+		return topics.ErrUnknownTopic
 	}
 
 	result, err := inst.relay.Drain(t.Context())
@@ -229,8 +228,8 @@ func TestDrain_DeadLettersRecordEachRowsOwnError(t *testing.T) {
 
 	// The relay names the topic it could not reach in the error it records, so
 	// two unresolvable topics in one batch produce two distinct messages.
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
-		return gcp.ErrUnknownTopic
+	inst.pub.failWith = func(string, int) error {
+		return topics.ErrUnknownTopic
 	}
 
 	result, err := inst.relay.Drain(t.Context())
@@ -254,7 +253,7 @@ func TestDrain_ExhaustedAttemptsDeadLetters(t *testing.T) {
 	// last one the row gets.
 	row := seedRow(t, inst.conn, orgID, seedOptions{attempts: 9})
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("still unavailable")
 	}
 
@@ -281,7 +280,7 @@ func TestDrain_PartialBatchSettlesEachRowIndependently(t *testing.T) {
 
 	// Fail only the second publish. The other two must still be deleted — a
 	// batch that settles all-or-nothing would either lose or duplicate events.
-	inst.pub.failWith = func(_ protoreflect.FullName, call int) error {
+	inst.pub.failWith = func(_ string, call int) error {
 		if call == 1 {
 			return errors.New("transient")
 		}

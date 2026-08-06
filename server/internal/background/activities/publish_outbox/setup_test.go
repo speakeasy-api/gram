@@ -14,10 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -57,14 +57,16 @@ type fakePublisher struct {
 	// failWith is consulted per call; return nil to succeed. The call index
 	// counts every attempt, failed ones included, so a test can target the nth
 	// publish in a batch.
-	failWith func(topic protoreflect.FullName, call int) error
+	failWith func(topic string, call int) error
 }
 
 type publishedMessage struct {
-	Topic      protoreflect.FullName
+	Topic      string
 	Data       []byte
 	Attributes map[string]string
 }
+
+var _ topics.Publisher = (*fakePublisher)(nil)
 
 func newFakePublisher() *fakePublisher {
 	return &fakePublisher{
@@ -74,7 +76,7 @@ func newFakePublisher() *fakePublisher {
 	}
 }
 
-func (f *fakePublisher) PublishRaw(ctx context.Context, topic protoreflect.FullName, data []byte, attributes map[string]string) gcp.PublishResult {
+func (f *fakePublisher) Publish(ctx context.Context, topic string, data []byte, attributes map[string]string) gcp.PublishResult {
 	f.mu.Lock()
 	call := f.calls
 	f.calls++

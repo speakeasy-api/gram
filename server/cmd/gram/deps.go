@@ -43,12 +43,12 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -68,7 +68,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -1056,26 +1055,12 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	outboxPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
 	outboxPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
 
-	outboxPublisher := gcp.NewRawPublisher(psbroker, outbox.ProtobufType,
-		gcp.WithRawPublishSettings(&outboxPublishSettings),
-	)
+	// No boot-time resolvability assertion is needed here: the topics registry
+	// is generated from the proto descriptors and imports every topic's Go
+	// package, so a topic that can be written to the outbox is resolvable by
+	// construction, and CI fails on registry drift.
+	outboxPublisher := topics.NewSet(psbroker, &outboxPublishSettings)
 	pubs = append(pubs, labelledStop{label: "outbox", pub: outboxPublisher})
-
-	// Fail here rather than at publish time. A topic that is registered but not
-	// resolvable would otherwise dead-letter every row written to it, one row at
-	// a time, with nothing to point at the wiring mistake that caused it.
-	if err := outbox.AssertResolvable(func(name protoreflect.FullName) error {
-		msg, ok := outbox.ProtobufType(name)
-		if !ok {
-			return fmt.Errorf("not in registry")
-		}
-		if _, err := psbroker.PublisherForMessage(ctx, msg); err != nil {
-			return fmt.Errorf("resolve publisher: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return nil, noopShutdown, fmt.Errorf("failed to verify outbox topics: %w", err)
-	}
 
 	shutdown := func(ctx context.Context) error {
 		var err error
