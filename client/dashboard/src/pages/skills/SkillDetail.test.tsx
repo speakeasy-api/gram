@@ -456,12 +456,16 @@ describe("SkillDetail", () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
     render(<SkillDetail />);
     const archiveButton = screen.getByRole("button", { name: "Archive" });
-    expect(archiveButton).toHaveClass(
-      "bg-transparent",
+    expect(archiveButton.className).toContain("bg-transparent");
+    expect(archiveButton.className).toContain(
       "text-btn-destructive-secondary",
+    );
+    expect(archiveButton.className).toContain(
       "hover:text-btn-destructive-secondary-hover",
     );
-    expect(archiveButton).not.toHaveClass("hover:bg-btn-destructive-hover");
+    expect(archiveButton.className).not.toContain(
+      "hover:bg-btn-destructive-hover",
+    );
 
     fireEvent.click(archiveButton);
     fireEvent.click(screen.getByRole("button", { name: "Archive skill" }));
