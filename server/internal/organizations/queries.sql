@@ -733,3 +733,11 @@ LEFT JOIN global_roles gr
 WHERE ora.organization_id = @organization_id
   AND ora.user_id IS NOT NULL
   AND ora.deleted_at IS NULL;
+
+-- name: GetActiveEnterpriseTrial :one
+SELECT organization_id, created_at, ends_at
+FROM enterprise_trials
+WHERE organization_id = @organization_id
+  AND converted_at IS NULL
+  AND demoted_at IS NULL
+  AND ends_at > now();
