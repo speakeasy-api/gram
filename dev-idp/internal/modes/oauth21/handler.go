@@ -66,6 +66,11 @@ const (
 	// payloads are small; 64 KiB is comfortably above any legitimate
 	// request and below any DoS-relevant size.
 	maxFormBodyBytes = 64 << 10
+
+	// cimdCacheTTL bounds how long a client metadata document is reused. Long
+	// enough that a burst of requests is one fetch, short enough that
+	// republishing a rotated key takes effect without a restart.
+	cimdCacheTTL = 60 * time.Second
 )
 
 // Config carries the static configuration for the oauth2-1 mode.
@@ -90,19 +95,20 @@ type Handler struct {
 	logger   *slog.Logger
 	db       *sql.DB
 	keystore *keystore.Keystore
-	// httpClient dereferences Client ID Metadata Document (CIMD) client_id URLs
-	// during the authorize leg. Short timeout; dev-only (no HTTPS enforcement).
-	httpClient *http.Client
+	// cimd dereferences Client ID Metadata Document client_id URLs: on the
+	// authorize leg to learn a client's redirect_uris, and on the mint leg to
+	// learn the keys a CIMD client authenticates with.
+	cimd *cimd.Resolver
 }
 
 func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
-		cfg:        cfg,
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"),
-		logger:     logger.With(slog.String("component", "devidp."+Mode)),
-		db:         db,
-		keystore:   ks,
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		cfg:      cfg,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"),
+		logger:   logger.With(slog.String("component", "devidp."+Mode)),
+		db:       db,
+		keystore: ks,
+		cimd:     cimd.NewResolver(&http.Client{Timeout: 5 * time.Second}, cimdCacheTTL),
 	}
 }
 
@@ -345,7 +351,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		// who can reach this endpoint already has local access).
 		allowedRedirectURIs = []string{redirectURI}
 	case cimd.IsClientID(clientID):
-		doc, derr := cimd.Fetch(ctx, h.httpClient, clientID)
+		doc, derr := h.cimd.Document(ctx, clientID)
 		switch {
 		case errors.Is(derr, cimd.ErrClientIDMismatch):
 			oauthError(w, http.StatusBadRequest, "invalid_client", cimd.ErrClientIDMismatch.Error())

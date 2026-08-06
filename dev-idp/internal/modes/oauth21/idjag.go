@@ -15,6 +15,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/dev-idp/internal/cimd"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 	"github.com/speakeasy-api/gram/dev-idp/internal/jwks"
@@ -231,17 +232,31 @@ func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter,
 
 	switch {
 	case app.Jwks != "":
-		if got := r.Form.Get("client_assertion_type"); got != ema.ClientAssertionTypeJWTBearer {
-			oauthError(w, http.StatusUnauthorized, "invalid_client",
-				fmt.Sprintf("this app authenticates with private_key_jwt; send client_assertion_type=%s", ema.ClientAssertionTypeJWTBearer))
+		keys, err := jwks.Parse([]byte(app.Jwks))
+		if err != nil {
+			h.logger.ErrorContext(ctx, "app has an unusable registered jwks",
+				slog.String("client_id", app.ClientID), slog.Any("error", err))
+			oauthError(w, http.StatusUnauthorized, "invalid_client", "this app's registered jwks is unusable")
 			return nil
 		}
-		if err := h.verifyClientAssertion(app, assertion); err != nil {
-			h.logger.WarnContext(ctx, "reject client assertion",
-				slog.String("client_id", app.ClientID),
-				slog.Any("error", err),
-			)
-			oauthError(w, http.StatusUnauthorized, "invalid_client", err.Error())
+		if !h.requirePrivateKeyJWT(ctx, w, &app, keys, r, assertion) {
+			return nil
+		}
+
+	case cimd.IsClientID(app.ClientID):
+		// The app published its own metadata document, so that is where its
+		// keys come from -- no JWKS is stored here and rotation is the client
+		// republishing. A document that declares none describes a public
+		// client, which the draft allows.
+		keys, hasKeys, err := h.cimd.Keys(ctx, app.ClientID)
+		if err != nil {
+			h.logger.WarnContext(ctx, "resolve client metadata document",
+				slog.String("client_id", app.ClientID), slog.Any("error", err))
+			oauthError(w, http.StatusUnauthorized, "invalid_client",
+				fmt.Sprintf("could not read this client's metadata document: %v", err))
+			return nil
+		}
+		if hasKeys && !h.requirePrivateKeyJWT(ctx, w, &app, keys, r, assertion) {
 			return nil
 		}
 
@@ -273,22 +288,45 @@ func unverifiedAssertionSubject(assertion string) string {
 	return claims.Subject
 }
 
+// requirePrivateKeyJWT enforces the private_key_jwt method against an already
+// resolved key set, whichever side supplied it. It writes the error response
+// itself and reports false when the caller should stop.
+func (h *Handler) requirePrivateKeyJWT(
+	ctx context.Context,
+	w http.ResponseWriter,
+	app *repo.EmaApp,
+	keys jwks.Document,
+	r *http.Request,
+	assertion string,
+) bool {
+	if got := r.Form.Get("client_assertion_type"); got != ema.ClientAssertionTypeJWTBearer {
+		oauthError(w, http.StatusUnauthorized, "invalid_client",
+			fmt.Sprintf("this app authenticates with private_key_jwt; send client_assertion_type=%s", ema.ClientAssertionTypeJWTBearer))
+		return false
+	}
+	if err := h.verifyClientAssertion(app, keys, assertion); err != nil {
+		h.logger.WarnContext(ctx, "reject client assertion",
+			slog.String("client_id", app.ClientID),
+			slog.Any("error", err),
+		)
+		oauthError(w, http.StatusUnauthorized, "invalid_client", err.Error())
+		return false
+	}
+	return true
+}
+
 // verifyClientAssertion checks an RFC 7523 §2.2 private_key_jwt assertion
-// against the app's registered JWKS.
+// against a key set. The keys come either from the JWKS registered on the app
+// or from the app's own metadata document; nothing below cares which.
 //
 // The audience check is what stops an assertion from being replayed: a token
 // the app minted for some other authorization server must not authenticate it
 // here. Both the issuer identifier and the token endpoint URL are accepted,
 // because deployments differ on which one they put in `aud` and rejecting the
 // other reads as a signing bug rather than a configuration one.
-func (h *Handler) verifyClientAssertion(app repo.EmaApp, assertion string) error {
+func (h *Handler) verifyClientAssertion(app *repo.EmaApp, doc jwks.Document, assertion string) error {
 	if assertion == "" {
 		return errors.New("client_assertion is required")
-	}
-
-	doc, err := jwks.Parse([]byte(app.Jwks))
-	if err != nil {
-		return fmt.Errorf("this app's registered jwks is unusable: %w", err)
 	}
 
 	var probe jwt.RegisteredClaims
@@ -300,7 +338,7 @@ func (h *Handler) verifyClientAssertion(app repo.EmaApp, assertion string) error
 
 	key, err := doc.FindRSA(kid)
 	if err != nil {
-		return fmt.Errorf("no key in this app's jwks matches the assertion: %w", err)
+		return fmt.Errorf("no key for this client matches the assertion: %w", err)
 	}
 
 	var claims jwt.RegisteredClaims

@@ -289,11 +289,18 @@ function isRelated(
 function AppBody({ app }: { app: EmaApp }) {
   // A public app is a legitimate configuration but the weakest of the three,
   // so it is toned to catch the eye when scanning the column.
-  const method = app.jwks
-    ? { label: "private_key_jwt", tone: "default" as const }
-    : app.client_secret
-      ? { label: "client_secret_post", tone: "default" as const }
-      : { label: "public", tone: "warn" as const };
+  //
+  // A CIMD client stores no JWKS here — its keys live in its own document —
+  // so it would otherwise read as public, which is only true if that document
+  // publishes no keys. The card cannot know without fetching, so it names the
+  // source rather than guessing the method.
+  const method = /^https?:\/\//.test(app.client_id)
+    ? { label: "metadata document", tone: "default" as const }
+    : app.jwks
+      ? { label: "private_key_jwt", tone: "default" as const }
+      : app.client_secret
+        ? { label: "client_secret_post", tone: "default" as const }
+        : { label: "public", tone: "warn" as const };
 
   return (
     <div className="min-w-0">
@@ -307,7 +314,9 @@ function AppBody({ app }: { app: EmaApp }) {
           title={
             method.tone === "warn"
               ? "Authenticates with its client_id alone. Minting still needs a valid subject_token and an assignment."
-              : undefined
+              : method.label === "metadata document"
+                ? "Keys are read from this client's own metadata document; a document with none is treated as public."
+                : undefined
           }
         >
           {method.label}
