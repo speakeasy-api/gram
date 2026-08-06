@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -71,8 +70,8 @@ func (p *Provisioner) ProvisionOrganizationAdminTx(ctx context.Context, tx pgx.T
 		WorkosUserID:       admin.WorkOSUserID,
 		UserID:             conv.ToPGText(admin.UserID),
 		WorkosMembershipID: conv.ToPGTextEmpty(admin.WorkOSMembershipID),
-		WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now().UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-		WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
 		WorkosRoleSlug:     SystemRoleAdmin,
 	})
 	if err != nil {
