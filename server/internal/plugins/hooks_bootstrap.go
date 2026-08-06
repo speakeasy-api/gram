@@ -396,18 +396,21 @@ exit $LASTEXITCODE
 `, hooksBinaryVersion, conv.Ternary(cfg.InstallFailOpen, 0, 1), hooksDownloadHost(cfg.ServerURL), cases.String())
 }
 
-func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool) string {
-	command := fmt.Sprintf(`bash "%s/hooks/bootstrap.sh" --config="%s/speakeasy.json" agenthooks run --provider=%s --timeout=%ds`, root, root, provider, timeoutSeconds)
-	if async {
-		command += " --async"
-	}
-	return command
+// hooksBootstrapCommand renders a hook command line. The verb is `agenthooks
+// client`: the per-hook process forwards the event to the long-running hook
+// server (spawned on demand, keyed by the pre-sentinel --config), which hosts
+// the pipeline, warm caches, and in-process OTel telemetry. The pinned hooks
+// binary must therefore include client/server support; an older binary
+// degrades gracefully — its argv parser treats the unknown "client" verb as a
+// stray positional and runs the event in-process, today's `run` behavior.
+//
+// There is no --async suffix anymore: the hook server early-acks non-gating
+// events (replies to the client before finishing processing), which replaces
+// the old detached re-exec quirk.
+func hooksBootstrapCommand(root, provider string, timeoutSeconds int) string {
+	return fmt.Sprintf(`bash "%s/hooks/bootstrap.sh" --config="%s/speakeasy.json" agenthooks client --provider=%s --timeout=%ds`, root, root, provider, timeoutSeconds)
 }
 
-func hooksPowerShellCommand(root, provider string, timeoutSeconds int, async bool) string {
-	command := fmt.Sprintf(`powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%s\hooks\bootstrap.ps1" --config="%s\speakeasy.json" agenthooks run --provider=%s --timeout=%ds`, root, root, provider, timeoutSeconds)
-	if async {
-		command += " --async"
-	}
-	return command
+func hooksPowerShellCommand(root, provider string, timeoutSeconds int) string {
+	return fmt.Sprintf(`powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%s\hooks\bootstrap.ps1" --config="%s\speakeasy.json" agenthooks client --provider=%s --timeout=%ds`, root, root, provider, timeoutSeconds)
 }
