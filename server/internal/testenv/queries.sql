@@ -355,8 +355,7 @@ WHERE id = @id;
 
 -- name: CountSkillPromptInjectionResults :one
 -- Test-only fixture: counts prompt-injection findings anchored to a version of
--- the named skill. Attribution is what makes the finding useful, so tests
--- assert on the skill_versions join rather than on the finding alone.
+-- the named skill.
 SELECT count(*)
 FROM risk_results rr
 JOIN skill_versions sv ON sv.id = rr.skill_version_id
@@ -368,9 +367,7 @@ WHERE s.project_id = @project_id
 
 -- name: CountSkillScanRecords :one
 -- Test-only fixture: counts every recorded scan of a version of the named
--- skill, findings and clean records alike. This is the coverage question -
--- "was this content ever judged" - which CountSkillPromptInjectionResults
--- cannot answer because it filters to found rows.
+-- skill, findings and clean records alike.
 SELECT count(*)
 FROM risk_results rr
 JOIN skill_versions sv ON sv.id = rr.skill_version_id

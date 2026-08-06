@@ -4454,11 +4454,8 @@ type RecordSkillPromptInjectionScanParams struct {
 
 // Records one row per enabled prompt-injection policy that has not yet scanned
 // this skill version, anchored on the version rather than a chat message.
-// Called for a completed judgement whether or not it found anything: a
-// found = FALSE row is the coverage record that separates "judged clean" from
-// "never judged", mirroring how the chat batch path writes empty result rows.
-// A judge failure records nothing, leaving the version eligible for a later
-// scan rather than silently passing as clean.
+// Called for any completed judgement: a found = FALSE row is the coverage
+// record, mirroring the empty result rows the chat batch path writes.
 func (q *Queries) RecordSkillPromptInjectionScan(ctx context.Context, arg RecordSkillPromptInjectionScanParams) error {
 	_, err := q.db.Exec(ctx, recordSkillPromptInjectionScan,
 		arg.SkillVersionID,
@@ -4636,11 +4633,8 @@ type SkillVersionNeedsPromptInjectionScanParams struct {
 }
 
 // True when some enabled prompt-injection policy has no recorded scan of this
-// skill version yet. Drives the scan gate: no such policy means judging the
-// content would produce nothing storable, and an already-recorded scan must
-// not be repeated (content is immutable per version, so the verdict cannot
-// change). A policy enabled after capture has no row, so it reports true and
-// the version becomes eligible again.
+// skill version yet. Gates the judge call: content is immutable per version,
+// so a recorded scan is never worth repeating.
 func (q *Queries) SkillVersionNeedsPromptInjectionScan(ctx context.Context, arg SkillVersionNeedsPromptInjectionScanParams) (bool, error) {
 	row := q.db.QueryRow(ctx, skillVersionNeedsPromptInjectionScan, arg.ProjectID, arg.SkillVersionID)
 	var exists bool
