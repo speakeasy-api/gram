@@ -22,6 +22,10 @@ export type RecordDecisionRequestBody = {
    * Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.
    */
   rationale: string;
+  /**
+   * A research report this decision cites. Must belong to the request being decided.
+   */
+  researchReportId?: string | undefined;
 };
 
 /** @internal */
@@ -30,6 +34,7 @@ export type RecordDecisionRequestBody$Outbound = {
   granted_principal_urns?: Array<string> | undefined;
   id: string;
   rationale: string;
+  research_report_id?: string | undefined;
 };
 
 /** @internal */
@@ -42,10 +47,12 @@ export const RecordDecisionRequestBody$outboundSchema: z.ZodMiniType<
     grantedPrincipalUrns: z.optional(z.array(z.string())),
     id: z.string(),
     rationale: z.string(),
+    researchReportId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       grantedPrincipalUrns: "granted_principal_urns",
+      researchReportId: "research_report_id",
     });
   }),
 );

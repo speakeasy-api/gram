@@ -75,6 +75,7 @@ func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
 		DecidedBy:            decision.DecidedBy,
 		Rationale:            fromPGText(decision.Rationale),
 		GrantedPrincipalUrns: decision.GrantedPrincipalUrns,
+		ResearchReportID:     nullUUIDString(decision.McpResearchReportID),
 		Evidence:             rawEvidence(decision.EvidenceSnapshot),
 		EvidenceVersion:      evidenceVersion(decision.EvidenceVersion),
 		DecidedAt:            decision.DecidedAt.Time.Format(timeFormat),
@@ -88,6 +89,7 @@ func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
 		Report:        rawEvidence(report.Report),
 		ReportVersion: int(report.ReportVersion),
 		Model:         fromPGText(report.Model),
+		PromptVersion: fromPGText(report.PromptVersion),
 		RequestedBy:   fromPGText(report.RequestedBy),
 		StartedAt:     optionalTime(report.StartedAt),
 		CompletedAt:   optionalTime(report.CompletedAt),
@@ -116,6 +118,13 @@ func rawEvidence(raw []byte) any {
 		return nil
 	}
 
+	// The whole input must be one value. Trailing content means a payload
+	// this function does not understand, and half a document read as the
+	// whole of what is known is exactly what the nil contract forbids.
+	if decoder.More() {
+		return nil
+	}
+
 	return decoded
 }
 
@@ -124,6 +133,16 @@ func evidenceVersion(version int32) *int {
 	widened := int(version)
 
 	return &widened
+}
+
+func nullUUIDString(value uuid.NullUUID) *string {
+	if !value.Valid {
+		return nil
+	}
+
+	formatted := value.UUID.String()
+
+	return &formatted
 }
 
 func pgText(value *string) pgtype.Text {

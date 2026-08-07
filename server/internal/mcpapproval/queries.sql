@@ -49,6 +49,17 @@ WHERE mcp_approval_request_id = @mcp_approval_request_id
   AND deleted IS FALSE
 ORDER BY decided_at DESC;
 
+-- name: GetResearchReportForDecision :one
+-- Resolves a report a decision wants to cite, pinned to the request being
+-- decided and to the caller's project, so a decision can never attribute
+-- research about one server to another.
+SELECT id
+FROM mcp_research_reports
+WHERE id = @id
+  AND mcp_approval_request_id = @mcp_approval_request_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: CreateApprovalDecision :one
 -- evidence_version carries no default in the schema: the writer must copy the
 -- version off the request it snapshotted, so a v2 payload cannot be silently
@@ -63,6 +74,7 @@ INSERT INTO mcp_approval_decisions (
   , evidence_snapshot
   , evidence_version
   , granted_principal_urns
+  , mcp_research_report_id
 ) VALUES (
   @organization_id
   , @project_id
@@ -73,6 +85,7 @@ INSERT INTO mcp_approval_decisions (
   , @evidence_snapshot
   , @evidence_version
   , @granted_principal_urns
+  , sqlc.narg(mcp_research_report_id)::uuid
 )
 RETURNING *;
 
@@ -182,6 +195,7 @@ INSERT INTO mcp_research_reports (
   , requested_by
   , started_at
   , completed_at
+  , error
 ) VALUES (
   @organization_id
   , @project_id
@@ -194,5 +208,6 @@ INSERT INTO mcp_research_reports (
   , sqlc.narg(requested_by)::text
   , sqlc.narg(started_at)::timestamptz
   , sqlc.narg(completed_at)::timestamptz
+  , sqlc.narg(error)::text
 )
 RETURNING *;

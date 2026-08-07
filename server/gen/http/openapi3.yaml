@@ -53845,6 +53845,9 @@ components:
                 rationale:
                     type: string
                     description: Why. Written to be cited when explaining the decision to the requester.
+                research_report_id:
+                    type: string
+                    description: The research report this decision cited, when one informed it.
             description: A recorded approve or deny, with the evidence it rested on.
             required:
                 - id
@@ -65979,6 +65982,9 @@ components:
                 rationale:
                     type: string
                     description: Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.
+                research_report_id:
+                    type: string
+                    description: A research report this decision cites. Must belong to the request being decided.
             required:
                 - id
                 - decision
@@ -66553,6 +66559,9 @@ components:
                 model:
                     type: string
                     description: The model that produced the report.
+                prompt_version:
+                    type: string
+                    description: The prompt version the run used, so reports stay distinguishable across prompt changes.
                 report:
                     description: The structured findings. Every claim carries a provenance tier and its citations.
                 report_version:

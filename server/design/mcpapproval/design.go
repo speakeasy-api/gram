@@ -80,6 +80,7 @@ var _ = Service("mcpApproval", func() {
 			Attribute("decision", String, "Either approved or denied.")
 			Attribute("rationale", String, "Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.")
 			Attribute("granted_principal_urns", ArrayOf(String), "Principals the approval covers. Empty for a denial.")
+			Attribute("research_report_id", String, "A research report this decision cites. Must belong to the request being decided.")
 			Required("id", "decision", "rationale")
 		})
 
@@ -134,6 +135,7 @@ var ApprovalDecision = Type("ApprovalDecision", func() {
 	Attribute("decided_by", String, "Who decided.")
 	Attribute("rationale", String, "Why. Written to be cited when explaining the decision to the requester.")
 	Attribute("granted_principal_urns", ArrayOf(String), "Principals the approval covers. Empty for a denial.")
+	Attribute("research_report_id", String, "The research report this decision cited, when one informed it.")
 	Attribute("evidence", Any, "The evidence as it stood when this decision was made. Frozen at decision time: a later re-gather updates the request's evidence but never this snapshot, so what the reviewer actually saw stays inspectable.")
 	Attribute("evidence_version", Int, "Shape version of the frozen evidence payload, copied from the request at decision time.")
 	Attribute("decided_at", String, "When the decision was made.", func() { Format(FormatDateTime) })
@@ -149,6 +151,7 @@ var ResearchReport = Type("ResearchReport", func() {
 	Attribute("report", Any, "The structured findings. Every claim carries a provenance tier and its citations.")
 	Attribute("report_version", Int, "Shape version of the report payload.")
 	Attribute("model", String, "The model that produced the report.")
+	Attribute("prompt_version", String, "The prompt version the run used, so reports stay distinguishable across prompt changes.")
 	Attribute("requested_by", String, "Who asked for the research run.")
 	Attribute("started_at", String, "When the run started.", func() { Format(FormatDateTime) })
 	Attribute("completed_at", String, "When the run finished.", func() { Format(FormatDateTime) })

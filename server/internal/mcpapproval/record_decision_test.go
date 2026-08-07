@@ -326,3 +326,31 @@ func TestUpsertApprovalRequest_ReopensDeniedOnly(t *testing.T) {
 	seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://approved.example.com", status: "requested", evidence: "", version: 0})
 	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, approved), "re-asking for an approved server changes nothing")
 }
+
+// A decision can cite the research report that informed it — but only a
+// report belonging to the request being decided, resolved under the caller's
+// project before anything is written.
+func TestRecordDecision_CitesAResearchReport(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	reportID := seedResearchReport(t, ctx, ti, ti.projectID, requestID, "completed", `{"claims":[]}`)
+
+	payload := decisionPayload(requestID.String(), "approved")
+	payload.ResearchReportID = new(reportID.String())
+
+	decision, err := ti.service.RecordDecision(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, decision.ResearchReportID)
+	require.Equal(t, reportID.String(), *decision.ResearchReportID)
+
+	// Another request's report cannot be cited, however real it is.
+	otherRequest := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	otherPayload := decisionPayload(otherRequest.String(), "approved")
+	otherPayload.ResearchReportID = new(reportID.String())
+
+	_, err = ti.service.RecordDecision(ctx, otherPayload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

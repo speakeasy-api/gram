@@ -24,6 +24,9 @@ type RecordDecisionRequestBody struct {
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
+	// A research report this decision cites. Must belong to the request being
+	// decided.
+	ResearchReportID *string `form:"research_report_id,omitempty" json:"research_report_id,omitempty" xml:"research_report_id,omitempty"`
 }
 
 // ListRequestsResponseBody is the type of the "mcpApproval" service
@@ -71,6 +74,8 @@ type RecordDecisionResponseBody struct {
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
+	// The research report this decision cited, when one informed it.
+	ResearchReportID *string `form:"research_report_id,omitempty" json:"research_report_id,omitempty" xml:"research_report_id,omitempty"`
 	// The evidence as it stood when this decision was made. Frozen at decision
 	// time: a later re-gather updates the request's evidence but never this
 	// snapshot, so what the reviewer actually saw stays inspectable.
@@ -685,6 +690,8 @@ type ApprovalDecisionResponseBody struct {
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
+	// The research report this decision cited, when one informed it.
+	ResearchReportID *string `form:"research_report_id,omitempty" json:"research_report_id,omitempty" xml:"research_report_id,omitempty"`
 	// The evidence as it stood when this decision was made. Frozen at decision
 	// time: a later re-gather updates the request's evidence but never this
 	// snapshot, so what the reviewer actually saw stays inspectable.
@@ -709,6 +716,9 @@ type ResearchReportResponseBody struct {
 	ReportVersion int `form:"report_version" json:"report_version" xml:"report_version"`
 	// The model that produced the report.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The prompt version the run used, so reports stay distinguishable across
+	// prompt changes.
+	PromptVersion *string `form:"prompt_version,omitempty" json:"prompt_version,omitempty" xml:"prompt_version,omitempty"`
 	// Who asked for the research run.
 	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
 	// When the run started.
@@ -796,13 +806,14 @@ func NewGetRequestResponseBody(res *mcpapproval.ApprovalRequestDetail) *GetReque
 // of the "recordDecision" endpoint of the "mcpApproval" service.
 func NewRecordDecisionResponseBody(res *mcpapproval.ApprovalDecision) *RecordDecisionResponseBody {
 	body := &RecordDecisionResponseBody{
-		ID:              res.ID,
-		Decision:        res.Decision,
-		DecidedBy:       res.DecidedBy,
-		Rationale:       res.Rationale,
-		Evidence:        res.Evidence,
-		EvidenceVersion: res.EvidenceVersion,
-		DecidedAt:       res.DecidedAt,
+		ID:               res.ID,
+		Decision:         res.Decision,
+		DecidedBy:        res.DecidedBy,
+		Rationale:        res.Rationale,
+		ResearchReportID: res.ResearchReportID,
+		Evidence:         res.Evidence,
+		EvidenceVersion:  res.EvidenceVersion,
+		DecidedAt:        res.DecidedAt,
 	}
 	if res.GrantedPrincipalUrns != nil {
 		body.GrantedPrincipalUrns = make([]string, len(res.GrantedPrincipalUrns))
@@ -1265,9 +1276,10 @@ func NewGetRequestPayload(id string, sessionToken *string, apikeyToken *string, 
 // endpoint payload.
 func NewRecordDecisionPayload(body *RecordDecisionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RecordDecisionPayload {
 	v := &mcpapproval.RecordDecisionPayload{
-		ID:        *body.ID,
-		Decision:  *body.Decision,
-		Rationale: *body.Rationale,
+		ID:               *body.ID,
+		Decision:         *body.Decision,
+		Rationale:        *body.Rationale,
+		ResearchReportID: body.ResearchReportID,
 	}
 	if body.GrantedPrincipalUrns != nil {
 		v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))

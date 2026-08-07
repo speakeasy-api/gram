@@ -33,6 +33,10 @@ export type ResearchReport = {
    */
   model?: string | undefined;
   /**
+   * The prompt version the run used, so reports stay distinguishable across prompt changes.
+   */
+  promptVersion?: string | undefined;
+  /**
    * The structured findings. Every claim carries a provenance tier and its citations.
    */
   report?: any | undefined;
@@ -70,6 +74,7 @@ export const ResearchReport$inboundSchema: z.ZodMiniType<
     error: z.optional(z.string()),
     id: z.string(),
     model: z.optional(z.string()),
+    prompt_version: z.optional(z.string()),
     report: z.optional(z.any()),
     report_version: z.int(),
     requested_by: z.optional(z.string()),
@@ -82,6 +87,7 @@ export const ResearchReport$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "completed_at": "completedAt",
       "created_at": "createdAt",
+      "prompt_version": "promptVersion",
       "report_version": "reportVersion",
       "requested_by": "requestedBy",
       "started_at": "startedAt",
