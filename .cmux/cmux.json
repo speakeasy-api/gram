@@ -1,0 +1,130 @@
+{
+  // cmux project config — worktree creation delegated to worktrunk.
+  //
+  // Requires worktrunk (`wt`) with its shell integration installed
+  // (https://worktrunk.dev/shell/), which the gram workflow already uses:
+  // the wrapper is what lets `wt switch` cd this shell into the new worktree.
+  // All project hooks in .config/wt.toml fire as usual: port remap
+  // (git:workinit), background stack boot (git:workboot).
+  //
+  // Layout per workspace: left pane creates/opens the worktree and stays as a
+  // shell inside it; right pane waits for the worktree path (state file),
+  // cds in, and starts Claude.
+  //
+  // cmux has NO teardown hook — closing a workspace does NOT remove the
+  // worktree or tear its stack down. Run `wt remove` from the worktree
+  // (the pre-remove nuke hook handles the compose stack).
+  "schemaVersion": 1,
+
+  "actions": {
+    "wt-new-branch": {
+      "type": "workspaceCommand",
+      "title": "New Branch (worktrunk)",
+      "subtitle": "wt switch --create: worktree + full stack boot",
+      "commandName": "New Branch",
+      "icon": { "type": "symbol", "name": "arrow.triangle.branch" }
+    },
+    "wt-open-branch": {
+      "type": "workspaceCommand",
+      "title": "Open Branch (worktrunk)",
+      "subtitle": "wt switch: existing branch's worktree",
+      "commandName": "Open Branch",
+      "icon": { "type": "symbol", "name": "folder.badge.gearshape" }
+    }
+  },
+
+  "ui": {
+    "newWorkspace": {
+      "action": "wt-new-branch",
+      "contextMenu": [
+        { "action": "wt-new-branch", "title": "New Branch (worktrunk)" },
+        { "action": "wt-open-branch", "title": "Open Branch (worktrunk)" },
+        { "type": "separator" },
+        { "action": "cmux.newTerminal", "title": "Plain Terminal" }
+      ]
+    }
+  },
+
+  "commands": [
+    {
+      "name": "New Branch",
+      "description": "Create branch + worktree via wt switch --create (hooks boot the stack), start Claude in it",
+      "workspace": {
+        "name": "wt: new",
+        "cwd": ".",
+        "layout": {
+          "direction": "horizontal",
+          "split": 0.45,
+          "children": [
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "Worktree",
+                    "focus": true,
+                    // Prompt for a branch name plus optional passthrough args.
+                    // --no-boot is consumed here (sets GRAM_WT_NO_BOOT=1, same
+                    // as the git:workboot hook expects); everything else goes
+                    // to `wt switch --create` (e.g. --base some-branch).
+                    "command": "exec \"${SHELL:-zsh}\" -ic 'state=\"${TMPDIR:-/tmp}/cmux-wt-${CMUX_WORKSPACE_ID:-manual}.dir\"; rm -f \"$state\"; printf \"branch name [args ok: --no-boot, --base <ref>]: \"; read -r line; eval \"set -- $line\"; rest=\"\"; for a in \"$@\"; do if [ \"$a\" = \"--no-boot\" ]; then export GRAM_WT_NO_BOOT=1; else rest=\"$rest $a\"; fi; done; eval \"wt switch --create $rest\" && { pwd > \"$state\"; port=$(sed -n \"s/^GRAM_SITE_PORT = .\\(.*\\)./\\1/p\" mise.local.toml 2>/dev/null); [ -n \"$port\" ] && echo \"Dashboard: https://localhost:$port\"; }; exec \"${SHELL:-zsh}\" -i'"
+                  }
+                ]
+              }
+            },
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "Claude",
+                    "command": "state=\"${TMPDIR:-/tmp}/cmux-wt-${CMUX_WORKSPACE_ID:-manual}.dir\"; echo \"waiting for worktree...\"; while [ ! -s \"$state\" ]; do sleep 0.2; done; cd \"$(cat \"$state\")\" && exec \"${SHELL:-zsh}\" -ic claude"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Open Branch",
+      "description": "Switch to an existing branch's worktree via wt switch, start Claude in it",
+      "workspace": {
+        "name": "wt: open",
+        "cwd": ".",
+        "layout": {
+          "direction": "horizontal",
+          "split": 0.45,
+          "children": [
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "Worktree",
+                    "focus": true,
+                    // wt shortcuts pass through: ^ default branch, - previous,
+                    // pr:123 a PR. Empty input opens wt's interactive picker.
+                    "command": "exec \"${SHELL:-zsh}\" -ic 'state=\"${TMPDIR:-/tmp}/cmux-wt-${CMUX_WORKSPACE_ID:-manual}.dir\"; rm -f \"$state\"; printf \"branch [empty = picker, ^ = default, pr:123]: \"; read -r line; eval \"wt switch $line\" && pwd > \"$state\"; exec \"${SHELL:-zsh}\" -i'"
+                  }
+                ]
+              }
+            },
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "Claude",
+                    "command": "state=\"${TMPDIR:-/tmp}/cmux-wt-${CMUX_WORKSPACE_ID:-manual}.dir\"; echo \"waiting for worktree...\"; while [ ! -s \"$state\" ]; do sleep 0.2; done; cd \"$(cat \"$state\")\" && exec \"${SHELL:-zsh}\" -ic claude"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
