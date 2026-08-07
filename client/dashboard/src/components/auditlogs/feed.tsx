@@ -9,15 +9,10 @@ import {
 import { Text } from "@/components/ui/Text";
 import { getActionMeta } from "@/components/auditlogs/action-meta";
 import {
-  getActionCategory,
-  getActionColorConfig,
-} from "@/lib/audit-log-colors";
-import {
   formatDateHeader,
   type FacetOption,
   type TimestampMode,
 } from "@/lib/audit-log-feed";
-import { formatAuditAction } from "@/lib/audit-log-format";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import React from "react";
@@ -36,22 +31,6 @@ export function DateGroupHeader({
       </span>
       <div className="bg-border h-px flex-1" />
     </div>
-  );
-}
-
-export function ActionBadge({ action }: { action: string }): React.JSX.Element {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center px-1.5 py-0.5 font-mono text-[11px] font-medium",
-        colors.bg,
-        colors.text,
-      )}
-    >
-      {formatAuditAction(action)}
-    </span>
   );
 }
 
@@ -78,19 +57,6 @@ export function ActionIconTile({
         />
       )}
     </div>
-  );
-}
-
-export function ActionDot({ action }: { action: string }): React.JSX.Element {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
-  return (
-    <span
-      className={cn(
-        "mt-[3px] inline-block size-2 shrink-0 rounded-full",
-        colors.dot,
-      )}
-    />
   );
 }
 

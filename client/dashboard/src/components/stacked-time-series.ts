@@ -3,13 +3,7 @@
 // match the chart legend). Kept in a non-component module so the panel
 // component file satisfies the react-refresh "only export components" rule.
 
-import { OTHER_SERIES, SERIES } from "@/components/chart/palette";
-
-// The light-theme chart series palette. Kept for export-name stability;
-// components should resolve the theme-aware ramp via
-// `@/components/chart/useSeriesColors` instead so dark mode lifts the
-// near-black entries.
-export const CHART_COLORS = SERIES;
+import { OTHER_SERIES } from "@/components/chart/palette";
 export const OTHER_COLOR = OTHER_SERIES; // the top-N remainder rollup
 
 // The base label of a top-N remainder rollup series (a collision with a real

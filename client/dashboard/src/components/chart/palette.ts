@@ -42,7 +42,7 @@ export const SERIES: string[] = [
 // canvas. The mid-lightness brand hues (blue 600, green 500, orange,
 // chartreuse, ice blue) already read on dark and stay put; the neutral tail
 // lightens a step.
-export const SERIES_DARK: string[] = [
+const SERIES_DARK: string[] = [
   "hsl(0, 0%, 93%)", // ink -> near-white
   "hsl(215, 71%, 40%)", // brand blue 600 (kept)
   "hsl(108, 24%, 41%)", // brand green 500 (kept)

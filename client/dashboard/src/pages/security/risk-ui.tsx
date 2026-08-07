@@ -120,35 +120,6 @@ export function SeverityBadge({
     </SimpleTooltip>
   );
 }
-
-// Numeric severity, rendered as a color-coded pill. Used in list/table columns
-// where the raw score is more useful than the qualitative label — the number
-// carries the exact value while the band color (shared with SeverityBadge) makes
-// severity scannable at a glance.
-export function SeverityScore({
-  score,
-  className,
-}: {
-  score: number | undefined;
-  className?: string;
-}): JSX.Element {
-  if (score == null) {
-    return <span className="text-muted-foreground text-sm">-</span>;
-  }
-  // Rate on the rounded value we actually display, so a score sitting just below
-  // a band boundary (e.g. 3.96 → shown as "4.0") never renders the number in a
-  // color that disagrees with the band its displayed value falls in.
-  const displayed = Math.round(score * 10) / 10;
-  const rating = scoreToRating(displayed);
-  return (
-    <SimpleTooltip tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}>
-      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
-        <Badge.Text className="tabular-nums">{displayed.toFixed(1)}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
-  );
-}
-
 export function RevealAllProvider({
   children,
 }: {
