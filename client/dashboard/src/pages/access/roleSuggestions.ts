@@ -16,6 +16,7 @@ const SUB_SCOPES: Record<string, readonly string[]> = {
   "mcp:read": ["mcp:connect"],
   "environment:write": ["environment:read"],
   "skill:write": ["skill:read"],
+  "mcp_approval:decide": ["mcp_approval:read"],
 };
 
 /**

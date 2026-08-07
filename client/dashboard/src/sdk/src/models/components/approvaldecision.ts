@@ -44,6 +44,10 @@ export type ApprovalDecision = {
    * Why. Written to be cited when explaining the decision to the requester.
    */
   rationale?: string | undefined;
+  /**
+   * The research report this decision cited, when one informed it.
+   */
+  researchReportId?: string | undefined;
 };
 
 /** @internal */
@@ -63,6 +67,7 @@ export const ApprovalDecision$inboundSchema: z.ZodMiniType<
     granted_principal_urns: z.optional(z.array(z.string())),
     id: z.string(),
     rationale: z.optional(z.string()),
+    research_report_id: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -70,6 +75,7 @@ export const ApprovalDecision$inboundSchema: z.ZodMiniType<
       "decided_by": "decidedBy",
       "evidence_version": "evidenceVersion",
       "granted_principal_urns": "grantedPrincipalUrns",
+      "research_report_id": "researchReportId",
     });
   }),
 );

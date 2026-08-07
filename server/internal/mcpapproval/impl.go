@@ -111,17 +111,6 @@ func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, st
 		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
-	// The product-feature gate is independent of the RBAC check: a grant says
-	// who may use the surface, the feature says whether the organization has
-	// it at all, and holding the first must not bypass the second.
-	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
-	if err != nil {
-		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
-	}
-	if !enabled {
-		return uuid.Nil, "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
-	}
-
 	if err := s.authz.Require(ctx, authz.Check{
 		Scope:        scope,
 		ResourceKind: "",
@@ -129,6 +118,19 @@ func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, st
 		Dimensions:   nil,
 	}); err != nil {
 		return uuid.Nil, "", fmt.Errorf("authorize mcp approval access: %w", err)
+	}
+
+	// The product-feature gate is independent of the RBAC check: a grant says
+	// who may use the surface, the feature says whether the organization has
+	// it at all, and holding the first must not bypass the second. RBAC runs
+	// first so an unauthorized caller costs no feature-store work and a
+	// feature lookup failure never masks a denial.
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
+	if err != nil {
+		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return uuid.Nil, "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
 	}
 
 	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
@@ -290,6 +292,28 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
 	}
 
+	// A cited report is resolved against the request being decided and the
+	// caller's project before it is written, so a decision can never
+	// attribute research about one server to another.
+	var citedReport uuid.NullUUID
+	if payload.ResearchReportID != nil {
+		reportID, err := uuid.Parse(*payload.ResearchReportID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid research report id")
+		}
+		if _, err := queries.GetResearchReportForDecision(ctx, repo.GetResearchReportForDecisionParams{
+			ID:                   reportID,
+			McpApprovalRequestID: requestID,
+			ProjectID:            projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeBadRequest, nil, "research report does not belong to this request")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error reading research report").LogError(ctx, s.logger)
+		}
+		citedReport = uuid.NullUUID{UUID: reportID, Valid: true}
+	}
+
 	granted := payload.GrantedPrincipalUrns
 	if payload.Decision == decisionDenied {
 		// A denial grants nobody anything, whatever the caller sent.
@@ -316,6 +340,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		EvidenceSnapshot:     request.CurrentEvidence,
 		EvidenceVersion:      request.EvidenceVersion,
 		GrantedPrincipalUrns: granted,
+		McpResearchReportID:  citedReport,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
