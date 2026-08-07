@@ -2158,20 +2158,50 @@ func TestIngestStoresExplicitNilMCPInventory(t *testing.T) {
 	require.Empty(t, entries)
 }
 
-func TestIngestPreservesMCPInventoryForUnrelatedNilEvent(t *testing.T) {
+func TestIngestStoresCollectedEmptyMCPInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	sessionID := uuid.NewString()
-	want := []MCPServerEntry{{Name: "current-server", URL: "https://current.example.test/mcp"}}
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), want, sessionMCPListTTL))
+	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
 
-	result, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "session.updated", sessionID))
+	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
+	payload.Data = &gen.HookIngestData{McpInventoryCollected: new(true)}
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}
+
+func TestIngestPreservesMCPInventoryForUnrelatedExplicitEmptyEvent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	name := "current-server"
+	url := "https://current.example.test/mcp"
+	want := []MCPServerEntry{{Source: "claude", Name: name, URL: url, Status: "unknown"}}
+	snapshot := canonicalIngestPayload("claude", "session.started", sessionID)
+	snapshot.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+		McpInventoryCollected: new(true),
+	}
+	result, err := ti.service.Ingest(ctx, snapshot)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
+	payload.Data = &gen.HookIngestData{McpInventory: []*gen.HookMCPData{}}
+	result, err = ti.service.Ingest(ctx, payload)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
 	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, want, entries)
+	require.True(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
 }
 
 // TestIngest_ShadowMCPMetaToolGateDegradesWithoutAReadInventory: the guard
@@ -2232,8 +2262,7 @@ func TestIngest_ShadowMCPMetaToolGateReadsSessionState(t *testing.T) {
 	// servers before the related tool request arrives.
 	inventory := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
 	inventory.Data = &gen.HookIngestData{
-		McpInventory:          []*gen.HookMCPData{},
-		McpInventoryCollected: new(true),
+		McpInventory: []*gen.HookMCPData{},
 	}
 	_, err := ti.service.Ingest(ctx, inventory)
 	require.NoError(t, err)

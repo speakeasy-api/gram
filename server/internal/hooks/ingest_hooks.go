@@ -826,15 +826,16 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 		)
 	}
 
-	// A canonical inventory event is authoritative even when its data block was
-	// omitted. Other nil events remain refresh-only unless they report a
-	// successful inventory read.
+	// Dedicated inventory events and successful inventory reads are
+	// authoritative even when the inventory is empty or omitted. Other events
+	// only refresh the existing snapshot.
 	// Write the entries before the read status. The status is what licenses the
 	// guard to treat an empty inventory as proof no servers exist, so recording
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if entries != nil || inventoryRead || inventoryEvent {
+	authoritative := inventoryRead || inventoryEvent
+	if authoritative {
 		if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
 			s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 				attr.SlogEvent("hook_mcp_list_cache_set_failed"),
@@ -845,10 +846,10 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 		}
 	}
 
-	// The sender only reports this on session start; the meta-tool calls it
-	// gates arrive later carrying nothing, so it has to be held per session.
-	if inventoryRead {
-		if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), inventoryRead, sessionMCPInventoryReadTTL); err != nil {
+	// Meta-tool calls arrive later carrying no inventory status, so the
+	// authoritative read status has to be held per session.
+	if authoritative {
+		if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), true, sessionMCPInventoryReadTTL); err != nil {
 			s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
 				attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
 				attr.SlogError(err),
