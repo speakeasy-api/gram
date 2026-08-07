@@ -4660,12 +4660,13 @@ CREATE INDEX IF NOT EXISTS risk_results_excluded_exclusion_idx
 ON risk_results (excluded_exclusion_id)
 WHERE excluded_exclusion_id IS NOT NULL;
 
--- FK-cascade support: deleting chat_messages / chat_content_parts fires the
--- ON DELETE CASCADE trigger with `WHERE chat_message_id = $1` (no project_id),
--- which none of the project_id-leading composites above can serve — each
--- deleted parent row seq-scans the whole table. The daily demo-seed's project
--- cascade (~1k chat_messages) blew its 60s statement_timeout this way once
--- risk_results reached ~47M rows.
+-- FK-cascade support: deleting chat_messages (or chat_content_parts) fires
+-- the ON DELETE CASCADE trigger with `WHERE chat_message_id = $1` (resp.
+-- `chat_content_part_id = $1`) and no project_id, which none of the
+-- project_id-leading composites above can serve — each deleted parent row
+-- seq-scans the whole table. The daily demo-seed's project cascade (~1k
+-- chat_messages) blew its 60s statement_timeout this way once risk_results
+-- reached ~47M rows.
 CREATE INDEX IF NOT EXISTS risk_results_chat_message_idx
 ON risk_results (chat_message_id);
 
