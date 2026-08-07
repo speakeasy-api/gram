@@ -16,6 +16,11 @@ UPDATE chat_messages
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = @slug
+WHERE id = @id;
+
 -- name: UpdateRiskResultCreatedAt :exec
 UPDATE risk_results
 SET created_at = @created_at
@@ -175,6 +180,18 @@ INSERT INTO organization_metadata (
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
 
+-- name: InsertTrialFixture :exec
+-- Test-only fixture for exercising active trial lifecycle states.
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
+VALUES (
+    @organization_id,
+    'enterprise',
+    @created_at,
+    @ends_at,
+    sqlc.narg('converted_at')::timestamptz,
+    sqlc.narg('demoted_at')::timestamptz
+);
+
 -- name: ForceSoftDeleteUserSessionIssuer :exec
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers
@@ -289,3 +306,12 @@ INSERT INTO risk_results (
   @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
   @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
 );
+
+-- name: GetToolCallBlockLinksFixture :one
+-- Test-only. The block page query deliberately does not expose the optional
+-- foreign keys, but asserting that the salvage cleared exactly the link the
+-- database rejected — and left the others alone — requires reading them off
+-- the row.
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = @id;

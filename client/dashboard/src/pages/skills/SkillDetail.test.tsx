@@ -235,12 +235,14 @@ vi.mock("@/components/ui/Button", () => {
     children,
     onClick,
     disabled,
+    variant,
   }: {
     children: ReactNode;
     onClick?: () => void;
     disabled?: boolean;
+    variant?: string;
   }) => (
-    <button onClick={onClick} disabled={disabled}>
+    <button onClick={onClick} disabled={disabled} data-variant={variant}>
       {children}
     </button>
   );
@@ -452,10 +454,15 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
   });
 
-  it("archives with the exact wrapper, navigates back, and invalidates all skill caches", async () => {
+  it("uses the destructive primary archive action and archives the skill", async () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
     render(<SkillDetail />);
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    const archiveButton = screen.getByRole("button", { name: "Archive" });
+    expect(archiveButton.getAttribute("data-variant")).toBe(
+      "destructive-primary",
+    );
+
+    fireEvent.click(archiveButton);
     fireEvent.click(screen.getByRole("button", { name: "Archive skill" }));
 
     await waitFor(() => {

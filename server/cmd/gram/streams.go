@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -217,8 +220,11 @@ func newStreamsCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 
-			ctx, cancel := context.WithCancel(c.Context)
-			defer cancel()
+			// Without a signal handler the runtime kills the process on SIGTERM,
+			// so the Action never returns and the After hook never runs the
+			// shutdownFuncs registered below.
+			ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+			defer stop()
 
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 				ServiceName:    serviceName,
@@ -451,6 +457,8 @@ func newStreamsCommand() *cli.Command {
 			if err := group.Wait(); err != nil {
 				return fmt.Errorf("streaming error: %w", err)
 			}
+
+			logger.InfoContext(c.Context, "shutdown signal received, all receivers stopped")
 
 			return nil
 		},

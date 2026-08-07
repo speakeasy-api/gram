@@ -242,7 +242,6 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ToolIoLogsEnabled:                    isEnabled(FeatureToolIOLogs),
 		SessionCaptureEnabled:                isEnabled(FeatureSessionCapture),
 		AuthzChallengeLoggingEnabled:         isEnabled(FeatureAuthzChallengeLogging),
-		Webhooks:                             isEnabled(FeatureWebhooks),
 		SsoEnabled:                           isEnabled(FeatureSSO),
 		ScimEnabled:                          isEnabled(FeatureSCIM),
 		HooksBrowserLoginEnabled:             isEnabled(FeatureHooksBrowserLogin),
@@ -251,6 +250,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		SkillsEnabled:                        isEnabled(FeatureSkills),
 		SkillCaptureMetadataOnly:             isEnabled(FeatureSkillCaptureMetadataOnly),
 		AiPlatformPushIntegrationsEnabled:    isEnabled(FeatureAIPlatformPushIntegrations),
+		PlatformMcpEnabled:                   isEnabled(FeaturePlatformMCP),
 		CustomerManagedEncryptionKeysEnabled: isEnabled(FeatureCustomerManagedEncryptionKeys),
 		DeviceAgent:                          deviceAgent,
 	}, nil

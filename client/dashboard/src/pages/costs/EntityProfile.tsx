@@ -133,7 +133,7 @@ function searchNoun(label: string): string {
 // ── Small presentational pieces ─────────────────────────────────────────────
 
 // The page's bordered ghost buttons share one core look; the control-bar
-// actions (Export CSV, Reset) and the nav buttons (Home, Back) compose their
+// Reset, the table Export CSV, and the nav buttons (Home, Back) compose their
 // size/spacing on top of it.
 const GHOST_BUTTON_CLASS =
   "text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center border bg-transparent text-sm transition-colors";
@@ -245,8 +245,8 @@ export type EntityProfileProps = {
   // mode). The override owns its own loading/empty/error states.
   tableOverride?: ReactNode;
   // CSV export for a `tableOverride`'s rows. Supplied alongside the override so
-  // the export control keeps working — and keeps its place in the header row —
-  // on the sessions breakdown instead of unmounting and reflowing the row.
+  // the export control above the table keeps working on the sessions breakdown
+  // instead of unmounting and leaving a gap.
   overrideCsv?: { rowCount: number; build: () => string };
   // Switch the breakdown to the per-session list — wired to the clickable
   // "Agent sessions" header stat. Omitted when already in sessions mode.
@@ -437,8 +437,8 @@ export function EntityProfile({
 
   // Whichever table is on screen owns the export: the dimension rows by default,
   // the override's rows (sessions) when it has supplied a builder. The control
-  // renders either way and only disables on an empty table, so switching the
-  // breakdown never reflows the header row.
+  // sits above the table itself (not in the page-scope toolbar) so it reads as
+  // exporting those rows, and only disables when the table is empty.
   const csvExport = overrideCsv
     ? {
         rowCount: overrideCsv.rowCount,
@@ -458,6 +458,18 @@ export function EntityProfile({
               : buildCostCsv(rows, groupLabel, groupBy),
           ),
       };
+
+  const exportCsvButton = (
+    <button
+      type="button"
+      onClick={csvExport.run}
+      disabled={csvExport.rowCount === 0}
+      className={BAR_BUTTON_CLASS}
+    >
+      <Download className="size-3.5 shrink-0" />
+      Export CSV
+    </button>
+  );
 
   // Placeholder names what the search box narrows: the sessions list when the
   // override table is on screen, otherwise the current axis's plural.
@@ -603,12 +615,12 @@ export function EntityProfile({
       </div>
 
       {/* Page-scope controls sit under the headline numbers: dataset + range
-          shape every number on the page, and export/reset act on the current
-          view. Once scrolled past, the bar pins to the top of the scrollport
-          (the sentinel above drives the pinned styling: a full-width blur
-          band with a hairline). The breakdown axis track and row search live
-          with the chart/table below — not here — so they stay next to the
-          content they reshape. */}
+          shape every number on the page, and Reset acts on the current view.
+          Once scrolled past, the bar pins to the top of the scrollport (the
+          sentinel above drives the pinned styling: a full-width blur band
+          with a hairline). The breakdown axis track, row search, and CSV
+          export live with the chart/table below — not here — so they stay
+          next to the content they reshape and the rows they export. */}
       <div ref={pinSentinelRef} aria-hidden="true" className="h-px w-full" />
       <div
         className={cn(
@@ -623,25 +635,14 @@ export function EntityProfile({
               {rangePicker}
             </Page.Toolbar.Leading>
             <Page.Toolbar.Actions>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={csvExport.run}
-                  disabled={csvExport.rowCount === 0}
-                  className={BAR_BUTTON_CLASS}
-                >
-                  <Download className="size-3.5 shrink-0" />
-                  Export CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={onReset}
-                  className={BAR_BUTTON_CLASS}
-                >
-                  <RotateCcw className="size-3.5 shrink-0" />
-                  Reset
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={onReset}
+                className={BAR_BUTTON_CLASS}
+              >
+                <RotateCcw className="size-3.5 shrink-0" />
+                Reset
+              </button>
             </Page.Toolbar.Actions>
           </Page.Toolbar>
         </div>
@@ -689,6 +690,9 @@ export function EntityProfile({
             searchPlaceholder={searchPlaceholder}
           />
           {chart}
+          {/* Export sits immediately above the table so it reads as exporting
+              these rows — not the whole page's spend. */}
+          <div className="flex items-center justify-end">{exportCsvButton}</div>
           {tableOverride ?? dimensionTable}
         </div>
       </div>

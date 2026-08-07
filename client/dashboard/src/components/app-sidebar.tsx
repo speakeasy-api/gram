@@ -42,6 +42,7 @@ import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/Button";
 import { Text } from "@/components/ui/Text";
+import { TrialStatusCard } from "./trial-status-card";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -134,16 +135,8 @@ export function AppSidebar({
     sidebarContent = <PluginDetailSidebarNav />;
   } else {
     sidebarContent = (
-      <NavGroupProvider
-        activeGroup={activeGroup}
-        defaultOpenGroups={
-          !activeGroup
-            ? ["Observe", "Secure", "Connect", "Distribute"]
-            : undefined
-        }
-        activeItem={activeItem}
-      >
-        <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
+      <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+        <SidebarMenu className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0">
           {/* Home — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.home}
@@ -158,7 +151,7 @@ export function AppSidebar({
           />
 
           {/* Divider: sets Home + Chat apart from the grouped nav below */}
-          <li aria-hidden="true" className="my-3 px-1">
+          <li aria-hidden="true" className="my-2 px-1">
             <div className="border-border border-t" />
           </li>
 
@@ -268,6 +261,7 @@ export function AppSidebar({
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
         <div className="mb-2 flex flex-col gap-1.5">
+          <TrialStatusCard />
           <OnboardingResumeButton />
           <InsightsDockResumeButton />
           <SidebarFooterAction

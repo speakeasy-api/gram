@@ -8764,6 +8764,20 @@ paths:
                   schema:
                     description: Optional URL to redirect to after successful authentication
                     type: string
+                - allowEmptyValue: true
+                  description: Optional organization name. When set, the organization is created for a new user during the auth callback.
+                  in: query
+                  name: org_name
+                  schema:
+                    description: Optional organization name. When set, the organization is created for a new user during the auth callback.
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
+                  in: query
+                  name: email
+                  schema:
+                    description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -59578,6 +59592,9 @@ components:
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
+                platform_mcp_enabled:
+                    type: boolean
+                    description: Whether the organization is eligible for the Gram Platform MCP capability
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
@@ -59596,15 +59613,11 @@ components:
                 tool_io_logs_enabled:
                     type: boolean
                     description: Whether tool I/O logging is enabled
-                webhooks:
-                    type: boolean
-                    description: Whether webhooks are enabled
             required:
                 - logs_enabled
                 - tool_io_logs_enabled
                 - session_capture_enabled
                 - authz_challenge_logging_enabled
-                - webhooks
                 - sso_enabled
                 - scim_enabled
                 - hooks_browser_login_enabled
@@ -59613,6 +59626,7 @@ components:
                 - skills_enabled
                 - skill_capture_metadata_only
                 - ai_platform_push_integrations_enabled
+                - platform_mcp_enabled
                 - customer_managed_encryption_keys_enabled
                 - device_agent
         GetProjectForm:
@@ -60234,6 +60248,9 @@ components:
                     items:
                         $ref: '#/components/schemas/HookMCPData'
                     description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+                mcp_inventory_collected:
+                    type: boolean
+                    description: Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.
                 message:
                     $ref: '#/components/schemas/HookMessageData'
                 notification:
@@ -60266,6 +60283,7 @@ components:
                         - session.started
                         - session.updated
                         - session.ended
+                        - mcp.inventory
                         - prompt.submitted
                         - tool.requested
                         - tool.completed
@@ -60721,6 +60739,8 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/OrganizationEntry'
+                trial:
+                    $ref: '#/components/schemas/Trial'
                 user_display_name:
                     type: string
                 user_email:
@@ -68646,7 +68666,6 @@ components:
                         - tool_io_logs
                         - session_capture
                         - authz_challenge_logging
-                        - webhooks
                         - sso
                         - scim
                         - hooks_browser_login
@@ -68655,6 +68674,7 @@ components:
                         - skills
                         - skill_capture_metadata_only
                         - ai_platform_push_integrations
+                        - platform_mcp
                         - customer_managed_encryption_keys
                     maxLength: 60
             required:
@@ -72245,6 +72265,18 @@ components:
                 - user_id
                 - user_type
                 - activity_count
+        Trial:
+            type: object
+            properties:
+                ends_at:
+                    type: string
+                    format: date-time
+                started_at:
+                    type: string
+                    format: date-time
+            required:
+                - started_at
+                - ends_at
         TriggerAnalysisResponseBody:
             type: object
             properties:

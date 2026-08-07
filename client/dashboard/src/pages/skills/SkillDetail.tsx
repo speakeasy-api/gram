@@ -414,8 +414,8 @@ function SkillDetailSections({
           <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
         </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
-          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
+          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1 m-0">
               <Text className="text-sm font-semibold">Archive this skill</Text>
               <Text small muted className="max-w-xl">
                 Archiving removes the skill from this project's catalog and
@@ -428,7 +428,7 @@ function SkillDetailSections({
               level="component"
             >
               <Button
-                variant="destructive-secondary"
+                variant="destructive-primary"
                 onClick={() =>
                   setArchiveTarget({
                     id: skill.id,
@@ -552,8 +552,8 @@ function VersionHistory({
   });
 
   return (
-    <SettingsSection.Panel>
-      <SettingsSection.Body>
+    <>
+      <div className="space-y-4">
         {comparable && (
           <Text small muted>
             Select one version to compare it with current, or select any two
@@ -591,14 +591,14 @@ function VersionHistory({
           </Button>
         )}
         <VersionDiff versions={diffVersions} />
-      </SettingsSection.Body>
+      </div>
       <RestoreSkillVersionDialog
         skillId={skillId}
         version={restoreTarget?.version ?? null}
         direction={restoreTarget?.direction ?? null}
         onClose={() => setRestoreTarget(null)}
       />
-    </SettingsSection.Panel>
+    </>
   );
 }
 

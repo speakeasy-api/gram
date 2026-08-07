@@ -301,6 +301,12 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if p.Redirect != nil {
 			values.Add("redirect", *p.Redirect)
 		}
+		if p.OrgName != nil {
+			values.Add("org_name", *p.OrgName)
+		}
+		if p.Email != nil {
+			values.Add("email", *p.Email)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1719,6 +1725,20 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			return nil, goahttp.ErrInvalidResponse("auth", "info", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalTrialResponseBodyToAuthTrial builds a value of type *auth.Trial
+// from a value of type *TrialResponseBody.
+func unmarshalTrialResponseBodyToAuthTrial(v *TrialResponseBody) *auth.Trial {
+	if v == nil {
+		return nil
+	}
+	res := &auth.Trial{
+		StartedAt: *v.StartedAt,
+		EndsAt:    *v.EndsAt,
+	}
+
+	return res
 }
 
 // unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry builds a value

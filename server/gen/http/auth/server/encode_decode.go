@@ -242,12 +242,23 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		var payload *auth.LoginPayload
 		var (
 			redirect *string
+			orgName  *string
+			email    *string
 		)
-		redirectRaw := r.URL.Query().Get("redirect")
+		qp := r.URL.Query()
+		redirectRaw := qp.Get("redirect")
 		if redirectRaw != "" {
 			redirect = &redirectRaw
 		}
-		payload = NewLoginPayload(redirect)
+		orgNameRaw := qp.Get("org_name")
+		if orgNameRaw != "" {
+			orgName = &orgNameRaw
+		}
+		emailRaw := qp.Get("email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		payload = NewLoginPayload(redirect, orgName, email)
 
 		return payload, nil
 	}
@@ -1432,6 +1443,20 @@ func EncodeInfoError(encoder func(context.Context, http.ResponseWriter) goahttp.
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// marshalAuthTrialToTrialResponseBody builds a value of type
+// *TrialResponseBody from a value of type *auth.Trial.
+func marshalAuthTrialToTrialResponseBody(v *auth.Trial) *TrialResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &TrialResponseBody{
+		StartedAt: v.StartedAt,
+		EndsAt:    v.EndsAt,
+	}
+
+	return res
 }
 
 // marshalAuthOrganizationEntryToOrganizationEntryResponseBody builds a value

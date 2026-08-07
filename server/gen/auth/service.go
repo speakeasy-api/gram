@@ -105,6 +105,7 @@ type InfoResult struct {
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   bool
+	Trial         *Trial `json:"trial"`
 	Organizations []*OrganizationEntry
 	// The authentication session
 	SessionToken string
@@ -116,6 +117,12 @@ type InfoResult struct {
 type LoginPayload struct {
 	// Optional URL to redirect to after successful authentication
 	Redirect *string
+	// Optional organization name. When set, the organization is created for a new
+	// user during the auth callback.
+	OrgName *string
+	// Optional email address. Pre-fills the email field on the identity provider's
+	// sign-up screen. Never stored.
+	Email *string
 }
 
 // LoginResult is the result type of the auth service login method.
@@ -181,6 +188,11 @@ type SwitchScopesResult struct {
 	SessionToken string
 	// The authentication session
 	SessionCookie string
+}
+
+type Trial struct {
+	StartedAt string
+	EndsAt    string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

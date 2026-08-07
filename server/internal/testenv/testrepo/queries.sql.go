@@ -409,6 +409,35 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 	return i, err
 }
 
+const getToolCallBlockLinksFixture = `-- name: GetToolCallBlockLinksFixture :one
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = $1
+`
+
+type GetToolCallBlockLinksFixtureRow struct {
+	ChatID        uuid.NullUUID
+	ChatMessageID uuid.NullUUID
+	RiskResultID  uuid.NullUUID
+	RiskPolicyID  uuid.NullUUID
+}
+
+// Test-only. The block page query deliberately does not expose the optional
+// foreign keys, but asserting that the salvage cleared exactly the link the
+// database rejected — and left the others alone — requires reading them off
+// the row.
+func (q *Queries) GetToolCallBlockLinksFixture(ctx context.Context, id uuid.UUID) (GetToolCallBlockLinksFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallBlockLinksFixture, id)
+	var i GetToolCallBlockLinksFixtureRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.ChatMessageID,
+		&i.RiskResultID,
+		&i.RiskPolicyID,
+	)
+	return i, err
+}
+
 const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
 VALUES ($1, $2, $3, $4)
@@ -591,6 +620,38 @@ type InsertPluginAssignmentFixtureParams struct {
 // create.
 func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const insertTrialFixture = `-- name: InsertTrialFixture :exec
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
+VALUES (
+    $1,
+    'enterprise',
+    $2,
+    $3,
+    $4::timestamptz,
+    $5::timestamptz
+)
+`
+
+type InsertTrialFixtureParams struct {
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture for exercising active trial lifecycle states.
+func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertTrialFixture,
+		arg.OrganizationID,
+		arg.CreatedAt,
+		arg.EndsAt,
+		arg.ConvertedAt,
+		arg.DemotedAt,
+	)
 	return err
 }
 
@@ -1032,6 +1093,22 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const setProjectSlugFixture = `-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = $1
+WHERE id = $2
+`
+
+type SetProjectSlugFixtureParams struct {
+	Slug string
+	ID   uuid.UUID
+}
+
+func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
 	return err
 }
 

@@ -44,6 +44,19 @@ func TestInMemoryStore_RejectsGrantForDifferentClientWithoutConsumingIt(t *testi
 	require.NoError(t, err)
 }
 
+func TestInMemoryStore_RejectsGrantForDifferentOrganizationWithoutConsumingIt(t *testing.T) {
+	t.Parallel()
+
+	store, grant := seededGrant(t)
+	input := consumeInput(grant)
+	input.OrganizationID = "organization-2"
+	_, err := store.ConsumeGrant(t.Context(), input)
+	require.ErrorIs(t, err, platformoauth.ErrNotFound)
+
+	_, err = store.ConsumeGrant(t.Context(), consumeInput(grant))
+	require.NoError(t, err)
+}
+
 func TestInMemoryStore_RejectsMalformedPKCE(t *testing.T) {
 	t.Parallel()
 
@@ -75,6 +88,38 @@ func TestInMemoryStore_RejectsGrantWithMismatchedRedirectOrPKCE(t *testing.T) {
 
 	_, err = store.ConsumeGrant(t.Context(), consumeInput(grant))
 	require.NoError(t, err)
+}
+
+func TestInMemoryStore_AuthorizeConnectionCreatesAndReauthorizesAtomically(t *testing.T) {
+	t.Parallel()
+
+	store := platformoauth.NewInMemoryStore()
+	client := platformoauth.Client{ID: "client-1"}
+	require.NoError(t, store.RegisterClient(t.Context(), client))
+
+	first := platformoauth.AuthorizeConnectionInput{
+		Connection: platformoauth.Connection{ID: "connection-1", ClientID: client.ID, Subject: "user:user-1", OrganizationID: "organization-1", Generation: "generation-1"},
+		Grant:      platformoauth.Grant{Code: "code-1", ClientID: client.ID, RedirectURI: "https://client.example/callback", CodeChallenge: pkceChallenge("test-verifier"), ExpiresAt: time.Now().Add(time.Minute)},
+		Now:        time.Now(),
+	}
+	connection, err := store.AuthorizeConnection(t.Context(), first)
+	require.NoError(t, err)
+	require.Equal(t, first.Connection, connection)
+
+	session := sessionFor(connection, client.ID, "refresh-old")
+	require.NoError(t, store.CreateSession(t.Context(), session))
+	second := first
+	second.Connection = platformoauth.Connection{ID: "connection-new", ClientID: client.ID, Subject: "user:user-1", OrganizationID: "organization-1", Generation: "generation-2"}
+	second.Grant.Code = "code-2"
+	second.Now = time.Now()
+
+	connection, err = store.AuthorizeConnection(t.Context(), second)
+	require.NoError(t, err)
+	require.Equal(t, "connection-1", connection.ID)
+	require.Equal(t, "generation-2", connection.Generation)
+
+	_, err = store.RotateSession(t.Context(), rotateInput(session, sessionFor(session.Connection, client.ID, "refresh-new")))
+	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
 }
 
 func TestInMemoryStore_RotatesRefreshTokenOnce(t *testing.T) {
@@ -152,6 +197,28 @@ func TestInMemoryStore_RejectsRefreshForDifferentConnection(t *testing.T) {
 	require.ErrorIs(t, err, platformoauth.ErrGeneration)
 }
 
+func TestInMemoryStore_GetConnectionSkipsRevokedHistory(t *testing.T) {
+	t.Parallel()
+
+	store, grant := seededGrant(t)
+	for _, id := range []string{grant.Connection.ID, "connection-revoked-2", "connection-revoked-3"} {
+		connection := grant.Connection
+		connection.ID = id
+		if id != grant.Connection.ID {
+			require.NoError(t, store.RegisterConnection(t.Context(), connection))
+		}
+		require.NoError(t, store.RevokeConnection(t.Context(), grant.Connection.OrganizationID, id, time.Now()))
+	}
+	active := grant.Connection
+	active.ID = "connection-active"
+	require.NoError(t, store.RegisterConnection(t.Context(), active))
+
+	connection, err := store.GetConnection(t.Context(), active.OrganizationID, active.Subject, active.ClientID)
+
+	require.NoError(t, err)
+	require.Equal(t, active.ID, connection.ID)
+}
+
 func TestInMemoryStore_RotationInvalidatesOldGeneration(t *testing.T) {
 	t.Parallel()
 
@@ -159,7 +226,7 @@ func TestInMemoryStore_RotationInvalidatesOldGeneration(t *testing.T) {
 	session := sessionFor(grant.Connection, grant.ClientID, "refresh-old")
 	require.NoError(t, store.CreateSession(t.Context(), session))
 
-	connection, err := store.RotateConnectionGeneration(t.Context(), grant.Connection.ID, "generation-next", time.Now())
+	connection, err := store.RotateConnectionGeneration(t.Context(), grant.Connection.OrganizationID, grant.Connection.ID, "generation-next", time.Now())
 	require.NoError(t, err)
 	require.Equal(t, "generation-next", connection.Generation)
 
@@ -167,7 +234,57 @@ func TestInMemoryStore_RotationInvalidatesOldGeneration(t *testing.T) {
 	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
 }
 
-func TestInMemoryStore_ClientRevocationRevokesSessionFamily(t *testing.T) {
+func TestInMemoryStore_DoesNotExposeSessionAcrossOrganizations(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	session := sessionFor(grant.Connection, grant.ClientID, "refresh-session")
+	require.NoError(t, store.CreateSession(t.Context(), session))
+
+	_, err := store.GetSessionByRefreshHash(t.Context(), "organization-2", session.RefreshHash)
+	require.ErrorIs(t, err, platformoauth.ErrNotFound)
+	_, err = store.RevokeAccessSession(t.Context(), "organization-2", session.JTI, grant.ClientID, time.Now())
+	require.ErrorIs(t, err, platformoauth.ErrNotFound)
+
+	stored, err := store.GetSessionByRefreshHash(t.Context(), grant.Connection.OrganizationID, session.RefreshHash)
+	require.NoError(t, err)
+	require.Nil(t, stored.RevokedAt)
+}
+
+func TestInMemoryStore_RevokeAccessSessionRejectsRepeatedRevocation(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	session := sessionFor(grant.Connection, grant.ClientID, "refresh-session")
+	require.NoError(t, store.CreateSession(t.Context(), session))
+	require.NoError(t, store.CreateSession(t.Context(), sessionFor(grant.Connection, grant.ClientID, "refresh-other")))
+
+	_, err := store.RevokeAccessSession(t.Context(), grant.Connection.OrganizationID, session.JTI, grant.ClientID, time.Now())
+	require.NoError(t, err)
+	_, err = store.RevokeAccessSession(t.Context(), grant.Connection.OrganizationID, session.JTI, grant.ClientID, time.Now())
+	require.ErrorIs(t, err, platformoauth.ErrNotFound)
+
+	stored, err := store.GetSessionByRefreshHash(t.Context(), grant.Connection.OrganizationID, session.RefreshHash)
+	require.NoError(t, err)
+	require.NotNil(t, stored.RevokedAt)
+}
+
+func TestInMemoryStore_RejectsDuplicateActiveConnectionAndSessionJTI(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	connection := grant.Connection
+	connection.ID = "connection-duplicate"
+	require.ErrorIs(t, store.RegisterConnection(t.Context(), connection), platformoauth.ErrAlreadyUsed)
+
+	first := sessionFor(grant.Connection, grant.ClientID, "refresh-first")
+	second := sessionFor(grant.Connection, grant.ClientID, "refresh-second")
+	second.JTI = first.JTI
+	require.NoError(t, store.CreateSession(t.Context(), first))
+	require.ErrorIs(t, store.CreateSession(t.Context(), second), platformoauth.ErrAlreadyUsed)
+}
+
+func TestInMemoryStore_ClientRevocationBlocksSessionRotation(t *testing.T) {
 	t.Parallel()
 
 	store, grant := consumedGrant(t)
@@ -177,6 +294,10 @@ func TestInMemoryStore_ClientRevocationRevokesSessionFamily(t *testing.T) {
 
 	_, err := store.RotateSession(t.Context(), rotateInput(session, sessionFor(grant.Connection, grant.ClientID, "refresh-new")))
 	require.ErrorIs(t, err, platformoauth.ErrRevoked)
+
+	stored, err := store.GetSessionByRefreshHash(t.Context(), grant.Connection.OrganizationID, session.RefreshHash)
+	require.NoError(t, err)
+	require.Nil(t, stored.RevokedAt)
 }
 
 func TestInMemoryStore_ClientRevocationCannotBeUndone(t *testing.T) {
@@ -195,9 +316,9 @@ func TestInMemoryStore_ConnectionRevocationCannotBeRotated(t *testing.T) {
 	t.Parallel()
 
 	store, grant := seededGrant(t)
-	require.NoError(t, store.RevokeConnection(t.Context(), grant.Connection.ID, time.Now()))
+	require.NoError(t, store.RevokeConnection(t.Context(), grant.Connection.OrganizationID, grant.Connection.ID, time.Now()))
 
-	_, err := store.RotateConnectionGeneration(t.Context(), grant.Connection.ID, "generation-next", time.Now())
+	_, err := store.RotateConnectionGeneration(t.Context(), grant.Connection.OrganizationID, grant.Connection.ID, "generation-next", time.Now())
 	require.ErrorIs(t, err, platformoauth.ErrRevoked)
 }
 
@@ -271,21 +392,23 @@ func consumedGrant(t *testing.T) (*platformoauth.InMemoryStore, platformoauth.Gr
 
 func consumeInput(grant platformoauth.Grant) platformoauth.ConsumeGrantInput {
 	return platformoauth.ConsumeGrantInput{
-		Code:         grant.Code,
-		ClientID:     grant.ClientID,
-		RedirectURI:  grant.RedirectURI,
-		CodeVerifier: testVerifier,
-		Now:          time.Now(),
+		OrganizationID: grant.Connection.OrganizationID,
+		Code:           grant.Code,
+		ClientID:       grant.ClientID,
+		RedirectURI:    grant.RedirectURI,
+		CodeVerifier:   testVerifier,
+		Now:            time.Now(),
 	}
 }
 
 func rotateInput(session, replacement platformoauth.Session) platformoauth.RotateSessionInput {
 	return platformoauth.RotateSessionInput{
-		RefreshHash: session.RefreshHash,
-		ClientID:    session.ClientID,
-		Generation:  session.Connection.Generation,
-		Now:         time.Now(),
-		Replacement: replacement,
+		OrganizationID: session.Connection.OrganizationID,
+		RefreshHash:    session.RefreshHash,
+		ClientID:       session.ClientID,
+		Generation:     session.Connection.Generation,
+		Now:            time.Now(),
+		Replacement:    replacement,
 	}
 }
 

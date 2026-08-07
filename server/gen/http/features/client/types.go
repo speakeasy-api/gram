@@ -32,8 +32,6 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
-	// Whether webhooks are enabled
-	Webhooks *bool `form:"webhooks,omitempty" json:"webhooks,omitempty" xml:"webhooks,omitempty"`
 	// Whether SSO setup is enabled for the organization
 	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
 	// Whether SCIM/directory sync setup is enabled for the organization
@@ -53,6 +51,8 @@ type GetProductFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
+	// Whether the organization is eligible for the Gram Platform MCP capability
+	PlatformMcpEnabled *bool `form:"platform_mcp_enabled,omitempty" json:"platform_mcp_enabled,omitempty" xml:"platform_mcp_enabled,omitempty"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
 	CustomerManagedEncryptionKeysEnabled *bool `form:"customer_managed_encryption_keys_enabled,omitempty" json:"customer_managed_encryption_keys_enabled,omitempty" xml:"customer_managed_encryption_keys_enabled,omitempty"`
@@ -453,7 +453,6 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		ToolIoLogsEnabled:                    *body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                *body.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled:         *body.AuthzChallengeLoggingEnabled,
-		Webhooks:                             *body.Webhooks,
 		SsoEnabled:                           *body.SsoEnabled,
 		ScimEnabled:                          *body.ScimEnabled,
 		HooksBrowserLoginEnabled:             *body.HooksBrowserLoginEnabled,
@@ -462,6 +461,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		SkillsEnabled:                        *body.SkillsEnabled,
 		SkillCaptureMetadataOnly:             *body.SkillCaptureMetadataOnly,
 		AiPlatformPushIntegrationsEnabled:    *body.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                   *body.PlatformMcpEnabled,
 		CustomerManagedEncryptionKeysEnabled: *body.CustomerManagedEncryptionKeysEnabled,
 		DeviceAgent:                          *body.DeviceAgent,
 	}
@@ -784,9 +784,6 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	if body.AuthzChallengeLoggingEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "body"))
 	}
-	if body.Webhooks == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("webhooks", "body"))
-	}
 	if body.SsoEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sso_enabled", "body"))
 	}
@@ -810,6 +807,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.AiPlatformPushIntegrationsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
+	}
+	if body.PlatformMcpEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform_mcp_enabled", "body"))
 	}
 	if body.CustomerManagedEncryptionKeysEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("customer_managed_encryption_keys_enabled", "body"))

@@ -160,7 +160,7 @@ var HookIngestEvent = Type("HookIngestEvent", func() {
 	Description("Canonical Gram feature event.")
 	Required("type")
 	Attribute("type", String, "Canonical Gram hook event type.", func() {
-		Enum("session.started", "session.updated", "session.ended", "prompt.submitted",
+		Enum("session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted",
 			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
 			"assistant.thought", "usage.reported", "skill.activated", "notification.reported")
 	})
@@ -292,6 +292,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("tool_call", HookToolCallData)
 	Attribute("mcp", HookMCPData)
 	Attribute("mcp_inventory", ArrayOf(HookMCPData), "Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.")
+	Attribute("mcp_inventory_collected", Boolean, "Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.")
 	Attribute("usage", HookUsageData)
 	Attribute("message", HookMessageData)
 	Attribute("skill", HookSkillData)

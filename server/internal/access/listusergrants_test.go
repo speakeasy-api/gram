@@ -130,6 +130,21 @@ func TestService_ListGrants_InvalidUserPrincipal(t *testing.T) {
 	require.ErrorIs(t, err, authz.ErrPrincipalInvalid)
 }
 
+func TestService_ListGrants_WithoutActiveOrganizationReturnsNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, result.Grants)
+}
+
 func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	t.Parallel()
 
