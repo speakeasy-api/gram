@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,10 +17,10 @@ func TestLoadActiveTrialReturnsNilAfterLookupError(t *testing.T) {
 	logger := testenv.NewLogger(t)
 
 	trial := loadActiveTrial(
-		context.Background(),
+		t.Context(),
 		"<ORG_ID>",
-		func(context.Context, string) (orgRepo.GetActiveTrialRow, error) {
-			return orgRepo.GetActiveTrialRow{}, lookupErr
+		func(context.Context, string) (trialsRepo.GetActiveTrialRow, error) {
+			return trialsRepo.GetActiveTrialRow{}, lookupErr
 		},
 		logger,
 	)

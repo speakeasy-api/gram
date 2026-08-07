@@ -45,6 +45,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const dispositionAssistants = "assistants"
@@ -737,7 +738,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	trial := loadActiveTrial(
 		ctx,
 		authCtx.ActiveOrganizationID,
-		s.orgRepo.GetActiveTrial,
+		trialsRepo.New(s.db).GetActiveTrial,
 		s.logger,
 	)
 
@@ -869,7 +870,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 func loadActiveTrial(
 	ctx context.Context,
 	organizationID string,
-	getTrial func(context.Context, string) (orgRepo.GetActiveTrialRow, error),
+	getTrial func(context.Context, string) (trialsRepo.GetActiveTrialRow, error),
 	logger *slog.Logger,
 ) *gen.Trial {
 	trial, err := getTrial(ctx, organizationID)
