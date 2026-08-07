@@ -316,10 +316,3 @@ func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, pro
 
 	return row.ID
 }
-
-// ptrString takes the address of a string for optional payload fields.
-//
-//go:fix inline
-func ptrString(value string) *string {
-	return new(value)
-}
