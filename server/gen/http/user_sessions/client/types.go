@@ -827,7 +827,12 @@ type UserSessionResponseBody struct {
 	// Slug of the user_session_issuer that gated this session.
 	IssuerSlug *string `form:"issuer_slug,omitempty" json:"issuer_slug,omitempty" xml:"issuer_slug,omitempty"`
 	// Name of the MCP client that established the session, if known.
+	// Client-controlled and unverified; do not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// Set when the client that established this session was resolved from a Client
+	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
+	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType *string `form:"subject_type,omitempty" json:"subject_type,omitempty" xml:"subject_type,omitempty"`
 	// Resolved human-readable name of the subject, if known.

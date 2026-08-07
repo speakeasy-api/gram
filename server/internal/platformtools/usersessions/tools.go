@@ -75,6 +75,7 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		UpdatedAt:           row.UpdatedAt.Time.Format(time.RFC3339),
 		IssuerSlug:          row.IssuerSlug,
 		ClientName:          conv.FromPGText[string](row.ClientName),
+		ClientIDMetadataURI: conv.FromPGText[string](row.ClientIDMetadataUri),
 		SubjectType:         subjectType,
 		SubjectDisplayName:  subjectName,
 		RevokedAt:           revokedAt,

@@ -13,7 +13,11 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type UserSession = {
   /**
-   * Name of the MCP client that established the session, if known.
+   * Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
+   */
+  clientIdMetadataUri?: string | undefined;
+  /**
+   * Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.
    */
   clientName?: string | undefined;
   createdAt: Date;
@@ -64,6 +68,7 @@ export type UserSession = {
 export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
   .pipe(
     z.object({
+      client_id_metadata_uri: z.optional(z.string()),
       client_name: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -94,6 +99,7 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "client_id_metadata_uri": "clientIdMetadataUri",
         "client_name": "clientName",
         "created_at": "createdAt",
         "expires_at": "expiresAt",

@@ -438,6 +438,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          sessions: {
+            title: "MCP Server Clients and Sessions",
+            url: "sessions",
+          },
           settings: {
             title: "MCP Server Settings",
             url: "settings",
@@ -476,6 +480,10 @@ const ROUTE_STRUCTURE = {
           teamAccess: {
             title: "MCP Team Access",
             url: "team-access",
+          },
+          sessions: {
+            title: "MCP Clients and Sessions",
+            url: "sessions",
           },
           settings: {
             title: "MCP Settings",

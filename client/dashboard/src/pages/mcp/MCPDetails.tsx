@@ -1,5 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
@@ -239,6 +240,12 @@ function renderMcpDetailTabContent(
       return (
         <RequireScope scope="mcp:write" level="page">
           <MCPPerformanceTab toolset={toolset} />
+        </RequireScope>
+      );
+    case "sessions":
+      return (
+        <RequireScope scope="project:read" level="page">
+          <ClientsAndSessionsTab issuerId={toolset.userSessionIssuerId} />
         </RequireScope>
       );
     case "team-access":

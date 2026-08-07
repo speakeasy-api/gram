@@ -815,8 +815,9 @@ type ListUserSessionClientsByProjectIDParams struct {
 	LimitValue          int32
 }
 
-// Operator visibility into all DCR-issued clients in the project, with optional
-// filter by user_session_issuer_id. Joins through issuers for project scoping.
+// Operator visibility into every client registered against an issuer in the
+// project -- DCR-registered and CIMD-resolved alike -- with optional filter by
+// user_session_issuer_id. Joins through issuers for project scoping.
 func (q *Queries) ListUserSessionClientsByProjectID(ctx context.Context, arg ListUserSessionClientsByProjectIDParams) ([]UserSessionClient, error) {
 	rows, err := q.db.Query(ctx, listUserSessionClientsByProjectID,
 		arg.ProjectID,
@@ -1123,6 +1124,7 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       c.client_id_metadata_uri AS client_id_metadata_uri,
        u.display_name AS user_display_name,
        u.email AS user_email,
        k.name AS api_key_name
@@ -1187,6 +1189,7 @@ type ListUserSessionsByProjectIDRow struct {
 	Deleted             bool
 	IssuerSlug          string
 	ClientName          pgtype.Text
+	ClientIDMetadataUri pgtype.Text
 	UserDisplayName     pgtype.Text
 	UserEmail           pgtype.Text
 	ApiKeyName          pgtype.Text
@@ -1226,6 +1229,7 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 			&i.Deleted,
 			&i.IssuerSlug,
 			&i.ClientName,
+			&i.ClientIDMetadataUri,
 			&i.UserDisplayName,
 			&i.UserEmail,
 			&i.ApiKeyName,
