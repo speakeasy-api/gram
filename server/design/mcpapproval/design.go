@@ -76,10 +76,13 @@ var _ = Service("mcpApproval", func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("target_kind", String, "The namespace of the reference: server_url or stdio_command.")
+			Attribute("target_kind", String, func() {
+				Description("The namespace of the reference.")
+				Enum("server_url", "stdio_command")
+			})
 			Attribute("target", String, "The server reference: a URL, or the stdio command that launches it.")
-			Attribute("note", String, "Why the requester wants it. The one input no automated evidence supplies.")
-			Required("target_kind", "target")
+			Attribute("note", String, "Why the requester wants it. The one input no automated evidence supplies, so it cannot be blank.")
+			Required("target_kind", "target", "note")
 		})
 
 		Result(ApprovalRequestSummary)

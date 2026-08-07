@@ -15,12 +15,13 @@ import (
 // CreateRequestRequestBody is the type of the "mcpApproval" service
 // "createRequest" endpoint HTTP request body.
 type CreateRequestRequestBody struct {
-	// The namespace of the reference: server_url or stdio_command.
+	// The namespace of the reference.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The server reference: a URL, or the stdio command that launches it.
 	Target string `form:"target" json:"target" xml:"target"`
-	// Why the requester wants it. The one input no automated evidence supplies.
-	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// Why the requester wants it. The one input no automated evidence supplies, so
+	// it cannot be blank.
+	Note string `form:"note" json:"note" xml:"note"`
 }
 
 // PromoteRequestBody is the type of the "mcpApproval" service "promote"

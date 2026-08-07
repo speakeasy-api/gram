@@ -146,12 +146,13 @@ type CreateRequestPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// The namespace of the reference: server_url or stdio_command.
+	// The namespace of the reference.
 	TargetKind string
 	// The server reference: a URL, or the stdio command that launches it.
 	Target string
-	// Why the requester wants it. The one input no automated evidence supplies.
-	Note *string
+	// Why the requester wants it. The one input no automated evidence supplies, so
+	// it cannot be blank.
+	Note string
 }
 
 // GetRequestPayload is the payload type of the mcpApproval service getRequest
