@@ -57,9 +57,9 @@ func TestBuildAuthorizationURL_WorkOS(t *testing.T) {
 	require.Equal(t, "state-value", q.Get("state"))
 	require.Equal(t, "client_test123", q.Get("client_id"))
 
-	// The SDK omits `scope` because WorkOS's reference does not list it for
-	// this endpoint. Gram re-adds it: it has always been sent here, and "not
-	// documented" is not "verified ignored".
+	// WorkOS's reference does not list `scope` for this endpoint, so it is
+	// likely inert here. Asserted anyway: it is what Gram has always sent, and
+	// "not documented" is not "verified ignored".
 	require.Equal(t, "openid email profile", q.Get("scope"))
 }
 
