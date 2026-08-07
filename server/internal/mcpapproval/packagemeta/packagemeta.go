@@ -322,10 +322,16 @@ type pypiDocument struct {
 
 func (c *Client) lookupPyPI(ctx context.Context, name string) (*Metadata, error) {
 	// PEP 508 extras select optional dependencies of the same package, so
-	// `mcp-server[sse]` is looked up as `mcp-server` — kept, the brackets
-	// would be escaped into a path segment PyPI has no project for.
-	if bracket := strings.IndexByte(name, '['); bracket >= 0 {
-		name = strings.TrimSpace(name[:bracket])
+	// `mcp-server[sse]` is looked up as `mcp-server`. Only a well-formed,
+	// terminal extras expression is stripped: a malformed spec like `foo[bar`
+	// names nothing pip would install, and quietly resolving it to `foo`
+	// would attribute another package's evidence to it. Left unchanged, it
+	// finds no project and surfaces as unknown, which is the honest outcome.
+	if open := strings.IndexByte(name, '['); open >= 0 {
+		inner, closed := strings.CutSuffix(name[open+1:], "]")
+		if closed && !strings.ContainsAny(inner, "[]") {
+			name = strings.TrimSpace(name[:open])
+		}
 	}
 
 	endpoint := c.pypiURL + "/pypi/" + url.PathEscape(name) + "/json"
