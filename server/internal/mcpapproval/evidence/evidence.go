@@ -124,14 +124,34 @@ type PackageLookup interface {
 
 var _ PackageLookup = (*packagemeta.Client)(nil)
 
+// defaultSourceTimeout bounds each source's gather independently, so one
+// unreachable source costs its own budget rather than the whole gather's —
+// an admission is delayed by a registry outage, never held for the sum of
+// every source's worst case.
+const defaultSourceTimeout = 3 * time.Second
+
 // Assembler gathers evidence for one requested server.
 type Assembler struct {
-	packages PackageLookup
-	traffic  exposure.Reader
+	packages      PackageLookup
+	traffic       exposure.Reader
+	sourceTimeout time.Duration
 }
 
-func NewAssembler(packages PackageLookup, traffic exposure.Reader) *Assembler {
-	return &Assembler{packages: packages, traffic: traffic}
+// Option configures an Assembler.
+type Option func(*Assembler)
+
+// WithSourceTimeout overrides the per-source gather budget.
+func WithSourceTimeout(timeout time.Duration) Option {
+	return func(a *Assembler) { a.sourceTimeout = timeout }
+}
+
+func NewAssembler(packages PackageLookup, traffic exposure.Reader, options ...Option) *Assembler {
+	assembler := &Assembler{packages: packages, traffic: traffic, sourceTimeout: defaultSourceTimeout}
+	for _, option := range options {
+		option(assembler)
+	}
+
+	return assembler
 }
 
 // Assemble gathers one evidence document for a requested server.
@@ -158,7 +178,9 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 	}
 
 	if resolved.Kind == identity.KindPackage && resolved.Registry != "" {
-		metadata, err := a.packages.Lookup(ctx, resolved.Registry, resolved.PackageName)
+		lookupCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+		metadata, err := a.packages.Lookup(lookupCtx, resolved.Registry, resolved.PackageName)
+		cancel()
 		switch {
 		case err != nil:
 			document.Gaps = append(document.Gaps, GapPackageLookup)
@@ -185,7 +207,9 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 	// targets, and the inventory is keyed by URL.
 	if resolved.Kind == identity.KindRemote {
 		target := strings.TrimPrefix(resolved.ArtifactRef, "url:")
-		signals, err := exposure.Assess(ctx, a.traffic, projectID, target)
+		assessCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+		signals, err := exposure.Assess(assessCtx, a.traffic, projectID, target)
+		cancel()
 		if err != nil {
 			document.Gaps = append(document.Gaps, GapExposureLookup)
 		} else if signals.Status != exposure.StatusUnaddressable {

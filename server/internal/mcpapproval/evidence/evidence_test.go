@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -240,4 +241,36 @@ func TestDecodeDocument_RoundTripAndVersionGate(t *testing.T) {
 
 	_, err = evidence.DecodeDocument(raw, evidence.Version+1)
 	require.Error(t, err)
+}
+
+// blockingPackages never answers until its context is cancelled, standing in
+// for an unreachable registry.
+type blockingPackages struct{}
+
+func (blockingPackages) Lookup(ctx context.Context, _ identity.Registry, _ string) (*packagemeta.Metadata, error) {
+	<-ctx.Done()
+
+	return nil, fmt.Errorf("lookup aborted: %w", ctx.Err())
+}
+
+// An unreachable source costs its own budget, not the caller's whole window:
+// the gather returns with the failure recorded as a gap instead of hanging.
+func TestAssemble_UnreachableSourceIsBoundedAndBecomesAGap(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		blockingPackages{},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		evidence.WithSourceTimeout(50*time.Millisecond),
+	)
+
+	started := time.Now()
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
+	require.NoError(t, err)
+	require.Less(t, time.Since(started), 5*time.Second)
+
+	doc := decode(t, raw)
+	gaps, ok := doc["gaps"].([]any)
+	require.True(t, ok)
+	require.Contains(t, gaps, "package_lookup_failed")
 }
