@@ -194,12 +194,8 @@ function OrgLogsInner() {
 
           <div className="border-border border-t" />
 
-          {featuresData?.skillsEnabled && (
-            <>
-              <SkillContentUploadSetting />
-              <div className="border-border border-t" />
-            </>
-          )}
+          <SkillContentUploadSetting />
+          <div className="border-border border-t" />
 
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>

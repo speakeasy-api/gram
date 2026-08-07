@@ -309,15 +309,12 @@ func TestRestoreSkillVersionRejectsInvalidAndCrossSkillTargets(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestRestoreSkillVersionRequiresWriteScopeAndFeature(t *testing.T) {
+func TestRestoreSkillVersionRequiresWriteScope(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	created := createSkill(t, ctx, ti, "restore-access", "Valid.")
 	readCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()))
 	_, err := ti.service.RestoreVersion(readCtx, &gen.RestoreVersionPayload{ID: created.Skill.ID, VersionID: created.Version.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
-	requireOopsCode(t, err, oops.CodeForbidden)
-	disableSkills(t, ctx, ti)
-	_, err = ti.service.RestoreVersion(ctx, &gen.RestoreVersionPayload{ID: created.Skill.ID, VersionID: created.Version.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

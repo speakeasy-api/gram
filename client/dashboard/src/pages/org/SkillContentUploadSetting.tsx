@@ -26,7 +26,7 @@ export function SkillContentUploadSetting(): JSX.Element | null {
     },
   });
 
-  if (features?.skillsEnabled !== true) return null;
+  if (!features) return null;
 
   return (
     <Stack direction="horizontal" justify="space-between" align="center">

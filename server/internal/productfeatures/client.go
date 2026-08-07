@@ -37,6 +37,11 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgx
 }
 
 func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, feature Feature) (bool, error) {
+	// Skills is generally available; the feature remains in the API for compatibility.
+	if feature == FeatureSkills {
+		return true, nil
+	}
+
 	if cached, err := c.featureCache.Get(ctx, FeatureCacheKey(organizationID, feature)); err == nil {
 		return cached.Enabled, nil
 	}
