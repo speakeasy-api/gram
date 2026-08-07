@@ -1735,8 +1735,20 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   -- (e.g. Slack non-rotating tokens). Readers treat NULL as non-expiring.
   access_expires_at timestamptz,
   refresh_token_encrypted TEXT,
+  -- Absolute upstream authorization deadline reported via
+  -- authorization_expires_in. Separate from the sliding refresh-token idle
+  -- deadline because exchanging a token resets only the latter.
+  authorization_expires_at timestamptz,
   refresh_expires_at timestamptz,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- RFC 8707 resource indicator from code exchange; replayed on refresh_token grant.
+  resource TEXT,
+  -- Subject's consent-screen choice. The organization feature controls only
+  -- whether the UI exposes this opt-in.
+  auto_refresh boolean NOT NULL DEFAULT FALSE,
+  -- Automated keepalive claim time. Kept separate from updated_at because
+  -- updated_at is both the refresh-token CAS version and the 24-hour due clock.
+  last_refresh_attempt_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1755,6 +1767,12 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_key
 ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id)
 WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS remote_sessions_refresh_keepalive_due_idx
+ON remote_sessions (updated_at, id)
+WHERE deleted IS FALSE
+  AND refresh_token_encrypted IS NOT NULL
+  AND auto_refresh IS TRUE;
 
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
