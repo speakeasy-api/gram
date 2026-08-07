@@ -336,14 +336,26 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	msgParams chatRepo.CreateChatMessageParams,
 	defaultTitle string,
 ) error {
+	_, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, chatID, projectID, msgParams, defaultTitle)
+	return err
+}
+
+func (s *Service) insertMessageWithFallbackUpsertResult(
+	ctx context.Context,
+	metadata *SessionMetadata,
+	chatID uuid.UUID,
+	projectID uuid.UUID,
+	msgParams chatRepo.CreateChatMessageParams,
+	defaultTitle string,
+) (bool, error) {
 	if s.productFeatures == nil {
-		return nil
+		return false, nil
 	}
 
 	// Check if session capture is enabled for this org
 	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
 	if err != nil {
-		return fmt.Errorf("check session_capture feature flag: %w", err)
+		return false, fmt.Errorf("check session_capture feature flag: %w", err)
 	}
 	if !enabled {
 		s.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
@@ -352,31 +364,33 @@ func (s *Service) insertMessageWithFallbackUpsert(
 			attr.SlogProjectID(projectID.String()),
 			attr.SlogGenAIConversationID(metadata.SessionID),
 		)
-		return nil
+		return false, nil
 	}
 
-	writeMessage := func() error {
+	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
-			if _, writeErr := s.writer.WriteCorrelated(ctx, projectID, msgParams, msgParams.MessageID.String); writeErr != nil {
-				return fmt.Errorf("write correlated chat message: %w", writeErr)
+			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, msgParams, msgParams.MessageID.String)
+			if writeErr != nil {
+				return 0, fmt.Errorf("write correlated chat message: %w", writeErr)
 			}
-			return nil
+			return n, nil
 		}
-		if _, writeErr := s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams}); writeErr != nil {
-			return fmt.Errorf("write chat message: %w", writeErr)
+		n, writeErr := s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+		if writeErr != nil {
+			return 0, fmt.Errorf("write chat message: %w", writeErr)
 		}
-		return nil
+		return n, nil
 	}
 
 	// Try to insert the message (the writer handles notification on success).
-	err = writeMessage()
+	n, err := writeMessage()
 	if err == nil {
-		return nil
+		return n > 0, nil
 	}
 
 	// If this is not a foreign key violation (chat doesn't exist), fail.
 	if !isForeignKeyViolation(err) {
-		return fmt.Errorf("insert chat message: %w", err)
+		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
 	// Create the chat and retry.
@@ -390,13 +404,14 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		Title:          conv.ToPGText(defaultTitle),
 	})
 	if upsertErr != nil {
-		return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+		return false, fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
 	}
 
-	if err = writeMessage(); err != nil {
-		return fmt.Errorf("insert chat message after creating chat: %w", err)
+	n, err = writeMessage()
+	if err != nil {
+		return false, fmt.Errorf("insert chat message after creating chat: %w", err)
 	}
-	return nil
+	return n > 0, nil
 }
 
 // persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.

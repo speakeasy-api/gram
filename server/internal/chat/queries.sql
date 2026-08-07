@@ -289,6 +289,16 @@ WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork', 'codex', 'cursor', 'opencode')
   AND chat_messages.source = 'litellm';
 
+-- name: HasNativeChatPrompt :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chat_messages
+  WHERE chat_id = @chat_id
+    AND project_id = @project_id::uuid
+    AND role = 'user'
+    AND source = ANY(@sources::text[])
+);
+
 -- name: CreateChatContentPart :copyfrom
 INSERT INTO chat_content_parts (
     chat_id

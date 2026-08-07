@@ -182,6 +182,10 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 // WriteCorrelated atomically inserts a message or promotes an earlier LiteLLM
 // observation of the same turn to the authoritative native-hook source.
 func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, param repo.CreateChatMessageParams, externalMessageID string) (int64, error) {
+	params := []repo.CreateChatMessageParams{param}
+	stampUnsetCreatedAt(params)
+	param = params[0]
+
 	n, err := repo.New(w.db).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
 		ChatID:            param.ChatID,
 		Role:              param.Role,

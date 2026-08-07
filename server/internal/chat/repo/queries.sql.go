@@ -1092,6 +1092,30 @@ func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMe
 	return items, nil
 }
 
+const hasNativeChatPrompt = `-- name: HasNativeChatPrompt :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chat_messages
+  WHERE chat_id = $1
+    AND project_id = $2::uuid
+    AND role = 'user'
+    AND source = ANY($3::text[])
+)
+`
+
+type HasNativeChatPromptParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	Sources   []string
+}
+
+func (q *Queries) HasNativeChatPrompt(ctx context.Context, arg HasNativeChatPromptParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasNativeChatPrompt, arg.ChatID, arg.ProjectID, arg.Sources)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertChatResolution = `-- name: InsertChatResolution :one
 INSERT INTO chat_resolutions (
     project_id,

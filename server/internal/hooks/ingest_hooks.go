@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,6 +34,8 @@ const (
 	agentTurnPrefix              = "agent-turn:v1:"
 	agentPromptCorrelationPrefix = "agent-prompt:v1:"
 )
+
+var nativeTranscriptFallbackSources = []string{"claude", "claude-code", "claude-code-desktop", "cowork", "cursor"}
 
 type authenticatedIngestOptionsKey struct{}
 
@@ -949,18 +952,6 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 }
 
 func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time, blockReason string) {
-	adapter := strings.TrimSpace(payload.Source.Adapter)
-	if sessionID := canonicalSessionID(payload); sessionID != "" && usesNativeTranscriptFallback(adapter) {
-		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-		err := s.cache.Set(cacheCtx, sessionNativeHooksCacheKey(authCtx.ProjectID.String(), sessionID), adapter, 24*time.Hour)
-		cancel()
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to mark native hook session",
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(sessionID),
-			)
-		}
-	}
 	// Resolve the session identity once, before the telemetry write, so the
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
@@ -991,7 +982,8 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		}
 	}
 	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
-	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp); err != nil {
+	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
+	if err != nil {
 		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
 			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
 			attr.SlogError(err),
@@ -1000,6 +992,8 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			attr.SlogGenAIConversationID(canonicalSessionID(payload)),
 			attr.SlogProjectID(authCtx.ProjectID.String()),
 		)
+	} else if promptCaptured && usesNativeTranscriptFallback(payload.Source.Adapter) {
+		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
 	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
 		s.logger.WarnContext(ctx, "failed to persist prompt attachments",
@@ -1374,10 +1368,10 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 // so the chat row, telemetry, and enforcement carry the exact same
 // server-resolved time for one event — a recomputed fallback or clamp would
 // drift by the handler's processing latency.
-func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) error {
+func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) (bool, error) {
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {
-		return nil
+		return false, nil
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
@@ -1418,7 +1412,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	case "prompt.submitted":
 		content := canonicalPromptText(payload)
 		if strings.TrimSpace(content) == "" {
-			return nil
+			return false, nil
 		}
 		msg = baseMsg("user", content)
 		if correlationID := agentPromptCorrelationID(payload, content); correlationID != "" {
@@ -1426,7 +1420,21 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		} else if strings.EqualFold(strings.TrimSpace(hookSource), "litellm") {
 			var nativeSource string
 			if err := s.cache.Get(ctx, sessionNativeHooksCacheKey(authCtx.ProjectID.String(), sessionID), &nativeSource); err == nil && strings.TrimSpace(nativeSource) != "" {
-				return nil
+				return false, nil
+			}
+			captured, err := chatRepo.New(s.db).HasNativeChatPrompt(ctx, chatRepo.HasNativeChatPromptParams{
+				ChatID:    msg.ChatID,
+				ProjectID: *authCtx.ProjectID,
+				Sources:   nativeTranscriptFallbackSources,
+			})
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to verify native prompt capture",
+					attr.SlogError(err),
+					attr.SlogGenAIConversationID(sessionID),
+				)
+			} else if captured {
+				s.markNativePromptSession(ctx, authCtx.ProjectID.String(), sessionID, "captured")
+				return false, nil
 			}
 		}
 		titleContent = content
@@ -1434,13 +1442,13 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		content := canonicalMessageText(payload)
 		outputToolCalls := authenticatedIngestOptions(ctx).OutputToolCalls
 		if strings.TrimSpace(content) == "" && len(outputToolCalls) == 0 {
-			return nil
+			return false, nil
 		}
 		msg = baseMsg("assistant", content)
 		if len(outputToolCalls) > 0 {
 			toolCallsJSON, err := json.Marshal(outputToolCalls)
 			if err != nil {
-				return fmt.Errorf("marshal output tool calls: %w", err)
+				return false, fmt.Errorf("marshal output tool calls: %w", err)
 			}
 			msg.FinishReason = conv.ToPGText("tool_calls")
 			msg.ToolCalls = toolCallsJSON
@@ -1453,15 +1461,15 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		// put phantom or duplicate tool_calls rows in the transcript.
 		if canonicalPermissionType(payload) != "" ||
 			strings.EqualFold(strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, "")), "PermissionRequest") {
-			return nil
+			return false, nil
 		}
 		toolName := canonicalToolName(payload)
 		if strings.TrimSpace(toolName) == "" {
-			return nil
+			return false, nil
 		}
 		toolCallsJSON, err := canonicalToolCallsJSON(payload)
 		if err != nil {
-			return err
+			return false, err
 		}
 		msg = baseMsg("assistant", "")
 		msg.FinishReason = conv.ToPGText("tool_calls")
@@ -1470,24 +1478,36 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	case "tool.completed", "tool.failed":
 		content := canonicalToolResultContent(payload)
 		if strings.TrimSpace(content) == "" {
-			return nil
+			return false, nil
 		}
 		msg = baseMsg("tool", content)
 		msg.ToolCallID = conv.ToPGTextEmpty(canonicalChatToolCallID(payload))
 		titleContent = content
 	default:
-		return nil
+		return false, nil
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+	stored, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+	return stored && msg.Role == "user", err
 }
 
 func usesNativeTranscriptFallback(adapter string) bool {
-	switch strings.ToLower(strings.TrimSpace(adapter)) {
-	case "claude", "claude-code", "claude-code-desktop", "cowork", "cursor":
-		return true
-	default:
-		return false
+	adapter = strings.ToLower(strings.TrimSpace(adapter))
+	return slices.Contains(nativeTranscriptFallbackSources, adapter)
+}
+
+func (s *Service) markNativePromptSession(ctx context.Context, projectID, sessionID, source string) {
+	if sessionID == "" {
+		return
+	}
+	cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
+	err := s.cache.Set(cacheCtx, sessionNativeHooksCacheKey(projectID, sessionID), source, 24*time.Hour)
+	cancel()
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to mark native prompt session",
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
 	}
 }
 

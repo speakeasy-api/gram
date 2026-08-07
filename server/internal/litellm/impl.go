@@ -428,7 +428,27 @@ func sessionHeader(headers map[string]string) string {
 			return value
 		}
 	}
+	if metadata, ok := codexTurnMetadataFromHeaders(headers); ok {
+		return strings.TrimSpace(metadata.SessionID)
+	}
 	return ""
+}
+
+type codexTurnMetadata struct {
+	SessionID string `json:"session_id"`
+	TurnID    string `json:"turn_id"`
+}
+
+func codexTurnMetadataFromHeaders(headers map[string]string) (codexTurnMetadata, bool) {
+	encoded := requestHeader(headers, "x-codex-turn-metadata")
+	if encoded == "" {
+		return codexTurnMetadata{SessionID: "", TurnID: ""}, false
+	}
+	var metadata codexTurnMetadata
+	if json.Unmarshal([]byte(encoded), &metadata) != nil {
+		return codexTurnMetadata{SessionID: "", TurnID: ""}, false
+	}
+	return metadata, true
 }
 
 func agentTurnFromHeaders(headers map[string]string) (string, string) {
@@ -438,13 +458,8 @@ func agentTurnFromHeaders(headers map[string]string) (string, string) {
 		return provider, turnID
 	}
 
-	if encoded := requestHeader(headers, "x-codex-turn-metadata"); encoded != "" {
-		var metadata struct {
-			TurnID string `json:"turn_id"`
-		}
-		if json.Unmarshal([]byte(encoded), &metadata) == nil && strings.TrimSpace(metadata.TurnID) != "" {
-			return "codex", strings.TrimSpace(metadata.TurnID)
-		}
+	if metadata, ok := codexTurnMetadataFromHeaders(headers); ok && strings.TrimSpace(metadata.TurnID) != "" {
+		return "codex", strings.TrimSpace(metadata.TurnID)
 	}
 
 	if turnID := requestHeader(headers, "x-opencode-request"); turnID != "" {

@@ -312,9 +312,11 @@ func TestRequestHeaderIgnoresRedactedValues(t *testing.T) {
 
 func TestAgentTurnFromHeadersUsesCodexMetadataAndOpenCodeFallback(t *testing.T) {
 	t.Parallel()
-	provider, turnID := agentTurnFromHeaders(map[string]string{
+	headers := map[string]string{
 		"X-Codex-Turn-Metadata": `{"session_id":"session-1","turn_id":"turn-1"}`,
-	})
+	}
+	require.Equal(t, "session-1", sessionHeader(headers))
+	provider, turnID := agentTurnFromHeaders(headers)
 	require.Equal(t, "codex", provider)
 	require.Equal(t, "turn-1", turnID)
 
@@ -342,7 +344,11 @@ func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {
 	payload.Texts = []string{" first segment ", "", "  second segment  "}
 	payload.StructuredMessages = []*gen.LiteLLMStructuredMessage{{Role: "user", Content: "request history must be ignored"}}
 	payload.ToolCalls = []any{map[string]any{"id": "tool-1", "type": "function"}}
-	payload.RequestHeaders = map[string]string{"x-gram-session-id": "conflicting-response-session"}
+	payload.RequestHeaders = map[string]string{
+		"x-gram-session-id":     "conflicting-response-session",
+		"x-gram-agent-provider": "opencode",
+		"x-gram-agent-turn-id":  "agent-turn-that-must-not-replace-call-id",
+	}
 	payload.LitellmTraceID = new("conflicting-response-trace")
 	payload.RequestData.UserAPIKeyUserEmail = new("conflicting@example.test")
 
