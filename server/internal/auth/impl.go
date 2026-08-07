@@ -46,8 +46,8 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const dispositionAssistants = "assistants"

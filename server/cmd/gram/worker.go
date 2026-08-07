@@ -72,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -816,6 +817,8 @@ func newWorkerCommand() *cli.Command {
 					return fmt.Errorf("failed to parse site url: %w", err)
 				}
 			}
+			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,
@@ -857,6 +860,7 @@ func newWorkerCommand() *cli.Command {
 				ProductFeatures:     productFeatures,
 				PluginPublisher:     pluginPublisher,
 				Publishers:          publishers,
+				TrialEmailsService:  trialEmailsService,
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

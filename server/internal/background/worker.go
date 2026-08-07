@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 type WorkerOptions struct {
@@ -99,6 +100,7 @@ type WorkerOptions struct {
 	ProductFeatures     *productfeatures.Client
 	PluginPublisher     *plugins.Service
 	Publishers          *Publishers
+	TrialEmailsService  *trialemails.Service
 }
 
 func ForDeploymentProcessing(
@@ -160,6 +162,7 @@ func ForDeploymentProcessing(
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
+		TrialEmailsService: nil,
 	}
 }
 
@@ -210,6 +213,7 @@ func NewTemporalWorker(
 		ClickhouseConn:      nil,
 		PluginPublisher:     nil,
 		Publishers:          nil,
+		TrialEmailsService:  nil,
 	}
 
 	for _, o := range options {
@@ -253,6 +257,7 @@ func NewTemporalWorker(
 			ClickhouseConn:      conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:     conv.Default(o.PluginPublisher, opts.PluginPublisher),
 			Publishers:          conv.Default(o.Publishers, opts.Publishers),
+			TrialEmailsService:  conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
 		}
 	}
 
@@ -336,6 +341,7 @@ func NewTemporalWorker(
 		celEng,
 		judgeRateLimiter,
 		opts.BuiltinPresets,
+		opts.TrialEmailsService,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -426,6 +432,7 @@ func NewTemporalWorker(
 	// Trial expiry activities
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
+	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -537,6 +544,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RemoteSessionRefreshWorkflow)
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
+	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
