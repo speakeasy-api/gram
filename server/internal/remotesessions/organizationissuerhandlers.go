@@ -818,12 +818,12 @@ func loadMigrationPair(ctx context.Context, r *repo.Queries, logger *slog.Logger
 		return source, target, oops.E(oops.CodeBadRequest, nil, "source and target issuer must differ").LogError(ctx, logger)
 	}
 
-	// Both arms stay org-scoped: migrating onto a platform issuer is AIS-335, and
-	// it needs more than a widened read here. There is deliberately no
-	// global-inclusive ForUpdate variant — a lock-consistent read across the org
-	// and global partitions is what that work has to design, and quietly widening
-	// the non-locking arm alone would let a migration validate against a scope it
-	// never locked.
+	// Both arms stay org-scoped, permanently. Migrating onto a platform issuer is
+	// a platform-admin operation with its own loader, loadPlatformMigrationPair,
+	// which reads the source from the tenant partition and the target from the
+	// global one. Widening either arm here would not reproduce that: there is
+	// deliberately no global-inclusive ForUpdate variant, so a widened non-locking
+	// arm alone would let a migration validate against a scope it never locked.
 	loadIssuer := func(id uuid.UUID) (repo.RemoteSessionIssuer, error) {
 		if forUpdate {
 			return r.GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx, repo.GetOrganizationRemoteSessionIssuerByIDForUpdateParams{
@@ -956,25 +956,9 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 		return nil, err
 	}
 
-	preflight, err := buildMigratePreflight(ctx, txRepo, source, target)
+	clientsMigrated, err := runIssuerMigration(ctx, txRepo, logger, source, target)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
-	}
-
-	if len(preflight.endpointMismatches) > 0 {
-		return nil, oops.E(oops.CodeConflict, nil, "source and target issuers describe different authorization servers (%s differ); migration would break existing sessions", strings.Join(preflight.endpointMismatches, ", ")).LogError(ctx, logger)
-	}
-
-	if len(preflight.conflictingMcpServerNames) > 0 {
-		return nil, oops.E(oops.CodeConflict, nil, "both issuers already have a client bound to the same MCP server (%s); detach one client per server and retry", strings.Join(preflight.conflictingMcpServerNames, ", ")).LogError(ctx, logger)
-	}
-
-	clientsMigrated, err := txRepo.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{
-		TargetIssuerID: target.ID,
-		SourceIssuerID: source.ID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "repoint remote session clients to target issuer").LogError(ctx, logger)
+		return nil, err
 	}
 
 	// The source now has no active clients, so the delete guard that

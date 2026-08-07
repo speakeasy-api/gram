@@ -1070,6 +1070,7 @@ const ORG_ROUTE_STRUCTURE = {
         component: PlatformRemoteIdentityProviderDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
+          convergence: { title: "Convergence", url: "convergence" },
           settings: { title: "Settings", url: "settings" },
         },
       },
