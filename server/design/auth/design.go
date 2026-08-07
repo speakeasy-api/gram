@@ -7,6 +7,16 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
+var Trial = Type("Trial", func() {
+	Attribute("started_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("ends_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Required("started_at", "ends_at")
+})
+
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
 	Security(security.Session)
@@ -199,6 +209,9 @@ var _ = Service("auth", func() {
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
 			Attribute("whitelisted", Boolean, "Whether the organization is whitelisted to access the platform")
+			Attribute("trial", Trial, func() {
+				Meta("struct:tag:json", "trial")
+			})
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
 			Attribute("session_token", String, "The authentication session")

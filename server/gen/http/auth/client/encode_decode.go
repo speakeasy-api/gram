@@ -1721,6 +1721,20 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 	}
 }
 
+// unmarshalTrialResponseBodyToAuthTrial builds a value of type *auth.Trial
+// from a value of type *TrialResponseBody.
+func unmarshalTrialResponseBodyToAuthTrial(v *TrialResponseBody) *auth.Trial {
+	if v == nil {
+		return nil
+	}
+	res := &auth.Trial{
+		StartedAt: *v.StartedAt,
+		EndsAt:    *v.EndsAt,
+	}
+
+	return res
+}
+
 // unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry builds a value
 // of type *auth.OrganizationEntry from a value of type
 // *OrganizationEntryResponseBody.
