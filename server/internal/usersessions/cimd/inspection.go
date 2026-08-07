@@ -66,6 +66,11 @@ type inspection struct {
 	// safeDescription is the client-safe text from an *oauthwire.Error, set
 	// only for the two validation outcomes. Never holds transport error text.
 	safeDescription string
+
+	// tooLarge distinguishes the one unreachable case that arrives with a
+	// 200: the body ran past the size cap. Without it, every 200 that failed
+	// to read would be blamed on size.
+	tooLarge bool
 }
 
 // detail renders the operator-facing explanation. Validation rejections reuse
@@ -82,15 +87,17 @@ func (i inspection) detail() string {
 		}
 		return "The client ID metadata document is not valid."
 	case OutcomeUnreachable:
-		switch i.status {
-		case 0:
+		// A 200 that still lands here means the response arrived but the body
+		// could not be read to completion. Saying it "returned HTTP 200, it
+		// must return 200" would be a contradiction, so name the real
+		// problem, and only blame the size cap when that is what happened.
+		switch {
+		case i.tooLarge:
+			return fmt.Sprintf("The document endpoint responded, but the document is larger than the %d byte limit.", maxDocumentBytes)
+		case i.status == 0:
 			return "Gram could not reach the document endpoint."
-		case http.StatusOK:
-			// A 200 that still lands here means the response arrived but the
-			// body could not be read to completion — overwhelmingly the size
-			// cap. Telling the operator it "returned HTTP 200, it must return
-			// 200" would be a contradiction, so name the real problem.
-			return fmt.Sprintf("The document endpoint responded, but Gram could not read a usable document from it. The document must be under %d bytes.", maxDocumentBytes)
+		case i.status == http.StatusOK:
+			return "The document endpoint responded, but Gram could not read the document to completion."
 		default:
 			return fmt.Sprintf("The document endpoint returned HTTP %d. It must return 200 without redirecting.", i.status)
 		}

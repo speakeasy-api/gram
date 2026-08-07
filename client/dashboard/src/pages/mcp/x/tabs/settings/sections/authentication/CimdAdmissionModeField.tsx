@@ -1,7 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import {
   Field,
   FieldDescription,
@@ -26,7 +25,7 @@ import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSes
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
 
 // The three modes an operator can actually choose. The read side of the API
@@ -34,9 +33,7 @@ import { toast } from "sonner";
 // been configured — but it is not writable and is deliberately not shown as
 // a fourth option: it is as permissive as "open" while it is on, so naming
 // it as a choice would put a reassuring label on the least restrictive
-// state. An unconfigured issuer therefore renders with nothing selected,
-// and the confirmation dialog on the first save is where the recording
-// state and its irreversibility are explained. See
+// state. An unconfigured issuer therefore renders with nothing selected. See
 // server/internal/usersessions/cimd/admission/mode.go.
 const MODE_OPTIONS: {
   value: WritableMode;
@@ -76,15 +73,13 @@ export function CimdAdmissionModeField({
   const effectiveMode = userSessionIssuer.clientIdMetadataAdmissionMode;
 
   // "reporting" is only ever returned for an issuer whose mode was never
-  // set, and it cannot be written back — so choosing anything here is a
-  // one-way door out of the unconfigured state.
+  // set, and it cannot be written back, so there is no option to select for
+  // it. Saving any mode leaves that state permanently, but it is a
+  // short-lived migration default rather than something an operator chose,
+  // so it is not worth a confirmation step in front of every first save.
   const unconfigured = effectiveMode === "reporting";
 
   const [draftMode, setDraftMode] = useState<WritableMode | null>(null);
-  // Holds the mode the confirmation dialog is asking about. Captured when
-  // the dialog opens so a background refetch that clears the draft cannot
-  // empty the dialog's copy or disarm its confirm button mid-read.
-  const [pendingMode, setPendingMode] = useState<WritableMode | null>(null);
 
   // Resync on the mode value, NOT the issuer object: every save in this
   // panel invalidates the issuer query, so keying on the object would
@@ -123,10 +118,6 @@ export function CimdAdmissionModeField({
 
   const handleSave = () => {
     if (!draftMode) return;
-    if (unconfigured) {
-      setPendingMode(draftMode);
-      return;
-    }
     save(draftMode);
   };
 
@@ -134,7 +125,7 @@ export function CimdAdmissionModeField({
     <Field data-invalid={update.isError ? true : undefined}>
       {/* No htmlFor: a group label must not target one option, or clicking
           the heading silently arms that choice. Names the group instead. */}
-      <FieldLabel id={`${fieldId}-label`}>Client Admission</FieldLabel>
+      <FieldLabel id={`${fieldId}-label`}>CIMD Client Admission</FieldLabel>
 
       <RadioGroup
         aria-labelledby={`${fieldId}-label`}
@@ -162,7 +153,9 @@ export function CimdAdmissionModeField({
 
       <FieldDescription>
         Which MCP clients may authenticate using a Client ID Metadata Document
-        (CIMD).
+        (CIMD). This does not restrict clients that lack CIMD support: they
+        register through Dynamic Client Registration (DCR), which stays enabled
+        and open to any client whatever you choose here.
       </FieldDescription>
 
       <div className="flex">
@@ -189,17 +182,6 @@ export function CimdAdmissionModeField({
       </div>
 
       {update.isError && <FieldError>{update.error.message}</FieldError>}
-
-      {pendingMode && (
-        <ConfirmFirstPolicyDialog
-          mode={pendingMode}
-          onCancel={() => setPendingMode(null)}
-          onConfirm={(mode) => {
-            setPendingMode(null);
-            save(mode);
-          }}
-        />
-      )}
     </Field>
   );
 }
@@ -218,10 +200,23 @@ function ModeOptionCard({
   const labelId = `${id}-label`;
   const descriptionId = `${id}-description`;
 
+  // The whole card reads as the target, so the whole card selects. Clicks
+  // that started on a button are ignored, or opening the presets popover
+  // would silently arm this mode too. Mouse affordance only: the radio group
+  // already handles keyboard selection, and the radio stays the accessible
+  // control.
+  const selectFromCard = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest("button")) {
+      return;
+    }
+    document.getElementById(id)?.click();
+  };
+
   return (
     <div
+      onClick={selectFromCard}
       className={cn(
-        "grid grid-cols-[auto_1fr] items-center gap-x-3 rounded-lg border p-3.5 transition-colors",
+        "grid cursor-pointer grid-cols-[auto_1fr] items-center gap-x-3 rounded-lg border p-3.5 transition-colors",
         selected ? "border-foreground bg-muted/40" : "border-border",
       )}
     >
@@ -332,46 +327,5 @@ function KnownClientsList({
         </li>
       ))}
     </ul>
-  );
-}
-
-function ConfirmFirstPolicyDialog({
-  mode,
-  onCancel,
-  onConfirm,
-}: {
-  mode: WritableMode;
-  onCancel: () => void;
-  onConfirm: (mode: WritableMode) => void;
-}) {
-  const title = MODE_OPTIONS.find((option) => option.value === mode)?.title;
-
-  return (
-    <Dialog open onOpenChange={onCancel}>
-      <Dialog.Content>
-        <Dialog.Header>
-          <Dialog.Title>Set client admission policy</Dialog.Title>
-          <Dialog.Description>
-            This issuer will use <strong>{title}</strong> from now on.
-          </Dialog.Description>
-        </Dialog.Header>
-
-        <Alert variant="warning" dismissible={false}>
-          Gram is currently recording admission decisions without enforcing
-          them. Setting a policy is permanent: you can switch between Known
-          clients, Open, and Disabled at any time afterward, but this issuer
-          cannot return to recording.
-        </Alert>
-
-        <Dialog.Footer>
-          <Button variant="secondary" onClick={onCancel}>
-            <Button.Text>Cancel</Button.Text>
-          </Button>
-          <Button variant="primary" onClick={() => onConfirm(mode)}>
-            <Button.Text>Set policy</Button.Text>
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
   );
 }

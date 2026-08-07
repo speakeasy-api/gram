@@ -15,6 +15,9 @@ const testState = vi.hoisted(() => ({
   items: [] as { id: string; clientIdMetadataUri: string }[],
   isLoading: false,
   isError: false,
+  hasNextPage: false,
+  isFetchNextPageError: false,
+  fetchNextPage: vi.fn(),
   createMutate: vi.fn(),
   createPending: false,
   verifyPending: false,
@@ -63,9 +66,10 @@ vi.mock("@gram/client/react-query/userSessionIssuerCimdClients.js", () => ({
     data: { pages: [{ result: { items: testState.items } }] },
     isLoading: testState.isLoading,
     isError: testState.isError,
-    hasNextPage: false,
+    hasNextPage: testState.hasNextPage,
     isFetchingNextPage: false,
-    fetchNextPage: vi.fn(),
+    isFetchNextPageError: testState.isFetchNextPageError,
+    fetchNextPage: testState.fetchNextPage,
   }),
 }));
 
@@ -145,6 +149,8 @@ beforeEach(() => {
   testState.hasScope = true;
   testState.isLoading = false;
   testState.isError = false;
+  testState.hasNextPage = false;
+  testState.isFetchNextPageError = false;
   testState.createPending = false;
   testState.verifyPending = false;
   testState.items = [];
@@ -251,6 +257,52 @@ describe("CimdCustomClientsField", () => {
       screen.getByText(/Could not load the custom client URLs/),
     ).toBeDefined();
     expect(screen.queryByText(/No custom client URLs/)).toBeNull();
+  });
+
+  it("drains the remaining pages while more are outstanding", () => {
+    testState.hasNextPage = true;
+
+    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+
+    expect(testState.fetchNextPage).toHaveBeenCalled();
+    expect(screen.getByText(/Loading custom client URLs/)).toBeDefined();
+  });
+
+  it("stops draining and reports an error when a later page fails", () => {
+    testState.hasNextPage = true;
+    testState.isFetchNextPageError = true;
+    testState.items = [
+      { id: "row-1", clientIdMetadataUri: "https://a.example.com/client.json" },
+    ];
+
+    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+
+    // hasNextPage stays true after a failure, so without the error guard this
+    // retries forever and the list claims to be loading indefinitely.
+    expect(testState.fetchNextPage).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Loading custom client URLs/)).toBeNull();
+    expect(
+      screen.getByText(/Could not load the custom client URLs/),
+    ).toBeDefined();
+  });
+
+  it("toasts a refused verify request rather than blaming the field", () => {
+    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+
+    act(() => {
+      testState.verifyOptions?.onError?.(
+        new Error("verify rate limit exceeded, try again shortly"),
+      );
+    });
+
+    // Rate limit, authorization, and transport failures are outcomes of the
+    // Verify action, like a refused probe, so they surface the same way.
+    expect(testState.toastError).toHaveBeenCalledWith(
+      "verify rate limit exceeded, try again shortly",
+    );
+    expect(
+      screen.queryByText("verify rate limit exceeded, try again shortly"),
+    ).toBeNull();
   });
 
   it("verifies the typed URL without saving it", () => {

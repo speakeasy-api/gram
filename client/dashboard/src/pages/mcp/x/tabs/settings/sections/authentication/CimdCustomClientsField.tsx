@@ -36,16 +36,27 @@ export function CimdCustomClientsField({
   const query = useUserSessionIssuerCimdClientsInfinite({
     userSessionIssuerId: userSessionIssuer.id,
   });
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  const {
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+  } = query;
 
   // Drain every page: the list is rendered whole, and a single-page fetch
   // would silently hide entries once an issuer crosses the default page
-  // size. Mirrors useAllRemoteSessionClients.
+  // size.
+  //
+  // isFetchNextPageError is load-bearing, not defensive. hasNextPage stays
+  // true after a page fails, so without it this effect re-fires the moment
+  // isFetchingNextPage drops back to false and retries forever, while the
+  // list below reports a permanent "Loading…". Stop on the failure and let
+  // the list render an error instead.
   useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage) {
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) {
       void fetchNextPage();
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
 
   const clients = useMemo<UserSessionIssuerCimdClient[]>(
     () => query.data?.pages.flatMap((page) => page.result.items) ?? [],
@@ -86,8 +97,12 @@ export function CimdCustomClientsField({
       }
       toast.error(result.detail);
     },
+    // Toast, not inline: a refused probe and a refused request (rate limit,
+    // authorization, transport) are both outcomes of the Verify action, so
+    // they belong in the same place. Inline errors are reserved for what is
+    // wrong with the field itself, which is Add's syntax rejection.
     onError: (error) => {
-      setAddError(
+      toast.error(
         error instanceof Error ? error.message : "Failed to verify client URL",
       );
     },
@@ -141,7 +156,7 @@ export function CimdCustomClientsField({
 
   return (
     <Field data-invalid={addError ? true : undefined}>
-      <FieldLabel htmlFor={inputId}>Custom Client URLs</FieldLabel>
+      <FieldLabel htmlFor={inputId}>Custom CIMD Client URLs</FieldLabel>
 
       {/* One bordered region holds both the allowed URLs and the control
           that adds to them, so it is unambiguous which list the input
@@ -149,8 +164,8 @@ export function CimdCustomClientsField({
       <div className="border-border rounded-md border">
         <CustomClientList
           clients={clients}
-          isLoading={query.isLoading || hasNextPage}
-          isError={query.isError}
+          isLoading={query.isLoading || (hasNextPage && !isFetchNextPageError)}
+          isError={query.isError || isFetchNextPageError}
           removingId={
             remove.isPending ? remove.variables?.request.id : undefined
           }
@@ -275,11 +290,13 @@ function CustomClientList({
     );
   }
 
+  // No enforcement claim in the empty state: what an empty list means
+  // depends on the admission mode, and in the unconfigured "reporting" state
+  // nothing is refused at all.
   if (clients.length === 0) {
     return (
       <Text muted small className="block p-3">
-        No custom client URLs are currently configured. Only the clients Gram
-        has verified are allowed.
+        No custom client URLs are currently configured.
       </Text>
     );
   }

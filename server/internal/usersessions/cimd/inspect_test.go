@@ -2,6 +2,7 @@ package cimd
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,6 +89,55 @@ func TestInspect_Unreachable_NoResponse(t *testing.T) {
 	// The transport error names the refused connection and the local port;
 	// none of that may reach the operator.
 	require.Equal(t, "Gram could not reach the document endpoint.", result.Detail)
+}
+
+func TestInspect_Unreachable_OversizedBody(t *testing.T) {
+	t.Parallel()
+
+	// A 200 whose body runs past the read cap. Blaming the status here would
+	// tell the operator "returned HTTP 200, it must return 200"; blaming the
+	// size cap is only correct because the sentinel says so.
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"padding":"` + strings.Repeat("x", 8*1024) + `"}`)); err != nil {
+			return // the client hangs up at the cap, which is the point
+		}
+	})
+
+	result := resolver.Inspect(t.Context(), srv.URL+"/client.json")
+
+	require.Equal(t, OutcomeUnreachable, result.Outcome)
+	require.Equal(t, http.StatusOK, result.HTTPStatus)
+	require.Contains(t, result.Detail, "larger than")
+	require.Contains(t, result.Detail, "byte limit")
+}
+
+func TestInspect_Unreachable_ReadFailureIsNotBlamedOnSize(t *testing.T) {
+	t.Parallel()
+
+	// A 200 that promises more than it delivers: the read fails partway, but
+	// nothing exceeded the cap, so the size-cap wording must not appear.
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "4096")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(`{"client_id":`)); err != nil {
+			return
+		}
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		if hj, ok := w.(http.Hijacker); ok {
+			conn, _, err := hj.Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+		}
+	})
+
+	result := resolver.Inspect(t.Context(), srv.URL+"/client.json")
+
+	require.Equal(t, OutcomeUnreachable, result.Outcome)
+	require.NotContains(t, result.Detail, "byte limit")
 }
 
 func TestInspect_Unparseable(t *testing.T) {

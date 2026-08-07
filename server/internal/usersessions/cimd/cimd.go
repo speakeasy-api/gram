@@ -91,6 +91,16 @@ const (
 	maxRedirectURILength = 2048
 )
 
+// ErrDocumentTooLarge marks the one fetch failure that arrives with a
+// successful HTTP status: the response began, but the body ran past
+// maxDocumentBytes. It exists so Inspect can tell an operator their document
+// is oversized instead of guessing at a 200 that failed to read.
+//
+// It is wrapped behind the existing descriptive prefix rather than replacing
+// it, so the "document exceeds N byte limit" text every log and the opaque
+// OAuth error already carried is preserved; the sentinel is appended to it.
+var ErrDocumentTooLarge = errors.New("document exceeds size limit")
+
 // Document is the subset of a Client ID Metadata Document that the
 // user-session AS honours, plus the fields it must detect to reject a
 // document (client_secret and friends). Unknown members are deliberately
@@ -258,6 +268,7 @@ func (r *Resolver) inspect(ctx context.Context, clientID string) inspection {
 			reason:          validationReasonOf(err),
 			err:             err,
 			safeDescription: safeDescriptionOf(err),
+			tooLarge:        false,
 		}
 	}
 	origin := clientIDURL.Host
@@ -283,6 +294,7 @@ func (r *Resolver) inspect(ctx context.Context, clientID string) inspection {
 			reason:          "",
 			err:             fmt.Errorf("fetch client metadata document: %w", err),
 			safeDescription: "",
+			tooLarge:        errors.Is(err, ErrDocumentTooLarge),
 		}
 	}
 
@@ -312,6 +324,7 @@ func (r *Resolver) inspect(ctx context.Context, clientID string) inspection {
 			reason:          "",
 			err:             fmt.Errorf("parse client metadata document: %w", err),
 			safeDescription: "",
+			tooLarge:        false,
 		}
 	}
 
@@ -334,6 +347,7 @@ func (r *Resolver) inspect(ctx context.Context, clientID string) inspection {
 			reason:          validationReasonOf(err),
 			err:             err,
 			safeDescription: safeDescriptionOf(err),
+			tooLarge:        false,
 		}
 	}
 
@@ -355,6 +369,7 @@ func (r *Resolver) inspect(ctx context.Context, clientID string) inspection {
 		reason:          "",
 		err:             nil,
 		safeDescription: "",
+		tooLarge:        false,
 	}
 }
 
@@ -453,7 +468,7 @@ func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID st
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			r.metrics.RecordResponseSize(ctx, origin, maxDocumentBytes)
-			return nil, resp.StatusCode, fmt.Errorf("document exceeds %d byte limit", maxDocumentBytes)
+			return nil, resp.StatusCode, fmt.Errorf("document exceeds %d byte limit: %w", maxDocumentBytes, ErrDocumentTooLarge)
 		}
 		return nil, resp.StatusCode, fmt.Errorf("read document body: %w", err)
 	}

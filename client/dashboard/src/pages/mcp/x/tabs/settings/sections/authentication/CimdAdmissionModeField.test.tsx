@@ -176,18 +176,13 @@ describe("CimdAdmissionModeField", () => {
     });
   });
 
-  it("confirms the one-way exit from recording before the first save", () => {
+  it("saves the first explicit mode directly, with no confirmation step", () => {
     render(<CimdAdmissionModeField userSessionIssuer={issuer("reporting")} />);
 
     fireEvent.click(
       screen.getByRole("radio", { name: "Known clients (recommended)" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(testState.mutate).not.toHaveBeenCalled();
-    expect(screen.getByText(/cannot return to recording/)).toBeDefined();
-
-    fireEvent.click(screen.getByRole("button", { name: "Set policy" }));
 
     expect(testState.mutate).toHaveBeenCalledWith({
       request: {
@@ -197,27 +192,7 @@ describe("CimdAdmissionModeField", () => {
         },
       },
     });
-  });
-
-  it("saves nothing when the one-way-door dialog is canceled", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("reporting")} />);
-
-    fireEvent.click(
-      screen.getByRole("radio", { name: "Known clients (recommended)" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(testState.mutate).not.toHaveBeenCalled();
-    expect(screen.queryByText(/cannot return to recording/)).toBeNull();
-
-    // The selection survives the cancel, so the operator does not lose their
-    // choice by backing out of the confirmation.
-    expect(
-      screen
-        .getByRole("radio", { name: "Known clients (recommended)" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("keeps Save inert until the selection differs from the persisted mode", () => {
@@ -289,6 +264,61 @@ describe("CimdAdmissionModeField", () => {
       screen.getByText("https://claude.ai/oauth/mcp-oauth-client-metadata"),
     ).toBeDefined();
     expect(screen.queryByText("Retired Vendor")).toBeNull();
+  });
+
+  it("selects a mode when the card body is clicked, not just the radio", () => {
+    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+
+    // The description is the largest part of the card and reads as part of
+    // the target, so clicking it must select.
+    fireEvent.click(screen.getByText(/Reject all CIMD clients/));
+
+    expect(
+      screen
+        .getByRole("radio", { name: "Disabled" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("does not select Known clients when opening its presets popover", () => {
+    render(<CimdAdmissionModeField userSessionIssuer={issuer("disabled")} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
+
+    // The trigger sits inside the Known clients card; arming that mode as a
+    // side effect of reading the catalog would be a silent policy change.
+    expect(
+      screen
+        .getByRole("radio", { name: "Known clients (recommended)" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("radio", { name: "Disabled" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("reports a loading preset catalog", () => {
+    testState.presetsLoading = true;
+    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
+
+    expect(screen.getByText("Loading verified clients…")).toBeDefined();
+    expect(screen.queryByText("Anthropic (Claude)")).toBeNull();
+  });
+
+  it("reports a failed preset catalog fetch", () => {
+    testState.presetsError = true;
+    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
+
+    expect(
+      screen.getByText("Could not load the verified client list."),
+    ).toBeDefined();
+    expect(screen.queryByText("Anthropic (Claude)")).toBeNull();
   });
 
   it("explains an empty preset catalog rather than rendering nothing", () => {
