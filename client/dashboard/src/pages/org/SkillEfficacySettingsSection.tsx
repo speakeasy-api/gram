@@ -12,7 +12,6 @@ import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { SkillEfficacySettings } from "@gram/client/models/components/skillefficacysettings.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import {
   invalidateAllSkillEfficacySettings,
   useSkillEfficacySettings,
@@ -82,14 +81,8 @@ function LimitField({
 
 export function SkillEfficacySettingsSection(): JSX.Element | null {
   const { hasScope, isLoading: isRBACLoading } = useRBAC();
-  const { data: features, isLoading: isFeaturesLoading } = useProductFeatures(
-    undefined,
-    undefined,
-    { staleTime: 30_000, throwOnError: false },
-  );
 
-  if (isRBACLoading || isFeaturesLoading) return null;
-  if (!hasScope("org:admin") || features?.skillsEnabled !== true) return null;
+  if (isRBACLoading || !hasScope("org:admin")) return null;
 
   return <SkillEfficacySettingsQuery />;
 }
