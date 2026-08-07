@@ -53628,11 +53628,17 @@ components:
           items:
             $ref: '#/components/schemas/ApprovalRequester'
           description: Everyone who asked.
+        research_reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResearchReport'
+          description: Every research-agent run for this request, newest first.
       description: An approval request with everything needed to decide it.
       required:
         - request
         - requesters
         - decisions
+        - research_reports
     ApprovalRequestSummary:
       type: object
       properties:
@@ -65728,10 +65734,11 @@ components:
           description: The approval request ID.
         rationale:
           type: string
-          description: Why the decision was made. This is the artifact cited when explaining a denial.
+          description: Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.
       required:
         - id
         - decision
+        - rationale
     RecordSkillResult:
       type: object
       properties:
@@ -66282,6 +66289,48 @@ components:
           format: int64
       required:
         - sent_to_count
+    ResearchReport:
+      type: object
+      properties:
+        completed_at:
+          type: string
+          description: When the run finished.
+          format: date-time
+        created_at:
+          type: string
+          description: When the run was requested.
+          format: date-time
+        error:
+          type: string
+          description: Why the run failed, when it did.
+        id:
+          type: string
+          description: The report ID.
+        model:
+          type: string
+          description: The model that produced the report.
+        report:
+          description: The structured findings. Every claim carries a provenance tier and its citations.
+        report_version:
+          type: integer
+          description: Shape version of the report payload.
+          format: int64
+        requested_by:
+          type: string
+          description: Who asked for the research run.
+        started_at:
+          type: string
+          description: When the run started.
+          format: date-time
+        status:
+          type: string
+          description: The run's lifecycle state, such as running, completed, or failed.
+      description: One research-agent run over a request's server. Findings are gathered and cited, never adjudicated — and web-sourced claims may be inaccurate, incomplete, or deliberately seeded.
+      required:
+        - id
+        - status
+        - report_version
+        - created_at
     ResolveChallengeForm:
       type: object
       properties:

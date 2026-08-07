@@ -78,9 +78,9 @@ var _ = Service("mcpApproval", func() {
 			security.ProjectPayload()
 			Attribute("id", String, "The approval request ID.")
 			Attribute("decision", String, "Either approved or denied.")
-			Attribute("rationale", String, "Why the decision was made. This is the artifact cited when explaining a denial.")
+			Attribute("rationale", String, "Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.")
 			Attribute("granted_principal_urns", ArrayOf(String), "Principals the approval covers. Empty for a denial.")
-			Required("id", "decision")
+			Required("id", "decision", "rationale")
 		})
 
 		Result(ApprovalDecision)
@@ -141,6 +141,23 @@ var ApprovalDecision = Type("ApprovalDecision", func() {
 	Required("id", "decision", "decided_by", "decided_at")
 })
 
+var ResearchReport = Type("ResearchReport", func() {
+	Description("One research-agent run over a request's server. Findings are gathered and cited, never adjudicated — and web-sourced claims may be inaccurate, incomplete, or deliberately seeded.")
+
+	Attribute("id", String, "The report ID.")
+	Attribute("status", String, "The run's lifecycle state, such as running, completed, or failed.")
+	Attribute("report", Any, "The structured findings. Every claim carries a provenance tier and its citations.")
+	Attribute("report_version", Int, "Shape version of the report payload.")
+	Attribute("model", String, "The model that produced the report.")
+	Attribute("requested_by", String, "Who asked for the research run.")
+	Attribute("started_at", String, "When the run started.", func() { Format(FormatDateTime) })
+	Attribute("completed_at", String, "When the run finished.", func() { Format(FormatDateTime) })
+	Attribute("error", String, "Why the run failed, when it did.")
+	Attribute("created_at", String, "When the run was requested.", func() { Format(FormatDateTime) })
+
+	Required("id", "status", "report_version", "created_at")
+})
+
 var ApprovalRequestDetail = Type("ApprovalRequestDetail", func() {
 	Description("An approval request with everything needed to decide it.")
 
@@ -150,8 +167,9 @@ var ApprovalRequestDetail = Type("ApprovalRequestDetail", func() {
 	Attribute("evidence_version", Int, "Shape version of the evidence payload, so an older snapshot stays interpretable.")
 	Attribute("evidence_collected_at", String, "When the evidence was last gathered.", func() { Format(FormatDateTime) })
 	Attribute("decisions", ArrayOf(ApprovalDecision), "Every decision made on this server, newest first. A repeat request starts from the last rationale rather than from zero.")
+	Attribute("research_reports", ArrayOf(ResearchReport), "Every research-agent run for this request, newest first.")
 
-	Required("request", "requesters", "decisions")
+	Required("request", "requesters", "decisions", "research_reports")
 })
 
 var ListApprovalRequestsResult = Type("ListApprovalRequestsResult", func() {

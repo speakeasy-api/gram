@@ -16,7 +16,7 @@ import (
 func decisionPayload(id, decision string) *gen.RecordDecisionPayload {
 	return &gen.RecordDecisionPayload{
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		ID: id, Decision: decision, Rationale: nil, GrantedPrincipalUrns: nil,
+		ID: id, Decision: decision, Rationale: "recorded in a test", GrantedPrincipalUrns: nil,
 	}
 }
 
@@ -28,7 +28,7 @@ func TestRecordDecision_Approve(t *testing.T) {
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	payload := decisionPayload(requestID.String(), "approved")
-	payload.Rationale = new("read-only tools, pinned version, vendor we already use")
+	payload.Rationale = "read-only tools, pinned version, vendor we already use"
 	payload.GrantedPrincipalUrns = []string{"urn:gram:team:platform"}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
@@ -50,7 +50,7 @@ func TestRecordDecision_DenyDropsGrants(t *testing.T) {
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	payload := decisionPayload(requestID.String(), "denied")
-	payload.Rationale = new("demands a broad token and publishes no source")
+	payload.Rationale = "demands a broad token and publishes no source"
 	payload.GrantedPrincipalUrns = []string{"urn:gram:team:platform", "urn:gram:user:someone"}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
@@ -102,12 +102,12 @@ func TestRecordDecision_AccumulatesHistory(t *testing.T) {
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	first := decisionPayload(requestID.String(), "denied")
-	first.Rationale = new("no pinned version")
+	first.Rationale = "no pinned version"
 	_, err := ti.service.RecordDecision(ctx, first)
 	require.NoError(t, err)
 
 	second := decisionPayload(requestID.String(), "approved")
-	second.Rationale = new("now pinned")
+	second.Rationale = "now pinned"
 	_, err = ti.service.RecordDecision(ctx, second)
 	require.NoError(t, err)
 
@@ -281,4 +281,48 @@ func TestRecordDecision_FeatureDisabledIsForbidden(t *testing.T) {
 
 	_, err = ti.service.GetRequest(ctx, getPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The rationale is what gets cited when explaining the decision to the
+// requester, so a blank one is rejected rather than recorded.
+func TestRecordDecision_RequiresARationale(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+
+	for _, blank := range []string{"", "   ", "\n\t"} {
+		payload := decisionPayload(requestID.String(), "approved")
+		payload.Rationale = blank
+		_, err := ti.service.RecordDecision(ctx, payload)
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+}
+
+// A re-request reopens a denied review — the denial stays in the history and
+// the request returns to the queue — while an approval stays until an admin
+// re-decides it.
+func TestUpsertApprovalRequest_ReopensDeniedOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	denied := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://denied.example.com", status: "requested", evidence: "", version: 0})
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(denied.String(), "denied"))
+	require.NoError(t, err)
+
+	reopened := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://denied.example.com", status: "requested", evidence: "", version: 0})
+	require.Equal(t, denied, reopened, "a re-request reuses the same row")
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, denied))
+	require.Len(t, decisionsFor(t, ctx, ti, ti.projectID, denied), 1, "the denial stays in the history")
+
+	approved := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://approved.example.com", status: "requested", evidence: "", version: 0})
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(approved.String(), "approved"))
+	require.NoError(t, err)
+
+	seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://approved.example.com", status: "requested", evidence: "", version: 0})
+	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, approved), "re-asking for an approved server changes nothing")
 }

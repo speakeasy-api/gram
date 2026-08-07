@@ -19,6 +19,10 @@ import {
   ApprovalRequestSummary,
   ApprovalRequestSummary$inboundSchema,
 } from "./approvalrequestsummary.js";
+import {
+  ResearchReport,
+  ResearchReport$inboundSchema,
+} from "./researchreport.js";
 
 /**
  * An approval request with everything needed to decide it.
@@ -48,6 +52,10 @@ export type ApprovalRequestDetail = {
    * Everyone who asked.
    */
   requesters: Array<ApprovalRequester>;
+  /**
+   * Every research-agent run for this request, newest first.
+   */
+  researchReports: Array<ResearchReport>;
 };
 
 /** @internal */
@@ -64,11 +72,13 @@ export const ApprovalRequestDetail$inboundSchema: z.ZodMiniType<
     evidence_version: z.optional(z.int()),
     request: ApprovalRequestSummary$inboundSchema,
     requesters: z.array(ApprovalRequester$inboundSchema),
+    research_reports: z.array(ResearchReport$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       "evidence_collected_at": "evidenceCollectedAt",
       "evidence_version": "evidenceVersion",
+      "research_reports": "researchReports",
     });
   }),
 );

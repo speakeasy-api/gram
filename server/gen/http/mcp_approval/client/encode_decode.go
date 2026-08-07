@@ -806,3 +806,23 @@ func unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(v *Appro
 
 	return res
 }
+
+// unmarshalResearchReportResponseBodyToMcpapprovalResearchReport builds a
+// value of type *mcpapproval.ResearchReport from a value of type
+// *ResearchReportResponseBody.
+func unmarshalResearchReportResponseBodyToMcpapprovalResearchReport(v *ResearchReportResponseBody) *mcpapproval.ResearchReport {
+	res := &mcpapproval.ResearchReport{
+		ID:            *v.ID,
+		Status:        *v.Status,
+		Report:        v.Report,
+		ReportVersion: *v.ReportVersion,
+		Model:         v.Model,
+		RequestedBy:   v.RequestedBy,
+		StartedAt:     v.StartedAt,
+		CompletedAt:   v.CompletedAt,
+		Error:         v.Error,
+		CreatedAt:     *v.CreatedAt,
+	}
+
+	return res
+}

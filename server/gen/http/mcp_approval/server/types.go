@@ -19,8 +19,8 @@ type RecordDecisionRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Either approved or denied.
 	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
-	// Why the decision was made. This is the artifact cited when explaining a
-	// denial.
+	// Why the decision was made. This is the artifact cited when explaining the
+	// decision to the requester, so it cannot be blank.
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
@@ -54,6 +54,8 @@ type GetRequestResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions" json:"decisions" xml:"decisions"`
+	// Every research-agent run for this request, newest first.
+	ResearchReports []*ResearchReportResponseBody `form:"research_reports" json:"research_reports" xml:"research_reports"`
 }
 
 // RecordDecisionResponseBody is the type of the "mcpApproval" service
@@ -694,6 +696,31 @@ type ApprovalDecisionResponseBody struct {
 	DecidedAt string `form:"decided_at" json:"decided_at" xml:"decided_at"`
 }
 
+// ResearchReportResponseBody is used to define fields on response body types.
+type ResearchReportResponseBody struct {
+	// The report ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The run's lifecycle state, such as running, completed, or failed.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The structured findings. Every claim carries a provenance tier and its
+	// citations.
+	Report any `form:"report,omitempty" json:"report,omitempty" xml:"report,omitempty"`
+	// Shape version of the report payload.
+	ReportVersion int `form:"report_version" json:"report_version" xml:"report_version"`
+	// The model that produced the report.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Who asked for the research run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run finished.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// Why the run failed, when it did.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was requested.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // NewListRequestsResponseBody builds the HTTP response body from the result of
 // the "listRequests" endpoint of the "mcpApproval" service.
 func NewListRequestsResponseBody(res *mcpapproval.ListApprovalRequestsResult) *ListRequestsResponseBody {
@@ -749,6 +776,18 @@ func NewGetRequestResponseBody(res *mcpapproval.ApprovalRequestDetail) *GetReque
 		}
 	} else {
 		body.Decisions = []*ApprovalDecisionResponseBody{}
+	}
+	if res.ResearchReports != nil {
+		body.ResearchReports = make([]*ResearchReportResponseBody, len(res.ResearchReports))
+		for i, val := range res.ResearchReports {
+			if val == nil {
+				body.ResearchReports[i] = nil
+				continue
+			}
+			body.ResearchReports[i] = marshalMcpapprovalResearchReportToResearchReportResponseBody(val)
+		}
+	} else {
+		body.ResearchReports = []*ResearchReportResponseBody{}
 	}
 	return body
 }
@@ -1228,7 +1267,7 @@ func NewRecordDecisionPayload(body *RecordDecisionRequestBody, sessionToken *str
 	v := &mcpapproval.RecordDecisionPayload{
 		ID:        *body.ID,
 		Decision:  *body.Decision,
-		Rationale: body.Rationale,
+		Rationale: *body.Rationale,
 	}
 	if body.GrantedPrincipalUrns != nil {
 		v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))
@@ -1251,6 +1290,9 @@ func ValidateRecordDecisionRequestBody(body *RecordDecisionRequestBody) (err err
 	}
 	if body.Decision == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("decision", "body"))
+	}
+	if body.Rationale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rationale", "body"))
 	}
 	return
 }
