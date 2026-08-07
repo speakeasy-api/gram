@@ -99,7 +99,9 @@ const maxOrgNameLength = 100
 // alphanumeric such as "A-" still yields the one-character slug "a".
 const minOrgNameSlugChars = 2
 
-// shortOrgNameFormat mirrors SHORT_ORG_NAME_MESSAGE in the sign-up form.
+// shortOrgNameFormat matches the sign-up form's constraint and keeps the
+// server's established "organization name" terminology; the form calls it a
+// "Company name".
 const shortOrgNameFormat = "organization name must contain at least %d letters or numbers"
 
 // validateOrgName is the single org-name rule, shared by the authenticated
