@@ -198,6 +198,7 @@ func TestUsageEventUnmarshalsTimestamp(t *testing.T) {
 	var event UsageEvent
 	err := json.Unmarshal([]byte(`{
 		"timestamp": "1710720000123",
+		"conversationId": "11111111-2222-4333-8444-555555555555",
 		"model": "claude",
 		"kind": "Usage-based",
 		"chargedCents": 0,
@@ -215,6 +216,7 @@ func TestUsageEventUnmarshalsTimestamp(t *testing.T) {
 	}`), &event)
 	require.NoError(t, err)
 	require.Equal(t, int64(1710720000123), event.Timestamp.UnixMilli())
+	require.Equal(t, "11111111-2222-4333-8444-555555555555", event.ConversationID)
 }
 
 func TestFilteredUsageEventsResponseUnmarshalsDocsShape(t *testing.T) {
@@ -234,6 +236,7 @@ func TestFilteredUsageEventsResponseUnmarshalsDocsShape(t *testing.T) {
 			{
 				"timestamp": "1750979225854",
 				"userEmail": "developer@company.com",
+				"conversationId": "11111111-2222-4333-8444-555555555555",
 				"model": "claude-4.5-sonnet",
 				"kind": "Usage-based",
 				"maxMode": true,
@@ -277,6 +280,7 @@ func TestFilteredUsageEventsResponseUnmarshalsDocsShape(t *testing.T) {
 	require.True(t, resp.Pagination.HasNextPage)
 	require.Len(t, resp.UsageEvents, 2)
 	require.Equal(t, "developer@company.com", resp.UsageEvents[0].UserEmail)
+	require.Equal(t, "11111111-2222-4333-8444-555555555555", resp.UsageEvents[0].ConversationID)
 	require.Equal(t, int64(1750979225854), resp.UsageEvents[0].Timestamp.UnixMilli())
 	require.InDelta(t, float64(21.36232), resp.UsageEvents[0].ChargedCents, 0.000001)
 	require.Equal(t, int64(126), resp.UsageEvents[0].TokenUsage.InputTokens)
@@ -296,6 +300,7 @@ func testGuardianPolicy(t *testing.T) *guardian.Policy {
 func testUsageEvent(chargedCents float64) UsageEvent {
 	return UsageEvent{
 		Timestamp:        time.UnixMilli(1710720000123).UTC(),
+		ConversationID:   "11111111-2222-4333-8444-555555555555",
 		Model:            "claude",
 		Kind:             "Usage-based",
 		ChargedCents:     chargedCents,
