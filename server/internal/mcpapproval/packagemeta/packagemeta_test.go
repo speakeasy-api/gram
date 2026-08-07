@@ -256,7 +256,7 @@ func TestLookup_PyPIStripsExtras(t *testing.T) {
 	require.NotNil(t, got)
 	require.Equal(t, "/pypi/mcp-thing/json", path())
 
-	for _, malformed := range []string{"foo[bar", "foo[a][b]", "foo[a[b]]"} {
+	for _, malformed := range []string{"foo[bar", "foo[a][b]", "foo[a[b]]", "foo[]"} {
 		server, path := serve(t, http.StatusNotFound, `{}`)
 		client := packagemeta.NewClient(server.Client(), packagemeta.WithPyPIBaseURL(server.URL))
 
