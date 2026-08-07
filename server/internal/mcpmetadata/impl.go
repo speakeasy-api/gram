@@ -31,6 +31,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -575,12 +576,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	if metadataErr == nil {
 		if metadataRecord.LogoID.Valid {
-			logoURLValue := *s.serverURL
-			logoURLValue.Path = "/rpc/assets.serveImage"
-			q := logoURLValue.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURLValue.RawQuery = q.Encode()
-			logoURL = new(logoURLValue.String())
+			logoURL = new(assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID))
 		}
 		docsURL = conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl)
 		instructions = conv.FromPGText[string](metadataRecord.Instructions)
@@ -1176,12 +1172,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 
 	if metadataRecord != nil {
 		if metadataRecord.LogoID.Valid {
-			logoURL := *s.serverURL
-			logoURL.Path = "/rpc/assets.serveImage"
-			q := logoURL.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURL.RawQuery = q.Encode()
-			logoAssetURL = logoURL.String()
+			logoAssetURL = assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID)
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
@@ -1323,12 +1314,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 	var docsURL, docsText, instructions string
 	if metadataRecord != nil {
 		if metadataRecord.LogoID.Valid {
-			logoURL := *s.serverURL
-			logoURL.Path = "/rpc/assets.serveImage"
-			q := logoURL.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURL.RawQuery = q.Encode()
-			logoAssetURL = logoURL.String()
+			logoAssetURL = assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID)
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)

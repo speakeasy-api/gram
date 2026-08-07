@@ -24,6 +24,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/collections"
 	srv "github.com/speakeasy-api/gram/server/gen/http/collections/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -604,6 +605,14 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 	collectionRegistryIDStr := registry.ID.String()
 	mcpMetaRepo := mcpmetadataRepo.New(s.db)
 
+	// serveImage is unauthenticated, so collection consumers can render logos.
+	logoIconURL := func(logoID uuid.NullUUID) *string {
+		if !logoID.Valid {
+			return nil
+		}
+		return conv.PtrEmpty(assets.ServeImageURL(s.serverURL, logoID.UUID))
+	}
+
 	// Toolset-backed and mcp_server-backed attachments are listed independently
 	// (Option A) and merged into one published_at DESC stream so a collection
 	// that mixes both backends presents a single stable ordering.
@@ -639,7 +648,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 				RegistryID:                          nil,
 				OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
 				Title:                               &t.Name,
-				IconURL:                             nil,
+				IconURL:                             logoIconURL(t.LogoID),
 				Meta:                                nil,
 				Tools:                               nil,
 				Remotes: []*types.ExternalMCPRemote{{
@@ -685,7 +694,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 				RegistryID:                          nil,
 				OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
 				Title:                               &title,
-				IconURL:                             nil,
+				IconURL:                             logoIconURL(m.LogoID),
 				Meta:                                nil,
 				Tools:                               nil,
 				// mcp_server-backed servers authenticate via their user session
