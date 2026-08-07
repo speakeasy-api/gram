@@ -98,6 +98,7 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ApprovalRequests from "./pages/security/ApprovalRequests";
+import MCPApprovalDetail from "./pages/security/mcp-approvals/MCPApprovalDetail";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -389,6 +390,11 @@ const ROUTE_STRUCTURE = {
     component: MCPRoot,
     indexComponent: MCPPage,
     subPages: {
+      approvalRequest: {
+        title: "Access request",
+        url: "mcp-approvals/:requestId",
+        component: MCPApprovalDetail,
+      },
       builtIn: {
         title: "Built-in MCP",
         url: "built-in/:builtInSlug",
