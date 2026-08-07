@@ -127,7 +127,6 @@ var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
 // CacheKey implements cache.CacheableObject.
 func (a AuthnChallengeState) CacheKey() string { return "authnChallenge:" + a.ID }
 
-
 // TTL implements cache.CacheableObject.
 func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
 
@@ -163,7 +162,6 @@ var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
 func (g UserSessionGrant) CacheKey() string {
 	return "userSessionGrant:" + g.UserSessionIssuerID.String() + ":" + g.Code
 }
-
 
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short

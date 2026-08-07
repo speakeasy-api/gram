@@ -28,4 +28,3 @@ func ModelPricingCacheKey(id string) string {
 func (m ModelPricing) TTL() time.Duration {
 	return 72 * time.Hour
 }
-

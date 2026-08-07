@@ -28,7 +28,6 @@ func (p PolarCustomerState) TTL() time.Duration {
 	return 15 * time.Minute
 }
 
-
 type Product struct {
 	polarComponents.Product
 }
@@ -46,7 +45,6 @@ func ProductCacheKey(productID string) string {
 func (p Product) TTL() time.Duration {
 	return 1 * time.Hour // 1 hour because the products in Polar are almost never changed
 }
-
 
 type PolarPeriodUsageState struct {
 	OrganizationID string
@@ -66,4 +64,3 @@ func PeriodUsageStateCacheKey(orgID string) string {
 func (p PolarPeriodUsageState) TTL() time.Duration {
 	return 2 * time.Hour // twice our cache refresh rate
 }
-

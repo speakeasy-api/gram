@@ -31,8 +31,8 @@ func LoginStateCacheKey(state string) string {
 	return "adminLoginState:" + state
 }
 
-func (s LoginState) CacheKey() string              { return LoginStateCacheKey(s.State) }
-func (s LoginState) TTL() time.Duration            { return loginStateTTL }
+func (s LoginState) CacheKey() string   { return LoginStateCacheKey(s.State) }
+func (s LoginState) TTL() time.Duration { return loginStateTTL }
 
 func randomString(n int) (string, error) {
 	b := make([]byte, n)

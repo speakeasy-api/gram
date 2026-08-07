@@ -366,4 +366,3 @@ func TestServePublic_DualSecurity_APIKeyOnly_Succeeds(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 }
-

@@ -20,7 +20,6 @@ func (c CachedConfig) CacheKey() string {
 	return "otel-forwarding:" + c.OrganizationID
 }
 
-
 func (c CachedConfig) TTL() time.Duration {
 	return cacheTTL
 }

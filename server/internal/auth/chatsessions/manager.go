@@ -35,7 +35,6 @@ func (r RevokedToken) CacheKey() string {
 	return fmt.Sprintf("chat_session_revoked:%s", r.JTI)
 }
 
-
 // TTL returns the TTL for the cache entry (24 hours for revoked tokens)
 func (r RevokedToken) TTL() time.Duration {
 	return 24 * time.Hour

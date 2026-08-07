@@ -25,4 +25,3 @@ func ModelContextWindowCacheKey(id string) string {
 func (m ModelContextWindow) TTL() time.Duration {
 	return 72 * time.Hour
 }
-
