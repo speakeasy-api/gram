@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
 // oauthFlowStage is the closed set of coarse stages at which a user-facing
@@ -39,6 +40,13 @@ const (
 )
 
 type metrics struct {
+	// mcpInitializeCounter is the unsampled census of observed handshakes by
+	// protocol revision. A counter rather than a span attribute because traces
+	// are sampled and so cannot be counted, and separate from
+	// mcpRequestDuration because that histogram carries a per-server URL
+	// dimension this must not be multiplied by.
+	mcpInitializeCounter metric.Int64Counter
+
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
 
@@ -83,6 +91,15 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		logger.ErrorContext(context.Background(), "failed to create mcp request duration", attr.SlogError(err))
 	}
 
+	mcpInitializeCounter, err := meter.Int64Counter(
+		"mcp.initialize",
+		metric.WithDescription("MCP handshakes observed, by requested and negotiated protocol revision"),
+		metric.WithUnit("{handshake}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create mcp initialize counter", attr.SlogError(err))
+	}
+
 	oauthFlowStartedCounter, err := meter.Int64Counter(
 		"oauth.flow.started",
 		metric.WithDescription("User-facing OAuth flow initiated at /authorize"),
@@ -122,6 +139,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 	return &metrics{
 		mcpToolCallCounter:        mcpToolCallCounter,
 		mcpRequestDuration:        mcpRequestDuration,
+		mcpInitializeCounter:      mcpInitializeCounter,
 		oauthFlowStartedCounter:   oauthFlowStartedCounter,
 		oauthFlowCompletedCounter: oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:    oauthFlowFailedCounter,
@@ -140,6 +158,33 @@ func (m *metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.OrganizationID(orgID),
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
+// protocol revision the client requested and the one it was answered with.
+//
+// This is deliberately a counter and deliberately carries no per-server
+// dimension. Traces are sampled at a low fixed rate service-wide, so span
+// attributes answer "what version was this failing request?" but cannot answer
+// "how many clients are still on 2024-11-05?" — which is the census question
+// protocol-version gating decisions depend on. Omitting gram.mcp.url keeps this
+// instrument aggregatable across the whole fleet and keeps its series count
+// bounded to the version cross-product.
+//
+// Both dimensions are clamped to the known revision set so a hostile or broken
+// client cannot mint unbounded series; the unclamped values remain on the span.
+// Both are always recorded, so a breakdown by version accounts for every
+// handshake — including clients that named an unknown revision or none at all,
+// which are the two cohorts most likely to break under a version ceiling.
+func (m *metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated string) {
+	if m == nil || m.mcpInitializeCounter == nil {
+		return
+	}
+
+	m.mcpInitializeCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.MCPRequestedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(requested))),
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(negotiated))),
+	))
 }
 
 func (m *metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
