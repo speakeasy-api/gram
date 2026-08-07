@@ -17,6 +17,16 @@ func GetRequestMcpApprovalPath() string {
 	return "/rpc/mcpApproval.getRequest"
 }
 
+// CreateRequestMcpApprovalPath returns the URL path to the mcpApproval service createRequest HTTP endpoint.
+func CreateRequestMcpApprovalPath() string {
+	return "/rpc/mcpApproval.createRequest"
+}
+
+// PromoteMcpApprovalPath returns the URL path to the mcpApproval service promote HTTP endpoint.
+func PromoteMcpApprovalPath() string {
+	return "/rpc/mcpApproval.promote"
+}
+
 // RecordDecisionMcpApprovalPath returns the URL path to the mcpApproval service recordDecision HTTP endpoint.
 func RecordDecisionMcpApprovalPath() string {
 	return "/rpc/mcpApproval.recordDecision"
