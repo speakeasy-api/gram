@@ -115,10 +115,15 @@ async function runExchange(
 
   // Leg 1a — authorize. The redirect_uri never receives anything; the handler
   // reads the code off the Location header instead of following it.
+  //
+  // The login client is read from the environment rather than hardcoded: a
+  // checkout that sets GRAM_IDP_CLIENT_ID has a dev-idp that rejects the
+  // default, and the playground would fail on its very first leg.
+  const loginClientID = process.env["GRAM_IDP_CLIENT_ID"] || "gram-local-dev";
   const redirectURI = "http://localhost/devidp-playground";
   const authorizeURL = `${devidp}/oauth2-1/authorize?${new URLSearchParams({
     response_type: "code",
-    client_id: "gram-local-dev",
+    client_id: loginClientID,
     redirect_uri: redirectURI,
     scope: "openid email profile",
   }).toString()}`;
@@ -143,7 +148,7 @@ async function runExchange(
     {
       grant_type: "authorization_code",
       code,
-      client_id: "gram-local-dev",
+      client_id: loginClientID,
       redirect_uri: redirectURI,
     },
   );

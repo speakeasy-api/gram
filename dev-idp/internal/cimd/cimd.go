@@ -186,9 +186,10 @@ func (r *Resolver) KeysFor(ctx context.Context, doc Document) (jwks.Document, bo
 		if err != nil {
 			return jwks.Document{Keys: nil}, false, fmt.Errorf("inline jwks in %s: %w", doc.ClientID, err)
 		}
-		if len(parsed.Keys) > 0 {
-			return parsed, true, nil
-		}
+		// Inline wins outright: falling through to jwks_uri on an empty inline
+		// set would authenticate against a different key than the document's
+		// plain reading promises.
+		return parsed, len(parsed.Keys) > 0, nil
 	}
 
 	if doc.JwksURI == "" {

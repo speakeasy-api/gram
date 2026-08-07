@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
@@ -47,7 +48,25 @@ func AttachEmaTrustRules(mux goahttp.Muxer, service *EmaTrustRulesService) {
 	)
 }
 
+// validateAllowedClientIDs rejects an allowlist the redeem leg cannot read.
+// Stored unchecked, a malformed value turns every redemption into a confusing
+// "allowed_client_ids is not a JSON array" long after the mistake was made.
+func validateAllowedClientIDs(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "allowed_client_ids must be a JSON array of strings, e.g. [\"my-client\"]")
+	}
+	return nil
+}
+
 func (s *EmaTrustRulesService) Create(ctx context.Context, p *gen.CreatePayload) (*gen.EmaTrustRule, error) {
+	if err := validateAllowedClientIDs(conv.PtrValOrEmpty(p.AllowedClientIds)); err != nil {
+		return nil, err
+	}
+
 	resourceID, err := uuid.Parse(p.ResourceID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid resource id")
@@ -74,6 +93,12 @@ func (s *EmaTrustRulesService) Create(ctx context.Context, p *gen.CreatePayload)
 }
 
 func (s *EmaTrustRulesService) Update(ctx context.Context, p *gen.UpdatePayload) (*gen.EmaTrustRule, error) {
+	if p.AllowedClientIds != nil {
+		if verr := validateAllowedClientIDs(*p.AllowedClientIds); verr != nil {
+			return nil, verr
+		}
+	}
+
 	id, err := uuid.Parse(p.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid trust rule id")

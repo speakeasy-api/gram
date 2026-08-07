@@ -41,7 +41,7 @@ function methodOf(app: EmaApp | undefined): Method {
  * than failing on save.
  */
 function isCIMD(clientID: string): boolean {
-  return /^https?:\/\/\S+$/.test(clientID.trim());
+  return /^https?:\/\/\S+$/.test(clientID);
 }
 
 export function AppDialog({
@@ -64,7 +64,11 @@ export function AppDialog({
   const pending = create.isPending || update.isPending || remove.isPending;
   const error = create.error ?? update.error ?? remove.error;
 
-  const cimd = isCIMD(clientID);
+  // Submit what was inspected. Deciding CIMD on the trimmed value but sending
+  // the raw one registers a padded URL as a public client, which the server
+  // then cannot recognise as a metadata document.
+  const submittedClientID = clientID.trim();
+  const cimd = isCIMD(submittedClientID);
   const effectiveMethod: Method = cimd && method === "secret" ? "jwt" : method;
 
   // Exactly one credential survives, decided by the tab. A CIMD client stores
@@ -78,19 +82,19 @@ export function AppDialog({
   const submit = () => {
     if (editing) {
       update.mutate(
-        { id: app.id, client_id: clientID, name, ...credentials },
+        { id: app.id, client_id: submittedClientID, name, ...credentials },
         { onSuccess: onClose },
       );
     } else {
       create.mutate(
-        { client_id: clientID, name: name || undefined, ...credentials },
+        { client_id: submittedClientID, name: name || undefined, ...credentials },
         { onSuccess: onClose },
       );
     }
   };
 
   const ready =
-    clientID.trim() !== "" &&
+    submittedClientID !== "" &&
     (effectiveMethod !== "jwt" || cimd || jwks.trim() !== "") &&
     (effectiveMethod !== "secret" || clientSecret.trim() !== "");
 
@@ -158,7 +162,7 @@ export function AppDialog({
               </TabsContent>
               <TabsContent value="jwt">
                 {cimd ? (
-                  <CIMDPane clientID={clientID.trim()} />
+                  <CIMDPane clientID={submittedClientID} />
                 ) : (
                   <PrivateKeyPane value={jwks} onChange={setJwks} />
                 )}
