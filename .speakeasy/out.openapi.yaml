@@ -27043,6 +27043,7 @@ paths:
               - claude
               - cursor
               - codex
+              - agent-plugin
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -27103,6 +27104,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -64406,6 +64413,9 @@ components:
     Plugin:
       type: object
       properties:
+        agent_plugins_v1_compatible:
+          type: boolean
+          description: Whether the plugin's complete current intended state can be published as an Agent Plugins 1.0 package.
         assignment_count:
           type: integer
           description: Number of role/user assignments.
@@ -64454,6 +64464,7 @@ components:
         - id
         - name
         - slug
+        - agent_plugins_v1_compatible
         - created_at
         - updated_at
     PluginAssignment:
