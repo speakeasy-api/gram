@@ -275,7 +275,7 @@ func (s *Service) serveTunneledPublicInit(
 		reserved = true
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, r, logger, endpoint, mcpServer, "", "")
+	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, mcpServer, "", "", nil)
 	if err != nil {
 		if reserved {
 			s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
@@ -525,6 +525,7 @@ func (s *Service) serveTunneledPublicSession(
 		endpoint.ProjectID.String(),
 		"",
 		"",
+		nil,
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true

@@ -86,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
@@ -1037,6 +1038,7 @@ func newStartCommand() *cli.Command {
 				billingTracker,
 				toolDispositionCache,
 				platformSelectedUseRecorder,
+				toolfilter.NewSessionToolWitnessStore(logger, cache.NewRedisCacheAdapter(redisClient)),
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a

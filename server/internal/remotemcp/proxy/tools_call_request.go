@@ -31,6 +31,20 @@ type ToolsCallRequest struct {
 	UserRequest *UserRequest
 }
 
+// userRequestMethod returns the JSON-RPC method of a single-message user
+// request, or "" for anything else (responses, batch shapes). Used by the
+// strict-tool-selection path to distinguish "not a tools/call" from "a
+// tools/call whose params failed to decode".
+func userRequestMethod(req *UserRequest) string {
+	if req == nil || len(req.JSONRPCMessages) != 1 {
+		return ""
+	}
+	if rpcReq, ok := req.JSONRPCMessages[0].(*jsonrpc.Request); ok {
+		return rpcReq.Method
+	}
+	return ""
+}
+
 // toolsCallRequestFromUserRequest returns a ToolsCallRequest if req carries
 // exactly one JSON-RPC "tools/call" request whose params decode cleanly.
 // Anything else — notifications, responses, multiple messages, unrelated
