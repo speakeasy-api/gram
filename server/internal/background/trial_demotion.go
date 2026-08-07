@@ -18,11 +18,12 @@ const (
 	trialDemotionScheduleID          = "v1:demote-expired-trials-schedule"
 	trialDemotionScheduledWorkflowID = "v1:demote-expired-trials/scheduled"
 
+	trialDemotionActivityMaxRetries = 3
+
 	// One demotion is two OpenRouter round trips and one transaction, so 30s is
 	// a generous ceiling that surfaces a stalled provider rather than masking
 	// it behind retries.
-	trialDemotionActivityMaxRetries = 3
-	trialDemotionActivityTimeout    = 30 * time.Second
+	trialDemotionActivityTimeout = 30 * time.Second
 
 	// A trial expires 14 days after signup, so an hour of extra access costs
 	// little and the tick is cheap: the table holds one row per trial signup

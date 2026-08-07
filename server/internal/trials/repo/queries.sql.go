@@ -51,12 +51,10 @@ type DemoteOrganizationToFreeRow struct {
 	PreviousAccountType string
 }
 
-// Drops the organization to the free tier and out of the enterprise alert
-// cohort. Returns the pre-update account type.
-// The UPDATE joins the CTE rather than reading it from the RETURNING clause so
-// that the locking read runs first. A row this statement has already updated is
-// invisible to FOR UPDATE, and the join also blocks a concurrent account type
-// change from making the returned value disagree with the row that is written.
+// Drops the organization to the free tier and back behind the dashboard
+// book-a-demo gate. Returns the pre-update account type.
+// The UPDATE joins the CTE so that the locking read runs first: a row this
+// statement has already updated is invisible to FOR UPDATE.
 func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID string) (DemoteOrganizationToFreeRow, error) {
 	row := q.db.QueryRow(ctx, demoteOrganizationToFree, organizationID)
 	var i DemoteOrganizationToFreeRow
@@ -148,7 +146,6 @@ WHERE ends_at < clock_timestamp()
 ORDER BY ends_at
 `
 
-// Trials past their end date that neither converted nor were already demoted.
 func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
 	rows, err := q.db.Query(ctx, listExpiredTrials)
 	if err != nil {
@@ -177,8 +174,8 @@ WHERE organization_id = $1
   AND converted_at IS NULL
 `
 
-// Records that the trial became a signed contract. The first conversion wins.
-// Zero rows means the trial already converted.
+// Records that the trial became a signed contract. Zero rows means the trial
+// already converted.
 func (q *Queries) MarkTrialConverted(ctx context.Context, organizationID string) (int64, error) {
 	result, err := q.db.Exec(ctx, markTrialConverted, organizationID)
 	if err != nil {
@@ -198,8 +195,7 @@ WHERE organization_id = $1
 RETURNING organization_id, tier, ends_at, converted_at, demoted_at, created_at, updated_at
 `
 
-// Demotes a trial that is expired, unconverted, and not already demoted. No
-// rows means the trial no longer meets those conditions.
+// No rows means the trial no longer meets the sweep conditions.
 func (q *Queries) MarkTrialDemoted(ctx context.Context, organizationID string) (Trial, error) {
 	row := q.db.QueryRow(ctx, markTrialDemoted, organizationID)
 	var i Trial
