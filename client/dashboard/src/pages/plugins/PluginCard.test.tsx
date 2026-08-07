@@ -110,10 +110,15 @@ describe("PluginCard Agent Plugins actions", () => {
       );
     });
     expect(screen.getAllByText("Download Agent Plugins ZIP")).toHaveLength(1);
-    expect(screen.getByLabelText("Agent Plugins available")).toBeTruthy();
+    const status = screen.getByLabelText("Agent Plugin standard compatible");
+    fireEvent.focus(status);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toBe(
+      "Agent Plugin standard compatible. Additional harnesses can use this plugin: https://agent-plugins.org/compatible-clients",
+    );
   });
 
-  it("warns when unavailable while retaining native downloads", async () => {
+  it("shows neutral compatibility status while retaining native downloads", async () => {
     renderCard(false);
 
     expect(screen.queryByText("Download Agent Plugins ZIP")).toBeNull();
@@ -125,11 +130,13 @@ describe("PluginCard Agent Plugins actions", () => {
       expect((action as HTMLButtonElement).disabled).toBe(false);
     }
 
-    const warning = screen.getByLabelText("Agent Plugins unavailable");
-    fireEvent.focus(warning);
+    const status = screen.getByLabelText(
+      "Not Agent Plugin standard compatible",
+    );
+    fireEvent.focus(status);
     const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip.textContent).toContain(
-      "Cursor and Codex downloads remain available.",
+    expect(tooltip.textContent).toBe(
+      "Not Agent Plugin standard compatible. Plugin works normally in our supported harnesses.",
     );
   });
 });

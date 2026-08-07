@@ -288,11 +288,11 @@ function AgentPluginsStatus({
   compatible: boolean;
 }): JSX.Element {
   const label = compatible
-    ? "Agent Plugins available"
-    : "Agent Plugins unavailable";
+    ? "Agent Plugin standard compatible"
+    : "Not Agent Plugin standard compatible";
   const tooltip = compatible
-    ? "Available as an Agent Plugins package."
-    : "At least one included server can't be represented safely. Cursor and Codex downloads remain available.";
+    ? "Agent Plugin standard compatible. Additional harnesses can use this plugin: https://agent-plugins.org/compatible-clients"
+    : "Not Agent Plugin standard compatible. Plugin works normally in our supported harnesses.";
 
   return (
     <SimpleTooltip tooltip={tooltip}>
@@ -303,7 +303,7 @@ function AgentPluginsStatus({
           "inline-flex h-8 w-8 items-center justify-center border",
           compatible
             ? "border-success-softest bg-success-softest text-default-success"
-            : "border-warning-softest bg-warning-softest text-default-warning",
+            : "border-border bg-muted text-muted-foreground",
         )}
       >
         {/* Official mark from https://agent-plugins.org/. */}
