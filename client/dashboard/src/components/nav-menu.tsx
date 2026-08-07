@@ -546,7 +546,7 @@ export function CollapsibleNavGroup({
             <button
               type="button"
               aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
-              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 z-1 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-sm transition-colors group-data-[collapsible=icon]:hidden"
+              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 z-1 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center transition-colors group-data-[collapsible=icon]:hidden"
             >
               <ChevronRightIcon
                 className={cn(

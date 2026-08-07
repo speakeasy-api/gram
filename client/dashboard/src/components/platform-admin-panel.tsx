@@ -40,7 +40,7 @@ import { toast } from "sonner";
 
 function StatusPill({ enabled }: { enabled: boolean }): ReactElement {
   return enabled ? (
-    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-500">
+    <span className="border-border text-default-success inline-flex items-center border px-2 py-0.5 font-mono text-[10px] uppercase">
       Enabled
     </span>
   ) : (
