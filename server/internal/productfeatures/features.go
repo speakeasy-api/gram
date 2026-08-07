@@ -30,6 +30,7 @@ const (
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
+	FeatureRemoteSessionAutoRefresh      Feature = "remote_session_auto_refresh"
 )
 
 type FeatureCache struct {

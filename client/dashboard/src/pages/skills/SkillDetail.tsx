@@ -528,7 +528,7 @@ function VersionHistory({
           role="group"
           tabIndex={-1}
           aria-label={versionAnchorLabel(version, currentVersion)}
-          className="focus-visible:ring-ring rounded-md focus-visible:ring-2 focus-visible:outline-none"
+          className="focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         >
           {direction && version.specValid && (
             <RequireScope
@@ -624,9 +624,9 @@ function SkillDetailLoading(): JSX.Element {
           aria-label="Loading skill"
           className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8"
         >
-          <Skeleton className="h-36 w-full rounded-xl" />
-          <Skeleton className="h-80 w-full rounded-xl" />
-          <Skeleton className="h-48 w-full rounded-xl" />
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-48 w-full" />
         </div>
       </Page.Body>
     </Page>
@@ -639,7 +639,7 @@ function ValidationErrors({
   errors: SkillVersion["validationErrors"];
 }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4">
+    <div className="border-destructive/40 bg-destructive/5 border p-4">
       <Text variant="subheading" className="text-destructive mb-2">
         Current version has validation issues
       </Text>
@@ -778,7 +778,7 @@ function versionColumns({
 
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 border p-3">
       <Text small className="text-destructive">
         Unable to load more versions.
       </Text>

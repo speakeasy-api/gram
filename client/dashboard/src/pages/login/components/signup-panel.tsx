@@ -116,7 +116,7 @@ export function SignUpPanel(): JSX.Element {
         {AUTH_PILLARS.map((label) => (
           <span
             key={label}
-            className="auth-mono rounded-full border border-(--edge) px-[11px] py-[5px] text-[11px]"
+            className="auth-mono border border-(--edge) px-[11px] py-[5px] text-[11px]"
           >
             {label}
           </span>
@@ -182,7 +182,7 @@ export function SignUpPanel(): JSX.Element {
                           error ? `${field.name}-error` : undefined
                         }
                         className={cn(
-                          "w-full rounded-md border bg-(--card) px-3.5 py-[11px] text-[16px] text-black placeholder:text-(--muted) placeholder:opacity-55 focus:outline-none",
+                          "w-full border bg-(--card) px-3.5 py-[11px] text-[16px] text-black placeholder:text-(--muted) placeholder:opacity-55 focus:outline-none",
                           error
                             ? "border-destructive-default"
                             : "border-(--input-edge) focus:border-(--focus)",
@@ -231,7 +231,7 @@ export function SignUpPanel(): JSX.Element {
                           error ? `${field.name}-error` : undefined
                         }
                         className={cn(
-                          "w-full rounded-md border bg-(--card) px-3.5 py-[11px] text-[16px] text-black placeholder:text-(--muted) placeholder:opacity-55 focus:outline-none",
+                          "w-full border bg-(--card) px-3.5 py-[11px] text-[16px] text-black placeholder:text-(--muted) placeholder:opacity-55 focus:outline-none",
                           error
                             ? "border-destructive-default"
                             : "border-(--input-edge) focus:border-(--focus)",

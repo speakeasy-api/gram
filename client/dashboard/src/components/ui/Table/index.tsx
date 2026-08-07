@@ -165,8 +165,8 @@ const TableContainer = forwardRef<HTMLTableElement, TableContainerProps>(
           ref={ref}
           className={cn(
             styles.table,
-            "relative grid w-full caption-bottom [border-collapse:separate] [border-spacing:0] [grid-template-columns:var(--grid-template-columns)] overflow-x-auto overflow-y-hidden rounded-lg border text-sm",
-            tableDepth > 1 && "rounded-none border-none",
+            "relative grid w-full caption-bottom [border-collapse:separate] [border-spacing:0] [grid-template-columns:var(--grid-template-columns)] overflow-x-auto overflow-y-hidden border text-sm",
+            tableDepth > 1 && "border-none",
             className,
           )}
           data-cell-padding={cellPadding}
@@ -401,7 +401,7 @@ function SortableHeaderCell<T extends object>({
     >
       <button
         type="button"
-        className="group flex h-full w-full min-w-0 items-center gap-1 text-left font-medium"
+        className="group flex h-full w-full min-w-0 items-center gap-1 text-left"
         aria-label={getSortButtonLabel(column, sort)}
         onClick={() => onSortChange(getNextSort(column, sort))}
       >
@@ -891,13 +891,13 @@ function LoadMore<T extends object>({
       >
         {columns.map((column) => (
           <Cell key={column.key.toString()}>
-            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-full bg-muted" />
           </Cell>
         ))}
       </RowWrapper>
       <ButtonWrapper>
         <button
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium whitespace-nowrap normal-case transition-colors select-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
+          className="inline-flex h-9 items-center justify-center gap-2 border border-input bg-background px-4 py-2 text-sm font-medium whitespace-nowrap normal-case transition-colors select-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
           onClick={() => {
             void handleLoadMore();
           }}
@@ -927,7 +927,7 @@ function HeaderCell({ className, children, ...props }: HeaderCellProps) {
       {...props}
       className={cn(
         styles.tableHeader,
-        "flex items-center align-middle font-medium whitespace-nowrap text-body select-none",
+        "text-eyebrow flex items-center align-middle whitespace-nowrap select-none",
         className,
       )}
     >

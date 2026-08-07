@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -246,22 +246,25 @@ function FeedbackOverview({
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <MetricCardGroup>
         <MetricCard
           title="30-day feedback"
           value={metrics.feedbackInWindow}
+          tone="information"
           format="number"
           subtext="Reports collected"
         />
         <MetricCard
           title="Unreviewed"
           value={metrics.unreviewed}
+          tone={metrics.unreviewed > 0 ? "warning" : "neutral"}
           format="number"
           subtext="Awaiting suggestion analysis"
         />
         <MetricCard
           title="Activation coverage"
           value={coverage}
+          tone="success"
           format="percent"
           displayValue={
             metrics.activationsInWindow === 0
@@ -273,18 +276,19 @@ function FeedbackOverview({
         <MetricCard
           title="Suggestion conversion"
           value={conversion}
+          tone="success"
           format="percent"
           displayValue={
             counts.total === 0 ? "N/A" : `${conversion.toFixed(1)}%`
           }
           subtext={`${metrics.converted.toLocaleString()} of ${counts.total.toLocaleString()} reports cited`}
         />
-      </div>
+      </MetricCardGroup>
 
       <OutcomeDistribution counts={counts} />
       <FeedbackTimeline timeline={timeline} />
 
-      <div className="bg-muted/20 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+      <div className="bg-muted/20 flex flex-wrap items-center justify-between gap-3 border p-4">
         <div>
           <Text variant="subheading">Turn reviews into an edit</Text>
           <Text small muted>
@@ -383,13 +387,13 @@ function FeedbackTimeline({
         </Text>
       </div>
       <div
-        className="bg-muted/20 flex h-28 items-end gap-1 rounded-lg border px-3 pt-3"
+        className="bg-muted/20 flex h-28 items-end gap-1 border px-3 pt-3"
         aria-label="Daily feedback volume over the last 30 days"
       >
         {timeline.map((point) => (
           <div
             key={point.bucketStart.toISOString()}
-            className="bg-primary/70 hover:bg-primary min-h-0.5 flex-1 rounded-t-sm transition-colors"
+            className="bg-primary/70 hover:bg-primary min-h-0.5 flex-1 transition-colors"
             style={{ height: `${percentage(point.feedbackCount, maximum)}%` }}
             title={`${dateTimeFormatters.monthDay.format(point.bucketStart)}: ${point.feedbackCount.toLocaleString()} reports`}
           />
@@ -424,7 +428,7 @@ function GroupedFindings({
           No notes among recent feedback.
         </Text>
       ) : (
-        <div className="divide-y overflow-hidden rounded-lg border">
+        <div className="divide-y overflow-hidden border">
           {groups.map((group) => (
             <details key={group.key} className="group">
               <summary className="hover:bg-muted/30 flex cursor-pointer list-none items-start gap-3 p-4">

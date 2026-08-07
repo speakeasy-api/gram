@@ -312,9 +312,6 @@ func shadowMCPPolicyURLPrincipalsForScope(t *testing.T, ctx context.Context, con
 
 	result := make(map[string][]string)
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		serverURL := grant.Selector[authz.SelectorKeyServerURL]
 		if serverURL == "" {
 			continue

@@ -118,7 +118,7 @@ export function TrialStatusCard(): React.ReactNode {
   );
 
   return (
-    <div className="border-border/60 rounded-lg border bg-card p-3 shadow-sm group-data-[collapsible=icon]:hidden">
+    <div className="border-border border bg-card p-3 group-data-[collapsible=icon]:hidden">
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between tracking-wide">
           <Text mono small className="uppercase">

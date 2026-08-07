@@ -37,6 +37,11 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgx
 }
 
 func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, feature Feature) (bool, error) {
+	// Skills is generally available; the feature remains in the API for compatibility.
+	if feature == FeatureSkills {
+		return true, nil
+	}
+
 	if cached, err := c.featureCache.Get(ctx, FeatureCacheKey(organizationID, feature)); err == nil {
 		return cached.Enabled, nil
 	}
@@ -120,7 +125,6 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeSkillRead),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 	}, nil); err != nil {
@@ -130,12 +134,10 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeSkillRead),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 		{
 			Scope:     string(authz.ScopeSkillWrite),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 	}, nil); err != nil {

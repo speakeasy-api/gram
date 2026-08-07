@@ -38,7 +38,7 @@ export function BusinessMemoryScopeTree({
   };
 
   return (
-    <aside className="border-border bg-card min-w-0 rounded-lg border p-2">
+    <aside className="border-border bg-card min-w-0 border p-2">
       <div className="text-muted-foreground px-2 py-1.5 text-xs font-medium">
         Content scope
       </div>
@@ -46,7 +46,7 @@ export function BusinessMemoryScopeTree({
         type="button"
         onClick={() => onSelectionChange(null)}
         className={cn(
-          "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+          "hover:bg-muted flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors",
           selection === null && "bg-muted font-medium",
         )}
       >
@@ -81,7 +81,7 @@ export function BusinessMemoryScopeTree({
                 <CollapsibleTrigger
                   onClick={() => toggleSelection(namespaceSelection)}
                   className={cn(
-                    "hover:bg-muted flex w-full items-center gap-1 rounded-md px-1 py-1.5 text-left text-sm transition-colors [&[data-state=open]_.scope-chevron]:rotate-90",
+                    "hover:bg-muted flex w-full items-center gap-1 px-1 py-1.5 text-left text-sm transition-colors [&[data-state=open]_.scope-chevron]:rotate-90",
                     selectionIsActive(selection, namespaceSelection) &&
                       "bg-muted font-medium",
                   )}
@@ -107,7 +107,7 @@ export function BusinessMemoryScopeTree({
                         type="button"
                         onClick={() => toggleSelection(tagSelection)}
                         className={cn(
-                          "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                          "hover:bg-muted flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors",
                           selectionIsActive(selection, tagSelection) &&
                             "bg-muted font-medium",
                         )}

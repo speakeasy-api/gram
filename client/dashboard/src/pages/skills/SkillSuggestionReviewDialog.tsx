@@ -44,7 +44,7 @@ export function SkillSuggestionReviewDialog({
         </Dialog.Header>
 
         <div className="min-h-0 overflow-y-auto pr-1">
-          <Suspense fallback={<Skeleton className="h-64 w-full rounded-lg" />}>
+          <Suspense fallback={<Skeleton className="h-64 w-full" />}>
             <SkillTextDiff
               oldContent={currentContent}
               newContent={suggestion.proposedContent}

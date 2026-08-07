@@ -1,3 +1,4 @@
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
@@ -150,16 +151,19 @@ function OrgLogsInner() {
 
   return (
     <>
-      <Heading variant="h4" className="mb-2">
-        Logs
-      </Heading>
-      <Text muted small className="mb-6">
-        Configure logging and telemetry settings for all your tool capture. When
-        enabled, tool calls and traces are recorded for debugging and analytics.
-        These power the insights and logs page on the platform.
-      </Text>
+      <div className="mb-6">
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+          Logs
+        </Heading>
+        <Text muted small className="mt-1">
+          Configure logging and telemetry settings for all your tool capture.
+          When enabled, tool calls and traces are recorded for debugging and
+          analytics. These power the insights and logs page on the platform.
+        </Text>
+      </div>
       <LogDataRetentionBanner />
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -190,12 +194,8 @@ function OrgLogsInner() {
 
           <div className="border-border border-t" />
 
-          {featuresData?.skillsEnabled && (
-            <>
-              <SkillContentUploadSetting />
-              <div className="border-border border-t" />
-            </>
-          )}
+          <SkillContentUploadSetting />
+          {featuresData && <div className="border-border border-t" />}
 
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>

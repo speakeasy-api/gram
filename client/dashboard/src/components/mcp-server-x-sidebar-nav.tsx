@@ -37,6 +37,7 @@ import {
   ArrowRight,
   ExternalLink,
   LayoutDashboard,
+  Plug,
   Settings as SettingsIcon,
   Users,
   Wrench,
@@ -229,6 +230,20 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           },
         ]
       : []),
+    // Hidden for unproxied servers: the customer connects straight to the
+    // vendor with the vendor's own credentials, so Gram never mints a session
+    // or registers a client for them and the tab would always be empty.
+    ...(isUnproxied
+      ? []
+      : [
+          {
+            key: "sessions",
+            title: "Clients and Sessions",
+            Icon: Plug,
+            href: mcpServerTabHref(routes, idOrSlug, "sessions"),
+            active: activeTab === "sessions",
+          },
+        ]),
     {
       key: "settings",
       title: "Settings",

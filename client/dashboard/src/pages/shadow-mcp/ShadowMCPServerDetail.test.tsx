@@ -535,9 +535,9 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByRole("heading", { name: "GitHub MCP" })).toBeTruthy();
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
-    expect(screen.getByText("0 requests")).toBeTruthy();
-    expect(screen.getByText("8 calls")).toBeTruthy();
-    expect(screen.getByText("2 users")).toBeTruthy();
+    expect(screen.getByText("pending requests")).toBeTruthy();
+    expect(screen.getByText("calls")).toBeTruthy();
+    expect(screen.getByText("observed users")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "User" })).toBeTruthy();
     expect(screen.getByText("alex@example.com")).toBeTruthy();
     expect(screen.getByText("15 calls")).toBeTruthy();

@@ -178,9 +178,7 @@ export function OrgSidebar({
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
-                  ...(productFeatures?.skillsEnabled === true
-                    ? [{ item: orgRoutes.skills, scope: "org:admin" as Scope }]
-                    : []),
+                  { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===

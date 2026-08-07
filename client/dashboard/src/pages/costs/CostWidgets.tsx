@@ -4,18 +4,18 @@ import { formatWorkUnits, type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
+import { TREND } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 
-const BRAND = "#6366f1"; // indigo-500 — neutral headline accent
-const NEUTRAL = "#64748b"; // slate-500 — KPI sparklines
-const UP = "#e11d48"; // rose-600
-const DOWN = "#059669"; // emerald-600
+const NEUTRAL = TREND.flat; // KPI sparklines
 
-// Bar grading: emerald (lowest cost) → slate → rose (highest). Avoids lime by
-// passing through neutral grey rather than yellow.
+// Bar grading: muted green (lowest cost) → neutral → muted red (highest).
+// RGB forms of the palette TREND tokens (down/flat/up), pre-converted because
+// the mix below interpolates channel-wise.
 type RGB = [number, number, number];
-const GRADE_LOW: RGB = [5, 150, 105];
-const GRADE_MID: RGB = [148, 163, 184];
-const GRADE_HIGH: RGB = [225, 29, 72];
+const GRADE_LOW: RGB = [59, 85, 52]; // TREND.down
+const GRADE_MID: RGB = [150, 150, 150]; // TREND.flat
+const GRADE_HIGH: RGB = [164, 39, 35]; // TREND.up
 function mixRgb(a: RGB, b: RGB, k: number): string {
   const c = (i: 0 | 1 | 2) => Math.round(a[i] + (b[i] - a[i]) * k);
   return `rgb(${c(0)}, ${c(1)}, ${c(2)})`;
@@ -36,7 +36,7 @@ function Skeleton({
 }): JSX.Element {
   return (
     <div
-      className={`bg-muted animate-pulse rounded ${className ?? ""}`}
+      className={`bg-muted animate-pulse ${className ?? ""}`}
       style={style}
     />
   );
@@ -69,6 +69,8 @@ function formatDelta(pct: number): string {
 
 // A filled, smoothed area chart of a series — the hero "cost trend".
 function AreaChart({ values }: { values: number[] }): JSX.Element {
+  // Ink — neutral headline accent, lifted to near-white on dark surfaces.
+  const brand = useSeriesColors()[0]!;
   const W = 600;
   const H = 80;
   const pad = 4;
@@ -94,17 +96,11 @@ function AreaChart({ values }: { values: number[] }): JSX.Element {
       aria-hidden="true"
       className="h-20 w-full"
     >
-      <defs>
-        <linearGradient id="cost-area-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={BRAND} stopOpacity="0.18" />
-          <stop offset="100%" stopColor={BRAND} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#cost-area-grad)" />
+      <path d={area} fill={brand} fillOpacity={0.08} />
       <path
         d={line}
         fill="none"
-        stroke={BRAND}
+        stroke={brand}
         strokeWidth={1.5}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -125,8 +121,8 @@ function Card({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border rounded-lg border p-4">
-      <div className="text-sm font-semibold">
+    <div className="border-border border p-4">
+      <div className="text-eyebrow">
         {title}
         {range && (
           <span className="text-muted-foreground ml-1 font-normal">
@@ -155,9 +151,10 @@ function TrendCard({
   billingMode?: string;
 }): JSX.Element {
   const delta = relDelta(total, prevTotal);
-  let deltaColor: string | undefined;
+  let deltaClass: string | undefined;
   if (delta !== null && Math.abs(delta) >= 1)
-    deltaColor = delta > 0 ? UP : DOWN;
+    deltaClass =
+      delta > 0 ? "text-default-destructive" : "text-default-success";
   const title = (
     <>
       Total cost <EstimatedCostIndicator billingMode={billingMode} />
@@ -174,13 +171,12 @@ function TrendCard({
   return (
     <Card title={title} range={range}>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums">
+        <span className="font-display text-3xl font-thin tabular-nums">
           {formatCost(total)}
         </span>
         {delta !== null && (
           <span
-            className="text-xs font-medium tabular-nums"
-            style={deltaColor ? { color: deltaColor } : undefined}
+            className={`text-xs font-medium tabular-nums ${deltaClass ?? ""}`}
           >
             {formatDelta(delta)}
           </span>
@@ -237,9 +233,9 @@ function MixRowItem({
       </div>
       {/* Track is muted by default; on row hover the row itself goes muted, so
           flip the track to the page background (white) to keep it legible. */}
-      <div className="bg-muted group-hover:bg-background h-2.5 overflow-hidden rounded-full">
+      <div className="bg-muted group-hover:bg-background h-2.5 overflow-hidden">
         <div
-          className="h-full rounded-full"
+          className="h-full"
           style={{ width: `${barPct}%`, backgroundColor: barColor }}
         />
       </div>
@@ -256,7 +252,7 @@ function MixRowItem({
     <button
       type="button"
       onClick={onSelect}
-      className="group hover:bg-muted -mx-2 block w-full cursor-pointer space-y-1 rounded-md px-2 py-1.5 text-left transition-colors"
+      className="group hover:bg-muted -mx-2 block w-full cursor-pointer space-y-1 px-2 py-1.5 text-left transition-colors"
     >
       {inner}
     </button>
@@ -274,10 +270,7 @@ function RankedSkeleton(): JSX.Element {
             <Skeleton className="h-4" style={{ width: `${r.label}%` }} />
             <Skeleton className="h-4 w-8" />
           </div>
-          <Skeleton
-            className="h-2.5 rounded-full"
-            style={{ width: `${r.bar}%` }}
-          />
+          <Skeleton className="h-2.5" style={{ width: `${r.bar}%` }} />
         </div>
       ))}
     </>
@@ -314,7 +307,7 @@ function MixCard({
           top.map((r, i) => {
             // Colour by rank, not magnitude: rows are sorted by cost desc, so a
             // single outlier won't collapse everyone else to one colour. Top
-            // rank → rose, last → emerald, middle ranks → slate/grey.
+            // rank → muted red, last → muted green, middle ranks → neutral.
             const t = top.length > 1 ? 1 - i / (top.length - 1) : 1;
             const selectable =
               canDrill && r.label !== "" && r.label !== "Other";
@@ -360,7 +353,7 @@ function SessionsCard({
           <div className="text-muted-foreground/60 text-sm">No sessions</div>
         ) : (
           top.map((r, i) => {
-            // Colour by rank (top → rose, last → emerald), matching MixCard.
+            // Colour by rank (top → muted red, last → muted green), matching MixCard.
             const t = top.length > 1 ? 1 - i / (top.length - 1) : 1;
             return (
               <MixRowItem
@@ -407,7 +400,9 @@ function KpiTile({
       ) : (
         <div className="mt-3 flex items-end justify-between gap-3">
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tabular-nums">{value}</span>
+            <span className="font-display text-3xl font-thin tabular-nums">
+              {value}
+            </span>
             {delta !== null && (
               <span className="text-muted-foreground text-xs font-medium tabular-nums">
                 {formatDelta(delta)}
@@ -449,7 +444,7 @@ function StatCard({
         <Skeleton className="mt-2 h-8 w-24" />
       ) : (
         <>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">
+          <div className="mt-1 font-display text-3xl font-thin tabular-nums">
             {value}
           </div>
           {caption && (

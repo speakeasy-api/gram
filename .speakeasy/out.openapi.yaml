@@ -50156,7 +50156,7 @@ paths:
         name: UserSessionClients
   /rpc/userSessionClients.revoke:
     post:
-      description: Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.
+      description: 'Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control''s job, not revocation''s.'
       operationId: revokeUserSessionClient
       parameters:
         - allowEmptyValue: true
@@ -56775,7 +56775,7 @@ components:
             - interactive
         session_duration_hours:
           type: integer
-          description: Issued user session lifetime, in hours.
+          description: Maximum issued user session lifetime, in hours.
           format: int64
         slug:
           type: string
@@ -59346,6 +59346,9 @@ components:
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization is eligible for the Gram Platform MCP capability
+        remote_session_auto_refresh_enabled:
+          type: boolean
+          description: Whether consent screens expose automatic remote-session refresh for the organization
         scim_enabled:
           type: boolean
           description: Whether SCIM/directory sync setup is enabled for the organization
@@ -59379,6 +59382,7 @@ components:
         - ai_platform_push_integrations_enabled
         - platform_mcp_enabled
         - customer_managed_encryption_keys_enabled
+        - remote_session_auto_refresh_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -68430,6 +68434,7 @@ components:
             - ai_platform_push_integrations
             - platform_mcp
             - customer_managed_encryption_keys
+            - remote_session_auto_refresh
           maxLength: 60
       required:
         - feature_name
@@ -73872,7 +73877,7 @@ components:
           format: uuid
         session_duration_hours:
           type: integer
-          description: Issued user session lifetime, in hours.
+          description: Maximum issued user session lifetime, in hours.
           format: int64
         slug:
           type: string
@@ -74279,9 +74284,12 @@ components:
     UserSession:
       type: object
       properties:
+        client_id_metadata_uri:
+          type: string
+          description: Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
         client_name:
           type: string
-          description: Name of the MCP client that established the session, if known.
+          description: Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.
         created_at:
           type: string
           format: date-time
@@ -74340,13 +74348,16 @@ components:
       properties:
         client_id:
           type: string
-          description: DCR-issued client_id.
+          description: The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
         client_id_issued_at:
           type: string
           format: date-time
+        client_id_metadata_uri:
+          type: string
+          description: When set, the client was resolved from a Client ID Metadata Document (CIMD) hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR clients. The URL is the client's identity, so its origin -- not client_name, which the client chooses -- is the trustworthy label.
         client_name:
           type: string
-          description: Display name from the registration request.
+          description: Display name the client supplied at registration, or the client_name extracted from its metadata document. Client-controlled and unverified; do not present it as an identity.
         client_secret_expires_at:
           type: string
           description: Null when the secret does not expire.
@@ -74370,7 +74381,7 @@ components:
           type: string
           description: The owning user_session_issuer id.
           format: uuid
-      description: A user_session_client (DCR'd MCP client). client_secret_hash is never returned.
+      description: An MCP client registered against a user-session issuer. client_secret_hash is never returned.
       required:
         - id
         - user_session_issuer_id
@@ -74459,7 +74470,7 @@ components:
           format: uuid
         session_duration_hours:
           type: integer
-          description: Issued user session lifetime, in hours.
+          description: Maximum issued user session lifetime, in hours.
           format: int64
         slug:
           type: string
@@ -74983,7 +74994,7 @@ tags:
   - name: usage
     description: Read usage for gram.
   - name: userSessionClients
-    description: Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.
+    description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuers

@@ -53,7 +53,7 @@ function IssuerLoginConnection({
   }, [needsAuth, refetch]);
 
   return (
-    <div className="bg-muted/30 rounded-md border p-3">
+    <div className="bg-muted/30 border p-3">
       <Stack gap={2}>
         <Stack
           direction="horizontal"

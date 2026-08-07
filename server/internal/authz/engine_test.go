@@ -253,109 +253,6 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	}, 500*time.Millisecond, 50*time.Millisecond, "no challenge log entry should be emitted for empty input")
 }
 
-// --- Engine deny-wins tests ---
-
-func TestEngineRequire_denyGrantBlocksAccess(t *testing.T) {
-	t.Parallel()
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeProjectRead, WildcardResource),
-		NewDenyGrant(ScopeProjectRead, "proj_secret"),
-	})
-
-	// Allowed resource — should pass.
-	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_normal"})
-	require.NoError(t, err)
-
-	// Denied resource — should be forbidden.
-	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_secret"})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestEngineRequireAny_denySkipsToNextCheck(t *testing.T) {
-	t.Parallel()
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeMCPConnect, WildcardResource),
-		NewDenyGrant(ScopeMCPConnect, "tool_blocked"),
-	})
-
-	// One denied, one allowed — RequireAny should succeed via the allowed one.
-	err = engine.RequireAny(ctx,
-		Check{Scope: ScopeMCPConnect, ResourceID: "tool_blocked"},
-		Check{Scope: ScopeMCPConnect, ResourceID: "tool_ok"},
-	)
-	require.NoError(t, err)
-}
-
-func TestEngineRequireAny_allDeniedReturnsForbidden(t *testing.T) {
-	t.Parallel()
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeMCPConnect, WildcardResource),
-		NewDenyGrant(ScopeMCPConnect, WildcardResource),
-	})
-
-	err = engine.RequireAny(ctx,
-		Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"},
-		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
-	)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestEngineFilter_denyExcludesResources(t *testing.T) {
-	t.Parallel()
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeProjectRead, WildcardResource),
-		NewDenyGrant(ScopeProjectRead, "proj_secret"),
-	})
-
-	resourceIDs, err := engine.Filter(ctx, []Check{
-		{Scope: ScopeProjectRead, ResourceID: "proj_normal"},
-		{Scope: ScopeProjectRead, ResourceID: "proj_secret"},
-		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"proj_normal", "proj_other"}, resourceIDs)
-}
-
-func TestEngineFindMatched_denyReturnsFalse(t *testing.T) {
-	t.Parallel()
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeMCPConnect, WildcardResource),
-		NewDenyGrant(ScopeMCPConnect, "tool_blocked"),
-	})
-
-	matched, err := engine.FindMatched(ctx, []Check{
-		{Scope: ScopeMCPConnect, ResourceID: "tool_ok"},
-		{Scope: ScopeMCPConnect, ResourceID: "tool_blocked"},
-		{Scope: ScopeMCPConnect, ResourceID: "tool_also_ok"},
-	})
-	require.NoError(t, err)
-	require.Equal(t, []bool{true, false, true}, matched)
-}
-
 func TestEngineRequire_projectWriteBlocklistBlocksAccess(t *testing.T) {
 	t.Parallel()
 
@@ -413,8 +310,7 @@ func TestEngineFilter_withDimensions(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
-			Scope:  ScopeMCPConnect,
-			Effect: PolicyEffectAllow,
+			Scope: ScopeMCPConnect,
 			Selector: Selector{
 				SelectorKeyResourceKind: ResourceKindMCP,
 				SelectorKeyResourceID:   "toolsetA",
@@ -440,8 +336,7 @@ func TestEngineFilter_withDisposition(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
-			Scope:  ScopeMCPConnect,
-			Effect: PolicyEffectAllow,
+			Scope: ScopeMCPConnect,
 			Selector: Selector{
 				SelectorKeyResourceKind: ResourceKindMCP,
 				SelectorKeyResourceID:   "toolsetA",
@@ -486,8 +381,7 @@ func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
-			Scope:  ScopeMCPConnect,
-			Effect: PolicyEffectAllow,
+			Scope: ScopeMCPConnect,
 			Selector: Selector{
 				SelectorKeyResourceKind: ResourceKindMCP,
 				SelectorKeyResourceID:   WildcardResource,
@@ -513,8 +407,7 @@ func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
-			Scope:  ScopeMCPConnect,
-			Effect: PolicyEffectAllow,
+			Scope: ScopeMCPConnect,
 			Selector: Selector{
 				SelectorKeyResourceKind: ResourceKindMCP,
 				SelectorKeyResourceID:   WildcardResource,
@@ -548,8 +441,7 @@ func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
-			Scope:  ScopeMCPRead,
-			Effect: PolicyEffectAllow,
+			Scope: ScopeMCPRead,
 			Selector: Selector{
 				SelectorKeyResourceKind: ResourceKindMCP,
 				SelectorKeyResourceID:   WildcardResource,
@@ -578,8 +470,7 @@ func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		// Project-scoped grant for proj_A
 		{
-			Scope:  ScopeMCPConnect,
-			Effect: PolicyEffectAllow,
+			Scope: ScopeMCPConnect,
 			Selector: Selector{
 				SelectorKeyResourceKind: ResourceKindMCP,
 				SelectorKeyResourceID:   WildcardResource,

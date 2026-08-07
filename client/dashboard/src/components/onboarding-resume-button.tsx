@@ -33,7 +33,7 @@ export function OnboardingResumeButton(): JSX.Element | null {
           aria-label="Restore setup banner"
           title="Restore setup banner"
           onClick={resume}
-          className="text-muted-foreground hover:text-foreground hover:bg-background/80 shrink-0 rounded-md p-1 transition-colors group-data-[collapsible=icon]:hidden"
+          className="text-muted-foreground hover:text-foreground hover:bg-background/80 shrink-0 p-1 transition-colors group-data-[collapsible=icon]:hidden"
         >
           <ArrowUpRight className="size-3.5" />
         </button>

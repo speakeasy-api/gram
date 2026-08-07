@@ -357,7 +357,7 @@ function MultiSelectOptionItem({
     >
       <div
         className={cn(
-          "border-primary mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+          "border-primary mr-2 flex h-4 w-4 shrink-0 items-center justify-center border",
           isSelected
             ? "bg-primary text-primary-foreground"
             : "opacity-50 [&_svg]:invisible",
@@ -966,7 +966,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 getAllOptions().length
               } options selected. ${placeholder}`}
               className={cn(
-                "flex h-auto min-h-[42px] items-center justify-between rounded-md border bg-inherit p-1 hover:bg-inherit [&_svg]:pointer-events-auto",
+                "flex h-auto min-h-[42px] items-center justify-between border bg-inherit p-1 hover:bg-inherit [&_svg]:pointer-events-auto",
                 autoSize ? "w-auto" : "w-full",
                 singleLine && "h-[42px] min-h-0",
                 responsiveSettings.compactMode && "min-h-8 text-sm",
@@ -1138,7 +1138,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                         }
                       }}
                       aria-label={`Clear all ${selectedValues.length} selected options`}
-                      className="text-muted-foreground hover:text-foreground focus:ring-ring mx-2 flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm focus:ring-2 focus:ring-offset-1 focus:outline-none"
+                      className="text-muted-foreground hover:text-foreground focus:ring-ring mx-2 flex h-4 w-4 cursor-pointer items-center justify-center focus:ring-2 focus:ring-offset-1 focus:outline-none"
                     >
                       <XIcon className="h-4 w-4" />
                     </div>
@@ -1257,7 +1257,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                     >
                       <div
                         className={cn(
-                          "border-primary mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
+                          "border-primary mr-2 flex h-4 w-4 items-center justify-center border",
                           selectedValues.length ===
                             getAllOptions().filter((opt) => !opt.disabled)
                               .length

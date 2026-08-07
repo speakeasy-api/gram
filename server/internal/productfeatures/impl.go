@@ -87,6 +87,9 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	}
 
 	orgID := authCtx.ActiveOrganizationID
+	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
+		return nil
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -247,11 +250,12 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		HooksBrowserLoginEnabled:             isEnabled(FeatureHooksBrowserLogin),
 		HooksFailOpenEnabled:                 isEnabled(FeatureHooksFailOpen),
 		CustomModelKeysEnabled:               isEnabled(FeatureCustomModelKeys),
-		SkillsEnabled:                        isEnabled(FeatureSkills),
+		SkillsEnabled:                        true,
 		SkillCaptureMetadataOnly:             isEnabled(FeatureSkillCaptureMetadataOnly),
 		AiPlatformPushIntegrationsEnabled:    isEnabled(FeatureAIPlatformPushIntegrations),
 		PlatformMcpEnabled:                   isEnabled(FeaturePlatformMCP),
 		CustomerManagedEncryptionKeysEnabled: isEnabled(FeatureCustomerManagedEncryptionKeys),
+		RemoteSessionAutoRefreshEnabled:      isEnabled(FeatureRemoteSessionAutoRefresh),
 		DeviceAgent:                          deviceAgent,
 	}, nil
 }

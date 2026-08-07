@@ -1101,8 +1101,11 @@ func newStartCommand() *cli.Command {
 			}))
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
-			mux.Use(otelforwarding.Middleware(logger, otelForwardClient, otelForwarder))
+			// LiteLLM dispatch must run before OTLP forwarding: LiteLLM ingest
+			// is excluded from outbound forwarding, and the canonical metrics
+			// path is shared with harness telemetry.
 			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))
+			mux.Use(otelforwarding.Middleware(logger, otelForwardClient, otelForwarder))
 
 			// Reuse the same Presidio client the worker uses for offline analysis
 			// so the runtime hook scanner can flag/redact PII inputs too.
@@ -1192,7 +1195,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, productFeatures, auditLogger, c.String("environment"))
+			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
@@ -1249,7 +1252,7 @@ func newStartCommand() *cli.Command {
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
-				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
+				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, siteURL)
 			skills.Attach(mux, skillsService)
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil)
 			toolsets.Attach(mux, toolsetsSvc)
@@ -1271,7 +1274,8 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, cache.NewRedisCacheAdapter(redisClient))
+			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remoteSessionsCache, remotesessions.NewRefreshService(logger, db, encryptionClient, guardianPolicy, remoteSessionsCache))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)

@@ -318,7 +318,10 @@ func mintIssuerBearerForEndpoint(
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: "S256",
 		Subject:             urn.NewAnonymousSubject(uuid.NewString()),
-		CreatedAt:           time.Now(),
+		// Simulate a tampered consent value; token minting must clamp this to
+		// the issuer's one-hour maximum asserted below.
+		DesiredSessionDurationHours: 10_000,
+		CreatedAt:                   time.Now(),
 	}))
 
 	form := url.Values{}
@@ -338,10 +341,12 @@ func mintIssuerBearerForEndpoint(
 	require.Equal(t, http.StatusOK, w.Code, "token endpoint should mint an access token: %s", w.Body.String())
 
 	var resp struct {
-		AccessToken string `json:"access_token"`
+		AccessToken            string `json:"access_token"`
+		AuthorizationExpiresIn int64  `json:"authorization_expires_in"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.NotEmpty(t, resp.AccessToken)
+	require.Equal(t, int64(time.Hour/time.Second), resp.AuthorizationExpiresIn)
 	return resp.AccessToken
 }
 
@@ -604,7 +609,6 @@ func seedUserMCPConnectGrant(t *testing.T, ctx context.Context, conn *pgxpool.Po
 		OrganizationID: organizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
 		Scope:          string(authz.ScopeMCPConnect),
-		Effect:         pgtype.Text{},
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)

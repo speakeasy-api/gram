@@ -116,9 +116,6 @@ func loadShadowMCPBlockedURLs(ctx context.Context, db repo.DBTX, organizationID 
 	}
 	urls := make([]string, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		if serverURL := grant.Selector[authz.SelectorKeyServerURL]; serverURL != "" {
 			urls = append(urls, serverURL)
 		}

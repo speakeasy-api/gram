@@ -271,7 +271,6 @@ func seedCustomDomainAdminRecipient(t *testing.T, conn *pgxpool.Pool, organizati
 		OrganizationID: organizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
 		Scope:          string(authz.ScopeOrgAdmin),
-		Effect:         pgtype.Text{String: "", Valid: false},
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)

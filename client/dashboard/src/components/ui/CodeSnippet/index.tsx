@@ -147,7 +147,7 @@ export function CodeSnippet({
     <div
       data-theme={theme}
       className={cn(
-        "snippet relative box-border flex w-full overflow-hidden rounded-lg border border-muted bg-card",
+        "snippet relative box-border flex w-full overflow-hidden border border-muted bg-card",
         inline && "inline-flex",
         shimmer && "shimmer",
         className,
@@ -155,7 +155,7 @@ export function CodeSnippet({
       style={{ "--width": `${containerWidth}px` } as React.CSSProperties}
       ref={containerRef}
     >
-      <div className="snippet-inner flex w-full flex-row gap-2 rounded-lg bg-card p-4">
+      <div className="snippet-inner flex w-full flex-row gap-2 bg-card p-4">
         {language === "bash" && (
           <div className="self-center font-mono font-light text-body select-none">
             {promptSymbol ?? "$"}
