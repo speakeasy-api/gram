@@ -1318,16 +1318,7 @@ func newStartCommand() *cli.Command {
 				platformmcp.NewPostgresReader(db),
 				platformmcp.NewPostgresReadinessRecorder(db),
 			)
-			platformmcp.Attach(mux, platformmcp.NewService(
-				logger,
-				tracerProvider,
-				db,
-				sessionManager,
-				authzEngine,
-				platformAuthorizer,
-				platformmcp.NewPostgresLifecycleStore(db),
-				platformAdmission,
-			))
+
 			platformOAuth.Attach(mux)
 			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
