@@ -765,11 +765,13 @@ func marshalMcpapprovalApprovalRequesterToApprovalRequesterResponseBody(v *mcpap
 // *mcpapproval.ApprovalDecision.
 func marshalMcpapprovalApprovalDecisionToApprovalDecisionResponseBody(v *mcpapproval.ApprovalDecision) *ApprovalDecisionResponseBody {
 	res := &ApprovalDecisionResponseBody{
-		ID:        v.ID,
-		Decision:  v.Decision,
-		DecidedBy: v.DecidedBy,
-		Rationale: v.Rationale,
-		DecidedAt: v.DecidedAt,
+		ID:              v.ID,
+		Decision:        v.Decision,
+		DecidedBy:       v.DecidedBy,
+		Rationale:       v.Rationale,
+		Evidence:        v.Evidence,
+		EvidenceVersion: v.EvidenceVersion,
+		DecidedAt:       v.DecidedAt,
 	}
 	if v.GrantedPrincipalUrns != nil {
 		res.GrantedPrincipalUrns = make([]string, len(v.GrantedPrincipalUrns))

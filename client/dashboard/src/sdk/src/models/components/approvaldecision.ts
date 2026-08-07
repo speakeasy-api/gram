@@ -25,6 +25,14 @@ export type ApprovalDecision = {
    */
   decision: string;
   /**
+   * The evidence as it stood when this decision was made. Frozen at decision time: a later re-gather updates the request's evidence but never this snapshot, so what the reviewer actually saw stays inspectable.
+   */
+  evidence?: any | undefined;
+  /**
+   * Shape version of the frozen evidence payload, copied from the request at decision time.
+   */
+  evidenceVersion?: number | undefined;
+  /**
    * Principals the approval covers. Empty for a denial.
    */
   grantedPrincipalUrns?: Array<string> | undefined;
@@ -50,6 +58,8 @@ export const ApprovalDecision$inboundSchema: z.ZodMiniType<
     ),
     decided_by: z.string(),
     decision: z.string(),
+    evidence: z.optional(z.any()),
+    evidence_version: z.optional(z.int()),
     granted_principal_urns: z.optional(z.array(z.string())),
     id: z.string(),
     rationale: z.optional(z.string()),
@@ -58,6 +68,7 @@ export const ApprovalDecision$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "decided_at": "decidedAt",
       "decided_by": "decidedBy",
+      "evidence_version": "evidenceVersion",
       "granted_principal_urns": "grantedPrincipalUrns",
     });
   }),

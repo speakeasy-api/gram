@@ -9,4 +9,5 @@ const (
 	ResourceKindSkill       = "skill"
 	ResourceKindRiskPolicy  = "risk_policy"
 	ResourceKindChat        = "chat"
+	ResourceKindMCPApproval = "mcp_approval"
 )

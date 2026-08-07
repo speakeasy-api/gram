@@ -26,7 +26,8 @@ export type ResourceType =
   | "environment"
   | "skill"
   | "risk_policy"
-  | "chat";
+  | "chat"
+  | "mcp_approval";
 
 export function isProjectSelectableResourceType(
   resourceType: ResourceType,

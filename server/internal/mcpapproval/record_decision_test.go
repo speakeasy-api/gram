@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -196,4 +198,87 @@ func TestRecordDecision_ReadScopeIsNotEnough(t *testing.T) {
 	_, err := ti.service.RecordDecision(readOnly, decisionPayload(requestID.String(), "approved"))
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+}
+
+// Each decision carries the evidence frozen at its own decision time, so after
+// a re-gather the API can still show what an older decision actually rested
+// on rather than only what the request says now.
+func TestRecordDecision_DecisionsExposeTheirFrozenEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: "", status: "requested", evidence: `{"authority":{"mode":"api_key"}}`, version: 3,
+	})
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
+
+	seedEvidence(t, ctx, ti, ti.projectID, requestID, `{"authority":{"mode":"oauth"}}`, 4)
+
+	detail, err := ti.service.GetRequest(ctx, getPayload(requestID.String()))
+	require.NoError(t, err)
+	require.Len(t, detail.Decisions, 1)
+
+	// The request shows the new gather; the decision still shows the old one.
+	require.NotNil(t, detail.EvidenceVersion)
+	require.Equal(t, 4, *detail.EvidenceVersion)
+
+	frozen, ok := detail.Decisions[0].Evidence.(map[string]any)
+	require.True(t, ok)
+	authority, ok := frozen["authority"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "api_key", authority["mode"])
+	require.NotNil(t, detail.Decisions[0].EvidenceVersion)
+	require.Equal(t, 3, *detail.Decisions[0].EvidenceVersion)
+}
+
+// A decision writes one audit entry in the same transaction as the decision
+// itself, with the action carrying approve versus deny.
+func TestRecordDecision_WritesAnAuditEntry(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	approveBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestApprove)
+	require.NoError(t, err)
+	denyBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestDeny)
+	require.NoError(t, err)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
+	require.NoError(t, err)
+
+	approveAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestApprove)
+	require.NoError(t, err)
+	require.Equal(t, approveBefore+1, approveAfter)
+
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
+
+	denyAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestDeny)
+	require.NoError(t, err)
+	require.Equal(t, denyBefore+1, denyAfter)
+}
+
+// Holding the scope must not bypass a disabled product feature: the grant says
+// who may use the surface, the feature says whether the organization has it.
+func TestRecordDecision_FeatureDisabledIsForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	disableMCPApproval(t, ctx, ti)
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.ListRequests(ctx, listPayload())
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.GetRequest(ctx, getPayload(requestID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

@@ -1,6 +1,7 @@
 package mcpapproval
 
 import (
+	"bytes"
 	"encoding/json"
 	"time"
 
@@ -74,6 +75,8 @@ func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
 		DecidedBy:            decision.DecidedBy,
 		Rationale:            fromPGText(decision.Rationale),
 		GrantedPrincipalUrns: decision.GrantedPrincipalUrns,
+		Evidence:             rawEvidence(decision.EvidenceSnapshot),
+		EvidenceVersion:      evidenceVersion(decision.EvidenceVersion),
 		DecidedAt:            decision.DecidedAt.Time.Format(timeFormat),
 	}
 }
@@ -88,8 +91,13 @@ func rawEvidence(raw []byte) any {
 		return nil
 	}
 
+	// UseNumber keeps numerics as their literal text rather than float64, so
+	// a large integer in the evidence re-encodes exactly as stored.
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+
 	var decoded any
-	if err := json.Unmarshal(raw, &decoded); err != nil {
+	if err := decoder.Decode(&decoded); err != nil {
 		return nil
 	}
 

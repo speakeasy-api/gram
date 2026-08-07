@@ -53828,6 +53828,12 @@ components:
                 decision:
                     type: string
                     description: Either approved or denied.
+                evidence:
+                    description: 'The evidence as it stood when this decision was made. Frozen at decision time: a later re-gather updates the request''s evidence but never this snapshot, so what the reviewer actually saw stays inspectable.'
+                evidence_version:
+                    type: integer
+                    description: Shape version of the frozen evidence payload, copied from the request at decision time.
+                    format: int64
                 granted_principal_urns:
                     type: array
                     items:
@@ -62289,6 +62295,10 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - mcp_approval:read
+                        - mcp_approval:blocked_read
+                        - mcp_approval:decide
+                        - mcp_approval:blocked_decide
                 selectors:
                     type: array
                     items:
@@ -62326,6 +62336,10 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - mcp_approval:read
+                            - mcp_approval:blocked_read
+                            - mcp_approval:decide
+                            - mcp_approval:blocked_decide
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -66498,6 +66512,8 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - mcp_approval:read
+                        - mcp_approval:decide
             description: Form for requesting access to a scope.
             required:
                 - scope
@@ -67768,6 +67784,10 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - mcp_approval:read
+                        - mcp_approval:blocked_read
+                        - mcp_approval:decide
+                        - mcp_approval:blocked_decide
                 selectors:
                     type: array
                     items:
@@ -67889,6 +67909,8 @@ components:
                         - skill:blocked_read
                         - skill:blocked_write
                         - risk_policy:bypass
+                        - mcp_approval:blocked_read
+                        - mcp_approval:blocked_decide
                 resource_type:
                     type: string
                     description: The type of resource this scope applies to.
@@ -67900,6 +67922,7 @@ components:
                         - skill
                         - risk_policy
                         - chat
+                        - mcp_approval
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -67931,6 +67954,10 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - mcp_approval:read
+                        - mcp_approval:blocked_read
+                        - mcp_approval:decide
+                        - mcp_approval:blocked_decide
                 visibility:
                     type: string
                     description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -68415,6 +68442,7 @@ components:
                         - skill
                         - risk_policy
                         - chat
+                        - mcp_approval
                         - '*'
                 server_url:
                     type: string
