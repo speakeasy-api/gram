@@ -83,3 +83,60 @@ SET status = @status
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: UpsertApprovalRequest :one
+-- Re-requesting a server reopens the same row rather than starting a second
+-- review, so decisions accumulate as history against one target per project.
+-- target_key is what deduplicates; target_raw stays as the requester wrote it.
+INSERT INTO mcp_approval_requests (
+  organization_id
+  , project_id
+  , target_kind
+  , target_raw
+  , target_key
+  , artifact_ref
+  , version_pinned
+  , status
+) VALUES (
+  @organization_id
+  , @project_id
+  , @target_kind
+  , @target_raw
+  , @target_key
+  , sqlc.narg(artifact_ref)::text
+  , @version_pinned
+  , @status
+)
+ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
+SET updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: CreateApprovalRequestRequester :one
+INSERT INTO mcp_approval_request_requesters (
+  organization_id
+  , project_id
+  , mcp_approval_request_id
+  , user_id
+  , user_email
+  , note
+) VALUES (
+  @organization_id
+  , @project_id
+  , @mcp_approval_request_id
+  , @user_id
+  , sqlc.narg(user_email)::text
+  , sqlc.narg(note)::text
+)
+RETURNING *;
+
+-- name: SetApprovalRequestEvidence :exec
+-- Overwrites the current gather. The copy a decision rested on is frozen onto
+-- the decision, so refreshing this loses nothing.
+UPDATE mcp_approval_requests
+SET current_evidence = @current_evidence
+  , evidence_version = @evidence_version
+  , evidence_collected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

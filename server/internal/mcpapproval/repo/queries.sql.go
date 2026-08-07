@@ -86,6 +86,61 @@ func (q *Queries) CreateApprovalDecision(ctx context.Context, arg CreateApproval
 	return i, err
 }
 
+const createApprovalRequestRequester = `-- name: CreateApprovalRequestRequester :one
+INSERT INTO mcp_approval_request_requesters (
+  organization_id
+  , project_id
+  , mcp_approval_request_id
+  , user_id
+  , user_email
+  , note
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5::text
+  , $6::text
+)
+RETURNING id, organization_id, project_id, mcp_approval_request_id, user_id, user_email, note, requested_at, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateApprovalRequestRequesterParams struct {
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	McpApprovalRequestID uuid.UUID
+	UserID               string
+	UserEmail            pgtype.Text
+	Note                 pgtype.Text
+}
+
+func (q *Queries) CreateApprovalRequestRequester(ctx context.Context, arg CreateApprovalRequestRequesterParams) (McpApprovalRequestRequester, error) {
+	row := q.db.QueryRow(ctx, createApprovalRequestRequester,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.McpApprovalRequestID,
+		arg.UserID,
+		arg.UserEmail,
+		arg.Note,
+	)
+	var i McpApprovalRequestRequester
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpApprovalRequestID,
+		&i.UserID,
+		&i.UserEmail,
+		&i.Note,
+		&i.RequestedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getApprovalRequest = `-- name: GetApprovalRequest :one
 SELECT
   r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.created_at, r.updated_at, r.deleted_at, r.deleted
@@ -339,6 +394,36 @@ func (q *Queries) ListRequestersForApprovalRequest(ctx context.Context, arg List
 	return items, nil
 }
 
+const setApprovalRequestEvidence = `-- name: SetApprovalRequestEvidence :exec
+UPDATE mcp_approval_requests
+SET current_evidence = $1
+  , evidence_version = $2
+  , evidence_collected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $3
+  AND project_id = $4
+  AND deleted IS FALSE
+`
+
+type SetApprovalRequestEvidenceParams struct {
+	CurrentEvidence []byte
+	EvidenceVersion int32
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Overwrites the current gather. The copy a decision rested on is frozen onto
+// the decision, so refreshing this loses nothing.
+func (q *Queries) SetApprovalRequestEvidence(ctx context.Context, arg SetApprovalRequestEvidenceParams) error {
+	_, err := q.db.Exec(ctx, setApprovalRequestEvidence,
+		arg.CurrentEvidence,
+		arg.EvidenceVersion,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const setApprovalRequestStatus = `-- name: SetApprovalRequestStatus :exec
 UPDATE mcp_approval_requests
 SET status = $1
@@ -357,4 +442,77 @@ type SetApprovalRequestStatusParams struct {
 func (q *Queries) SetApprovalRequestStatus(ctx context.Context, arg SetApprovalRequestStatusParams) error {
 	_, err := q.db.Exec(ctx, setApprovalRequestStatus, arg.Status, arg.ID, arg.ProjectID)
 	return err
+}
+
+const upsertApprovalRequest = `-- name: UpsertApprovalRequest :one
+INSERT INTO mcp_approval_requests (
+  organization_id
+  , project_id
+  , target_kind
+  , target_raw
+  , target_key
+  , artifact_ref
+  , version_pinned
+  , status
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , $7
+  , $8
+)
+ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
+SET updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, target_kind, target_raw, target_key, artifact_ref, version_pinned, risk_policy_bypass_request_id, status, current_evidence, evidence_version, evidence_collected_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertApprovalRequestParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetRaw      string
+	TargetKey      string
+	ArtifactRef    pgtype.Text
+	VersionPinned  bool
+	Status         string
+}
+
+// Re-requesting a server reopens the same row rather than starting a second
+// review, so decisions accumulate as history against one target per project.
+// target_key is what deduplicates; target_raw stays as the requester wrote it.
+func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalRequestParams) (McpApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, upsertApprovalRequest,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRaw,
+		arg.TargetKey,
+		arg.ArtifactRef,
+		arg.VersionPinned,
+		arg.Status,
+	)
+	var i McpApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRaw,
+		&i.TargetKey,
+		&i.ArtifactRef,
+		&i.VersionPinned,
+		&i.RiskPolicyBypassRequestID,
+		&i.Status,
+		&i.CurrentEvidence,
+		&i.EvidenceVersion,
+		&i.EvidenceCollectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }

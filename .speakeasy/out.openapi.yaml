@@ -18902,6 +18902,339 @@ paths:
       x-speakeasy-name-override: rotateInstanceKey
       x-speakeasy-react-hook:
         name: RotateLiteLLMInstanceKey
+  /rpc/mcpApproval.getRequest:
+    get:
+      description: Fetch one MCP approval request with its evidence and decision history.
+      operationId: getMcpApprovalRequest
+      parameters:
+        - allowEmptyValue: true
+          description: The approval request ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The approval request ID.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequestDetail'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getRequest mcpApproval
+      tags:
+        - mcpApproval
+      x-speakeasy-name-override: getRequest
+      x-speakeasy-react-hook:
+        name: GetMcpApprovalRequest
+  /rpc/mcpApproval.listRequests:
+    get:
+      description: List MCP approval requests for a project.
+      operationId: listMcpApprovalRequests
+      parameters:
+        - allowEmptyValue: true
+          description: Only return requests in this status.
+          in: query
+          name: status
+          schema:
+            description: Only return requests in this status.
+            type: string
+        - allowEmptyValue: true
+          description: The cursor to fetch results from
+          in: query
+          name: cursor
+          schema:
+            description: The cursor to fetch results from
+            type: string
+        - allowEmptyValue: true
+          description: The number of requests to return per page
+          in: query
+          name: limit
+          schema:
+            description: The number of requests to return per page
+            format: int32
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListApprovalRequestsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listRequests mcpApproval
+      tags:
+        - mcpApproval
+      x-speakeasy-name-override: listRequests
+      x-speakeasy-react-hook:
+        name: ListMcpApprovalRequests
+  /rpc/mcpApproval.recordDecision:
+    post:
+      description: Approve or deny an MCP approval request, recording the rationale and who it applies to.
+      operationId: recordMcpApprovalDecision
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordDecisionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalDecision'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: recordDecision mcpApproval
+      tags:
+        - mcpApproval
+      x-speakeasy-name-override: recordDecision
+      x-speakeasy-react-hook:
+        name: RecordMcpApprovalDecision
   /rpc/mcpEndpoints.checkSlugAvailability:
     get:
       description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -53387,6 +53720,129 @@ components:
         - status
         - created_at
         - updated_at
+    ApprovalDecision:
+      type: object
+      properties:
+        decided_at:
+          type: string
+          description: When the decision was made.
+          format: date-time
+        decided_by:
+          type: string
+          description: Who decided.
+        decision:
+          type: string
+          description: Either approved or denied.
+        granted_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principals the approval covers. Empty for a denial.
+        id:
+          type: string
+          description: The decision ID.
+        rationale:
+          type: string
+          description: Why. Written to be cited when explaining the decision to the requester.
+      description: A recorded approve or deny, with the evidence it rested on.
+      required:
+        - id
+        - decision
+        - decided_by
+        - decided_at
+    ApprovalRequestDetail:
+      type: object
+      properties:
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalDecision'
+          description: Every decision made on this server, newest first. A repeat request starts from the last rationale rather than from zero.
+        evidence:
+          description: The deterministic signals gathered for this server, as they stood when last collected. Every item is a declaration by the server or its registry, never an observation of behaviour.
+        evidence_collected_at:
+          type: string
+          description: When the evidence was last gathered.
+          format: date-time
+        evidence_version:
+          type: integer
+          description: Shape version of the evidence payload, so an older snapshot stays interpretable.
+          format: int64
+        request:
+          $ref: '#/components/schemas/ApprovalRequestSummary'
+        requesters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalRequester'
+          description: Everyone who asked.
+      description: An approval request with everything needed to decide it.
+      required:
+        - request
+        - requesters
+        - decisions
+    ApprovalRequestSummary:
+      type: object
+      properties:
+        artifact_ref:
+          type: string
+          description: The resolved artifact identity. Absent when the server could not be identified, which must surface as unknown rather than as an absence of findings.
+        created_at:
+          type: string
+          description: When the request was first raised.
+          format: date-time
+        id:
+          type: string
+          description: The approval request ID.
+        requester_count:
+          type: integer
+          description: How many people have asked for this server.
+          format: int64
+        status:
+          type: string
+          description: The request's current status.
+        target_kind:
+          type: string
+          description: The namespace of the requested reference, such as server_url or stdio_command.
+        target_raw:
+          type: string
+          description: The reference exactly as the requester named it.
+        updated_at:
+          type: string
+          description: When the request last changed.
+          format: date-time
+        version_pinned:
+          type: boolean
+          description: Whether the reference names an exact version.
+      description: One MCP server awaiting a decision.
+      required:
+        - id
+        - target_kind
+        - target_raw
+        - version_pinned
+        - status
+        - requester_count
+        - created_at
+        - updated_at
+    ApprovalRequester:
+      type: object
+      properties:
+        note:
+          type: string
+          description: The requester's justification. The one input no automated evidence supplies.
+        requested_at:
+          type: string
+          description: When they asked.
+          format: date-time
+        user_email:
+          type: string
+          description: The requester's email, when known.
+        user_id:
+          type: string
+          description: The requester.
+      description: Someone who asked for a server, and why.
+      required:
+        - user_id
+        - requested_at
     ApproveAllSkillSuggestionsRequestBody:
       type: object
       properties:
@@ -60834,6 +61290,19 @@ components:
           description: The list of allowed origins
       required:
         - allowed_origins
+    ListApprovalRequestsResult:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: The cursor to fetch results from
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalRequestSummary'
+          description: The list of approval requests
+      required:
+        - requests
     ListAssetsResult:
       type: object
       properties:
@@ -65484,6 +65953,26 @@ components:
       required:
         - group_value
         - points
+    RecordDecisionRequestBody:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: Either approved or denied.
+        granted_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principals the approval covers. Empty for a denial.
+        id:
+          type: string
+          description: The approval request ID.
+        rationale:
+          type: string
+          description: Why the decision was made. This is the artifact cited when explaining a denial.
+      required:
+        - id
+        - decision
     RecordSkillResult:
       type: object
       properties:
@@ -74925,6 +75414,8 @@ tags:
     description: Managing system api keys.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
+  - name: mcpApproval
+    description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata

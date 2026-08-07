@@ -810,6 +810,8 @@ tags:
     description: Managing system api keys.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
+  - name: mcpApproval
+    description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata
