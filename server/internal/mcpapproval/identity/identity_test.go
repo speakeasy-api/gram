@@ -341,6 +341,85 @@ func TestResolve_PackageFlagWithNoValueIsUnresolved(t *testing.T) {
 	require.Equal(t, identity.KindUnresolved, identity.Resolve("npx --package").Kind)
 }
 
+// A selector after the first bare word belongs to the server, not the
+// launcher. `-p` is a common port flag, and reading it as npx's package
+// selector resolved a real config to a nonexistent artifact.
+func TestResolve_ServerFlagsAreNotLauncherSelectors(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("npx -y some-mcp-server -p 8080")
+	require.Equal(t, identity.KindPackage, got.Kind)
+	require.Equal(t, "some-mcp-server", got.PackageName)
+
+	uv := identity.Resolve("uvx some-mcp-server --from trusted-pkg")
+	require.Equal(t, "some-mcp-server", uv.PackageName)
+}
+
+// npx hands arguments after the package to the binary, so a trailing selector
+// must not rename what actually ran — otherwise the review is keyed to a
+// trusted package while an untrusted one executes.
+func TestResolve_TrailingSelectorCannotRenameThePackage(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("npx -y @evil/mcp-server --package=@modelcontextprotocol/server-filesystem")
+	require.Equal(t, "@evil/mcp-server", got.PackageName)
+
+	uv := identity.Resolve("uvx evil-server --from=trusted-pkg")
+	require.Equal(t, "evil-server", uv.PackageName)
+}
+
+// A wildcard component is a range; the same letter inside a prerelease or
+// build tag is part of an exact version.
+func TestResolve_PlatformSuffixedVersionsStayPinned(t *testing.T) {
+	t.Parallel()
+
+	for _, spec := range []string{"npx pkg@1.0.0-linux", "npx pkg@2.0.0-osx", "npx pkg@1.0.0+build.x", "npx pkg@v1.2.3"} {
+		require.True(t, identity.Resolve(spec).VersionPinned, "%s names one immutable release", spec)
+	}
+
+	for _, spec := range []string{"npx pkg@1.2.x", "npx pkg@1.x", "npx pkg@1.2.*"} {
+		require.False(t, identity.Resolve(spec).VersionPinned, "%s floats", spec)
+	}
+}
+
+// A port equal to the scheme default is redundant and must not key a second
+// artifact for the same endpoint.
+func TestResolve_DefaultPortsAreDropped(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, identity.Resolve("https://mcp.example.com/sse").ArtifactRef, identity.Resolve("https://mcp.example.com:443/sse").ArtifactRef)
+	require.Equal(t, identity.Resolve("http://mcp.example.com/sse").ArtifactRef, identity.Resolve("http://mcp.example.com:80/sse").ArtifactRef)
+
+	// A non-default port still distinguishes the endpoint.
+	require.NotEqual(t, identity.Resolve("https://mcp.example.com/sse").ArtifactRef, identity.Resolve("https://mcp.example.com:8443/sse").ArtifactRef)
+}
+
+// Hostname() strips the brackets an IPv6 literal needs, and a URL is malformed
+// without them.
+func TestResolve_PortlessIPv6KeepsItsBrackets(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("http://[::1]/sse")
+	require.Equal(t, "url:http://[::1]/sse", got.ArtifactRef)
+}
+
+// npx ships as npx.cmd on Windows, and the canonical Windows stdio config
+// launches it through the command processor.
+func TestResolve_WindowsLauncherForms(t *testing.T) {
+	t.Parallel()
+
+	for _, command := range []string{
+		`npx.cmd -y @scope/server`,
+		`cmd /c npx -y @scope/server`,
+		`cmd.exe /C npx.cmd -y @scope/server`,
+		`NPX -y @scope/server`,
+	} {
+		got := identity.Resolve(command)
+		require.Equal(t, identity.KindPackage, got.Kind, command)
+		require.Equal(t, "@scope/server", got.PackageName, command)
+	}
+}
+
 // Several selectors install several packages and the binary may come from any
 // of them. Picking the first would attach evidence to the wrong artifact.
 func TestResolve_MultiplePackageSelectorsAreUnresolved(t *testing.T) {
