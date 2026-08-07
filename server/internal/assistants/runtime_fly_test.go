@@ -1123,7 +1123,7 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	servers := []runtimeMCPServer{
 		{ID: "github", URL: "https://example/mcp/github", Headers: map[string]string{"Gram-Environment": "prod"}},
 	}
-	require.NoError(t, backend.RunTurn(context.Background(), rec, turnThreadID, "idem-1", "tok", "hi", servers))
+	require.NoError(t, backend.RunTurn(context.Background(), rec, turnThreadID, "idem-1", "tok", "hi", nil, servers))
 	require.Equal(t, fmt.Sprintf("/threads/%s/turn", turnThreadID), observedPath)
 	require.Equal(t, "hi", observedBody.Input)
 	require.Equal(t, "tok", observedBody.AuthToken)

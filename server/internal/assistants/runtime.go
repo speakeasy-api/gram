@@ -143,10 +143,10 @@ func (c runnerClient) state(ctx context.Context, baseURL string) (runnerStateRes
 
 // turn delivers a turn to /threads/{threadID}/turn, wrapping failures with
 // the classifyTurnError sentinel the service dispatches on.
-func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey, authToken, prompt string, mcpServers []runtimeMCPServer, timeout time.Duration) error {
+func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey, authToken, prompt string, inputParts []runtimeContentPart, mcpServers []runtimeMCPServer, timeout time.Duration) error {
 	reqBody, err := json.Marshal(runtimeTurnRequest{
 		Input:       prompt,
-		InputParts:  nil,
+		InputParts:  inputParts,
 		AuthToken:   authToken,
 		MCPServers:  mcpServers,
 		AssistantID: runtime.AssistantID.String(),

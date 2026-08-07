@@ -34,6 +34,19 @@ type slackEventPayload struct {
 	ActionID     string `json:"action_id,omitempty"`
 	ActionValue  string `json:"action_value,omitempty"`
 	BlockID      string `json:"block_id,omitempty"`
+
+	Files []slackFilePayload `json:"files,omitempty"`
+}
+
+// slackFilePayload mirrors the file attachment metadata the slack trigger
+// carries on message events (e.g. the file_share subtype).
+type slackFilePayload struct {
+	ID                 string `json:"id"`
+	Name               string `json:"name,omitempty"`
+	Title              string `json:"title,omitempty"`
+	Mimetype           string `json:"mimetype,omitempty"`
+	Size               int64  `json:"size,omitempty"`
+	URLPrivateDownload string `json:"url_private_download,omitempty"`
 }
 
 type slackAdapter struct{ deterministicChatIDAdapter }
@@ -120,7 +133,33 @@ func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error)
 	if payload.ActionValue != "" {
 		fmt.Fprintf(&b, "ActionValue: %s\n", payload.ActionValue)
 	}
+	if len(payload.Files) > 0 {
+		b.WriteString("Attachments:\n")
+		for _, file := range payload.Files {
+			name := file.Name
+			if name == "" {
+				name = file.Title
+			}
+			fmt.Fprintf(&b, "- id: %s, name: %s, type: %s, size: %s\n", file.ID, name, file.Mimetype, humanFileSize(file.Size))
+		}
+		b.WriteString("Attachment contents are not directly visible here; pass an attachment's file id to the Slack platform tools to access it.\n")
+	}
 	b.WriteString("</message-context>\n\n")
 	b.WriteString(payload.Text)
 	return b.String(), nil
+}
+
+// humanFileSize renders a byte count with binary (1024) unit steps, e.g.
+// 2048 -> "2.0 KB".
+func humanFileSize(size int64) string {
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
 }

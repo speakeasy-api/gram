@@ -495,7 +495,7 @@ func TestLocalRunTurnPostsToRunner(t *testing.T) {
 	require.NoError(t, err)
 	record := localRecord(uuid.New(), metadata)
 
-	err = backend.RunTurn(t.Context(), record, threadID, "event-1", "jwt-token", "hello", nil)
+	err = backend.RunTurn(t.Context(), record, threadID, "event-1", "jwt-token", "hello", nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, "/threads/"+threadID.String()+"/turn", gotPath)
 	require.Equal(t, "event-1", gotIdem)

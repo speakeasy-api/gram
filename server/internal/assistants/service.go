@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -399,6 +400,8 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	assetStorage      assets.BlobStore
+	envLoader         toolconfig.EnvironmentLoader
+	slackImages       slackImageFetcher
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
@@ -445,6 +448,8 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		assetStorage:      nil,
+		envLoader:         nil,
+		slackImages:       nil,
 		dashboardIngestor: nil,
 		featureFlags:      nil,
 		turnClassified:    turnClassified,
@@ -2705,6 +2710,7 @@ func (s *ServiceCore) processEventTurn(
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
 	prompt, actorUserID := "", assistant.CreatedByUserID
+	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		// MCP auth resumption is a system event with no human sender — act as
 		// the assistant's creator.
@@ -2719,6 +2725,11 @@ func (s *ServiceCore) processEventTurn(
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
 		actorUserID = turnUserID(assistant, thread, event)
+		// Best-effort: image attachments on the triggering Slack message ride
+		// along as vision content. Failures degrade to the metadata-only turn.
+		if thread.SourceKind == sourceKindSlack {
+			inputParts = s.slackTurnImageParts(ctx, thread, event)
+		}
 	}
 	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
 	if err != nil {
@@ -2728,7 +2739,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, inputParts, mcpServers); err != nil {
 		return nil, fmt.Errorf("run assistant turn: %w", err)
 	}
 	return currentSnapshotBytes, nil

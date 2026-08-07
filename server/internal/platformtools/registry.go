@@ -177,6 +177,9 @@ var registry = []toolFactory{
 		return platformslack.NewGetFileInfoTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewInspectFileTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewListFilesTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
