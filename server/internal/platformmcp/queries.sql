@@ -267,6 +267,95 @@ WHERE session.organization_id = @organization_id
   AND connection.active_generation = session.connection_generation
   AND client.revoked_at IS NULL;
 
+-- name: GetPlatformMCPLifecycle :one
+WITH default_project AS (
+    SELECT id
+    FROM projects
+    WHERE organization_id = @organization_id
+      AND slug = 'default'
+      AND deleted IS FALSE
+    LIMIT 1
+)
+SELECT
+    default_project.id AS default_project_id,
+    EXISTS (
+        SELECT 1
+        FROM plugin_github_connections
+        WHERE project_id = default_project.id
+    ) AS marketplace_published
+FROM (VALUES (1)) AS root(value)
+LEFT JOIN default_project ON TRUE;
+
+-- name: ListPlatformMCPConnections :many
+SELECT
+    connection.id,
+    connection.authorized_at,
+    connection.reauthorized_at,
+    EXISTS (
+        SELECT 1
+        FROM platform_mcp_onboarding_milestones AS milestone
+        WHERE milestone.organization_id = connection.organization_id
+          AND milestone.milestone = 'connection_ready'
+          AND milestone.connection_id = connection.id
+          AND milestone.connection_generation = connection.active_generation
+    ) AS ready
+FROM platform_mcp_connections AS connection
+JOIN platform_mcp_oauth_clients AS client
+  ON client.id = connection.oauth_client_id
+WHERE connection.organization_id = @organization_id
+  AND connection.revoked_at IS NULL
+  AND client.revoked_at IS NULL
+ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC;
+
+-- name: RecordPlatformMCPConnectionReady :exec
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    connection_id,
+    connection_generation
+) VALUES (
+    @organization_id,
+    'connection_ready',
+    @connection_id,
+    @connection_generation
+)
+ON CONFLICT (milestone, connection_id, connection_generation)
+WHERE connection_id IS NOT NULL
+  AND connection_generation IS NOT NULL
+  AND milestone IN (
+    'authorization_succeeded',
+    'authorization_failed',
+    'connection_ready',
+    'first_read_succeeded',
+    'first_write_succeeded',
+    'read_only_cohort'
+)
+DO NOTHING;
+
+-- name: IsPlatformMCPNewModelEligible :one
+-- Package admission requires at least one active issuer-backed MCP server with
+-- an active endpoint. Platform runtime authorization deliberately does not use
+-- this condition: a later project-model change must not invalidate an existing
+-- organization-bound connection.
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    JOIN projects AS project
+      ON project.id = server.project_id
+     AND project.organization_id = @organization_id
+     AND project.deleted IS FALSE
+    JOIN user_session_issuers AS issuer
+      ON issuer.id = server.user_session_issuer_id
+     AND issuer.project_id = project.id
+     AND issuer.deleted IS FALSE
+    JOIN mcp_endpoints AS endpoint
+      ON endpoint.mcp_server_id = server.id
+     AND endpoint.project_id = project.id
+     AND endpoint.deleted IS FALSE
+    WHERE server.deleted IS FALSE
+      AND server.visibility <> 'disabled'
+);
+
 -- name: ListPlatformMCPProjects :many
 SELECT id, name, slug
 FROM projects

@@ -5,16 +5,20 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestRuntimeHandlerRejectsMissingBearerToken(t *testing.T) {
 	t.Parallel()
 
 	authenticator := &testAuthenticator{principal: testPrincipal()}
-	handler := NewRuntime(authenticator, testGate{enabled: true}, &testAuthorizer{}, "https://gram.example/.well-known/oauth-protected-resource/platform-mcp", nil).Handler()
+	handler := NewRuntime(testenv.NewLogger(t), authenticator, testGate{enabled: true}, &testAuthorizer{}, "https://gram.example/.well-known/oauth-protected-resource/platform-mcp", nil, nil).Handler()
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	res := httptest.NewRecorder()
 
@@ -40,7 +44,7 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 			t.Parallel()
 
 			authorizer := &testAuthorizer{}
-			handler := NewRuntime(&testAuthenticator{principal: testPrincipal()}, tc.gate, authorizer, "", nil).Handler()
+			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, tc.gate, authorizer, "", nil, nil).Handler()
 			req := httptest.NewRequest(http.MethodPost, Path, nil)
 			req.Header.Set("Authorization", "Bearer access-token")
 			res := httptest.NewRecorder()
@@ -56,23 +60,61 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
-	authorizer := &testAuthorizer{err: errors.New("org:admin grant removed")}
-	handler := NewRuntime(&testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", nil).Handler()
-	req := httptest.NewRequest(http.MethodPost, Path, nil)
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "denied", err: ErrForbidden},
+		{name: "unexpected error", err: errors.New("authorization store unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			authorizer := &testAuthorizer{err: tc.err}
+			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", nil, nil).Handler()
+			req := httptest.NewRequest(http.MethodPost, Path, nil)
+			req.Header.Set("Authorization", "Bearer access-token")
+			res := httptest.NewRecorder()
+
+			handler.ServeHTTP(res, req)
+
+			require.Equal(t, http.StatusForbidden, res.Code)
+			require.Equal(t, 1, authorizer.calls)
+		})
+	}
+}
+
+func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
+	t.Parallel()
+
+	recorder := &testReadinessRecorder{}
+	handler := NewRuntime(
+		testenv.NewLogger(t),
+		&testAuthenticator{principal: testPrincipal()},
+		testGate{enabled: true},
+		&testAuthorizer{},
+		"",
+		nil,
+		recorder,
+	).Handler()
+	req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Authorization", "Bearer access-token")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	res := httptest.NewRecorder()
 
 	handler.ServeHTTP(res, req)
 
-	require.Equal(t, http.StatusForbidden, res.Code)
-	require.Equal(t, 1, authorizer.calls)
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	require.Equal(t, 1, recorder.calls)
+	require.Equal(t, testPrincipal(), recorder.principal)
 }
 
 func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
 	t.Parallel()
 
 	authenticator := &testAuthenticator{principal: testPrincipal()}
-	runtime := NewRuntime(authenticator, testGate{enabled: true}, &testAuthorizer{}, "", nil)
+	runtime := NewRuntime(testenv.NewLogger(t), authenticator, testGate{enabled: true}, &testAuthorizer{}, "", nil, nil)
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	req.Header.Set("Authorization", "bearer  access-token  ")
 
@@ -86,13 +128,24 @@ func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
 func TestRuntimeAuthenticateRejectsIncompletePrincipal(t *testing.T) {
 	t.Parallel()
 
-	runtime := NewRuntime(&testAuthenticator{principal: Principal{UserID: "user"}}, testGate{enabled: true}, &testAuthorizer{}, "", nil)
+	runtime := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: Principal{UserID: "user"}}, testGate{enabled: true}, &testAuthorizer{}, "", nil, nil)
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	req.Header.Set("Authorization", "Bearer access-token")
 
 	_, err := runtime.authenticate(req)
 
 	require.ErrorIs(t, err, ErrUnauthorized)
+}
+
+type testReadinessRecorder struct {
+	principal Principal
+	calls     int
+}
+
+func (r *testReadinessRecorder) RecordReady(_ context.Context, principal Principal, _ time.Time) error {
+	r.calls++
+	r.principal = principal
+	return nil
 }
 
 type testAuthenticator struct {

@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -161,6 +162,16 @@ type Service struct {
 	// eligible and carry their existing hooks — so a missing provider can never
 	// force-advance an org.
 	features feature.Provider
+	// platformAdmission decides package presence separately from runtime access.
+	// Indeterminate outcomes preserve published package bytes rather than
+	// interpreting an unavailable dependency as a revocation.
+	platformAdmission PlatformMCPAdmission
+}
+
+// PlatformMCPAdmission is the package-level policy used by plugin publishing.
+// It remains deliberately independent from the runtime authorization gate.
+type PlatformMCPAdmission interface {
+	Evaluate(ctx context.Context, organizationID, organizationSlug string) (platformmcp.Admission, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -178,6 +189,7 @@ func NewService(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	platformAdmission PlatformMCPAdmission,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -197,7 +209,8 @@ func NewService(
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
-		features: features,
+		features:          features,
+		platformAdmission: platformAdmission,
 	}
 }
 
@@ -209,22 +222,24 @@ func NewPublisher(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	platformAdmission PlatformMCPAdmission,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
 	return &Service{
-		tracer:    nil,
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      nil,
-		authz:     nil,
-		audit:     auditLogger,
-		cache:     nil,
-		github:    github,
-		serverURL: serverURL,
-		keyPrefix: auth.APIKeyPrefix(env),
-		features:  features,
+		tracer:            nil,
+		logger:            logger,
+		db:                db,
+		repo:              repo.New(db),
+		auth:              nil,
+		authz:             nil,
+		audit:             auditLogger,
+		cache:             nil,
+		github:            github,
+		serverURL:         serverURL,
+		keyPrefix:         auth.APIKeyPrefix(env),
+		features:          features,
+		platformAdmission: platformAdmission,
 	}
 }
 
@@ -1423,19 +1438,20 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			// directories when a rename happened while the rollout gate carried
 			// the hooks subtree.
 			slugCfg := GenerateConfig{
-				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:         "",
-				OrgID:            "",
-				ServerURL:        "",
-				APIKey:           "",
-				HooksAPIKey:      "",
-				ProjectSlug:      "",
-				IsDefaultProject: false,
-				Version:          "",
-				MarketplaceName:  "",
-				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
-				BrowserLogin:     false,
-				InstallFailOpen:  false,
+				OrgName:            s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:           "",
+				OrgID:              "",
+				ServerURL:          "",
+				APIKey:             "",
+				HooksAPIKey:        "",
+				ProjectSlug:        "",
+				IsDefaultProject:   false,
+				Version:            "",
+				MarketplaceName:    "",
+				HooksOrgName:       naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
+				BrowserLogin:       false,
+				InstallFailOpen:    false,
+				PlatformMCPEnabled: false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1642,17 +1658,36 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
+	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
+	admission := platformmcp.AdmissionDisabled
+	if projectSlug == "default" {
+		admission = platformmcp.AdmissionIndeterminate
+		if s.platformAdmission != nil {
+			admission, err = s.platformAdmission.Evaluate(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+			if err != nil {
+				s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp admission", attr.SlogError(err))
+				admission = platformmcp.AdmissionIndeterminate
+			}
+		}
+	}
+	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
+	cfg.PlatformMCPEnabled = admission == platformmcp.AdmissionEnabled ||
+		(admission == platformmcp.AdmissionIndeterminate && platformWasPublished)
+
 	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
+	}
+	if admission == platformmcp.AdmissionIndeterminate && platformWasPublished {
+		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
 	}
 
 	// Up to date only when both components match what was last published: the MCP
 	// per-plugin fingerprints, the hooks generator version, and the hook-affecting
 	// config (so a marketplace rename or browser-login toggle that hasn't
 	// propagated to the hooks subtree yet reads as stale rather than current).
-	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
+	upToDate := maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
 		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
 		storedHooksConfigHash(conn.PublishedHooksConfig) == hooksConfigHash(hooksConfigSnapshot(cfg))
 	return &upToDate
@@ -1900,19 +1935,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 
 	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug, input.ProjectID)
 
-	// The per-plugin MCP fingerprints and the hooks generator version are the two
-	// independent rollout signals. Compute both up front so we can short-circuit
-	// unchanged publishes before touching GitHub and persist them after a
-	// successful push.
-	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
-	}
-	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
-	}
-
 	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
 	// so the rows we persist round-trip cleanly through the case-insensitive
 	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
@@ -1925,13 +1947,61 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
 	}
 	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
+	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
-	// Decide which components to (re)generate. A human publish
-	// (SkipIfUnchanged == false) always refreshes MCP so installed copies pick up
-	// a new manifest version. Hooks change independently based on their version
-	// and output-affecting config.
-	mcpChanged := firstPublish || !input.SkipIfUnchanged ||
-		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
+	// Platform publishing is bound to the literal default project slug, not the
+	// oldest-project convention used by marketplace naming.
+	admission := platformmcp.AdmissionDisabled
+	if input.ProjectSlug == "default" {
+		admission = platformmcp.AdmissionIndeterminate
+		if s.platformAdmission != nil {
+			var admissionErr error
+			admission, admissionErr = s.platformAdmission.Evaluate(ctx, input.OrganizationID, input.OrganizationSlug)
+			if admissionErr != nil {
+				if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
+					return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
+				}
+				s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
+					attr.SlogOrganizationID(input.OrganizationID),
+					attr.SlogError(admissionErr))
+				admission = platformmcp.AdmissionIndeterminate
+			}
+		}
+	}
+	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
+	preservePlatformMCP := admission == platformmcp.AdmissionIndeterminate && platformWasPublished
+	cfg.PlatformMCPEnabled = admission == platformmcp.AdmissionEnabled || preservePlatformMCP
+
+	// The per-plugin MCP fingerprints and the hooks generator version are the two
+	// independent rollout signals. Compute both up front so we can short-circuit
+	// unchanged publishes before touching GitHub and persist them after a
+	// successful push.
+	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
+	}
+	// An unavailable admission dependency must not mutate the Platform package's
+	// rollout state. Retain its prior fingerprint while the shared marketplace
+	// files continue to be regenerated with the package entry present.
+	currentPlatformMCPFingerprint := mcpFingerprints[mcpPlatformFingerprintKey]
+	if preservePlatformMCP {
+		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
+	}
+
+	// Decide which components to (re)generate. A human publish refreshes customer
+	// MCP packages so installed copies pick up a new manifest version. A
+	// Platform-only transition deliberately carries those customer packages
+	// unchanged. Hooks change independently based on their version and
+	// output-affecting config.
+	// A confirmed Platform transition changes only its reserved fingerprint and
+	// shared marketplace files. Carry customer MCP files so adding/removing this
+	// first-party package never rotates customer credentials or manifests.
+	platformOnlyChange := !firstPublish &&
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
+		platformMCPOnlyFingerprintChange(mcpFingerprints, publishedMCPFingerprints)
+	mcpChanged := firstPublish ||
+		(!input.SkipIfUnchanged && !platformOnlyChange) ||
+		(!platformOnlyChange && !maps.Equal(mcpFingerprints, publishedMCPFingerprints))
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -1980,7 +2050,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
-	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
+	// Indeterminate Platform admission must inspect an already-published subtree
+	// before skipping. A stored fingerprint alone cannot establish that its files
+	// still exist, and the preservation path below reconstructs incomplete repos.
+	if input.SkipIfUnchanged && !preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
 		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
 	}
 
@@ -1989,7 +2062,8 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// Fetch the repo only in that case; a first publish or a both-components
 	// change regenerates everything and needs no fetch.
 	var existingFiles map[string][]byte
-	if !firstPublish && (!mcpChanged || !hooksChanged) {
+	existingRepoMissing := false
+	if !firstPublish && (!mcpChanged || !hooksChanged || preservePlatformMCP) {
 		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main")
 		if err != nil {
 			if !errors.Is(err, ghclient.ErrRepoNotFound) {
@@ -1997,6 +2071,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			}
 			// The connection row exists but the repo is gone or empty; regenerate
 			// both components rather than carrying stale files.
+			existingRepoMissing = true
 			existingFiles = nil
 		}
 	}
@@ -2020,6 +2095,24 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return true
 	}
 
+	if input.SkipIfUnchanged && preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
+		carryCfg := cfg
+		carryCfg.PlatformMCPEnabled = false
+		mcpPaths, err := mcpFilePaths(pluginInfos, carryCfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
+		}
+		sharedPaths, err := sharedFilePaths(pluginInfos, cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate shared files").LogError(ctx, s.logger)
+		}
+		verifiedFiles := make(map[string][]byte)
+		_, hooksIntact := carryHooksSubtree(verifiedFiles, existingFiles, targetHooksConfigJSON, cfg.OrgName)
+		if carry(verifiedFiles, mcpPaths) && carry(verifiedFiles, sharedPaths) && carryPlatformMCPSubtree(verifiedFiles, existingFiles) && hooksIntact {
+			return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
+		}
+	}
+
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
@@ -2027,7 +2120,14 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
 	if !mcpChanged {
-		paths, err := mcpFilePaths(pluginInfos, cfg)
+		carryCfg := cfg
+		// A transition or an indeterminate result needs a separate Platform
+		// decision below. Otherwise include Platform paths in normal MCP carry
+		// enumeration so hooks-only publishes preserve its bytes verbatim.
+		if platformOnlyChange || admission != platformmcp.AdmissionEnabled {
+			carryCfg.PlatformMCPEnabled = false
+		}
+		paths, err := mcpFilePaths(pluginInfos, carryCfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
@@ -2053,7 +2153,27 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
 		}
 		maps.Copy(files, mcpFiles)
+		if admission == platformmcp.AdmissionEnabled {
+			if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
+			}
+		}
 		candidates = append(candidates, mcpCandidate)
+	}
+	if preservePlatformMCP && !carryPlatformMCPSubtree(files, existingFiles) {
+		if !existingRepoMissing {
+			s.logger.WarnContext(ctx, "published platform mcp subtree cannot be preserved; reconstructing package",
+				attr.SlogOrganizationID(input.OrganizationID))
+		}
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconstruct platform mcp files after missing repo").LogError(ctx, s.logger)
+		}
+		mcpFingerprints[mcpPlatformFingerprintKey] = currentPlatformMCPFingerprint
+	}
+	if admission == platformmcp.AdmissionEnabled && platformOnlyChange && carriedMCP {
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
+		}
 	}
 
 	// Hooks component: carry when the target version+config match what's
@@ -2159,6 +2279,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		pluginSlugs = append(pluginSlugs, p.Slug)
 	}
 
+	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
+	}
+
 	// Persist the API keys, audit logs, and github connection atomically only
 	// after the GitHub publish has succeeded. This prevents leaking valid
 	// credentials when GitHub fails. If this transaction itself fails, the
@@ -2180,6 +2305,45 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
+}
+
+// platformMCPOnlyFingerprintChange reports whether two maps differ only in the
+// Platform package and shared marketplace entries. Those paths have no tenant
+// credentials and can change without regenerating customer MCP packages.
+func platformMCPOnlyFingerprintChange(current, published map[string]string) bool {
+	if current[mcpPlatformFingerprintKey] == published[mcpPlatformFingerprintKey] {
+		return false
+	}
+	current = maps.Clone(current)
+	published = maps.Clone(published)
+	delete(current, mcpPlatformFingerprintKey)
+	delete(published, mcpPlatformFingerprintKey)
+	delete(current, mcpSharedFingerprintKey)
+	delete(published, mcpSharedFingerprintKey)
+	return maps.Equal(current, published)
+}
+
+// carryPlatformMCPSubtree preserves every currently-published Platform package
+// path, including a future generator layout. An indeterminate admission result
+// must never regenerate or drop tenant-facing Platform bytes.
+func carryPlatformMCPSubtree(dst, existing map[string][]byte) bool {
+	if len(existing) == 0 {
+		return false
+	}
+	staged := make(map[string][]byte)
+	for p, content := range existing {
+		if strings.HasPrefix(p, platformMCPPluginRoot+"/") {
+			staged[p] = content
+		}
+	}
+	if _, ok := staged[platformMCPPluginRoot+"/.claude-plugin/plugin.json"]; !ok {
+		return false
+	}
+	if _, ok := staged[platformMCPPluginRoot+"/.mcp.json"]; !ok {
+		return false
+	}
+	maps.Copy(dst, staged)
+	return true
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree
@@ -2800,12 +2964,13 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:  "",
-		HooksOrgName:     "",
-		IsDefaultProject: s.isDefaultProject(ctx, projectID),
-		BrowserLogin:     false,
-		InstallFailOpen:  false,
+		Version:            fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:    "",
+		HooksOrgName:       "",
+		IsDefaultProject:   s.isDefaultProject(ctx, projectID),
+		BrowserLogin:       false,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
