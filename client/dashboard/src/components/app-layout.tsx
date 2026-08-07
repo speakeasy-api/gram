@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { Button } from "@/components/ui/Button";
 import { ModalProvider } from "@/components/ui/context/ModalContext";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
@@ -118,12 +117,12 @@ const ImpersonationBanner = () => {
   };
 
   // Height must stay 2.25rem (h-9) to match --header-offset / --banner-offset.
+  // Solid ink-family bars (editorial): demo = ink, impersonation = deep brand
+  // red. White mono label; the exit action is a hairline-outlined light chip.
   const toneClasses = isDemo
-    ? "border-information-softest bg-information-softest"
-    : "border-destructive-softest bg-destructive-softest";
-  const labelTone = isDemo
-    ? "text-default-information"
-    : "text-default-destructive";
+    ? "bg-surface-primary-fixed-dark border-transparent"
+    : "bg-destructive-highlight border-transparent";
+  const labelTone = "text-default-fixed-light";
 
   return (
     <div
@@ -140,9 +139,13 @@ const ImpersonationBanner = () => {
           ? "Demo org — sample data"
           : `Impersonating ${organization.slug}`}
       </span>
-      <Button variant="secondary" size="xs" className="ml-2" onClick={exit}>
+      <button
+        type="button"
+        onClick={exit}
+        className="border-neutral-softest text-default-fixed-light hover:bg-surface-secondary-inverse ml-2 border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase"
+      >
         {isDemo ? "Exit demo" : "Stop impersonating"}
-      </Button>
+      </button>
     </div>
   );
 };

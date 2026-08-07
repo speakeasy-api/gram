@@ -1,4 +1,5 @@
 import "./App.css";
+import NotFound from "@/pages/not-found/NotFound";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
@@ -312,6 +313,7 @@ const RouteProvider = () => {
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+            <Route path="*" element={<NotFound />} />
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
           <Route path=":orgSlug">

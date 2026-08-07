@@ -94,7 +94,7 @@ export function SidebarUserMenu(): JSX.Element {
             data-testid="user-menu-trigger"
             type="button"
             aria-label="Account menu"
-            className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex size-7 shrink-0 items-center justify-center rounded-full border group-data-[collapsible=icon]:mx-auto"
+            className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex size-9 shrink-0 items-center justify-center border group-data-[collapsible=icon]:mx-auto"
           >
             <MoreHorizontal className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
             {/* Collapsed: the round trigger shows the avatar so the menu stays reachable */}
