@@ -25,7 +25,7 @@ import (
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
 // It wraps repo.CreateChatMessage and notifies observers after a successful
 // write that stored at least one message. External packages must use Write,
-// WriteTurn, or WriteWithAssets.
+// WriteCorrelated, WriteTurn, or WriteWithAssets.
 type ChatMessageWriter struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
@@ -174,6 +174,46 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 	}
 	if n > 0 {
 		w.publishTurnFrames(ctx, nil, params)
+		w.notifyMessagesStored(ctx, projectID)
+	}
+	return n, nil
+}
+
+// WriteCorrelated atomically inserts a message or promotes an earlier LiteLLM
+// observation of the same turn to the authoritative native-hook source.
+func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, param repo.CreateChatMessageParams, externalMessageID string) (int64, error) {
+	n, err := repo.New(w.db).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
+		ChatID:            param.ChatID,
+		Role:              param.Role,
+		ProjectID:         param.ProjectID,
+		Content:           param.Content,
+		ContentRaw:        param.ContentRaw,
+		ContentAssetUrl:   param.ContentAssetUrl,
+		StorageError:      param.StorageError,
+		Model:             param.Model,
+		MessageID:         param.MessageID,
+		ToolCallID:        param.ToolCallID,
+		UserID:            param.UserID,
+		ExternalUserID:    param.ExternalUserID,
+		ExternalMessageID: conv.ToPGText(externalMessageID),
+		FinishReason:      param.FinishReason,
+		ToolCalls:         param.ToolCalls,
+		PromptTokens:      param.PromptTokens,
+		CompletionTokens:  param.CompletionTokens,
+		TotalTokens:       param.TotalTokens,
+		Origin:            param.Origin,
+		UserAgent:         param.UserAgent,
+		IpAddress:         param.IpAddress,
+		Source:            param.Source,
+		ContentHash:       param.ContentHash,
+		Generation:        param.Generation,
+		Replayed:          param.Replayed,
+		CreatedAt:         param.CreatedAt,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
+	}
+	if n > 0 {
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return n, nil

@@ -183,7 +183,11 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	payload.Images = []string{"image"}
 	payload.Tools = []any{map[string]any{"name": "definition-only"}}
 	payload.ToolCalls = []any{map[string]any{"name": "historical-only"}}
-	payload.RequestHeaders = map[string]string{"X-Gram-Session-ID": "session-from-header"}
+	payload.RequestHeaders = map[string]string{
+		"X-Gram-Session-ID":     "session-from-header",
+		"X-Gram-Agent-Provider": "opencode",
+		"X-Gram-Agent-Turn-ID":  "message-1",
+	}
 	payload.LitellmTraceID = new("trace-1")
 	payload.LitellmVersion = new("1.94.0")
 	payload.Model = new("model-1")
@@ -206,7 +210,7 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	require.Equal(t, "1.94.0", *call.payload.Source.AdapterVersion)
 	require.Equal(t, "member@example.test", *call.payload.Source.UserEmail)
 	require.Equal(t, "session-from-header", *call.payload.Session.ID)
-	require.Equal(t, "call-1", *call.payload.Session.TurnID)
+	require.Equal(t, "agent-turn:v1:opencode:message-1", *call.payload.Session.TurnID)
 	require.Equal(t, "model-1", *call.payload.Session.Model)
 	require.Equal(t, "litellm:call-1:request", *call.payload.IdempotencyKey)
 	require.Empty(t, call.auth.UserID)
@@ -298,6 +302,25 @@ func TestSessionHeaderUsesNativeClientHeadersInPrecedenceOrder(t *testing.T) {
 
 	headers["X-Gram-Session-ID"] = "[present]"
 	require.Equal(t, "opencode-session", sessionHeader(headers))
+}
+
+func TestRequestHeaderIgnoresRedactedValues(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, requestHeader(map[string]string{"X-Gram-Agent-Turn-ID": "[present]"}, "x-gram-agent-turn-id"))
+	require.Equal(t, "message-1", requestHeader(map[string]string{"X-Gram-Agent-Turn-ID": " message-1 "}, "x-gram-agent-turn-id"))
+}
+
+func TestAgentTurnFromHeadersUsesCodexMetadataAndOpenCodeFallback(t *testing.T) {
+	t.Parallel()
+	provider, turnID := agentTurnFromHeaders(map[string]string{
+		"X-Codex-Turn-Metadata": `{"session_id":"session-1","turn_id":"turn-1"}`,
+	})
+	require.Equal(t, "codex", provider)
+	require.Equal(t, "turn-1", turnID)
+
+	provider, turnID = agentTurnFromHeaders(map[string]string{"X-OpenCode-Request": "message-1"})
+	require.Equal(t, "opencode", provider)
+	require.Equal(t, "message-1", turnID)
 }
 
 func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {

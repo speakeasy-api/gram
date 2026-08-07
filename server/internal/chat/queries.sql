@@ -219,6 +219,76 @@ VALUES (
   , @created_at
 );
 
+-- name: UpsertCorrelatedChatMessage :execrows
+INSERT INTO chat_messages (
+    chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+)
+VALUES (
+    @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @replayed
+  , @created_at
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO UPDATE SET
+    source = EXCLUDED.source
+  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
+  , model = COALESCE(EXCLUDED.model, chat_messages.model)
+  , replayed = chat_messages.replayed OR EXCLUDED.replayed
+  , created_at = EXCLUDED.created_at
+  , risk_analyzed_at = NULL
+WHERE chat_messages.project_id = EXCLUDED.project_id
+  AND EXCLUDED.source IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork', 'codex', 'cursor', 'opencode')
+  AND chat_messages.source = 'litellm';
+
 -- name: CreateChatContentPart :copyfrom
 INSERT INTO chat_content_parts (
     chat_id

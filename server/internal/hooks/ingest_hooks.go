@@ -28,7 +28,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-const hookIngestSchemaV1 = "hook.ingest.v1"
+const (
+	hookIngestSchemaV1           = "hook.ingest.v1"
+	agentTurnPrefix              = "agent-turn:v1:"
+	agentPromptCorrelationPrefix = "agent-prompt:v1:"
+)
 
 type authenticatedIngestOptionsKey struct{}
 
@@ -945,6 +949,18 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 }
 
 func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time, blockReason string) {
+	adapter := strings.TrimSpace(payload.Source.Adapter)
+	if sessionID := canonicalSessionID(payload); sessionID != "" && usesNativeTranscriptFallback(adapter) {
+		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
+		err := s.cache.Set(cacheCtx, sessionNativeHooksCacheKey(authCtx.ProjectID.String(), sessionID), adapter, 24*time.Hour)
+		cancel()
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to mark native hook session",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+		}
+	}
 	// Resolve the session identity once, before the telemetry write, so the
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
@@ -1404,20 +1420,15 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		if strings.TrimSpace(content) == "" {
 			return nil
 		}
-		if strings.EqualFold(strings.TrimSpace(hookSource), "litellm") {
-			matched, err := s.repo.LatestUserMessageMatchesOpenCode(ctx, repo.LatestUserMessageMatchesOpenCodeParams{
-				ProjectID: *authCtx.ProjectID,
-				ChatID:    sessionIDToUUID(sessionID),
-				Content:   content,
-			})
-			if err != nil {
-				return fmt.Errorf("match LiteLLM prompt to OpenCode message: %w", err)
-			}
-			if matched {
+		msg = baseMsg("user", content)
+		if correlationID := agentPromptCorrelationID(payload, content); correlationID != "" {
+			msg.MessageID = conv.ToPGText(correlationID)
+		} else if strings.EqualFold(strings.TrimSpace(hookSource), "litellm") {
+			var nativeSource string
+			if err := s.cache.Get(ctx, sessionNativeHooksCacheKey(authCtx.ProjectID.String(), sessionID), &nativeSource); err == nil && strings.TrimSpace(nativeSource) != "" {
 				return nil
 			}
 		}
-		msg = baseMsg("user", content)
 		titleContent = content
 	case "assistant.responded":
 		content := canonicalMessageText(payload)
@@ -1469,6 +1480,87 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+}
+
+func usesNativeTranscriptFallback(adapter string) bool {
+	switch strings.ToLower(strings.TrimSpace(adapter)) {
+	case "claude", "claude-code", "claude-code-desktop", "cowork", "cursor":
+		return true
+	default:
+		return false
+	}
+}
+
+func agentPromptCorrelationID(payload *gen.IngestPayload, content string) string {
+	turnID := canonicalAgentTurnID(payload)
+	if turnID == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(turnID + "\x00" + content))
+	return agentPromptCorrelationPrefix + hex.EncodeToString(digest[:])
+}
+
+func canonicalAgentTurnID(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil {
+		return ""
+	}
+	adapter := strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
+	provider := canonicalAgentProvider(adapter)
+	if payload.Session != nil && payload.Session.TurnID != nil {
+		turnID := strings.TrimSpace(*payload.Session.TurnID)
+		if encoded, ok := strings.CutPrefix(turnID, agentTurnPrefix); ok {
+			encodedProvider, nativeTurnID, found := strings.Cut(encoded, ":")
+			encodedProvider = canonicalAgentProvider(encodedProvider)
+			if found && encodedProvider != "" && strings.TrimSpace(nativeTurnID) != "" &&
+				(adapter == "litellm" || provider == encodedProvider) {
+				return encodedProvider + ":" + strings.TrimSpace(nativeTurnID)
+			}
+			return ""
+		}
+		if provider != "" && turnID != "" {
+			return provider + ":" + turnID
+		}
+	}
+	if provider != "opencode" || payload.Raw == nil {
+		return ""
+	}
+
+	raw, err := json.Marshal(payload.Raw)
+	if err != nil {
+		return ""
+	}
+	var event struct {
+		Input struct {
+			MessageID string `json:"messageID"`
+		} `json:"input"`
+		Output struct {
+			Message struct {
+				ID string `json:"id"`
+			} `json:"message"`
+		} `json:"output"`
+	}
+	if json.Unmarshal(raw, &event) != nil {
+		return ""
+	}
+	messageID := strings.TrimSpace(event.Output.Message.ID)
+	if messageID == "" {
+		messageID = strings.TrimSpace(event.Input.MessageID)
+	}
+	if messageID == "" {
+		return ""
+	}
+	return "opencode:" + messageID
+}
+
+func canonicalAgentProvider(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "claude", "claude-code", "claude-code-desktop", "cowork":
+		return "claude"
+	case "codex", "cursor", "opencode":
+		return strings.ToLower(strings.TrimSpace(provider))
+	default:
+		return ""
+	}
 }
 
 func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {

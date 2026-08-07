@@ -355,8 +355,21 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return nil
 	}
 
-	// Try to insert the message (Write handles notification on success).
-	_, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+	writeMessage := func() error {
+		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
+			if _, writeErr := s.writer.WriteCorrelated(ctx, projectID, msgParams, msgParams.MessageID.String); writeErr != nil {
+				return fmt.Errorf("write correlated chat message: %w", writeErr)
+			}
+			return nil
+		}
+		if _, writeErr := s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams}); writeErr != nil {
+			return fmt.Errorf("write chat message: %w", writeErr)
+		}
+		return nil
+	}
+
+	// Try to insert the message (the writer handles notification on success).
+	err = writeMessage()
 	if err == nil {
 		return nil
 	}
@@ -380,7 +393,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
 	}
 
-	if _, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams}); err != nil {
+	if err = writeMessage(); err != nil {
 		return fmt.Errorf("insert chat message after creating chat: %w", err)
 	}
 	return nil
