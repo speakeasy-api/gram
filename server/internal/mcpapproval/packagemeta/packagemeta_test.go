@@ -243,6 +243,8 @@ func TestLookup_NPMToleratesUnpublishedTimeEntry(t *testing.T) {
 
 // PEP 508 extras select optional dependencies of the same package, so the
 // lookup strips them instead of asking PyPI for a project that does not exist.
+// Only a well-formed, terminal extras expression counts: a malformed spec
+// must not be quietly resolved to a different package's evidence.
 func TestLookup_PyPIStripsExtras(t *testing.T) {
 	t.Parallel()
 
@@ -253,6 +255,16 @@ func TestLookup_PyPIStripsExtras(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Equal(t, "/pypi/mcp-thing/json", path())
+
+	for _, malformed := range []string{"foo[bar", "foo[a][b]", "foo[a[b]]"} {
+		server, path := serve(t, http.StatusNotFound, `{}`)
+		client := packagemeta.NewClient(server.Client(), packagemeta.WithPyPIBaseURL(server.URL))
+
+		got, err := client.Lookup(t.Context(), identity.RegistryPyPI, malformed)
+		require.NoError(t, err)
+		require.Nil(t, got, "a malformed spec surfaces as unknown, never as another package")
+		require.NotEqual(t, "/pypi/foo/json", path(), "spec %q must not be looked up as foo", malformed)
+	}
 }
 
 // An oversized registry response fails loudly with a size error, never as a
