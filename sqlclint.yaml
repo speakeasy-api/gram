@@ -1,0 +1,9 @@
+# Defaults for `sqlclint run` in this repository. Every key here has a matching
+# flag; the flag wins when both are given.
+schema-file: server/database/schema.sql
+ignore-file: .sqlclintignore
+include:
+  - server/**/queries.sql
+exclude:
+  - "**/testenv/queries.sql"
+  - "**/audittest/queries.sql"

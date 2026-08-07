@@ -1019,6 +1019,11 @@ type RetrySyncScheduleParams struct {
 // on the next scheduler tick. The stored error is cleared deliberately — the
 // user acknowledged it by retrying, and a failing poll re-records it. A
 // user-disabled schedule stays disabled.
+// sqlclint:ignore parent-authorized -- ai_integration_syncs has no tenancy column
+// of its own. The only caller is Service.RetrySchedule in impl.go, which requires
+// ScopeOrgAdmin and then resolves the config id through resolveScheduleTarget ->
+// loadForOrgAndProviderRow -> GetConfigByOrgAndProvider, an organization_id-scoped
+// lookup, so the id is never taken from the payload.
 func (q *Queries) RetrySyncSchedule(ctx context.Context, arg RetrySyncScheduleParams) (AiIntegrationSync, error) {
 	row := q.db.QueryRow(ctx, retrySyncSchedule, arg.AiIntegrationConfigID, arg.Schedule)
 	var i AiIntegrationSync
@@ -1062,6 +1067,11 @@ type SetSyncScheduleDisabledParams struct {
 // sync schedule. Distinct from auto_paused_at: only the user flips this flag.
 // Re-enabling leaves next_poll_after untouched — a stale value is already due,
 // so candidate selection picks the schedule up on the next scheduler tick.
+// sqlclint:ignore parent-authorized -- ai_integration_syncs has no tenancy column
+// of its own. The only caller is Service.SetScheduleEnabled in impl.go, which
+// requires ScopeOrgAdmin and then resolves the config id through
+// resolveScheduleTarget -> loadForOrgAndProviderRow -> GetConfigByOrgAndProvider,
+// an organization_id-scoped lookup, so the id is never taken from the payload.
 func (q *Queries) SetSyncScheduleDisabled(ctx context.Context, arg SetSyncScheduleDisabledParams) (AiIntegrationSync, error) {
 	row := q.db.QueryRow(ctx, setSyncScheduleDisabled, arg.Disabled, arg.AiIntegrationConfigID, arg.Schedule)
 	var i AiIntegrationSync
