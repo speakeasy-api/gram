@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  CreateUserSessionIssuerCimdClientResult,
-  CreateUserSessionIssuerCimdClientResult$inboundSchema,
-} from "../models/components/createusersessionissuercimdclientresult.js";
+  VerifyCimdURLResult,
+  VerifyCimdURLResult$inboundSchema,
+} from "../models/components/verifycimdurlresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  CreateUserSessionIssuerCimdClientRequest,
-  CreateUserSessionIssuerCimdClientRequest$outboundSchema,
-  CreateUserSessionIssuerCimdClientSecurity,
-} from "../models/operations/createusersessionissuercimdclient.js";
+  VerifyUserSessionIssuerCimdClientURLRequest,
+  VerifyUserSessionIssuerCimdClientURLRequest$outboundSchema,
+  VerifyUserSessionIssuerCimdClientURLSecurity,
+} from "../models/operations/verifyusersessionissuercimdclienturl.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * createUserSessionIssuerCimdClient userSessionIssuersCimdClients
+ * verifyURL userSessionIssuersCimdClients
  *
  * @remarks
- * Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.
+ * Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.
  */
-export function userSessionIssuersCimdClientsCreate(
+export function userSessionIssuersCimdClientsVerifyURL(
   client: GramCore,
-  request: CreateUserSessionIssuerCimdClientRequest,
-  security?: CreateUserSessionIssuerCimdClientSecurity | undefined,
+  request: VerifyUserSessionIssuerCimdClientURLRequest,
+  security?: VerifyUserSessionIssuerCimdClientURLSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    CreateUserSessionIssuerCimdClientResult,
+    VerifyCimdURLResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function userSessionIssuersCimdClientsCreate(
 
 async function $do(
   client: GramCore,
-  request: CreateUserSessionIssuerCimdClientRequest,
-  security?: CreateUserSessionIssuerCimdClientSecurity | undefined,
+  request: VerifyUserSessionIssuerCimdClientURLRequest,
+  security?: VerifyUserSessionIssuerCimdClientURLSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      CreateUserSessionIssuerCimdClientResult,
+      VerifyCimdURLResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,20 +96,21 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(CreateUserSessionIssuerCimdClientRequest$outboundSchema, value),
+      z.parse(
+        VerifyUserSessionIssuerCimdClientURLRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.CreateUserSessionIssuerCimdClientForm,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.VerifyURLRequestBody, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/userSessionIssuersCimdClients.create")();
+  const path = pathToFunc("/rpc/userSessionIssuersCimdClients.verifyURL")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -158,7 +159,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createUserSessionIssuerCimdClient",
+    operationID: "verifyUserSessionIssuerCimdClientURL",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -202,7 +203,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    CreateUserSessionIssuerCimdClientResult,
+    VerifyCimdURLResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -213,7 +214,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, CreateUserSessionIssuerCimdClientResult$inboundSchema),
+    M.json(200, VerifyCimdURLResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

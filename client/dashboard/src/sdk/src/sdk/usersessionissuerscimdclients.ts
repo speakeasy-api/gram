@@ -7,10 +7,12 @@ import { userSessionIssuersCimdClientsDelete } from "../funcs/userSessionIssuers
 import { userSessionIssuersCimdClientsGet } from "../funcs/userSessionIssuersCimdClientsGet.js";
 import { userSessionIssuersCimdClientsList } from "../funcs/userSessionIssuersCimdClientsList.js";
 import { userSessionIssuersCimdClientsListPresets } from "../funcs/userSessionIssuersCimdClientsListPresets.js";
+import { userSessionIssuersCimdClientsVerifyURL } from "../funcs/userSessionIssuersCimdClientsVerifyURL.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreateUserSessionIssuerCimdClientResult } from "../models/components/createusersessionissuercimdclientresult.js";
 import { ListCimdClientPresetsResult } from "../models/components/listcimdclientpresetsresult.js";
 import { UserSessionIssuerCimdClient } from "../models/components/usersessionissuercimdclient.js";
+import { VerifyCimdURLResult } from "../models/components/verifycimdurlresult.js";
 import {
   CreateUserSessionIssuerCimdClientRequest,
   CreateUserSessionIssuerCimdClientSecurity,
@@ -32,6 +34,10 @@ import {
   ListUserSessionIssuerCimdClientsResponse,
   ListUserSessionIssuerCimdClientsSecurity,
 } from "../models/operations/listusersessionissuercimdclients.js";
+import {
+  VerifyUserSessionIssuerCimdClientURLRequest,
+  VerifyUserSessionIssuerCimdClientURLSecurity,
+} from "../models/operations/verifyusersessionissuercimdclienturl.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -40,7 +46,7 @@ export class UserSessionIssuersCimdClients extends ClientSDK {
    * createUserSessionIssuerCimdClient userSessionIssuersCimdClients
    *
    * @remarks
-   * Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.
+   * Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.
    */
   async create(
     request: CreateUserSessionIssuerCimdClientRequest,
@@ -126,6 +132,25 @@ export class UserSessionIssuersCimdClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListCimdClientPresetsResult> {
     return unwrapAsync(userSessionIssuersCimdClientsListPresets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyURL userSessionIssuersCimdClients
+   *
+   * @remarks
+   * Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.
+   */
+  async verifyURL(
+    request: VerifyUserSessionIssuerCimdClientURLRequest,
+    security?: VerifyUserSessionIssuerCimdClientURLSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<VerifyCimdURLResult> {
+    return unwrapAsync(userSessionIssuersCimdClientsVerifyURL(
       this,
       request,
       security,

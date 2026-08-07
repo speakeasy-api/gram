@@ -17,6 +17,11 @@ func CreateUserSessionIssuerCimdClientUserSessionIssuersCimdClientsPath() string
 	return "/rpc/userSessionIssuersCimdClients.create"
 }
 
+// VerifyURLUserSessionIssuersCimdClientsPath returns the URL path to the userSessionIssuersCimdClients service verifyURL HTTP endpoint.
+func VerifyURLUserSessionIssuersCimdClientsPath() string {
+	return "/rpc/userSessionIssuersCimdClients.verifyURL"
+}
+
 // ListUserSessionIssuerCimdClientsUserSessionIssuersCimdClientsPath returns the URL path to the userSessionIssuersCimdClients service listUserSessionIssuerCimdClients HTTP endpoint.
 func ListUserSessionIssuerCimdClientsUserSessionIssuersCimdClientsPath() string {
 	return "/rpc/userSessionIssuersCimdClients.list"
