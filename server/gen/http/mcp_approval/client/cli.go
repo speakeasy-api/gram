@@ -106,6 +106,86 @@ func BuildGetRequestPayload(mcpApprovalGetRequestID string, mcpApprovalGetReques
 	return v, nil
 }
 
+// BuildCreateRequestPayload builds the payload for the mcpApproval
+// createRequest endpoint from CLI flags.
+func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalCreateRequestSessionToken string, mcpApprovalCreateRequestApikeyToken string, mcpApprovalCreateRequestProjectSlugInput string) (*mcpapproval.CreateRequestPayload, error) {
+	var err error
+	var body CreateRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpApprovalCreateRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"note\": \"abc123\",\n      \"target\": \"abc123\",\n      \"target_kind\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalCreateRequestSessionToken != "" {
+			sessionToken = &mcpApprovalCreateRequestSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalCreateRequestApikeyToken != "" {
+			apikeyToken = &mcpApprovalCreateRequestApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalCreateRequestProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalCreateRequestProjectSlugInput
+		}
+	}
+	v := &mcpapproval.CreateRequestPayload{
+		TargetKind: body.TargetKind,
+		Target:     body.Target,
+		Note:       body.Note,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildPromotePayload builds the payload for the mcpApproval promote endpoint
+// from CLI flags.
+func BuildPromotePayload(mcpApprovalPromoteBody string, mcpApprovalPromoteSessionToken string, mcpApprovalPromoteApikeyToken string, mcpApprovalPromoteProjectSlugInput string) (*mcpapproval.PromotePayload, error) {
+	var err error
+	var body PromoteRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpApprovalPromoteBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"risk_policy_bypass_request_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalPromoteSessionToken != "" {
+			sessionToken = &mcpApprovalPromoteSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalPromoteApikeyToken != "" {
+			apikeyToken = &mcpApprovalPromoteApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalPromoteProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalPromoteProjectSlugInput
+		}
+	}
+	v := &mcpapproval.PromotePayload{
+		RiskPolicyBypassRequestID: body.RiskPolicyBypassRequestID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRecordDecisionPayload builds the payload for the mcpApproval
 // recordDecision endpoint from CLI flags.
 func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprovalRecordDecisionSessionToken string, mcpApprovalRecordDecisionApikeyToken string, mcpApprovalRecordDecisionProjectSlugInput string) (*mcpapproval.RecordDecisionPayload, error) {
