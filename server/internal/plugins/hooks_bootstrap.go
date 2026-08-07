@@ -136,6 +136,31 @@ case "$target" in
 %s  *) install_failure "unsupported target ${target}" ;;
 esac
 
+# The hooks binary shells out to 'claude mcp list' to learn which MCP server a
+# tool call reached — the only source for connectors configured in claude.ai,
+# which appear in no local config file. Both lookups are a bare PATH search
+# that fails silently, and a call whose server cannot be identified is reported
+# as shadow MCP. Desktop and MDM-launched sessions routinely hand hooks a
+# minimal PATH without the CLI, so put it back when it is missing.
+#
+# ponytail: probes documented install locations only; version-manager installs
+# (mise, asdf, volta) are not discoverable this way. Set GRAM_HOOKS_CLAUDE_BIN
+# to the executable if yours lives elsewhere.
+if ! command -v claude >/dev/null 2>&1; then
+  for claude_candidate in \
+    "${GRAM_HOOKS_CLAUDE_BIN:-}" \
+    "${HOME}/.local/bin/claude" \
+    "${HOME}/.claude/local/claude" \
+    /usr/local/bin/claude \
+    /opt/homebrew/bin/claude; do
+    if [ -n "$claude_candidate" ] && [ -x "$claude_candidate" ]; then
+      PATH="$(dirname "$claude_candidate"):${PATH}"
+      export PATH
+      break
+    fi
+  done
+fi
+
 if [ -n "${GRAM_HOOKS_HOME:-}" ]; then
   cache_root=$GRAM_HOOKS_HOME
 elif [ "$os" = darwin ]; then
