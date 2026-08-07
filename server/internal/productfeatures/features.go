@@ -20,6 +20,7 @@ const (
 	FeatureHooksFailOpen              Feature = "hooks_fail_open"
 	FeatureCustomModelKeys            Feature = "custom_model_keys"
 	FeatureSkills                     Feature = "skills"
+	FeatureMCPApproval                Feature = "mcp_approval"
 	FeatureSkillCaptureMetadataOnly   Feature = "skill_capture_metadata_only"
 	FeatureAIPlatformPushIntegrations Feature = "ai_platform_push_integrations"
 	// FeaturePlatformMCP enables the organization-level Platform MCP capability.
