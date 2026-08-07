@@ -97,7 +97,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	server.Traces = service.traceHTTPHandler()
-	server.Metrics = service.metricHTTPHandler()
 	srv.Mount(mux, server)
 }
 

@@ -25,7 +25,6 @@ type Server struct {
 	RevokeInstance    http.Handler
 	Ingest            http.Handler
 	Traces            http.Handler
-	Metrics           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -61,7 +60,6 @@ func New(
 			{"RevokeInstance", "DELETE", "/rpc/litellm.revokeInstance"},
 			{"Ingest", "POST", "/rpc/litellm.ingest/beta/litellm_basic_guardrail_api"},
 			{"Traces", "POST", "/rpc/hooks.otel/v1/traces"},
-			{"Metrics", "POST", "/rpc/litellm.otel/v1/metrics"},
 		},
 		CreateInstance:    NewCreateInstanceHandler(e.CreateInstance, mux, decoder, encoder, errhandler, formatter),
 		ListInstances:     NewListInstancesHandler(e.ListInstances, mux, decoder, encoder, errhandler, formatter),
@@ -69,7 +67,6 @@ func New(
 		RevokeInstance:    NewRevokeInstanceHandler(e.RevokeInstance, mux, decoder, encoder, errhandler, formatter),
 		Ingest:            NewIngestHandler(e.Ingest, mux, decoder, encoder, errhandler, formatter),
 		Traces:            NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
-		Metrics:           NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -84,7 +81,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RevokeInstance = m(s.RevokeInstance)
 	s.Ingest = m(s.Ingest)
 	s.Traces = m(s.Traces)
-	s.Metrics = m(s.Metrics)
 }
 
 // MethodNames returns the methods served.
@@ -98,7 +94,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRevokeInstanceHandler(mux, h.RevokeInstance)
 	MountIngestHandler(mux, h.Ingest)
 	MountTracesHandler(mux, h.Traces)
-	MountMetricsHandler(mux, h.Metrics)
 }
 
 // Mount configures the mux to serve the litellm endpoints.
@@ -401,59 +396,6 @@ func NewTracesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "traces")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountMetricsHandler configures the mux to serve the "litellm" service
-// "metrics" endpoint.
-func MountMetricsHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/litellm.otel/v1/metrics", f)
-}
-
-// NewMetricsHandler creates a HTTP handler which loads the HTTP request and
-// calls the "litellm" service "metrics" endpoint.
-func NewMetricsHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeMetricsRequest(mux, decoder)
-		encodeResponse = EncodeMetricsResponse(encoder)
-		encodeError    = EncodeMetricsError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "metrics")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
 		payload, err := decodeRequest(r)
 		if err != nil {

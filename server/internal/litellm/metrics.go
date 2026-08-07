@@ -2,7 +2,6 @@ package litellm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -18,7 +17,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -113,23 +111,6 @@ func protoStringAttribute(values []*commonv1.KeyValue, key string) string {
 		}
 	}
 	return ""
-}
-
-func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
-	if payload == nil {
-		return oops.E(oops.CodeBadRequest, nil, "metric payload is required")
-	}
-	body, err := json.Marshal(struct {
-		ResourceMetrics []any `json:"resourceMetrics"`
-	}{ResourceMetrics: payload.ResourceMetrics})
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid OTLP metric export")
-	}
-	request, err := decodeMetricExport(body, "application/json")
-	if err != nil {
-		return metricExportError(err)
-	}
-	return s.ingestMetricExport(ctx, request)
 }
 
 func decodeMetricExport(body []byte, mediaType string) (*collectorv1.ExportMetricsServiceRequest, error) {
