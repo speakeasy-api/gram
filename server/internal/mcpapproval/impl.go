@@ -492,6 +492,69 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
 	}
 
+	return s.requestDetail(ctx, projectID, requestID)
+}
+
+// RefreshEvidence re-runs every evidence source for a request and replaces its
+// current evidence with the fresh gather.
+//
+// It is gated on the read scope, not decide: gathering is not privileged —
+// intake runs the identical gather for any authenticated member — and a
+// reviewer preparing the queue must be able to refresh what they are reading.
+// Nothing org-authored is written and frozen decision snapshots are never
+// touched, which is also why no audit event is emitted. Unlike intake, where a
+// failed gather must not lose the admission, an explicit refresh that gathered
+// nothing reports the failure instead of silently keeping stale evidence.
+func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
+	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	if err != nil {
+		return nil, err
+	}
+
+	requestID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
+	}
+
+	queries := repo.New(s.db)
+
+	// Resolved with the project id in the predicate, so a caller who learns an
+	// id from a dashboard URL cannot refresh another tenant's request.
+	row, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
+	}
+
+	// The stored reference is what intake resolved and gathered from — the
+	// redacted URL for a server_url target — so a refresh sees exactly what a
+	// fresh admission of the same reference would.
+	resolved := identity.Resolve(row.TargetRaw)
+
+	gatherCtx, cancelGather := context.WithTimeout(ctx, gatherTimeout)
+	defer cancelGather()
+	document, err := s.evidence.Assemble(gatherCtx, projectID, resolved)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error gathering evidence").LogError(ctx, s.logger)
+	}
+
+	if err := queries.SetApprovalRequestEvidence(ctx, repo.SetApprovalRequestEvidenceParams{
+		CurrentEvidence: document,
+		EvidenceVersion: evidence.Version,
+		ID:              requestID,
+		ProjectID:       projectID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
+	}
+
+	return s.requestDetail(ctx, projectID, requestID)
+}
+
+// requestDetail assembles the full detail view of one request, already
+// resolved to the caller's project.
+func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, requestID uuid.UUID) (*gen.ApprovalRequestDetail, error) {
 	queries := repo.New(s.db)
 
 	// Resolved with the project id in the predicate, so a caller who learns an
