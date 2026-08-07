@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -105,16 +107,13 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	billingClient := billing.NewStubClient(logger, tp)
 	// Use a unique suffix per test to isolate Redis cache entries when tests
 	// run in parallel and all use the same mockidp.MockUserID.
 	suffix := cache.Suffix("gram-local-" + uuid.NewString()[:8])
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
 	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
 

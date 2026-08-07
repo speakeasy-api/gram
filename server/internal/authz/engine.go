@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -32,13 +33,20 @@ type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (b
 type Engine struct {
 	logger                  *slog.Logger
 	db                      *pgxpool.Pool
-	chDB                    clickhouse.Conn
+	challengePublisher      gcp.Publisher[*authzv1.Challenge]
 	challengeLoggingEnabled ChallengeLoggingEnabled
 	isDev                   bool
 	membership              MembershipFetcher
 }
 
-func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, opts ...EngineOpts) *Engine {
+func NewEngine(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	challengePublisher gcp.Publisher[*authzv1.Challenge],
+	challengeLogging ChallengeLoggingEnabled,
+	membership MembershipFetcher,
+	opts ...EngineOpts,
+) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
@@ -49,7 +57,7 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, chal
 	return &Engine{
 		logger:                  authzLogger,
 		db:                      db,
-		chDB:                    chDB,
+		challengePublisher:      challengePublisher,
 		challengeLoggingEnabled: challengeLogging,
 		isDev:                   devMode,
 		membership:              membership,
@@ -192,7 +200,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 
@@ -208,7 +216,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 		if evaluation.Grant == nil {
@@ -229,7 +237,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
@@ -245,7 +253,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
-	}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+	}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 	return nil
 }
 
@@ -278,7 +286,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 	}
@@ -297,7 +305,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 		if evaluation.Denied {
@@ -315,7 +323,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return nil
 		}
 	}
@@ -337,7 +345,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
-	}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+	}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
@@ -424,7 +432,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 
@@ -441,7 +449,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 		if evaluation.Denied {
@@ -475,7 +483,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			EvaluatedGrantCount:  uint32(len(grants)),  //nolint:gosec // grant count is small
 			FilterCandidateCount: uint32(len(checks)),  //nolint:gosec // candidate count is small
 			FilterAllowedCount:   uint32(len(allowed)), //nolint:gosec // allowed count is small
-		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+		}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 	}
 
 	return allowed, nil
@@ -529,7 +537,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 
@@ -546,7 +554,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 		if evaluation.Denied {
@@ -581,7 +589,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 			FilterAllowedCount:   uint32(allowedCount),
-		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+		}.Log(ctx, e.challengePublisher, e.logger, e.challengeLoggingEnabled)
 	}
 
 	return matched, nil

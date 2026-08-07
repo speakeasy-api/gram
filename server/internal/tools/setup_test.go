@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -112,10 +114,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	toolsSvc := tools.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, nil, nil)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)

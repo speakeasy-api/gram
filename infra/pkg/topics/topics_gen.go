@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/pubsub/v2"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -23,6 +24,8 @@ import (
 type Topic string
 
 const (
+	// GramAuthzV1Challenge publishes to gram-authz-v1-challenge.
+	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
 	// GramOtelV1LogRecord publishes to gram-otel-v1-log-record.
 	GramOtelV1LogRecord Topic = "gram.otel.v1.LogRecord"
 	// GramOtelV1Span publishes to gram-otel-v1-span.
@@ -50,6 +53,7 @@ const (
 // All returns every declared topic, sorted by proto name.
 func All() []Topic {
 	return []Topic{
+		GramAuthzV1Challenge,
 		GramOtelV1LogRecord,
 		GramOtelV1Span,
 		GramPingV2Message,
@@ -67,6 +71,8 @@ func All() []Topic {
 // Lookup reports whether name is a declared topic.
 func Lookup(name string) (Topic, bool) {
 	switch Topic(name) {
+	case GramAuthzV1Challenge:
+		return GramAuthzV1Challenge, true
 	case GramOtelV1LogRecord:
 		return GramOtelV1LogRecord, true
 	case GramOtelV1Span:
@@ -100,6 +106,8 @@ func Lookup(name string) (Topic, bool) {
 // compile time, and payloads pass through to the topic untouched.
 func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, settings *pubsub.PublishSettings) (gcp.EncodedPublisher, error) {
 	switch topic {
+	case GramAuthzV1Challenge:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1LogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.LogRecord{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1Span:

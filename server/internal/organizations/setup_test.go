@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	svix "github.com/svix/svix-webhooks/go"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -133,10 +135,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	orgs := newMockOrganizationProvider(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 
@@ -189,10 +188,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 
 	orgs := newMockOrganizationProvider(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 
@@ -243,10 +239,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	orgs := newMockOrganizationProvider(t)
 	loopsMock := newMockLoopsClient(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 

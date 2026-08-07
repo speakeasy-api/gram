@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
@@ -82,9 +84,6 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	svc := assets.NewService(logger,
@@ -96,11 +95,11 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 		storage,
 		"test-jwt-secret",
 		authz.NewEngine(logger,
-			conn,
-			chConn,
+			conn, gcp.NewNoopPublisher[*authzv1.Challenge](),
+
 			authztest.ChallengeLoggingAlwaysDisabled,
-			workos.NewStubClient(),
-		),
+			workos.NewStubClient()),
+
 		auditLogger,
 	)
 	repository := repo.New(conn)

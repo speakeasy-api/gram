@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -117,10 +119,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authCtx.ActiveOrganizationID = orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	// Verify tests call SetResolve to exercise the failure and unsupported-mode
 	// paths; the default answers impersonation and ambient offline.
