@@ -15,6 +15,8 @@ import (
 	"net"
 	"net/url"
 	"path"
+	"slices"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
@@ -219,7 +221,9 @@ func canonicalHostPort(u *url.URL) string {
 
 	// A port equal to the scheme's default is redundant: `https://h:443/x` and
 	// `https://h/x` are the same endpoint and must not key as two artifacts.
-	if port := u.Port(); port != "" && port != defaultPorts[u.Scheme] {
+	// Compared numerically: a port is a number, and `:0443` is the same
+	// endpoint as the implicit 443 even though the strings differ.
+	if port := u.Port(); port != "" && !isDefaultPort(u.Scheme, port) {
 		return net.JoinHostPort(host, port)
 	}
 
@@ -234,9 +238,25 @@ func canonicalHostPort(u *url.URL) string {
 }
 
 // defaultPorts is the port each scheme implies, which canonicalisation drops.
-var defaultPorts = map[string]string{
-	"http":  "80",
-	"https": "443",
+var defaultPorts = map[string]int{
+	"http":  80,
+	"https": 443,
+}
+
+// isDefaultPort reports whether an explicit port is the one its scheme already
+// implies. The comparison is numeric so a zero-padded spelling still matches.
+func isDefaultPort(scheme string, port string) bool {
+	implied, known := defaultPorts[scheme]
+	if !known {
+		return false
+	}
+
+	n, err := strconv.Atoi(port)
+	if err != nil {
+		return false
+	}
+
+	return n == implied
 }
 
 // registrableDomain reduces a hostname to its effective TLD plus one label,
@@ -295,9 +315,9 @@ func resolveCommand(command string) Identity {
 
 	switch {
 	case npmLaunchers[launcher]:
-		return firstPackageSpec(rest, RegistryNPM)
+		return firstPackageSpec(rest, launcher, RegistryNPM)
 	case pypiLaunchers[launcher]:
-		return firstPackageSpec(rest, RegistryPyPI)
+		return firstPackageSpec(rest, launcher, RegistryPyPI)
 	}
 
 	subcommands, isSubcommandLauncher := subcommandLaunchers[launcher]
@@ -310,7 +330,7 @@ func resolveCommand(command string) Identity {
 		return unresolved
 	}
 
-	return firstPackageSpec(rest[1:], reg)
+	return firstPackageSpec(rest[1:], launcher, reg)
 }
 
 // normalizeLauncher reduces a launcher token to a bare comparable name.
@@ -362,7 +382,7 @@ func unwrapShell(fields []string) []string {
 // and `npx --package=<pkg> <bin>` both install <pkg> and then run a binary
 // from it, so the bare word after them is a binary name, not a package.
 // mcp-remote's own documented invocation takes that form.
-func firstPackageSpec(args []string, registry Registry) Identity {
+func firstPackageSpec(args []string, launcher string, registry Registry) Identity {
 	var (
 		selected  string
 		rest      []string
@@ -387,7 +407,7 @@ func firstPackageSpec(args []string, registry Registry) Identity {
 		}
 
 		switch {
-		case isSelectorFlag(name, registry):
+		case isSelectorFlag(name, launcher):
 			selectors++
 			if !joined {
 				if i+1 >= len(args) {
@@ -435,17 +455,23 @@ func splitFlag(arg string) (string, string, bool) {
 // `uvx --from <pkg> <bin>` both run a binary out of the named package, so the
 // bare word after them is a command name.
 //
-// npx spells it -p; uv spells -p as --python and means an interpreter, so the
-// two must not be shared.
-func isSelectorFlag(name string, registry Registry) bool {
-	switch registry {
-	case RegistryNPM:
-		return name == "-p" || name == "--package"
-	case RegistryPyPI:
-		return name == "--from"
-	default:
-		return false
-	}
+// The spelling is per launcher, not per registry: uvx and pipx both install
+// from PyPI but name the package with --from and --spec respectively, and npx
+// spells it -p where uv uses -p for the interpreter. Sharing one set across a
+// registry would read pipx's package as its command name.
+func isSelectorFlag(name string, launcher string) bool {
+	return slices.Contains(selectorFlags[launcher], name)
+}
+
+// selectorFlags maps a launcher to the flags that name the package to install.
+var selectorFlags = map[string][]string{
+	"npx":  {"-p", "--package"},
+	"bunx": {"-p", "--package"},
+	"bun":  {"-p", "--package"},
+	"pnpm": {"-p", "--package"},
+	"yarn": {"-p", "--package"},
+	"uvx":  {"--from"},
+	"pipx": {"--spec"},
 }
 
 // takesSeparateValue reports whether a launcher flag consumes the argument
@@ -526,7 +552,7 @@ func packageIdentity(spec string, registry Registry) Identity {
 	return Identity{
 		Kind:              KindPackage,
 		ArtifactRef:       ref,
-		VersionPinned:     isExactVersion(version),
+		VersionPinned:     isExactVersion(version, registry),
 		Host:              "",
 		RegistrableDomain: "",
 		Registry:          registry,
@@ -572,7 +598,7 @@ func splitPackageSpec(spec string, registry Registry) (string, string) {
 // Dist-tags (`latest`, `next`) and ranges (`^1.2.0`, `>=1.0`, `1.2.x`) all
 // resolve to different content over time, so a scan of whatever they point at
 // today says nothing about what runs tomorrow.
-func isExactVersion(version string) bool {
+func isExactVersion(version string, registry Registry) bool {
 	// npm accepts a leading v on an otherwise exact version.
 	v := strings.TrimPrefix(version, "v")
 	if v == "" {
@@ -593,10 +619,19 @@ func isExactVersion(version string) bool {
 	// every platform-suffixed release.
 	core, _, _ := strings.Cut(v, "+")
 	core, _, _ = strings.Cut(core, "-")
-	for part := range strings.SplitSeq(core, ".") {
+	parts := strings.Split(core, ".")
+	for _, part := range parts {
 		if part == "x" || part == "X" || part == "*" {
 			return false
 		}
+	}
+
+	// npm resolves a partial version as a range: `pkg@1.2` installs the newest
+	// 1.2.x and `pkg@1` the newest 1.x, so only a complete major.minor.patch
+	// names one release. PyPI has no such rule — a version only reaches here
+	// through the `==` operator, which is exact at whatever precision it names.
+	if registry == RegistryNPM && len(parts) != 3 {
+		return false
 	}
 
 	return true
