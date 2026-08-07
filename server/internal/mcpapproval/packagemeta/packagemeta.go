@@ -29,9 +29,12 @@ import (
 )
 
 // maxResponseBytes bounds a registry response. npm returns the full document
-// for every published version, which for a large package runs to megabytes and
-// is mostly irrelevant here.
-const maxResponseBytes = 8 << 20
+// for every published version, which for a long-lived package runs to tens of
+// megabytes, so the cap has to sit above what real packages produce — an
+// oversized response fails loudly rather than truncating into a baffling
+// decode error, and a cap that ordinary packages hit would fail the lookups
+// for exactly the most established publishers.
+const maxResponseBytes = 32 << 20
 
 // Doer issues HTTP requests. `*guardian.HTTPClient` satisfies it, which is what
 // the composition root supplies so lookups inherit egress protection.
@@ -168,7 +171,17 @@ func (c *Client) get(ctx context.Context, endpoint string, into any) (bool, erro
 		return false, fmt.Errorf("fetch package metadata: %s", resp.Status)
 	}
 
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(into); err != nil {
+	// Read one byte past the cap so an oversized body is detected as such and
+	// fails with a size error, not as a decode failure on truncated JSON.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return false, fmt.Errorf("read package metadata: %w", err)
+	}
+	if len(body) > maxResponseBytes {
+		return false, fmt.Errorf("package metadata response exceeded the %d-byte limit", maxResponseBytes)
+	}
+
+	if err := json.Unmarshal(body, into); err != nil {
 		return false, fmt.Errorf("decode package metadata: %w", err)
 	}
 
@@ -180,12 +193,37 @@ type npmDocument struct {
 	DistTags struct {
 		Latest string `json:"latest"`
 	} `json:"dist-tags"`
-	Time        map[string]string `json:"time"`
-	Versions    map[string]any    `json:"versions"`
+	Time        npmTimes       `json:"time"`
+	Versions    map[string]any `json:"versions"`
 	Maintainers []struct {
 		Name string `json:"name"`
 	} `json:"maintainers"`
 	License any `json:"license"`
+}
+
+// npmTimes is npm's time map with non-string values dropped. A package that
+// ever had a version unpublished carries `time.unpublished` as an object, and
+// a strict string-map decode would fail the whole lookup over a field this
+// package never reads.
+type npmTimes map[string]string
+
+func (t *npmTimes) UnmarshalJSON(data []byte) error {
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("decode npm time map: %w", err)
+	}
+
+	out := make(map[string]string, len(raw))
+	for key, value := range raw {
+		var timestamp string
+		if err := json.Unmarshal(value, &timestamp); err != nil {
+			continue
+		}
+		out[key] = timestamp
+	}
+	*t = out
+
+	return nil
 }
 
 func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) {
@@ -205,7 +243,7 @@ func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) 
 		License:         npmLicense(doc.License),
 		LatestVersion:   latest,
 		FirstPublished:  npmTime(doc.Time["created"]),
-		LastPublished:   npmTime(doc.Time["modified"]),
+		LastPublished:   npmLastRelease(doc.Time),
 		VersionCount:    len(doc.Versions),
 		MaintainerCount: len(doc.Maintainers),
 		// npm marks deprecation per version. The latest version being
@@ -240,6 +278,25 @@ func npmLicense(raw any) string {
 	return ""
 }
 
+// npmLastRelease is the newest per-version publish time. The top-level
+// `modified` entry moves on any metadata edit — a deprecation or a dist-tag
+// change would make an abandoned package read as actively maintained — so the
+// release times are what carry the maintenance signal, matching what the PyPI
+// path derives from its per-release upload times.
+func npmLastRelease(times npmTimes) time.Time {
+	var last time.Time
+	for key, value := range times {
+		if key == "created" || key == "modified" {
+			continue
+		}
+		if parsed := npmTime(value); parsed.After(last) {
+			last = parsed
+		}
+	}
+
+	return last
+}
+
 func npmTime(raw string) time.Time {
 	parsed, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
@@ -264,6 +321,13 @@ type pypiDocument struct {
 }
 
 func (c *Client) lookupPyPI(ctx context.Context, name string) (*Metadata, error) {
+	// PEP 508 extras select optional dependencies of the same package, so
+	// `mcp-server[sse]` is looked up as `mcp-server` — kept, the brackets
+	// would be escaped into a path segment PyPI has no project for.
+	if bracket := strings.IndexByte(name, '['); bracket >= 0 {
+		name = strings.TrimSpace(name[:bracket])
+	}
+
 	endpoint := c.pypiURL + "/pypi/" + url.PathEscape(name) + "/json"
 
 	var doc pypiDocument
