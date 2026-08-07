@@ -147,6 +147,52 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	return nil
 }
 
+// EnterpriseTrialBundle is the entitlement set an enterprise trial organization
+// receives at signup. A trial gates only on the time window, so identity (SSO,
+// SCIM) is included rather than held back as a conversion lever.
+//
+// FeatureSkills is absent because Skills is generally available. The bundle
+// still calls EnableSkillsTx, which provisions the Skills role grants that the
+// entitlement cannot work without. FeatureHooksFailOpen and
+// FeatureSkillCaptureMetadataOnly are absent because they change how an
+// entitlement behaves rather than granting one.
+var EnterpriseTrialBundle = []Feature{
+	FeatureLogs,
+	FeatureToolIOLogs,
+	FeatureSessionCapture,
+	FeatureAuthzChallengeLogging,
+	FeatureSSO,
+	FeatureSCIM,
+	FeatureHooksBrowserLogin,
+	FeatureCustomModelKeys,
+	FeatureAIPlatformPushIntegrations,
+	FeaturePlatformMCP,
+	FeatureCustomerManagedEncryptionKeys,
+}
+
+// SeedEnterpriseTrialBundleTx enables the enterprise trial entitlements in the
+// caller's transaction. Idempotent, so a replayed signup is safe. The feature
+// cache is left untouched: the organization is created in the same transaction,
+// so no reader can have cached a state for it yet.
+func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	q := repo.New(tx)
+
+	for _, feature := range EnterpriseTrialBundle {
+		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); err != nil {
+			return fmt.Errorf("enable %s for enterprise trial: %w", feature, err)
+		}
+	}
+
+	if err := EnableSkillsTx(ctx, tx, organizationID); err != nil {
+		return fmt.Errorf("enable Skills for enterprise trial: %w", err)
+	}
+
+	return nil
+}
+
 // EnableSkillsTx provisions the built-in Skills grants and enables the
 // org-level Skills feature in the caller's transaction. Existing grants and
 // exclusions are preserved.
