@@ -46,6 +46,7 @@ var slackFaultCodes = map[string]struct{}{
 	"service_unavailable": {},
 	"request_timeout":     {},
 	"team_added_to_org":   {},
+	"org_login_required":  {},
 	// Slack spells the throttling code both ways depending on the method.
 	"ratelimited":  {},
 	"rate_limited": {},

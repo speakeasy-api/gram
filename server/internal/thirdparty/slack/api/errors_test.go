@@ -44,6 +44,7 @@ func TestError_SlackSideEnvelopeCodesStayServerFaults(t *testing.T) {
 		"fatal_error",
 		"service_unavailable",
 		"request_timeout",
+		"org_login_required",
 		"ratelimited",
 		"rate_limited",
 	}

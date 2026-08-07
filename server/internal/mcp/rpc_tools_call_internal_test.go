@@ -10,13 +10,12 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-
-	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // upstreamRefusalError stands in for a typed upstream API error that attributes
