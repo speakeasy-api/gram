@@ -1248,7 +1248,7 @@ webhooks:
                 required: true
     audit_log.mcp_approval_request_event_v1:
         post:
-            description: Emitted when MCP approval requests are decided
+            description: Emitted when changes to MCP approval requests are made
             operationId: audit_log.mcp_approval_request_event_v1
             requestBody:
                 content:

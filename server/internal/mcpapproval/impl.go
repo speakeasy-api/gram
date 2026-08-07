@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -281,14 +282,16 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	var key string
 	switch payload.TargetKind {
 	case targetKindServerURL:
-		// The same canonicalization the shadow-MCP inventory is keyed by, so
-		// a request, a block, and the org's own traffic all converge on one
-		// key for one server.
-		inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(raw)
-		if !ok {
-			return nil, oops.E(oops.CodeBadRequest, nil, "target is not a valid server URL")
+		canonicalKey, display, err := admittableServerURL(raw)
+		if err != nil {
+			return nil, err
 		}
-		key = inventoryURL.CanonicalURL
+		key = canonicalKey
+		// The stored reference is the redacted form: a token pasted into a
+		// request URL must not reach every reader of the queue or the audit
+		// feed, and the readable scheme, host, and path are what identify
+		// the server anyway.
+		raw = display
 	case targetKindStdioCommand:
 		// Collapsed whitespace, so cosmetic spacing differences do not split
 		// one server into two reviews.
@@ -297,11 +300,13 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 		return nil, oops.E(oops.CodeBadRequest, nil, "target_kind must be server_url or stdio_command")
 	}
 
-	var note *string
-	if payload.Note != nil && strings.TrimSpace(*payload.Note) != "" {
-		trimmed := strings.TrimSpace(*payload.Note)
-		note = &trimmed
+	// The justification is the one input no automated evidence supplies, so
+	// a proactive ask cannot omit it.
+	trimmedNote := strings.TrimSpace(payload.Note)
+	if trimmedNote == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a justification is required")
 	}
+	note := &trimmedNote
 
 	return s.admit(ctx, projectID, authCtx.ActiveOrganizationID, admission{
 		targetKind:      payload.TargetKind,
@@ -354,15 +359,15 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		return nil, oops.E(oops.CodeBadRequest, nil, "bypass request names no server")
 	}
 
-	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(serverURL)
-	if !ok {
-		return nil, oops.E(oops.CodeBadRequest, nil, "bypass request's server reference is not a valid URL")
+	key, display, err := admittableServerURL(serverURL)
+	if err != nil {
+		return nil, err
 	}
 
 	return s.admit(ctx, projectID, bypass.OrganizationID, admission{
 		targetKind:      targetKindServerURL,
-		targetRaw:       serverURL,
-		targetKey:       inventoryURL.CanonicalURL,
+		targetRaw:       display,
+		targetKey:       key,
 		bypassRequestID: uuid.NullUUID{UUID: bypass.ID, Valid: true},
 		requesterID:     bypass.RequesterUserID,
 		requesterEmail:  conv.FromPGText[string](bypass.RequesterEmail),
@@ -370,6 +375,37 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		actor:           authCtx.UserID,
 		actorEmail:      authCtx.Email,
 	})
+}
+
+// admittableServerURL validates a server URL reference for intake and returns
+// the canonical dedupe key plus the redacted form safe to persist and show.
+//
+// Only http and https are admitted: the MCP backend can reach nothing else,
+// and a review for an unreachable reference wastes an admin's attention. The
+// key comes from the same canonicalization the shadow-MCP inventory uses, so
+// a request, a block, and the org's own traffic converge on one key per
+// server.
+func admittableServerURL(raw string) (key string, display string, err error) {
+	parsed, parseErr := url.Parse(strings.TrimSpace(raw))
+	if parseErr != nil {
+		return "", "", oops.E(oops.CodeBadRequest, parseErr, "target is not a valid server URL")
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", "", oops.E(oops.CodeBadRequest, nil, "target must be an http or https URL")
+	}
+
+	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(raw)
+	if !ok {
+		return "", "", oops.E(oops.CodeBadRequest, nil, "target is not a valid server URL")
+	}
+
+	display, ok = identity.RedactServerURL(raw)
+	if !ok {
+		return "", "", oops.E(oops.CodeBadRequest, nil, "target is not a valid server URL")
+	}
+
+	return inventoryURL.CanonicalURL, display, nil
 }
 
 // bypassServerURL extracts the server a bypass request was raised about.

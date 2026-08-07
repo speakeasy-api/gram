@@ -4,25 +4,42 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * The namespace of the reference.
+ */
+export const TargetKind = {
+  ServerUrl: "server_url",
+  StdioCommand: "stdio_command",
+} as const;
+/**
+ * The namespace of the reference.
+ */
+export type TargetKind = ClosedEnum<typeof TargetKind>;
 
 export type CreateRequestRequestBody = {
   /**
-   * Why the requester wants it. The one input no automated evidence supplies.
+   * Why the requester wants it. The one input no automated evidence supplies, so it cannot be blank.
    */
-  note?: string | undefined;
+  note: string;
   /**
    * The server reference: a URL, or the stdio command that launches it.
    */
   target: string;
   /**
-   * The namespace of the reference: server_url or stdio_command.
+   * The namespace of the reference.
    */
-  targetKind: string;
+  targetKind: TargetKind;
 };
 
 /** @internal */
+export const TargetKind$outboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
+  .enum(TargetKind);
+
+/** @internal */
 export type CreateRequestRequestBody$Outbound = {
-  note?: string | undefined;
+  note: string;
   target: string;
   target_kind: string;
 };
@@ -33,9 +50,9 @@ export const CreateRequestRequestBody$outboundSchema: z.ZodMiniType<
   CreateRequestRequestBody
 > = z.pipe(
   z.object({
-    note: z.optional(z.string()),
+    note: z.string(),
     target: z.string(),
-    targetKind: z.string(),
+    targetKind: TargetKind$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

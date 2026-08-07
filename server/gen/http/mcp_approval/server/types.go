@@ -15,11 +15,12 @@ import (
 // CreateRequestRequestBody is the type of the "mcpApproval" service
 // "createRequest" endpoint HTTP request body.
 type CreateRequestRequestBody struct {
-	// The namespace of the reference: server_url or stdio_command.
+	// The namespace of the reference.
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	// The server reference: a URL, or the stdio command that launches it.
 	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
-	// Why the requester wants it. The one input no automated evidence supplies.
+	// Why the requester wants it. The one input no automated evidence supplies, so
+	// it cannot be blank.
 	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
@@ -2027,7 +2028,7 @@ func NewCreateRequestPayload(body *CreateRequestRequestBody, sessionToken *strin
 	v := &mcpapproval.CreateRequestPayload{
 		TargetKind: *body.TargetKind,
 		Target:     *body.Target,
-		Note:       body.Note,
+		Note:       *body.Note,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2078,6 +2079,14 @@ func ValidateCreateRequestRequestBody(body *CreateRequestRequestBody) (err error
 	}
 	if body.Target == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
+	}
+	if body.Note == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("note", "body"))
+	}
+	if body.TargetKind != nil {
+		if !(*body.TargetKind == "server_url" || *body.TargetKind == "stdio_command") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server_url", "stdio_command"}))
+		}
 	}
 	return
 }

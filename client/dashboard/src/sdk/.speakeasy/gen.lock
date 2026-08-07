@@ -3274,7 +3274,7 @@ examples:
   createMcpApprovalRequest:
     speakeasy-default-create-mcp-approval-request:
       requestBody:
-        application/json: {"target": "<value>", "target_kind": "<value>"}
+        application/json: {"note": "<value>", "target": "<value>", "target_kind": "server_url"}
       responses:
         "200":
           application/json: {"created_at": "2024-05-15T20:12:21.934Z", "id": "<id>", "requester_count": 474607, "status": "<value>", "target_kind": "<value>", "target_raw": "<value>", "updated_at": "2025-05-27T13:22:23.356Z", "version_pinned": true}

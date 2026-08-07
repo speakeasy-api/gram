@@ -56974,16 +56974,20 @@ components:
             properties:
                 note:
                     type: string
-                    description: Why the requester wants it. The one input no automated evidence supplies.
+                    description: Why the requester wants it. The one input no automated evidence supplies, so it cannot be blank.
                 target:
                     type: string
                     description: 'The server reference: a URL, or the stdio command that launches it.'
                 target_kind:
                     type: string
-                    description: 'The namespace of the reference: server_url or stdio_command.'
+                    description: The namespace of the reference.
+                    enum:
+                        - server_url
+                        - stdio_command
             required:
                 - target_kind
                 - target
+                - note
         CreateResponseBody:
             type: object
             properties:
