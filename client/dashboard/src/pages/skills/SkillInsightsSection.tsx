@@ -1,6 +1,6 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { CHART_COLORS } from "@/components/stacked-time-series";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import {
   Alert,
   AlertDescription,
@@ -474,6 +474,7 @@ function TrendChart({
   versions: SkillVersionInsight[];
   versionLabels: Map<string, string>;
 }): JSX.Element {
+  const chartColors = useSeriesColors();
   const timestamps = Array.from(
     new Set(
       versions.flatMap((version) =>
@@ -492,7 +493,7 @@ function TrendChart({
     const points = new Map(
       version.trend.map((point) => [point.bucketStart.getTime(), point]),
     );
-    const color = CHART_COLORS[index % CHART_COLORS.length];
+    const color = chartColors[index % chartColors.length];
     return {
       label: `Since ${
         versionLabels.get(version.skillVersionId) ??

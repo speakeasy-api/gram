@@ -1,6 +1,7 @@
 import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { AXIS, TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import {
   formatChartLabel,
   formatChartZoomRangeLabel,
@@ -636,9 +637,10 @@ function RiskTrendChart({
   height: number;
   onRangeSelect?: (from: Date, to: Date) => void;
 }) {
+  const seriesColors = useSeriesColors();
   const chartData = useMemo(
-    () => buildRiskTrendChartData(points, from, to),
-    [points, from, to],
+    () => buildRiskTrendChartData(points, from, to, seriesColors),
+    [points, from, to, seriesColors],
   );
   const timeRangeMs = to.getTime() - from.getTime();
   const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({

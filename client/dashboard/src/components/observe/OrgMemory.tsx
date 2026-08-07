@@ -1,11 +1,7 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { Page } from "@/components/page-layout";
-import {
-  GOOD_GREEN,
-  OTHER_SERIES,
-  SERIES,
-  TOOLTIP,
-} from "@/components/chart/palette";
+import { GOOD_GREEN, OTHER_SERIES, TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { smoothData } from "@/components/chart/chartUtils";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { RequireScope } from "@/components/require-scope";
@@ -73,6 +69,7 @@ function WorkDoneChart({
   onExpand: (id: string | null) => void;
 }): JSX.Element {
   const hasData = buckets.some((b) => b.scoredSessions > 0);
+  const seriesColors = useSeriesColors();
 
   const chartData = useMemo<{
     labels: string[];
@@ -92,8 +89,8 @@ function WorkDoneChart({
       label: "Trend",
       data: smoothData(buckets.map((b) => b.workUnits)),
       type: "line",
-      // Ink from the shared editorial chart palette.
-      borderColor: SERIES[0]!,
+      // Ink from the theme-resolved editorial chart palette.
+      borderColor: seriesColors[0]!,
       backgroundColor: "transparent",
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -103,7 +100,7 @@ function WorkDoneChart({
       order: 1,
     };
     return { labels, datasets: [bars, trend] };
-  }, [buckets]);
+  }, [buckets, seriesColors]);
 
   const options = useMemo<ChartOptions<"bar">>(
     () => ({
@@ -188,6 +185,7 @@ function EfficiencyChart({
   const hasData = buckets.some(
     (b) => b.costPerUnit !== undefined || b.tokensPerUnit !== undefined,
   );
+  const seriesColors = useSeriesColors();
 
   const chartData = useMemo<{
     labels: string[];
@@ -200,8 +198,8 @@ function EfficiencyChart({
         {
           label: "Cost efficiency",
           data: buckets.map((b) => b.costPerUnit ?? null),
-          // Warm neutral from the shared editorial series ramp.
-          borderColor: SERIES[1]!,
+          // Warm neutral from the theme-resolved editorial series ramp.
+          borderColor: seriesColors[1]!,
           backgroundColor: "transparent",
           pointRadius: 2,
           pointHoverRadius: 4,
@@ -224,7 +222,7 @@ function EfficiencyChart({
         },
       ],
     };
-  }, [buckets]);
+  }, [buckets, seriesColors]);
 
   const options = useMemo<ChartOptions<"line">>(
     () => ({

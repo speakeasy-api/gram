@@ -866,7 +866,7 @@ function AgentSessionsPageContent({
               />
             </div>
             {(hasMore || offset > 0) && (
-              <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
+              <div className="bg-card flex shrink-0 items-center justify-center gap-4 border-t p-4 pb-20">
                 <Button
                   onClick={() => setOffset(Math.max(0, offset - limit))}
                   disabled={offset === 0}

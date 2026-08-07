@@ -1,7 +1,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { SERIES, TOOLTIP } from "@/components/chart/palette";
+import { TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
@@ -666,10 +667,16 @@ function TokenTimeSeriesChart({
         : b.totalInputTokens + b.totalOutputTokens) > 0,
   );
 
+  const seriesColors = useSeriesColors();
   const { timestamps, chartData } = useMemo(
     () =>
-      buildAgentTokenTimeSeriesChartData(timeSeries, timeRangeMs, valueMode),
-    [timeSeries, timeRangeMs, valueMode],
+      buildAgentTokenTimeSeriesChartData(
+        timeSeries,
+        timeRangeMs,
+        valueMode,
+        seriesColors,
+      ),
+    [timeSeries, timeRangeMs, valueMode, seriesColors],
   );
   const resolveZoomRange = useCallback(
     (min: number, max: number) => {
@@ -801,6 +808,7 @@ function ClientBreakdownChart({
   const height = isExpanded ? 420 : 260;
   const hasData = data.length > 0;
 
+  const seriesColors = useSeriesColors();
   const chartData = useMemo(
     () => ({
       labels: data.map((d) => d.label),
@@ -808,11 +816,13 @@ function ClientBreakdownChart({
         {
           label: valueMode === "cost" ? "Cost" : "Events",
           data: data.map((d) => (valueMode === "cost" ? d.cost : d.tokens)),
-          backgroundColor: data.map((_, i) => SERIES[i % SERIES.length]!),
+          backgroundColor: data.map(
+            (_, i) => seriesColors[i % seriesColors.length]!,
+          ),
         },
       ],
     }),
-    [data, valueMode],
+    [data, valueMode, seriesColors],
   );
 
   const options = useMemo<ChartOptions<"bar">>(

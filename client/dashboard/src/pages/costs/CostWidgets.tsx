@@ -4,9 +4,9 @@ import { formatWorkUnits, type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
-import { SERIES, TREND } from "@/components/chart/palette";
+import { TREND } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 
-const BRAND = SERIES[0]!; // ink — neutral headline accent
 const NEUTRAL = TREND.flat; // KPI sparklines
 
 // Bar grading: muted green (lowest cost) → neutral → muted red (highest).
@@ -69,6 +69,8 @@ function formatDelta(pct: number): string {
 
 // A filled, smoothed area chart of a series — the hero "cost trend".
 function AreaChart({ values }: { values: number[] }): JSX.Element {
+  // Ink — neutral headline accent, lifted to near-white on dark surfaces.
+  const brand = useSeriesColors()[0]!;
   const W = 600;
   const H = 80;
   const pad = 4;
@@ -94,11 +96,11 @@ function AreaChart({ values }: { values: number[] }): JSX.Element {
       aria-hidden="true"
       className="h-20 w-full"
     >
-      <path d={area} fill={BRAND} fillOpacity={0.08} />
+      <path d={area} fill={brand} fillOpacity={0.08} />
       <path
         d={line}
         fill="none"
-        stroke={BRAND}
+        stroke={brand}
         strokeWidth={1.5}
         strokeLinejoin="round"
         strokeLinecap="round"

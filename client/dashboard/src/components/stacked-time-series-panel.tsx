@@ -22,12 +22,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ToggleButton } from "@/components/ui/ToggleButton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { AXIS, TOOLTIP, withAlpha } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { cn } from "@/lib/utils";
-import {
-  CHART_COLORS,
-  OTHER_COLOR,
-  type TimeSeriesStack,
-} from "./stacked-time-series";
+import { OTHER_COLOR, type TimeSeriesStack } from "./stacked-time-series";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
@@ -129,9 +126,10 @@ function rolledUpStacks(
 function stackColor(
   stack: { label: string; rollup?: boolean },
   index: number,
+  colors: string[],
 ): string {
   if (stack.rollup) return OTHER_COLOR;
-  return CHART_COLORS[index % CHART_COLORS.length]!;
+  return colors[index % colors.length]!;
 }
 
 // A palette color at ~13% alpha, for de-emphasizing non-hovered series.
@@ -197,6 +195,10 @@ export function StackedTimeSeriesPanel({
   const dragTeardownRef = useRef<(() => void) | null>(null);
   useEffect(() => () => dragTeardownRef.current?.(), []);
 
+  // Theme-resolved series ramp; a stable per-theme array, so the memo below
+  // only rebuilds when the theme actually flips.
+  const seriesColors = useSeriesColors();
+
   // The expensive pass — granularity roll-up, axis derivation, cumulative
   // sums, base colors — keyed on the data inputs only. Hover/toggle state
   // stays out so sweeping the legend doesn't rebuild the bucketing.
@@ -215,7 +217,11 @@ export function StackedTimeSeriesPanel({
           values[j] = values[j]! + values[j - 1]!;
         }
       }
-      return { label: s.label, data: values, base: stackColor(s, i) };
+      return {
+        label: s.label,
+        data: values,
+        base: stackColor(s, i, seriesColors),
+      };
     });
 
     return {
@@ -224,7 +230,7 @@ export function StackedTimeSeriesPanel({
       // Bucket start times parallel to the axis, for bar-click drill-down.
       buckets,
     };
-  }, [bucketsMs, stacks, granularity, cumulative]);
+  }, [bucketsMs, stacks, granularity, cumulative, seriesColors]);
 
   // The resolved hover spotlight, computed outside the chart memo so legend
   // TOGGLES (hiddenLabels churn) don't rebuild the data object while nothing

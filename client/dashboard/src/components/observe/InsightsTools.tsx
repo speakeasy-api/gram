@@ -52,7 +52,8 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { ACCENT_RED, SERIES, TOOLTIP } from "@/components/chart/palette";
+import { ACCENT_RED, TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
@@ -109,8 +110,10 @@ const CHART_COLORS = {
 
 // Failure stacks: the one brand-red accent leads, the neutral series steps
 // recede behind it so severity reads at a glance. Slice off the palette's
-// trailing green accent — green has no place in a failure ramp.
-const FAILURE_COLORS = [ACCENT_RED, ...SERIES.slice(0, -1)];
+// trailing entry — green has no place in a failure ramp.
+function failureColors(seriesColors: string[]): string[] {
+  return [ACCENT_RED, ...seriesColors.slice(0, -1)];
+}
 
 const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
@@ -1037,6 +1040,7 @@ function UsersPerServerChart({
 }) {
   const chartId = "users-per-server";
   const expanded = expandedChart === chartId;
+  const seriesColors = useSeriesColors();
   const { labels, datasets } = useMemo(() => {
     const serverMap = new Map<string, Map<string, number>>();
     const userSet = new Set<string>();
@@ -1078,11 +1082,11 @@ function UsersPerServerChart({
       label: user,
       barThickness: 24,
       data: sortedServers.map((s) => s.userCounts.get(user) ?? 0),
-      backgroundColor: SERIES[i % SERIES.length]!,
+      backgroundColor: seriesColors[i % seriesColors.length]!,
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings]);
+  }, [breakdown, serverNameMappings, seriesColors]);
 
   return (
     <ChartCard
@@ -1129,12 +1133,13 @@ function UserEventCountsChart({
 }) {
   const chartId = "user-event-counts";
   const expanded = expandedChart === chartId;
+  const seriesColors = useSeriesColors();
   const { labels, datasets } = useMemo(() => {
     const sortedUsers = [...users].sort((a, b) => b.eventCount - a.eventCount);
 
     const chartLabels = sortedUsers.map((user) => user.userLabel || "unknown");
     // Single ranked series: ink, not a category color.
-    const color = SERIES[0]!;
+    const color = seriesColors[0]!;
     const chartDatasets = [
       {
         label: "Tool calls",
@@ -1145,7 +1150,7 @@ function UserEventCountsChart({
     ];
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [users]);
+  }, [users, seriesColors]);
 
   return (
     <ChartCard
@@ -1192,7 +1197,9 @@ function ServerErrorRateChart({
 }) {
   const chartId = "errors-per-server";
   const expanded = expandedChart === chartId;
+  const seriesColors = useSeriesColors();
   const { labels, datasets } = useMemo(() => {
+    const failureRamp = failureColors(seriesColors);
     const serverMap = new Map<string, Map<string, number>>();
     const toolSet = new Set<string>();
     for (const row of breakdown) {
@@ -1234,11 +1241,11 @@ function ServerErrorRateChart({
       label: tool,
       barThickness: BAR_THICKNESS.collapsed,
       data: sortedServers.map((s) => s.toolCounts.get(tool) ?? 0),
-      backgroundColor: FAILURE_COLORS[i % FAILURE_COLORS.length]!,
+      backgroundColor: failureRamp[i % failureRamp.length]!,
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [breakdown, serverNameMappings]);
+  }, [breakdown, serverNameMappings, seriesColors]);
 
   const hiddenCount =
     !expanded && labels.length > COLLAPSED_BAR_CHART_MAX_ROWS
@@ -1467,6 +1474,7 @@ function ServerUsageTimeSeries({
 }) {
   const chartId = "server-usage";
   const expanded = expandedChart === chartId;
+  const seriesColors = useSeriesColors();
   const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
     () =>
       buildToolUsageTimeSeries(
@@ -1476,9 +1484,9 @@ function ServerUsageTimeSeries({
         from,
         to,
         undefined,
-        SERIES,
+        seriesColors,
       ),
-    [timeSeries, from, to, serverNameMappings],
+    [timeSeries, from, to, serverNameMappings, seriesColors],
   );
   return (
     <ChartCard
@@ -1533,6 +1541,7 @@ function UserUsageTimeSeries({
 }) {
   const chartId = "user-usage";
   const expanded = expandedChart === chartId;
+  const seriesColors = useSeriesColors();
   const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
     () =>
       buildToolUsageTimeSeries(
@@ -1541,9 +1550,9 @@ function UserUsageTimeSeries({
         from,
         to,
         undefined,
-        SERIES,
+        seriesColors,
       ),
-    [timeSeries, from, to],
+    [timeSeries, from, to, seriesColors],
   );
   return (
     <ChartCard
@@ -1598,6 +1607,7 @@ function SkillUsageTimeSeries({
 }) {
   const chartId = "skill-usage";
   const expanded = expandedChart === chartId;
+  const seriesColors = useSeriesColors();
   const { labels, timestamps, tooltipLabels, datasets, bucketMs } = useMemo(
     () =>
       buildToolUsageTimeSeries(
@@ -1606,9 +1616,9 @@ function SkillUsageTimeSeries({
         from,
         to,
         undefined,
-        SERIES,
+        seriesColors,
       ),
-    [skillTimeSeries, from, to],
+    [skillTimeSeries, from, to, seriesColors],
   );
   return (
     <ChartCard
@@ -1655,6 +1665,7 @@ function UsersPerSkillChart({
 }) {
   const chartId = "users-per-skill";
   const expanded = expandedChart === chartId;
+  const seriesColors = useSeriesColors();
   const { labels, datasets } = useMemo(() => {
     const skillMap = new Map<string, Map<string, number>>();
     const userSet = new Set<string>();
@@ -1690,11 +1701,11 @@ function UsersPerSkillChart({
       label: user,
       barThickness: BAR_THICKNESS.collapsed,
       data: sortedSkills.map((s) => s.userCounts.get(user) ?? 0),
-      backgroundColor: SERIES[i % SERIES.length]!,
+      backgroundColor: seriesColors[i % seriesColors.length]!,
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
-  }, [skillBreakdown]);
+  }, [skillBreakdown, seriesColors]);
 
   return (
     <ChartCard

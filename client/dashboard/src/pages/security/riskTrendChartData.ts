@@ -18,28 +18,32 @@ type TimestampedLineDataset = ChartDataset<
 // severity oranges, the rest walk the neutral ink ramp (lightness repeats are
 // fine — lines read by legend label, not hue), and "custom" recedes to the
 // Other neutral.
-const RISK_CATEGORY_CHART_COLORS = [
-  { category: "secrets", color: ACCENT_RED },
-  { category: "financial", color: SEVERITY.high },
-  { category: "pii", color: SEVERITY.medium },
-  { category: "government_ids", color: SERIES[0]! },
-  { category: "healthcare", color: SERIES[1]! },
-  { category: "prompt_policy", color: SERIES[2]! },
-  { category: "prompt_injection", color: SERIES[3]! },
-  { category: "off_policy", color: SERIES[4]! },
-  { category: "shadow_mcp", color: SERIES[5]! },
-  { category: "destructive_tool", color: SERIES[1]! },
-  { category: "cli_destructive", color: SERIES[2]! },
-  { category: "account_identity", color: SERIES[3]! },
-  { category: "custom", color: OTHER_SERIES },
-] satisfies ReadonlyArray<{ category: RuleCategory; color: string }>;
+function riskCategoryChartColors(
+  series: readonly string[],
+): Array<{ category: RuleCategory; color: string }> {
+  return [
+    { category: "secrets", color: ACCENT_RED },
+    { category: "financial", color: SEVERITY.high },
+    { category: "pii", color: SEVERITY.medium },
+    { category: "government_ids", color: series[0]! },
+    { category: "healthcare", color: series[1]! },
+    { category: "prompt_policy", color: series[2]! },
+    { category: "prompt_injection", color: series[3]! },
+    { category: "off_policy", color: series[4]! },
+    { category: "shadow_mcp", color: series[5]! },
+    { category: "destructive_tool", color: series[1]! },
+    { category: "cli_destructive", color: series[2]! },
+    { category: "account_identity", color: series[3]! },
+    { category: "custom", color: OTHER_SERIES },
+  ];
+}
 
-const RISK_CATEGORY_CHART_COLOR_BY_CATEGORY = new Map<RuleCategory, string>(
-  RISK_CATEGORY_CHART_COLORS.map(({ category, color }) => [category, color]),
-);
-
+// Category ordering is color-independent, so it is derived once.
 const RISK_CATEGORY_CHART_ORDER = new Map<RuleCategory, number>(
-  RISK_CATEGORY_CHART_COLORS.map(({ category }, index) => [category, index]),
+  riskCategoryChartColors(SERIES).map(({ category }, index) => [
+    category,
+    index,
+  ]),
 );
 
 export type TrendPoint = {
@@ -48,14 +52,13 @@ export type TrendPoint = {
   findings: number;
 };
 
-function getRiskCategoryChartColor(category: string) {
-  return RISK_CATEGORY_CHART_COLOR_BY_CATEGORY.get(category as RuleCategory);
-}
-
 export function buildRiskTrendChartData(
   points: TrendPoint[],
   from: Date,
   to: Date,
+  // Theme-resolved series ramp; component callers pass seriesForTheme(isDark)
+  // so dark mode lifts the near-black entries. Defaults to the light ramp.
+  seriesColors: readonly string[] = SERIES,
 ): {
   timestamps: number[];
   labels: string[];
@@ -65,6 +68,11 @@ export function buildRiskTrendChartData(
   if (points.length === 0) {
     return { timestamps: [], labels: [], tooltipLabels: [], datasets: [] };
   }
+
+  const categoryColors = riskCategoryChartColors(seriesColors);
+  const colorByCategory = new Map<RuleCategory, string>(
+    categoryColors.map(({ category, color }) => [category, color]),
+  );
 
   const timeRangeMs = to.getTime() - from.getTime();
   const dateMap = new Map<number, Date>();
@@ -104,9 +112,8 @@ export function buildRiskTrendChartData(
     })
     .map(([category, series], index): TimestampedLineDataset => {
       const color =
-        getRiskCategoryChartColor(category) ??
-        RISK_CATEGORY_CHART_COLORS[index % RISK_CATEGORY_CHART_COLORS.length]!
-          .color;
+        colorByCategory.get(category as RuleCategory) ??
+        categoryColors[index % categoryColors.length]!.color;
       const meta = RULE_CATEGORY_META[category as RuleCategory];
       return {
         label: meta?.label ?? category,

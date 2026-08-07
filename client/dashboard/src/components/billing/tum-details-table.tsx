@@ -8,7 +8,8 @@ import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
-import { CHART_COLORS, OTHER_COLOR } from "@/components/stacked-time-series";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import { OTHER_COLOR } from "@/components/stacked-time-series";
 import {
   type BilledDays,
   type BillingCycle,
@@ -78,30 +79,36 @@ type MeasureField = "inputTokens" | "outputTokens" | "cacheCreationTokens";
 
 type MeasureRowSpec = {
   label: string;
-  color: string;
+  // Slot in the theme-resolved series ramp, so the dot matches the chart's
+  // series color in both themes.
+  colorIndex: number;
   field: MeasureField;
 };
 
 // Input + output + cache writes sum to the TUM total; cache reads are
 // excluded from the population entirely.
 const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
-  { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
-  { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
+  { label: "Input", colorIndex: 0, field: "inputTokens" },
+  { label: "Output", colorIndex: 1, field: "outputTokens" },
   {
     label: "Cache write",
-    color: CHART_COLORS[2]!,
+    colorIndex: 2,
     field: "cacheCreationTokens",
   },
 ];
 
-// Row color for a dimension value — same palette walk as the chart's stacks,
-// so a value's dot matches its chart series color. The neutral remainder dot
-// uses the SAME rollup identity test as the chart (isServerRollupRow), never
-// a label match — a real value that happens to read "Other" keeps its
-// palette color in both places.
-function valueColor(rollup: boolean, index: number): string {
+// Row color for a dimension value — same palette walk as the chart's stacks
+// (the theme-resolved ramp), so a value's dot matches its chart series color.
+// The neutral remainder dot uses the SAME rollup identity test as the chart
+// (isServerRollupRow), never a label match — a real value that happens to
+// read "Other" keeps its palette color in both places.
+function valueColor(
+  rollup: boolean,
+  index: number,
+  chartColors: string[],
+): string {
   if (rollup) return OTHER_COLOR;
-  return CHART_COLORS[index % CHART_COLORS.length]!;
+  return chartColors[index % chartColors.length]!;
 }
 
 // The dimension sections of the details table, mirroring the chart's group
@@ -111,6 +118,7 @@ function dimensionGroups(
   data: TumDetailsResult | undefined,
   keys: string[],
   projectNames: Map<string, string>,
+  chartColors: string[],
 ): DetailGroup[] {
   const byKey = new Map(
     (data?.breakdowns ?? []).map((b) => [b.key, b.rows] as const),
@@ -140,7 +148,7 @@ function dimensionGroups(
         const label = breakdownValueLabel(key, r.value, projectNames);
         return {
           label,
-          color: valueColor(rollup, i),
+          color: valueColor(rollup, i, chartColors),
           series: r.series,
           total: r.totalTokens,
           // A Project row still carrying its UUID is a project the name map
@@ -384,6 +392,8 @@ export function TumDetailsTable({
   const organization = useOrganization();
   const scope = { client, orgId: organization.id, period };
   const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
+  // Theme-resolved series ramp, matching the chart the table sits under.
+  const chartColors = useSeriesColors();
 
   // The passed-in map comes from the projects list fetch; the session's own
   // project entries fill any gaps (e.g. before that fetch resolves) so
@@ -453,7 +463,7 @@ export function TumDetailsTable({
 
     const measureRow = (spec: MeasureRowSpec): DetailRow => ({
       label: spec.label,
-      color: spec.color,
+      color: chartColors[spec.colorIndex]!,
       series: points.map((p) => p[spec.field]),
       total: totals?.[spec.field] ?? 0,
     });
@@ -464,15 +474,25 @@ export function TumDetailsTable({
         rows: [
           {
             label: "Total tokens",
-            color: CHART_COLORS[0]!,
+            color: chartColors[0]!,
             series: points.map((p) => p.totalTokens),
             total: totals?.totalTokens ?? 0,
           },
         ],
       },
-      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS, projectLabels),
+      ...dimensionGroups(
+        data,
+        LEAD_DIMENSION_SECTIONS,
+        projectLabels,
+        chartColors,
+      ),
       { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
-      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS, projectLabels),
+      ...dimensionGroups(
+        data,
+        TAIL_DIMENSION_SECTIONS,
+        projectLabels,
+        chartColors,
+      ),
     ];
 
     // Convert every row into billed units (see billedScale).
@@ -484,7 +504,7 @@ export function TumDetailsTable({
         series: row.series.map((v) => v * billedScale),
       })),
     }));
-  }, [data, billedScale, projectLabels]);
+  }, [data, billedScale, projectLabels, chartColors]);
 
   // Time-based overage attribution: tokens count as overage from the moment
   // the organization's cumulative usage crossed the included allowance. Days

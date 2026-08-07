@@ -255,7 +255,7 @@ export function EmptyState({
   // For non-empty projects or loading state, show the standard empty state
   let CTA: React.ReactNode = (
     <routes.sources.Link>
-      <Button size="sm">Get Started</Button>
+      <Button size="sm">Get started</Button>
     </routes.sources.Link>
   );
 

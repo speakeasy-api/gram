@@ -5,9 +5,10 @@
 
 import { OTHER_SERIES, SERIES } from "@/components/chart/palette";
 
-// The chart series palette, shared with consumers that key row/dot colors to
-// the chart legend (e.g. the billing usage details table). Aliases of the
-// shared editorial palette so the whole dashboard charts as one system.
+// The light-theme chart series palette. Kept for export-name stability;
+// components should resolve the theme-aware ramp via
+// `@/components/chart/useSeriesColors` instead so dark mode lifts the
+// near-black entries.
 export const CHART_COLORS = SERIES;
 export const OTHER_COLOR = OTHER_SERIES; // the top-N remainder rollup
 

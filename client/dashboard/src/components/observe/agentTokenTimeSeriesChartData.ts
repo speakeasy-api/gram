@@ -29,6 +29,9 @@ export function buildAgentTokenTimeSeriesChartData(
   timeSeries: AgentTokenTimeSeriesBucket[],
   timeRangeMs: number,
   valueMode: AgentTokenValueMode,
+  // Theme-resolved series ramp; component callers pass seriesForTheme(isDark)
+  // so dark mode lifts the near-black entries. Defaults to the light ramp.
+  colors: readonly string[] = SERIES,
 ): {
   timestamps: number[];
   chartData: AgentTokenTimeSeriesChartData;
@@ -48,7 +51,7 @@ export function buildAgentTokenTimeSeriesChartData(
           {
             label: "Cost",
             data: timeSeries.map((bucket) => bucket.totalCost),
-            backgroundColor: withAlpha(SERIES[1]!, 0.35),
+            backgroundColor: withAlpha(colors[1]!, 0.35),
             stack: "stack",
             order: 2,
           },
@@ -57,21 +60,21 @@ export function buildAgentTokenTimeSeriesChartData(
           {
             label: "Input Tokens",
             data: timeSeries.map((bucket) => bucket.totalInputTokens),
-            backgroundColor: withAlpha(SERIES[1]!, 0.35),
+            backgroundColor: withAlpha(colors[1]!, 0.35),
             stack: "stack",
             order: 2,
           },
           {
             label: "Output Tokens",
             data: timeSeries.map((bucket) => bucket.totalOutputTokens),
-            backgroundColor: withAlpha(SERIES[3]!, 0.35),
+            backgroundColor: withAlpha(colors[3]!, 0.35),
             stack: "stack",
             order: 2,
           },
           {
             label: "Cache Read",
             data: timeSeries.map((bucket) => bucket.cacheReadInputTokens),
-            backgroundColor: withAlpha(SERIES[5]!, 0.35),
+            backgroundColor: withAlpha(colors[5]!, 0.35),
             stack: "stack",
             order: 2,
           },
@@ -90,7 +93,7 @@ export function buildAgentTokenTimeSeriesChartData(
     data: smoothData(rawTotal),
     type: "line",
     // Editorial trend line: ink for tokens, mid neutral for cost.
-    borderColor: valueMode === "cost" ? SERIES[3]! : SERIES[0]!,
+    borderColor: valueMode === "cost" ? colors[3]! : colors[0]!,
     backgroundColor: "transparent",
     pointRadius: 0,
     pointHoverRadius: 4,

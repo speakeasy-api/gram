@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { SERIES } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -109,8 +109,6 @@ ChartJS.register(
   ZoomPlugin,
 );
 
-// Single-series line: ink from the shared editorial chart palette.
-const CHART_COLOR = SERIES[0]!;
 const DATA_FLOW_TIER_ORDER: DataFlowTier[] = [
   "user",
   "origin",
@@ -1718,6 +1716,8 @@ function TokenTimeSeriesChart({
 }) {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 220;
+  // Single-series line: ink from the theme-resolved editorial chart palette.
+  const chartColor = useSeriesColors()[0]!;
 
   const chartData = useMemo(
     () =>
@@ -1804,9 +1804,9 @@ function TokenTimeSeriesChart({
                 {
                   label: "Tokens",
                   data: chartData,
-                  borderColor: CHART_COLOR,
+                  borderColor: chartColor,
                   backgroundColor: "transparent",
-                  pointBackgroundColor: CHART_COLOR,
+                  pointBackgroundColor: chartColor,
                   fill: false,
                   tension: 0.45,
                   borderWidth: 1.5,

@@ -7,10 +7,10 @@ import {
 import {
   ACCENT_RED,
   AXIS,
-  SERIES,
   TOOLTIP,
   withAlpha,
 } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { formatCompact } from "@/lib/format";
@@ -69,6 +69,7 @@ export function ToolCallsTimeSeriesChart({
   const height = isExpanded ? 420 : 260;
   const hasData = timeSeries.some((b) => b.totalToolCalls > 0);
 
+  const seriesColors = useSeriesColors();
   const chartData = useMemo<{
     labels: string[];
     datasets: Array<
@@ -90,7 +91,7 @@ export function ToolCallsTimeSeriesChart({
       {
         label: "Successful",
         data: successData,
-        backgroundColor: withAlpha(SERIES[5]!, 0.6),
+        backgroundColor: withAlpha(seriesColors[5]!, 0.6),
         stack: "stack",
         order: 2,
       },
@@ -107,7 +108,7 @@ export function ToolCallsTimeSeriesChart({
       label: "Total Trend",
       data: smoothData(timeSeries.map((b) => b.totalToolCalls)),
       type: "line",
-      borderColor: SERIES[0]!, // ink
+      borderColor: seriesColors[0]!, // ink
       backgroundColor: "transparent",
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -118,7 +119,7 @@ export function ToolCallsTimeSeriesChart({
     };
 
     return { labels, datasets: [...barDatasets, trendDataset] };
-  }, [timeSeries, timeRangeMs]);
+  }, [timeSeries, timeRangeMs, seriesColors]);
 
   // Chart.js paints the canvas with static defaults that ignore the CSS
   // theme, so gridlines and tick labels need explicit dark-mode colors.
