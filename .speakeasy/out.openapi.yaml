@@ -3712,6 +3712,106 @@ paths:
       x-speakeasy-name-override: getGlobalIssuer
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionIssuer
+  /rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight:
+    get:
+      description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.'
+      operationId: getGlobalRemoteSessionIssuerMigratePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The organization- or project-level remote_session_issuer to migrate away from.
+          in: query
+          name: source_id
+          required: true
+          schema:
+            description: The organization- or project-level remote_session_issuer to migrate away from.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The global remote_session_issuer to migrate onto.
+          in: query
+          name: target_id
+          required: true
+          schema:
+            description: The global remote_session_issuer to migrate onto.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuerMigratePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGlobalIssuerMigratePreflight adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: getGlobalIssuerMigratePreflight
+      x-speakeasy-react-hook:
+        name: GlobalRemoteSessionIssuerMigratePreflight
   /rpc/adminRemoteSessions.listGlobalClients:
     get:
       description: List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
@@ -3826,6 +3926,120 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionClients
+  /rpc/adminRemoteSessions.listGlobalIssuerConvergenceCandidates:
+    get:
+      description: List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
+      operationId: listGlobalRemoteSessionIssuerConvergenceCandidates
+      parameters:
+        - allowEmptyValue: true
+          description: The global remote_session_issuer that candidates would be consolidated onto.
+          in: query
+          name: target_id
+          required: true
+          schema:
+            description: The global remote_session_issuer that candidates would be consolidated onto.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Pagination cursor.
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor.
+            type: string
+        - allowEmptyValue: true
+          description: Page size (default 50, max 100).
+          in: query
+          name: limit
+          schema:
+            description: Page size (default 50, max 100).
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListIssuerConvergenceCandidatesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listGlobalIssuerConvergenceCandidates adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: listGlobalIssuerConvergenceCandidates
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: GlobalRemoteSessionIssuerConvergenceCandidates
   /rpc/adminRemoteSessions.listGlobalIssuers:
     get:
       description: List global remote_session_issuers. Requires platform admin.
@@ -3931,6 +4145,94 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionIssuers
+  /rpc/adminRemoteSessions.migrateToGlobalIssuer:
+    post:
+      description: 'Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.'
+      operationId: migrateToGlobalRemoteSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateRemoteSessionIssuerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrateRemoteSessionIssuerResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: migrateToGlobalIssuer adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: migrateToGlobalIssuer
+      x-speakeasy-react-hook:
+        name: MigrateToGlobalRemoteSessionIssuer
   /rpc/adminRemoteSessions.refreshGlobalIssuerMetadata:
     post:
       description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
@@ -23753,7 +24055,7 @@ paths:
         name: OrganizationRemoteSessionIssuers
   /rpc/organizationRemoteSessionIssuers.migrate:
     post:
-      description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
+      description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
       operationId: migrateOrganizationRemoteSessionIssuer
       parameters:
         - allowEmptyValue: true
@@ -60738,6 +61040,82 @@ components:
       required:
         - version
         - created_at
+    IssuerConvergenceCandidate:
+      type: object
+      properties:
+        client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients that would move onto the target issuer.
+          format: int64
+        endpoint_mismatches:
+          type: array
+          items:
+            type: string
+          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target. Non-empty blocks the migration.
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        organization_id:
+          type: string
+          description: The organization that owns the candidate. Empty for a legacy project-scoped issuer written before this column existed.
+        organization_name:
+          type: string
+          description: Display name of the owning organization. Empty when the organization has no synced metadata.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+      description: An organization- or project-level remote_session_issuer that names the same upstream authorization server as a global issuer, and so could be consolidated onto it.
+      required:
+        - issuer
+        - organization_id
+        - organization_name
+        - client_count
+        - endpoint_mismatches
+        - warnings
+    IssuerMigratePreflight:
+      type: object
+      properties:
+        can_migrate:
+          type: boolean
+          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+        client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
+          format: int64
+        conflicting_mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        endpoint_mismatches:
+          type: array
+          items:
+            type: string
+          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+        mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers attached to the source issuer's clients.
+        target_tenant_client_count:
+          type: integer
+          description: Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.
+          format: int64
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+      description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
+      required:
+        - client_count
+        - mcp_server_names
+        - endpoint_mismatches
+        - conflicting_mcp_server_names
+        - warnings
+        - can_migrate
+        - target_tenant_client_count
     Key:
       type: object
       properties:
@@ -61329,6 +61707,19 @@ components:
           description: Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
       required:
         - invitations
+    ListIssuerConvergenceCandidatesResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerConvergenceCandidate'
+        next_cursor:
+          type: string
+          description: Cursor for the next page; empty when exhausted.
+      description: Result type for the platform-administrator convergence-candidate listing.
+      required:
+        - items
     ListKeysResponseBody:
       type: object
       properties:
@@ -63201,6 +63592,37 @@ components:
           type: boolean
           description: TRUE when the source issuer was soft-deleted.
       description: 'Outcome of consolidating a source remote_session_issuer onto a target issuer: the surviving target issuer, how many clients were re-pointed, and whether the source was soft-deleted.'
+      required:
+        - issuer
+        - clients_migrated
+        - source_deleted
+    MigrateRemoteSessionIssuerRequestBody:
+      type: object
+      properties:
+        source_id:
+          type: string
+          description: The organization- or project-level remote_session_issuer to migrate away from; soft-deleted on success.
+          format: uuid
+        target_id:
+          type: string
+          description: The global remote_session_issuer to migrate onto; survives and adopts the source's clients.
+          format: uuid
+      required:
+        - source_id
+        - target_id
+    MigrateRemoteSessionIssuerResult:
+      type: object
+      properties:
+        clients_migrated:
+          type: integer
+          description: Number of remote_session_clients re-pointed from the source issuer to the target issuer. Zero when the source had no active clients.
+          format: int64
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        source_deleted:
+          type: boolean
+          description: TRUE when the source issuer was soft-deleted.
+      description: 'Outcome of consolidating a tenant remote_session_issuer onto a global issuer: the surviving global issuer, how many clients were re-pointed, and whether the source was soft-deleted.'
       required:
         - issuer
         - clients_migrated

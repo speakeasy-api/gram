@@ -71,8 +71,11 @@ trackedFiles:
   src/funcs/adminRemoteSessionsFetchGlobalIssuerMetadata.ts: {}
   src/funcs/adminRemoteSessionsGetGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsGetGlobalIssuer.ts: {}
+  src/funcs/adminRemoteSessionsGetGlobalIssuerMigratePreflight.ts: {}
   src/funcs/adminRemoteSessionsListGlobalClients.ts: {}
+  src/funcs/adminRemoteSessionsListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminRemoteSessionsListGlobalIssuers.ts: {}
+  src/funcs/adminRemoteSessionsMigrateToGlobalIssuer.ts: {}
   src/funcs/adminRemoteSessionsRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
@@ -820,6 +823,8 @@ trackedFiles:
   src/models/components/integration.ts: {}
   src/models/components/integrationentry.ts: {}
   src/models/components/integrationversion.ts: {}
+  src/models/components/issuerconvergencecandidate.ts: {}
+  src/models/components/issuermigratepreflight.ts: {}
   src/models/components/key.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
@@ -855,6 +860,7 @@ trackedFiles:
   src/models/components/listinstancesresponsebody.ts: {}
   src/models/components/listintegrationsresult.ts: {}
   src/models/components/listinvitesresult.ts: {}
+  src/models/components/listissuerconvergencecandidatesresult.ts: {}
   src/models/components/listkeysresponsebody.ts: {}
   src/models/components/listkeysresult.ts: {}
   src/models/components/listmanageddevicesresult.ts: {}
@@ -956,6 +962,8 @@ trackedFiles:
   src/models/components/migratelegacygramregistrationsform.ts: {}
   src/models/components/migratelegacygramregistrationsresult.ts: {}
   src/models/components/migrateorganizationremotesessionissuerresult.ts: {}
+  src/models/components/migrateremotesessionissuerrequestbody.ts: {}
+  src/models/components/migrateremotesessionissuerresult.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
   src/models/components/mintusersessionresponsebody.ts: {}
   src/models/components/modelproviderkey.ts: {}
@@ -1507,6 +1515,7 @@ trackedFiles:
   src/models/operations/getgcpsetupinfo.ts: {}
   src/models/operations/getglobalremotesessionclient.ts: {}
   src/models/operations/getglobalremotesessionissuer.ts: {}
+  src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getinstance.ts: {}
   src/models/operations/getlatestdeployment.ts: {}
@@ -1621,6 +1630,7 @@ trackedFiles:
   src/models/operations/listgcpiamcredentials.ts: {}
   src/models/operations/listgcpkmskeys.ts: {}
   src/models/operations/listglobalremotesessionclients.ts: {}
+  src/models/operations/listglobalremotesessionissuerconvergencecandidates.ts: {}
   src/models/operations/listglobalremotesessionissuers.ts: {}
   src/models/operations/listglobalvariations.ts: {}
   src/models/operations/listgrants.ts: {}
@@ -1704,6 +1714,7 @@ trackedFiles:
   src/models/operations/markriskresultsfalsepositive.ts: {}
   src/models/operations/migratelegacygramregistrations.ts: {}
   src/models/operations/migrateorganizationremotesessionissuer.ts: {}
+  src/models/operations/migratetoglobalremotesessionissuer.ts: {}
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/pausetriggerinstance.ts: {}
@@ -2122,6 +2133,10 @@ trackedFiles:
   src/react-query/globalRemoteSessionClients.ts: {}
   src/react-query/globalRemoteSessionIssuer.core.ts: {}
   src/react-query/globalRemoteSessionIssuer.ts: {}
+  src/react-query/globalRemoteSessionIssuerConvergenceCandidates.core.ts: {}
+  src/react-query/globalRemoteSessionIssuerConvergenceCandidates.ts: {}
+  src/react-query/globalRemoteSessionIssuerMigratePreflight.core.ts: {}
+  src/react-query/globalRemoteSessionIssuerMigratePreflight.ts: {}
   src/react-query/globalRemoteSessionIssuers.core.ts: {}
   src/react-query/globalRemoteSessionIssuers.ts: {}
   src/react-query/globalVariations.core.ts: {}
@@ -2254,6 +2269,7 @@ trackedFiles:
   src/react-query/members.ts: {}
   src/react-query/migrateLegacyGramRegistrations.ts: {}
   src/react-query/migrateOrganizationRemoteSessionIssuer.ts: {}
+  src/react-query/migrateToGlobalRemoteSessionIssuer.ts: {}
   src/react-query/mintUserSession.ts: {}
   src/react-query/modelProviderKeys.core.ts: {}
   src/react-query/modelProviderKeys.ts: {}
@@ -4592,6 +4608,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getGlobalRemoteSessionIssuerMigratePreflight:
+    speakeasy-default-get-global-remote-session-issuer-migrate-preflight:
+      parameters:
+        query:
+          source_id: "f86585b3-3f45-4dbc-a021-9db3f062c699"
+          target_id: "55beba50-b7b7-464f-844a-ce63acbbdbfb"
+      responses:
+        "200":
+          application/json: {"can_migrate": false, "client_count": 324927, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": ["<value 1>"], "mcp_server_names": ["<value 1>", "<value 2>"], "target_tenant_client_count": 887590, "warnings": ["<value 1>", "<value 2>"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getHooksSummary:
     speakeasy-default-get-hooks-summary:
       requestBody:
@@ -5144,6 +5173,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getTenantRemoteSessionIssuerMigratePreflight:
+    speakeasy-default-get-tenant-remote-session-issuer-migrate-preflight:
+      parameters:
+        query:
+          source_id: "8511938f-3b25-4641-b7a6-1c8d9ec81dc8"
+          target_id: "e4e71164-b787-4ff8-9b2b-e6dd3f364bcb"
+      responses:
+        "200":
+          application/json: {"can_migrate": true, "client_count": 828202, "conflicting_mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "endpoint_mismatches": ["<value 1>"], "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "target_tenant_client_count": 409105, "warnings": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getTokensUnderManagement:
     speakeasy-default-get-tokens-under-management:
       responses:
@@ -5862,6 +5904,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listGlobalRemoteSessionIssuerConvergenceCandidates:
+    speakeasy-default-list-global-remote-session-issuer-convergence-candidates:
+      parameters:
+        query:
+          target_id: "c27cb525-b164-4338-af11-ff9d469f97ea"
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listGlobalRemoteSessionIssuers:
     speakeasy-default-list-global-remote-session-issuers:
       responses:
@@ -6155,6 +6209,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listRemoteSessionIssuerConvergenceCandidates:
+    speakeasy-default-list-remote-session-issuer-convergence-candidates:
+      parameters:
+        query:
+          target_id: "3e385117-0c80-485a-9750-bc75fa47792d"
+      responses:
+        "200":
+          application/json: {"items": [{"client_count": 308024, "endpoint_mismatches": ["<value 1>"], "issuer": {"client_id_metadata_document_supported": true, "created_at": "2024-11-22T01:35:51.493Z", "id": "acf2fee3-5887-44d3-9ad0-cba270fc7c54", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-01-22T19:01:25.346Z"}, "organization_id": "<id>", "organization_name": "<value>", "warnings": ["<value 1>", "<value 2>", "<value 3>"]}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listRemoteSessionIssuers:
     speakeasy-default-list-remote-session-issuers:
       responses:
@@ -6750,6 +6816,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  migrateTenantRemoteSessionIssuer:
+    speakeasy-default-migrate-tenant-remote-session-issuer:
+      requestBody:
+        application/json: {"source_id": "72f21b11-3b00-48b7-94b1-ae201e19b8ee", "target_id": "1d5af59d-39bb-472e-a5ff-55db08f8dfba"}
+      responses:
+        "200":
+          application/json: {"clients_migrated": 795950, "issuer": {"client_id_metadata_document_supported": false, "created_at": "2024-06-22T23:56:50.756Z", "id": "767334d4-9a31-4fd0-832a-5fdadc70aa54", "issuer": "diners_club", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-18T22:55:52.577Z"}, "source_deleted": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  migrateToGlobalRemoteSessionIssuer:
+    speakeasy-default-migrate-to-global-remote-session-issuer:
+      requestBody:
+        application/json: {"source_id": "32f2c30e-325e-4a4a-8b6c-92a13f9dfda2", "target_id": "070c68b2-c4db-46cb-adc6-7c9ae374334f"}
+      responses:
+        "200":
+          application/json: {"clients_migrated": 902722, "issuer": {"client_id_metadata_document_supported": false, "created_at": "2026-02-26T15:23:12.711Z", "id": "4af55cee-39b3-428c-810e-46293265f00e", "issuer": "american_express", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-03T15:55:59.706Z"}, "source_deleted": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   mintUserSession:
     speakeasy-default-mint-user-session:
       requestBody:

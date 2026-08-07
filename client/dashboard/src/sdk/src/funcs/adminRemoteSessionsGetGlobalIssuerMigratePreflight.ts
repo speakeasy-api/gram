@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  MigrateOrganizationRemoteSessionIssuerResult,
-  MigrateOrganizationRemoteSessionIssuerResult$inboundSchema,
-} from "../models/components/migrateorganizationremotesessionissuerresult.js";
+  IssuerMigratePreflight,
+  IssuerMigratePreflight$inboundSchema,
+} from "../models/components/issuermigratepreflight.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  MigrateOrganizationRemoteSessionIssuerRequest,
-  MigrateOrganizationRemoteSessionIssuerRequest$outboundSchema,
-  MigrateOrganizationRemoteSessionIssuerSecurity,
-} from "../models/operations/migrateorganizationremotesessionissuer.js";
+  GetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  GetGlobalRemoteSessionIssuerMigratePreflightRequest$outboundSchema,
+  GetGlobalRemoteSessionIssuerMigratePreflightSecurity,
+} from "../models/operations/getglobalremotesessionissuermigratepreflight.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * migrateIssuer organizationRemoteSessionIssuers
+ * getGlobalIssuerMigratePreflight adminRemoteSessions
  *
  * @remarks
- * Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.
+ * Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.
  */
-export function organizationRemoteSessionIssuersMigrate(
+export function adminRemoteSessionsGetGlobalIssuerMigratePreflight(
   client: GramCore,
-  request: MigrateOrganizationRemoteSessionIssuerRequest,
-  security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: GetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  security?: GetGlobalRemoteSessionIssuerMigratePreflightSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    MigrateOrganizationRemoteSessionIssuerResult,
+    IssuerMigratePreflight,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function organizationRemoteSessionIssuersMigrate(
 
 async function $do(
   client: GramCore,
-  request: MigrateOrganizationRemoteSessionIssuerRequest,
-  security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: GetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  security?: GetGlobalRemoteSessionIssuerMigratePreflightSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      MigrateOrganizationRemoteSessionIssuerResult,
+      IssuerMigratePreflight,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -97,7 +97,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        MigrateOrganizationRemoteSessionIssuerRequest$outboundSchema,
+        GetGlobalRemoteSessionIssuerMigratePreflightRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -106,19 +106,19 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.MigrateIssuerRequestBody, {
-    explode: true,
+  const body = null;
+
+  const path = pathToFunc(
+    "/rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight",
+  )();
+
+  const query = encodeFormQuery({
+    "source_id": payload.source_id,
+    "target_id": payload.target_id,
   });
 
-  const path = pathToFunc("/rpc/organizationRemoteSessionIssuers.migrate")();
-
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -133,19 +133,12 @@ async function $do(
         value: security?.sessionHeaderGramSession,
       },
     ],
-    [
-      {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
-      },
-    ],
   );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "migrateOrganizationRemoteSessionIssuer",
+    operationID: "getGlobalRemoteSessionIssuerMigratePreflight",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -159,10 +152,11 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -189,7 +183,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    MigrateOrganizationRemoteSessionIssuerResult,
+    IssuerMigratePreflight,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -200,7 +194,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, MigrateOrganizationRemoteSessionIssuerResult$inboundSchema),
+    M.json(200, IssuerMigratePreflight$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
