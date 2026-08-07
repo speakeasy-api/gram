@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,19 +14,29 @@ import (
 )
 
 // serve stands up a registry returning body for any request, recording the
-// path so scoped-name handling can be asserted.
-func serve(t *testing.T, status int, body string) (*httptest.Server, *string) {
+// path so scoped-name handling can be asserted. The record is read through a
+// mutex-guarded getter: the handler runs on the server's goroutine, and a
+// completed HTTP round-trip is not a synchronization edge between it and the
+// test.
+func serve(t *testing.T, status int, body string) (*httptest.Server, func() string) {
 	t.Helper()
 
+	var mu sync.Mutex
 	var path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		path = r.URL.Path
+		mu.Unlock()
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(server.Close)
 
-	return server, &path
+	return server, func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return path
+	}
 }
 
 const npmBody = `{
@@ -60,7 +71,7 @@ func TestLookup_NPM(t *testing.T) {
 	require.False(t, got.Deprecated)
 
 	// A scope's slash is a path separator, not an escaped character.
-	require.Equal(t, "/@scope/mcp-server", *path)
+	require.Equal(t, "/@scope/mcp-server", path())
 }
 
 // Older packages publish license as an object rather than a string.
@@ -123,7 +134,7 @@ func TestLookup_PyPI(t *testing.T) {
 	require.Equal(t, 2, got.VersionCount)
 	require.Equal(t, 2024, got.FirstPublished.Year())
 	require.Equal(t, 2026, got.LastPublished.Year())
-	require.Equal(t, "/pypi/mcp-thing/json", *path)
+	require.Equal(t, "/pypi/mcp-thing/json", path())
 
 	// The free-text license was empty, so the Trove classifier supplies it.
 	require.Equal(t, "BSD License", got.License)
@@ -241,7 +252,7 @@ func TestLookup_PyPIStripsExtras(t *testing.T) {
 	got, err := client.Lookup(t.Context(), identity.RegistryPyPI, "mcp-thing[sse]")
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.Equal(t, "/pypi/mcp-thing/json", *path)
+	require.Equal(t, "/pypi/mcp-thing/json", path())
 }
 
 // An oversized registry response fails loudly with a size error, never as a
