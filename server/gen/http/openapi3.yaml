@@ -20315,6 +20315,14 @@ paths:
             operationId: refreshMcpApprovalEvidence
             parameters:
                 - allowEmptyValue: true
+                  description: The approval request ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The approval request ID.
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -20335,12 +20343,6 @@ paths:
                   schema:
                     description: project header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ServeImageForm'
-                required: true
             responses:
                 "200":
                     content:

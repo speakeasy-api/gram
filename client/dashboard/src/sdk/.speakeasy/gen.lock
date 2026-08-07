@@ -1128,7 +1128,6 @@ trackedFiles:
   src/models/components/sendinviterequestbody.ts: {}
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
-  src/models/components/serveimageform.ts: {}
   src/models/components/servernameoverride.ts: {}
   src/models/components/servervariable.ts: {}
   src/models/components/serviceinfo.ts: {}
@@ -7053,6 +7052,9 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   refreshMcpApprovalEvidence:
     speakeasy-default-refresh-mcp-approval-evidence:
+      parameters:
+        query:
+          id: "<id>"
       requestBody:
         application/json: {"id": "<id>"}
       responses:
