@@ -9,7 +9,7 @@ export const DEFAULT_USER_SESSION_DURATION_HOURS = 24 * 14;
 
 const MAX_SLUG_LENGTH = 40;
 
-export function remoteLoginCallbackURL(): string {
+function remoteLoginCallbackURL(): string {
   return `${getServerURL()}/mcp/remote_login_callback`;
 }
 

@@ -143,7 +143,7 @@ const REMOTE_SESSION_TIER_RANK: Record<RemoteSessionScopeTier, number> = {
 // (which is by creation time and says nothing about tier). Returns the
 // highest-priority candidate — project > organization > platform — or undefined
 // when the list is empty.
-export function resolveRemoteSessionIssuerByTierPrecedence<
+function resolveRemoteSessionIssuerByTierPrecedence<
   T extends { projectId?: string | null; organizationId?: string | null },
 >(candidates: T[]): T | undefined {
   let best: T | undefined;
