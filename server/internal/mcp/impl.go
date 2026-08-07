@@ -400,6 +400,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	// Backwards-compat: remote_session_clients flagged LegacyCallbackUrl were
+	// registered upstream against the retired oauth_proxy_servers /oauth/callback.
+	// Keep it mounted so their responses forward into remote_login_callback.
+	o11y.AttachHandler(mux, "GET", "/oauth/callback", oops.ErrHandle(service.logger, service.HandleLegacyProxyCallback).ServeHTTP)
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
@@ -438,6 +442,14 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // unexported manager field.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// HandleLegacyProxyCallback is the chi handler at `GET /oauth/callback`. Thin
+// passthrough to remotesessions.ChallengeManager: it forwards legacy
+// oauth_proxy_servers-era callbacks (remote_session_clients flagged
+// LegacyCallbackUrl) into /mcp/remote_login_callback.
+func (s *Service) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleLegacyProxyCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
 // HandleClientMetadataDocument is the public outbound-CIMD document endpoint at
