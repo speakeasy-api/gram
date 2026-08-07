@@ -53,6 +53,12 @@ const PLATFORMS = [
     description: "Configure Cursor plugins and MCP settings.",
     defaultLayer: "off",
   },
+  {
+    key: "opencode",
+    label: "OpenCode",
+    description: "Configure OpenCode plugins and MCP settings.",
+    defaultLayer: "off",
+  },
 ] as const satisfies ReadonlyArray<{
   key: string;
   label: string;
