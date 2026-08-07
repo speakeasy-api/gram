@@ -104,6 +104,109 @@ func (q *Queries) CountTenantRemoteSessionClientsByIssuerID(ctx context.Context,
 	return count, err
 }
 
+const createLocalFixtureGlobalRemoteSessionIssuer = `-- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
+INSERT INTO remote_session_issuers (
+    id,
+    project_id,
+    organization_id,
+    slug,
+    issuer,
+    name,
+    authorization_endpoint,
+    token_endpoint,
+    registration_endpoint,
+    scopes_supported,
+    grant_types_supported,
+    response_types_supported,
+    token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported,
+    oidc,
+    passthrough
+)
+VALUES (
+    $1,
+    NULL,
+    NULL,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    FALSE,
+    FALSE,
+    FALSE
+)
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateLocalFixtureGlobalRemoteSessionIssuerParams struct {
+	ID                                uuid.UUID
+	Slug                              string
+	Issuer                            string
+	Name                              pgtype.Text
+	AuthorizationEndpoint             pgtype.Text
+	TokenEndpoint                     pgtype.Text
+	RegistrationEndpoint              pgtype.Text
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+}
+
+// The local Platform MCP fixture owns this fixed global issuer identity. The
+// caller first holds LockRemoteSessionIssuerForClientBinding on the fixed ID and
+// validates an existing row, so this INSERT cannot overwrite incompatible state.
+func (q *Queries) CreateLocalFixtureGlobalRemoteSessionIssuer(ctx context.Context, arg CreateLocalFixtureGlobalRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, createLocalFixtureGlobalRemoteSessionIssuer,
+		arg.ID,
+		arg.Slug,
+		arg.Issuer,
+		arg.Name,
+		arg.AuthorizationEndpoint,
+		arg.TokenEndpoint,
+		arg.RegistrationEndpoint,
+		arg.ScopesSupported,
+		arg.GrantTypesSupported,
+		arg.ResponseTypesSupported,
+		arg.TokenEndpointAuthMethodsSupported,
+	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createRemoteSessionClient = `-- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
     project_id,
@@ -919,6 +1022,93 @@ func (q *Queries) GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx context.C
 		&i.RemoteSessionIssuer.Deleted,
 		&i.GlobalClientCount,
 		&i.TenantClientCount,
+	)
+	return i, err
+}
+
+const getLocalFixtureGlobalRemoteSessionIssuer = `-- name: GetLocalFixtureGlobalRemoteSessionIssuer :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE slug = $1
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+`
+
+// The local Platform MCP fixture owns one exact global issuer identity. This
+// lookup intentionally excludes project and organization rows so a tenant-owned
+// issuer can never be mistaken for the reviewed fixture.
+func (q *Queries) GetLocalFixtureGlobalRemoteSessionIssuer(ctx context.Context, slug string) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getLocalFixtureGlobalRemoteSessionIssuer, slug)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getLocalFixtureOrganizationRemoteSessionClient = `-- name: GetLocalFixtureOrganizationRemoteSessionClient :one
+SELECT id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_clients
+WHERE organization_id = $1
+  AND remote_session_issuer_id = $2
+  AND project_id IS NULL
+  AND deleted IS FALSE
+`
+
+type GetLocalFixtureOrganizationRemoteSessionClientParams struct {
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// The local Platform MCP fixture owns at most one organization-scoped public
+// client for its global issuer. Project-owned and global clients are excluded.
+func (q *Queries) GetLocalFixtureOrganizationRemoteSessionClient(ctx context.Context, arg GetLocalFixtureOrganizationRemoteSessionClientParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, getLocalFixtureOrganizationRemoteSessionClient, arg.OrganizationID, arg.RemoteSessionIssuerID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.Scope,
+		&i.Audience,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
