@@ -285,6 +285,47 @@ describe("useActiveSectionOnScroll", () => {
     expect(result.current).toBe("a");
   });
 
+  // Dragging the scrollbar emits neither wheel nor touch events, only scroll
+  // events while the button is held.
+  it("releases the requested section when the reader drags the scrollbar", () => {
+    createSection("a");
+    createSection("b");
+    createSection("c");
+    setSectionTops({ a: -10, b: 500, c: 700 });
+
+    const { result } = renderHook(() =>
+      useActiveSectionOnScroll(["a", "b", "c"], {
+        topOffset: TOP_OFFSET,
+        requestedSectionId: "c",
+        requestKey: "nav-1",
+      }),
+    );
+    act(() => flushFrames());
+    expect(result.current).toBe("c");
+
+    // The smooth scroll the click itself triggers has no button held, so it
+    // must not release the pin.
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(result.current).toBe("c");
+
+    // A click that scrolls nothing must not release it either.
+    act(() => {
+      window.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(result.current).toBe("c");
+
+    // Button held while the page scrolls: a scrollbar drag.
+    act(() => {
+      window.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(result.current).toBe("a");
+  });
+
   it("re-pins the same section when its link is clicked again", () => {
     createSection("a");
     createSection("b");

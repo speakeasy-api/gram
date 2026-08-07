@@ -74,8 +74,8 @@ export function useActiveSectionOnScroll(
     setPinnedId(requestedSectionId === "" ? null : requestedSectionId);
   }, [requestedSectionId, requestKey]);
 
-  // Only real input gestures release the pin. A plain `scroll` listener would
-  // fire on the smooth scroll the click itself triggers and release it
+  // Only real input gestures release the pin. Releasing on `scroll` alone would
+  // fire on the smooth scroll the click itself triggers and drop the pin
   // immediately.
   React.useEffect(() => {
     if (pinnedId === null || typeof window === "undefined") return;
@@ -84,15 +84,38 @@ export function useActiveSectionOnScroll(
     const releaseOnScrollKey = (event: KeyboardEvent) => {
       if (SCROLL_KEYS.has(event.key)) setPinnedId(null);
     };
+
+    // Dragging the scrollbar emits neither wheel nor touch events, and its
+    // gutter can't be located by geometry when the platform draws overlay
+    // scrollbars (no width to measure). What distinguishes it is scrolling
+    // while the button is held — a plain click scrolls nothing.
+    let buttonHeld = false;
+    const holdButton = () => {
+      buttonHeld = true;
+    };
+    const releaseButton = () => {
+      buttonHeld = false;
+    };
+    const releaseOnDragScroll = () => {
+      if (buttonHeld) setPinnedId(null);
+    };
+
+    // Capture, because scroll events from the scrolling container don't bubble.
     const options = { passive: true, capture: true } as const;
 
     window.addEventListener("wheel", release, options);
     window.addEventListener("touchmove", release, options);
     window.addEventListener("keydown", releaseOnScrollKey, options);
+    window.addEventListener("mousedown", holdButton, options);
+    window.addEventListener("mouseup", releaseButton, options);
+    window.addEventListener("scroll", releaseOnDragScroll, options);
     return () => {
       window.removeEventListener("wheel", release, options);
       window.removeEventListener("touchmove", release, options);
       window.removeEventListener("keydown", releaseOnScrollKey, options);
+      window.removeEventListener("mousedown", holdButton, options);
+      window.removeEventListener("mouseup", releaseButton, options);
+      window.removeEventListener("scroll", releaseOnDragScroll, options);
     };
   }, [pinnedId]);
 
