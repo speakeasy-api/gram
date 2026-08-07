@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -397,4 +398,68 @@ func TestASMetadataAdvertisesIDJAGMinting(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
 	require.Contains(t, doc.GrantTypesSupported, ema.GrantTypeTokenExchange)
 	require.Contains(t, doc.RequestedTokenTypes, ema.TokenTypeIDJAG)
+}
+
+// The bug this pins: an assignment granting no scopes used to let a client
+// mint whatever it asked for, because the narrowing helper read an empty
+// permitted set as "no ceiling" at both call sites.
+func TestMintRejectsScopeRequestAgainstAnEmptyAssignment(t *testing.T) {
+	t.Parallel()
+
+	f := newMintFixture(t)
+	_, err := f.queries.CreateEmaAppAssignment(t.Context(), repo.CreateEmaAppAssignmentParams{
+		ID:            f.assignment.ID,
+		AppID:         f.app.ID,
+		UserID:        f.user.ID,
+		ResourceID:    f.resource.ID,
+		GrantedScopes: "",
+	})
+	require.NoError(t, err)
+
+	form := f.form()
+	form.Set("scope", "chat.admin")
+
+	rec := f.mint(t, form)
+	require.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+	require.Equal(t, "invalid_scope", decodeError(t, rec)["error"])
+}
+
+// An ID-JAG is signed by the same key, carries the same issuer and puts a user
+// id in `sub`, so without a typ check it would pass as the id_token that
+// bought it.
+func TestMintRejectsAnIDJAGPresentedAsTheSubjectToken(t *testing.T) {
+	t.Parallel()
+
+	f := newMintFixture(t)
+	rec := f.mint(t, f.form())
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var minted idJAGResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &minted))
+
+	form := f.form()
+	form.Set("subject_token", minted.AccessToken)
+
+	replay := f.mint(t, form)
+	require.Equal(t, http.StatusBadRequest, replay.Code)
+	require.Equal(t, "invalid_grant", decodeError(t, replay)["error"])
+}
+
+// The discovery document advertises client_secret_basic, so a client that
+// reads the metadata and picks Basic has to work.
+func TestMintAcceptsClientSecretBasic(t *testing.T) {
+	t.Parallel()
+
+	f := newMintFixture(t)
+	form := f.form()
+	form.Del("client_id")
+	form.Del("client_secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(testAppClientID, testAppSecret)
+	rec := httptest.NewRecorder()
+	f.Handler.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
 }
