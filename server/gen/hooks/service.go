@@ -280,10 +280,17 @@ type HookIngestData struct {
 	// Configured MCP server snapshot captured at session start or configuration
 	// change. Transport credentials must be redacted by the sender.
 	McpInventory []*HookMCPData
-	Usage        *HookUsageData
-	Message      *HookMessageData
-	Skill        *HookSkillData
-	Notification *HookNotificationData
+	// Whether the sender was able to read the agent's MCP server list for this
+	// session. True with an empty mcp_inventory means the agent genuinely has no
+	// servers configured; absent or false means the list could not be read (no
+	// agent binary, a failed probe) and the inventory says nothing about what the
+	// session can reach. Enforcement that treats a missing inventory as proof of
+	// absence must consult this first.
+	McpInventoryCollected *bool
+	Usage                 *HookUsageData
+	Message               *HookMessageData
+	Skill                 *HookSkillData
+	Notification          *HookNotificationData
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
 	McpAttribution []*HookMCPAttributionEntry
 	// Transcript-derived prompt attachment content (Claude

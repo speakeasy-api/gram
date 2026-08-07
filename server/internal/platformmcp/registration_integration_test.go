@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -173,6 +174,120 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	_, err = store.BeginProviderSetup(ctx, principal, handoffBinding, failedSetupHandoff.Value, adapters)
 	require.ErrorIs(t, err, ErrSetupHandoffInvalid, "post-consume setup failures require a new handoff")
 
+	expiredHandoffBinding := handoffBinding
+	expiredHandoffBinding.Intent = "expired_provider_setup"
+	expiredDashboardHandoff, err := store.IssueSetupHandoff(ctx, principal, expiredHandoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	err = testrepo.New(conn).ExpirePlatformMCPSetupHandoffFixture(ctx, expiredDashboardHandoff.ID)
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(expiredDashboardHandoff.Value),
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects an expired handoff")
+
+	invalidatedHandoffBinding := handoffBinding
+	invalidatedHandoffBinding.Intent = "invalidated_provider_setup"
+	invalidatedDashboardHandoff, err := store.IssueSetupHandoff(ctx, principal, invalidatedHandoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	_, err = store.IssueSetupHandoff(ctx, principal, invalidatedHandoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	dashboardHandoff, err := store.IssueSetupHandoff(ctx, principal, handoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(invalidatedDashboardHandoff.Value),
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects an invalidated handoff")
+	dashboardStart, err := platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(dashboardHandoff.Value),
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, registration.ID, dashboardStart.RegistrationID)
+	require.Equal(t, project.ID, dashboardStart.ProjectID)
+	require.Equal(t, project.Slug, dashboardStart.ProjectSlug)
+	require.Equal(t, handoffBinding.ProviderKey, dashboardStart.ProviderKey)
+	require.Equal(t, handoffBinding.CatalogReference, dashboardStart.CatalogReference)
+
+	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(dashboardHandoff.Value),
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN("another-user"),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a dashboard session for another subject cannot start setup")
+	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(dashboardHandoff.Value),
+		OrganizationID: "another-organization",
+		SubjectUrn:     userSubjectURN(principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a dashboard session for another organization cannot start setup")
+
+	dashboardGate := &testRegistrationGate{enabled: true}
+	dashboardAuthorizer := &testAuthorizer{}
+	dashboardSetup := NewDashboardSetupService(store, dashboardGate, dashboardAuthorizer, adapters)
+	providerSetup, err := dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, dashboardHandoff.Value)
+	require.NoError(t, err)
+	require.Equal(t, "https://provider.test/authorize", providerSetup.AuthorizationURL)
+	require.Equal(t, principal.OrganizationID, dashboardGate.organizationID)
+	require.Equal(t, project.Slug, dashboardGate.projectSlug)
+	require.Equal(t, 1, dashboardGate.calls, "dashboard setup must evaluate the registration gate")
+	require.Equal(t, 1, dashboardAuthorizer.calls, "dashboard setup must reauthorize the active organization")
+	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, dashboardHandoff.Value)
+	require.ErrorIs(t, err, ErrSetupHandoffInvalid, "dashboard setup must consume the handoff exactly once")
+
+	gateDisabledHandoff, err := store.IssueSetupHandoff(ctx, principal, handoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	dashboardGate.enabled = false
+	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, gateDisabledHandoff.Value)
+	require.ErrorIs(t, err, ErrRegistrationUnavailable)
+	dashboardGate.enabled = true
+	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, gateDisabledHandoff.Value)
+	require.NoError(t, err, "a disabled gate must not consume the handoff")
+	dashboardAuthorizer.err = ErrForbidden
+	authorizationDeniedHandoff, err := store.IssueSetupHandoff(ctx, principal, handoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, authorizationDeniedHandoff.Value)
+	require.ErrorIs(t, err, ErrForbidden)
+	dashboardAuthorizer.err = nil
+	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, authorizationDeniedHandoff.Value)
+	require.NoError(t, err, "an authorization denial must not consume the handoff")
+
+	rotatedGenerationHandoff, err := store.IssueSetupHandoff(ctx, principal, handoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	connectionID := connectionIDFromPrincipal(t, principal)
+	oldGeneration := connectionIDFromPrincipalGeneration(t, principal)
+	newGeneration := uuid.New()
+	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
+		ActiveGeneration: newGeneration,
+		ReauthorizedAt:   timestamp(time.Now().UTC()),
+		ConnectionID:     connectionID,
+		OrganizationID:   principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(rotatedGenerationHandoff.Value),
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects a handoff after connection generation rotation")
+	_, err = platformrepo.New(conn).ConsumePlatformMCPSetupHandoff(ctx, platformrepo.ConsumePlatformMCPSetupHandoffParams{
+		HandoffHash:          setupHandoffHash(rotatedGenerationHandoff.Value),
+		OrganizationID:       principal.OrganizationID,
+		ProjectID:            handoffBinding.ProjectID,
+		RegistrationID:       handoffBinding.RegistrationID,
+		ConnectionID:         connectionID,
+		ConnectionGeneration: oldGeneration,
+		ProviderKey:          handoffBinding.ProviderKey,
+		Intent:               handoffBinding.Intent,
+		SubjectUrn:           userSubjectURN(principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a rotated Platform connection cannot redeem an issued handoff")
+	principal.Generation = newGeneration.String()
+
 	readiness, err := store.ProbeProviderReadiness(ctx, principal, project.ID, registration.ID, adapters)
 	require.NoError(t, err)
 	require.Equal(t, ReadinessReady, readiness.State)
@@ -201,6 +316,33 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	secondPrincipal.Generation = secondGeneration.String()
 	_, err = store.ProbeProviderReadiness(ctx, secondPrincipal, project.ID, registration.ID, adapters)
 	require.NoError(t, err, "a second active connection for the creating user may manage the registration")
+
+	revokedConnectionHandoff, err := store.IssueSetupHandoff(ctx, secondPrincipal, handoffBinding, time.Now().UTC())
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).RevokePlatformMCPConnection(ctx, platformrepo.RevokePlatformMCPConnectionParams{
+		RevokedAt:      timestamp(time.Now().UTC()),
+		ID:             secondConnectionID,
+		OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(revokedConnectionHandoff.Value),
+		OrganizationID: secondPrincipal.OrganizationID,
+		SubjectUrn:     userSubjectURN(secondPrincipal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects a handoff after connection revocation")
+	_, err = platformrepo.New(conn).ConsumePlatformMCPSetupHandoff(ctx, platformrepo.ConsumePlatformMCPSetupHandoffParams{
+		HandoffHash:          setupHandoffHash(revokedConnectionHandoff.Value),
+		OrganizationID:       secondPrincipal.OrganizationID,
+		ProjectID:            handoffBinding.ProjectID,
+		RegistrationID:       handoffBinding.RegistrationID,
+		ConnectionID:         secondConnectionID,
+		ConnectionGeneration: secondGeneration,
+		ProviderKey:          handoffBinding.ProviderKey,
+		Intent:               handoffBinding.Intent,
+		SubjectUrn:           userSubjectURN(secondPrincipal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a revoked Platform connection cannot redeem an issued handoff")
 
 	foreignClient, err := platformrepo.New(conn).CreatePlatformMCPOAuthClient(ctx, platformrepo.CreatePlatformMCPOAuthClientParams{
 		ClientID:              "client-" + uuid.NewString(),
@@ -272,9 +414,35 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.NoError(t, err)
 	require.Equal(t, auditCount, auditCountAfterReplay)
 
+	sameKeyReceipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	require.True(t, sameKeyReceipt.Replayed)
+	require.Equal(t, completed.ID, sameKeyReceipt.ID)
+	require.Equal(t, receiptStatusSucceeded, sameKeyReceipt.Status)
+	sameKeyReceipt, err = store.ConvergeRegistration(ctx, principal, project, request, sameKeyReceipt)
+	require.NoError(t, err)
+	require.Equal(t, completed.ID, sameKeyReceipt.ID)
+	require.Equal(t, receiptStatusSucceeded, sameKeyReceipt.Status)
+
 	plugins, err := pluginsrepo.New(conn).ListPlugins(ctx, pluginsrepo.ListPluginsParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Empty(t, plugins)
+}
+
+func connectionIDFromPrincipal(t *testing.T, principal Principal) uuid.UUID {
+	t.Helper()
+
+	connectionID, err := uuid.Parse(principal.ConnectionID)
+	require.NoError(t, err)
+	return connectionID
+}
+
+func connectionIDFromPrincipalGeneration(t *testing.T, principal Principal) uuid.UUID {
+	t.Helper()
+
+	generation, err := uuid.Parse(principal.Generation)
+	require.NoError(t, err)
+	return generation
 }
 
 func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.Pool) (Principal, ResolvedProject) {

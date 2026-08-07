@@ -23,6 +23,7 @@ type testOrganizationSlugResolver struct {
 
 type recordingRolloutProvider struct {
 	groups map[string]string
+	err    error
 }
 
 func (r testOrganizationSlugResolver) OrganizationSlug(_ context.Context, _ string) (string, error) {
@@ -31,7 +32,7 @@ func (r testOrganizationSlugResolver) OrganizationSlug(_ context.Context, _ stri
 
 func (r *recordingRolloutProvider) IsFlagEnabled(_ context.Context, _ feature.Flag, _ string, groups map[string]string) (bool, error) {
 	r.groups = groups
-	return true, nil
+	return true, r.err
 }
 
 func (r *recordingRolloutProvider) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, _ map[string]string) (bool, error) {
@@ -102,6 +103,24 @@ func TestCatalogRegistrationGateRequiresMainAndMutationGates(t *testing.T) {
 		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), &feature.InMemory{}, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
 
 		require.NoError(t, err)
+		require.False(t, enabled)
+	})
+
+	t.Run("fails closed when registration rollout errors", func(t *testing.T) {
+		t.Parallel()
+
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), &recordingRolloutProvider{err: errors.New("unavailable")}, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.ErrorContains(t, err, "check platform mcp catalog registration rollout")
+		require.False(t, enabled)
+	})
+
+	t.Run("fails closed when organization slug resolution errors", func(t *testing.T) {
+		t.Parallel()
+
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), &feature.InMemory{}, testOrganizationSlugResolver{err: errors.New("unavailable")}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.ErrorContains(t, err, "resolve platform mcp rollout organization")
 		require.False(t, enabled)
 	})
 

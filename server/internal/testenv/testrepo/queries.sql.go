@@ -167,6 +167,18 @@ func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, 
 	return err
 }
 
+const expirePlatformMCPSetupHandoffFixture = `-- name: ExpirePlatformMCPSetupHandoffFixture :exec
+UPDATE platform_mcp_setup_handoffs
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+`
+
+// Test-only fixture to verify expired setup handoffs cannot be redeemed.
+func (q *Queries) ExpirePlatformMCPSetupHandoffFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expirePlatformMCPSetupHandoffFixture, id)
+	return err
+}
+
 const expireRemoteSessionAccessTokenFixture = `-- name: ExpireRemoteSessionAccessTokenFixture :exec
 UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
@@ -447,6 +459,35 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LockedUntil,
 		&i.LeaseToken,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getToolCallBlockLinksFixture = `-- name: GetToolCallBlockLinksFixture :one
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = $1
+`
+
+type GetToolCallBlockLinksFixtureRow struct {
+	ChatID        uuid.NullUUID
+	ChatMessageID uuid.NullUUID
+	RiskResultID  uuid.NullUUID
+	RiskPolicyID  uuid.NullUUID
+}
+
+// Test-only. The block page query deliberately does not expose the optional
+// foreign keys, but asserting that the salvage cleared exactly the link the
+// database rejected — and left the others alone — requires reading them off
+// the row.
+func (q *Queries) GetToolCallBlockLinksFixture(ctx context.Context, id uuid.UUID) (GetToolCallBlockLinksFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallBlockLinksFixture, id)
+	var i GetToolCallBlockLinksFixtureRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.ChatMessageID,
+		&i.RiskResultID,
+		&i.RiskPolicyID,
 	)
 	return i, err
 }

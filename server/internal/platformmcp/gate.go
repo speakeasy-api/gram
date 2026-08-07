@@ -64,7 +64,7 @@ func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (
 		return false, nil
 	}
 
-	organizationSlug, err := g.organizationSlug(ctx, organizationID)
+	organizationSlug, err := resolveOrganizationSlug(ctx, g.organizations, organizationID)
 	if err != nil {
 		return false, err
 	}
@@ -116,10 +116,6 @@ func (g *CatalogRegistrationGate) Enabled(ctx context.Context, organizationID, p
 		return false, fmt.Errorf("check platform mcp catalog registration rollout: %w", err)
 	}
 	return registrationEnabled, nil
-}
-
-func (g *OrganizationGate) organizationSlug(ctx context.Context, organizationID string) (string, error) {
-	return resolveOrganizationSlug(ctx, g.organizations, organizationID)
 }
 
 func resolveOrganizationSlug(ctx context.Context, organizations OrganizationSlugResolver, organizationID string) (string, error) {

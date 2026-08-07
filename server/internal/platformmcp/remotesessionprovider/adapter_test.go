@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 )
 
 func TestValidDescriptorRequiresReviewedHTTPSURLs(t *testing.T) {
@@ -26,6 +28,17 @@ func TestValidDescriptorRequiresReviewedHTTPSURLs(t *testing.T) {
 	valid.StreamableHTTPURL = "https://provider.test/mcp"
 	valid.ProviderSetupCompletionURL = "http://gram.test/platform-mcp/provider-setup-complete"
 	require.False(t, validDescriptor(valid))
+}
+
+func TestPreflightSetupRejectsAlreadyConsumedHandoff(t *testing.T) {
+	t.Parallel()
+
+	adapter := &Adapter{}
+	err := adapter.PreflightSetup(t.Context(), platformmcp.ProviderSetupRequest{
+		UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), MCPSlug: "mcp", ConnectionID: uuid.New(), Generation: uuid.New(), HandoffID: uuid.New(),
+	})
+
+	require.ErrorIs(t, err, platformmcp.ErrSetupHandoffInvalid)
 }
 
 func TestBoundedReadCloserAllowsExactLimit(t *testing.T) {

@@ -76,8 +76,11 @@ func (a *Adapter) ProviderKey() string {
 // PreflightSetup confirms that a reviewed shared client binding exists before
 // a Platform handoff is consumed. It never starts OAuth or makes provider egress.
 func (a *Adapter) PreflightSetup(ctx context.Context, request platformmcp.ProviderSetupRequest) error {
-	if err := validateSetupRequest(request); err != nil || request.HandoffID != uuid.Nil {
+	if err := validateSetupRequest(request); err != nil {
 		return err
+	}
+	if request.HandoffID != uuid.Nil {
+		return platformmcp.ErrSetupHandoffInvalid
 	}
 	descriptor := a.descriptor
 	if !validDescriptor(descriptor) || a.sessions == nil {

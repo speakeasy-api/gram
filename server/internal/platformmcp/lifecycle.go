@@ -212,6 +212,7 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 		ConnectionGeneration: generation,
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
+		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SetupHandoff{}, ErrSetupHandoffInvalid

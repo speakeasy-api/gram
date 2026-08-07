@@ -301,6 +301,12 @@ SELECT handoff_hash
 FROM platform_mcp_setup_handoffs
 WHERE id = @id;
 
+-- name: ExpirePlatformMCPSetupHandoffFixture :exec
+-- Test-only fixture to verify expired setup handoffs cannot be redeemed.
+UPDATE platform_mcp_setup_handoffs
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id;
+
 -- name: GetPlatformMCPReadinessFingerprintFixture :one
 -- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
 SELECT provider_authorization_fingerprint
@@ -313,4 +319,13 @@ LIMIT 1;
 -- Test-only fixture forcing the shared remote-session refresh path.
 UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = @id;
+
+-- name: GetToolCallBlockLinksFixture :one
+-- Test-only. The block page query deliberately does not expose the optional
+-- foreign keys, but asserting that the salvage cleared exactly the link the
+-- database rejected — and left the others alone — requires reading them off
+-- the row.
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
 WHERE id = @id;

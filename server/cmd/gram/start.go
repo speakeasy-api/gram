@@ -1320,17 +1320,9 @@ func newStartCommand() *cli.Command {
 				nil, // Catalog registration remains fail-closed until it can use the same reviewed descriptor.
 				platformmcp.NewPostgresReadinessRecorder(db),
 			)
-			platformmcp.Attach(mux, platformmcp.NewService(
-				logger,
-				tracerProvider,
-				db,
-				sessionManager,
-				authzEngine,
-				platformAuthorizer,
-				platformmcp.NewPostgresLifecycleStore(db),
-				platformAdmission,
-			))
+
 			platformOAuth.Attach(mux)
+			platformmcp.NewDashboardSetupHTTP(nil, sessionManager).Attach(mux) // Reviewed provider composition is intentionally default-off, so setup start fails closed until approved dependencies are injected.
 			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)

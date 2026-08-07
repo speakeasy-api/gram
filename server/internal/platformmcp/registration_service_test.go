@@ -51,7 +51,8 @@ func TestRegistrationServiceRegistersReviewedCandidateWithServerComputedHash(t *
 	require.Equal(t, "reviewed/mcp", result.CatalogRef)
 	require.Equal(t, "authorize", result.SetupIntent)
 	require.Equal(t, registrationID.String(), result.Registration)
-	require.Equal(t, catalogRegistrationInputHash(project.Slug, "catalog", "provider", "reviewed/mcp"), store.request.InputHash)
+	require.Equal(t, "73d3fd5eb2797fecdc9e976e1567f48587eb4920f384eb0fca7d4e5fbe99f29b", store.request.InputHash)
+	require.NotEqual(t, catalogRegistrationInputHash(project.Slug, "catalog", "other-provider", "other/reference"), store.request.InputHash)
 	require.Equal(t, "catalog", store.request.SourceKind)
 	require.Equal(t, 1, store.beginCalls)
 	require.Equal(t, 1, store.convergeCalls)
@@ -136,6 +137,31 @@ func TestRegistrationServiceIssuesSetupHandoffOnlyWhenRegistrationGateIsEnabled(
 	require.Equal(t, 1, store.resolveCalls)
 }
 
+func TestRegistrationServiceRejectsInvalidSetupHandoffInputs(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	store := &recordingRegistrationStore{project: project}
+	gate := &testRegistrationGate{enabled: true}
+	service := NewRegistrationService(
+		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "setup"}, Transport: "streamable-http"}},
+		gate,
+		store,
+	)
+
+	_, err := service.IssueSetupHandoff(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+		ProjectSlug: "project", RegistrationID: uuid.NewString(), ProviderKey: "unreviewed", CatalogRef: "unreviewed/mcp",
+	})
+	require.ErrorIs(t, err, ErrCatalogRejected)
+	require.Zero(t, store.resolveCalls)
+
+	_, err = service.IssueSetupHandoff(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+		ProjectSlug: "project", RegistrationID: "not-a-uuid", ProviderKey: "provider", CatalogRef: "reviewed/mcp",
+	})
+	require.ErrorIs(t, err, ErrSetupHandoffInvalid)
+	require.Equal(t, 1, store.resolveCalls)
+}
+
 func TestRegistrationServiceDoesNotReconvergeSucceededReplay(t *testing.T) {
 	t.Parallel()
 
@@ -182,13 +208,17 @@ func (c testCatalog) Inspect(context.Context, string, string) (CatalogDetails, e
 }
 
 type testRegistrationGate struct {
-	enabled bool
-	err     error
-	calls   int
+	enabled        bool
+	err            error
+	calls          int
+	organizationID string
+	projectSlug    string
 }
 
-func (g *testRegistrationGate) Enabled(context.Context, string, string) (bool, error) {
+func (g *testRegistrationGate) Enabled(_ context.Context, organizationID, projectSlug string) (bool, error) {
 	g.calls++
+	g.organizationID = organizationID
+	g.projectSlug = projectSlug
 	return g.enabled, g.err
 }
 

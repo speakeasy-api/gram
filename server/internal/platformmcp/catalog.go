@@ -61,7 +61,7 @@ type RegistryCatalog struct {
 func NewRegistryCatalog(client *externalmcp.RegistryClient, descriptors []CatalogDescriptor) *RegistryCatalog {
 	byKey := make(map[string]CatalogDescriptor, len(descriptors))
 	for _, descriptor := range descriptors {
-		if descriptor.ProviderKey == "" || descriptor.Registry.ID == uuid.Nil || descriptor.Registry.URL == "" || descriptor.CanonicalRef == "" || descriptor.AllowedRemoteURL == "" || descriptor.SetupIntent == "" {
+		if descriptor.ProviderKey == "" || descriptor.Registry.ID == uuid.Nil || descriptor.Registry.URL == "" || descriptor.CanonicalRef == "" || descriptor.AllowedRemoteURL == "" || hasUnresolvedRemoteTemplate(descriptor.AllowedRemoteURL) || descriptor.SetupIntent == "" {
 			continue
 		}
 		byKey[descriptor.ProviderKey] = descriptor
@@ -106,7 +106,7 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 	if err != nil {
 		return CatalogDetails{}, fmt.Errorf("inspect platform mcp catalog candidate: %w", err)
 	}
-	if details.RemoteURL != descriptor.AllowedRemoteURL || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP || len(details.Headers) != 0 {
+	if details.RemoteURL != descriptor.AllowedRemoteURL || hasUnresolvedRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP || len(details.Headers) != 0 {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
 
@@ -134,12 +134,19 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 }
 
 func entryHasAllowedStreamableHTTPRemote(entry *types.ExternalMCPServerEntry, allowedRemoteURL string) bool {
+	if hasUnresolvedRemoteTemplate(allowedRemoteURL) {
+		return false
+	}
 	for _, remote := range entry.Remotes {
-		if remote != nil && remote.URL == allowedRemoteURL && strings.EqualFold(remote.TransportType, "streamable-http") {
+		if remote != nil && remote.URL == allowedRemoteURL && !hasUnresolvedRemoteTemplate(remote.URL) && strings.EqualFold(remote.TransportType, "streamable-http") {
 			return true
 		}
 	}
 	return false
+}
+
+func hasUnresolvedRemoteTemplate(rawURL string) bool {
+	return strings.ContainsAny(rawURL, "{}")
 }
 
 func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.ExternalMCPServerEntry) CatalogCandidate {

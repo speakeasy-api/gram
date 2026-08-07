@@ -19,6 +19,8 @@ type GetSetupHandoffToolOutput struct {
 	ProjectID      string `json:"project_id"`
 	RegistrationID string `json:"registration_id"`
 	ProviderKey    string `json:"provider_key"`
+	CatalogRef     string `json:"catalog_ref"`
+	SetupURL       string `json:"setup_url"`
 	Intent         string `json:"intent"`
 	Handoff        string `json:"handoff"`
 	ExpiresAt      string `json:"expires_at"`
@@ -42,6 +44,8 @@ func registerSetupHandoffTool(server *mcp.Server, registrations *RegistrationSer
 			ProjectID:      issued.ProjectID.String(),
 			RegistrationID: issued.RegistrationID.String(),
 			ProviderKey:    issued.ProviderKey,
+			CatalogRef:     input.CatalogRef,
+			SetupURL:       providerSetupStartPath,
 			Intent:         issued.Intent,
 			Handoff:        issued.Value,
 			ExpiresAt:      issued.ExpiresAt.UTC().Format(time.RFC3339),

@@ -22,6 +22,15 @@ func TestEntryHasAllowedStreamableHTTPRemote(t *testing.T) {
 	require.True(t, entryHasAllowedStreamableHTTPRemote(entry, "https://example.test/mcp"))
 	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "https://example.test/sse"))
 	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "https://other.test/mcp"))
+	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "https://example.test/{region}/mcp"))
+}
+
+func TestHasUnresolvedRemoteTemplate(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, hasUnresolvedRemoteTemplate("https://example.test/{region}/mcp"))
+	require.True(t, hasUnresolvedRemoteTemplate("https://example.test/mcp?tenant={tenant}"))
+	require.False(t, hasUnresolvedRemoteTemplate("https://example.test/mcp"))
 }
 
 func TestCatalogDetailsUseSnakeCaseJSONKeys(t *testing.T) {

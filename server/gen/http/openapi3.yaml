@@ -27008,182 +27008,6 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdatePackage
-    /rpc/platformMcp.getLifecycle:
-        get:
-            description: Get Platform MCP onboarding, publication, authorization, and discovery facts for the active organization. Requires org:admin.
-            operationId: getPlatformMcpLifecycle
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/PlatformMCPLifecycle'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-                "503":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unavailable: service temporarily unavailable'
-            security:
-                - session_header_Gram-Session: []
-            summary: getLifecycle platformMcp
-            tags:
-                - platformMcp
-            x-speakeasy-name-override: getLifecycle
-            x-speakeasy-react-hook:
-                name: PlatformMcpLifecycle
-    /rpc/platformMcp.revokeConnection:
-        post:
-            description: Revoke the active Platform MCP connection for the active organization. This remains available when Platform MCP rollout gates are unavailable. Requires live org:admin.
-            operationId: revokePlatformMcpConnection
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RevokeConnectionRequestBody'
-                required: true
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-                "503":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unavailable: service temporarily unavailable'
-            security:
-                - session_header_Gram-Session: []
-            summary: revokeConnection platformMcp
-            tags:
-                - platformMcp
-            x-speakeasy-name-override: revokeConnection
-            x-speakeasy-react-hook:
-                name: RevokePlatformMcpConnection
     /rpc/plugins.addPluginServer:
         post:
             description: Add an MCP server to a plugin.
@@ -60410,6 +60234,9 @@ components:
                     items:
                         $ref: '#/components/schemas/HookMCPData'
                     description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+                mcp_inventory_collected:
+                    type: boolean
+                    description: Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.
                 message:
                     $ref: '#/components/schemas/HookMessageData'
                 notification:
@@ -64730,72 +64557,6 @@ components:
                 - credits
                 - included_credits
                 - has_active_subscription
-        PlatformMCPConnection:
-            type: object
-            properties:
-                authorized_at:
-                    type: string
-                    description: When this connection was authorized.
-                    format: date-time
-                id:
-                    type: string
-                    description: Opaque active Platform MCP connection identifier, usable only to revoke within this organization.
-                    format: uuid
-                ready:
-                    type: boolean
-                    description: Whether authenticated tools/list completed for this connection generation.
-                reauthorized_at:
-                    type: string
-                    description: When this connection was most recently reauthorized.
-                    format: date-time
-            required:
-                - id
-                - ready
-        PlatformMCPLifecycle:
-            type: object
-            properties:
-                admission:
-                    type: string
-                    description: Current package admission evaluation.
-                    enum:
-                        - enabled
-                        - disabled
-                        - indeterminate
-                authorized:
-                    type: boolean
-                    description: Whether the organization has an active Platform MCP connection.
-                connections:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/PlatformMCPConnection'
-                    description: Active Platform MCP connections, each scoped to this organization and usable only to revoke within it.
-                default_project_id:
-                    type: string
-                    description: Literal default project identifier when it exists.
-                    format: uuid
-                marketplace_published:
-                    type: boolean
-                    description: Whether the literal default project has a published marketplace repository.
-                ready:
-                    type: boolean
-                    description: Whether at least one active connection completed authenticated tools/list discovery.
-                reason_code:
-                    type: string
-                    description: Bounded lifecycle state reason.
-                    enum:
-                        - eligible
-                        - default_project_missing
-                        - marketplace_unpublished
-                        - gate_disabled
-                        - status_indeterminate
-                        - authorized_awaiting_discovery
-                        - ready
-            required:
-                - admission
-                - reason_code
-                - marketplace_published
-                - authorized
-                - ready
         PlatformToolDefinition:
             type: object
             properties:
@@ -66651,15 +66412,6 @@ components:
             description: Result type for revoking all of a client's remote_sessions.
             required:
                 - revoked_count
-        RevokeConnectionRequestBody:
-            type: object
-            properties:
-                connection_id:
-                    type: string
-                    description: Opaque Platform MCP connection identifier.
-                    format: uuid
-            required:
-                - connection_id
         RiskBlock:
             type: object
             properties:
@@ -75397,8 +75149,6 @@ tags:
       description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: adminExternalCredentials
       description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
-    - name: platformMcp
-      description: Read Platform MCP lifecycle state and revoke organization-scoped Platform MCP connections. OAuth credentials and client metadata are never returned.
     - name: plugins
       description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features

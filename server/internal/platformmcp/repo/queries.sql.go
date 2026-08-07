@@ -153,10 +153,20 @@ WHERE handoff.handoff_hash = $1
   AND EXISTS (
       SELECT 1
       FROM platform_mcp_catalog_registrations AS registration
+      JOIN projects AS project
+        ON project.id = registration.project_id
+       AND project.organization_id = registration.organization_id
+       AND project.deleted IS FALSE
+      JOIN platform_mcp_connections AS connection
+        ON connection.id = handoff.connection_id
+       AND connection.organization_id = handoff.organization_id
       WHERE registration.id = handoff.registration_id
         AND registration.organization_id = handoff.organization_id
         AND registration.project_id = handoff.project_id
         AND registration.deleted IS FALSE
+        AND connection.subject_urn = $9
+        AND connection.active_generation = handoff.connection_generation
+        AND connection.revoked_at IS NULL
   )
 RETURNING handoff.id, handoff.organization_id, handoff.project_id, handoff.registration_id, handoff.connection_id, handoff.connection_generation, handoff.provider_key, handoff.intent, handoff.handoff_hash, handoff.expires_at, handoff.redeemed_at, handoff.invalidated_at, handoff.created_at, handoff.updated_at
 `
@@ -170,6 +180,7 @@ type ConsumePlatformMCPSetupHandoffParams struct {
 	ConnectionGeneration uuid.UUID
 	ProviderKey          string
 	Intent               string
+	SubjectUrn           string
 }
 
 func (q *Queries) ConsumePlatformMCPSetupHandoff(ctx context.Context, arg ConsumePlatformMCPSetupHandoffParams) (PlatformMcpSetupHandoff, error) {
@@ -182,6 +193,7 @@ func (q *Queries) ConsumePlatformMCPSetupHandoff(ctx context.Context, arg Consum
 		arg.ConnectionGeneration,
 		arg.ProviderKey,
 		arg.Intent,
+		arg.SubjectUrn,
 	)
 	var i PlatformMcpSetupHandoff
 	err := row.Scan(
@@ -1032,6 +1044,10 @@ JOIN platform_mcp_connections AS created_connection
 JOIN platform_mcp_connections AS current_connection
   ON current_connection.id = $1
  AND current_connection.organization_id = registration.organization_id
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
 WHERE registration.id = $2
   AND registration.organization_id = $3
   AND registration.project_id = $4
@@ -1444,6 +1460,75 @@ func (q *Queries) GetPlatformMCPSessionForRefreshForUpdate(ctx context.Context, 
 		&i.SubjectUrn,
 		&i.ActiveGeneration,
 		&i.ClientID,
+	)
+	return i, err
+}
+
+const getPlatformMCPSetupHandoffForDashboardStart = `-- name: GetPlatformMCPSetupHandoffForDashboardStart :one
+SELECT
+    handoff.id,
+    handoff.project_id,
+    handoff.registration_id,
+    handoff.provider_key,
+    handoff.intent,
+    handoff.connection_id,
+    handoff.connection_generation,
+    registration.catalog_reference,
+    project.slug AS project_slug
+FROM platform_mcp_setup_handoffs AS handoff
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = handoff.registration_id
+ AND registration.organization_id = handoff.organization_id
+ AND registration.project_id = handoff.project_id
+ AND registration.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+JOIN platform_mcp_connections AS connection
+  ON connection.id = handoff.connection_id
+ AND connection.organization_id = handoff.organization_id
+WHERE handoff.handoff_hash = $1
+  AND handoff.organization_id = $2
+  AND connection.subject_urn = $3
+  AND connection.active_generation = handoff.connection_generation
+  AND connection.revoked_at IS NULL
+  AND handoff.redeemed_at IS NULL
+  AND handoff.invalidated_at IS NULL
+  AND handoff.expires_at > clock_timestamp()
+`
+
+type GetPlatformMCPSetupHandoffForDashboardStartParams struct {
+	HandoffHash    string
+	OrganizationID string
+	SubjectUrn     string
+}
+
+type GetPlatformMCPSetupHandoffForDashboardStartRow struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	ProviderKey          string
+	Intent               string
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	CatalogReference     string
+	ProjectSlug          string
+}
+
+func (q *Queries) GetPlatformMCPSetupHandoffForDashboardStart(ctx context.Context, arg GetPlatformMCPSetupHandoffForDashboardStartParams) (GetPlatformMCPSetupHandoffForDashboardStartRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPSetupHandoffForDashboardStart, arg.HandoffHash, arg.OrganizationID, arg.SubjectUrn)
+	var i GetPlatformMCPSetupHandoffForDashboardStartRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ProviderKey,
+		&i.Intent,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.CatalogReference,
+		&i.ProjectSlug,
 	)
 	return i, err
 }

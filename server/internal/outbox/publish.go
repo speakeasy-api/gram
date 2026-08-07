@@ -29,6 +29,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/repo"
 )
@@ -64,7 +65,7 @@ const maxMessageBytes = 9 * 1024 * 1024
 // Message is a single enqueued publish.
 type Message struct {
 	// Proto is the message to publish. Its type determines the destination
-	// topic and must be registered with RegisterTopic.
+	// topic and must declare a (gcp.pubsub.v1.topic) option.
 	Proto proto.Message
 
 	// PublicID pins the row's public_id. Leave it zero to have one generated.
@@ -170,12 +171,14 @@ func buildEntry(ctx context.Context, orgID string, msg Message, propagator propa
 		return publishEntry{}, oops.Permanent(fmt.Errorf("publish outbox message must not be nil"))
 	}
 
-	// Reject an unregistered topic here rather than letting the relay discover
+	// Reject an undeclared topic here rather than letting the relay discover
 	// it: the write is the last point at which the failure is still attached to
-	// the code that caused it, instead of being a dead-lettered row.
+	// the code that caused it, instead of being a dead-lettered row. The
+	// registry is generated from the proto descriptors, so a type is publishable
+	// exactly when it declares a (gcp.pubsub.v1.topic) option.
 	topic := proto.MessageName(msg.Proto)
-	if _, ok := ProtobufType(topic); !ok {
-		return publishEntry{}, oops.Permanent(fmt.Errorf("publish outbox topic %s is not registered", topic))
+	if _, ok := topics.Lookup(string(topic)); !ok {
+		return publishEntry{}, oops.Permanent(fmt.Errorf("publish outbox topic %s is not a declared pubsub topic", topic))
 	}
 
 	body, err := proto.Marshal(msg.Proto)

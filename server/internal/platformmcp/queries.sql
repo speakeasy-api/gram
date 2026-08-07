@@ -519,6 +519,10 @@ JOIN platform_mcp_connections AS created_connection
 JOIN platform_mcp_connections AS current_connection
   ON current_connection.id = @connection_id
  AND current_connection.organization_id = registration.organization_id
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
 WHERE registration.id = @registration_id
   AND registration.organization_id = @organization_id
   AND registration.project_id = @project_id
@@ -621,6 +625,39 @@ WHERE organization_id = @organization_id
   AND redeemed_at IS NULL
   AND invalidated_at IS NULL;
 
+-- name: GetPlatformMCPSetupHandoffForDashboardStart :one
+SELECT
+    handoff.id,
+    handoff.project_id,
+    handoff.registration_id,
+    handoff.provider_key,
+    handoff.intent,
+    handoff.connection_id,
+    handoff.connection_generation,
+    registration.catalog_reference,
+    project.slug AS project_slug
+FROM platform_mcp_setup_handoffs AS handoff
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = handoff.registration_id
+ AND registration.organization_id = handoff.organization_id
+ AND registration.project_id = handoff.project_id
+ AND registration.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+JOIN platform_mcp_connections AS connection
+  ON connection.id = handoff.connection_id
+ AND connection.organization_id = handoff.organization_id
+WHERE handoff.handoff_hash = @handoff_hash
+  AND handoff.organization_id = @organization_id
+  AND connection.subject_urn = @subject_urn
+  AND connection.active_generation = handoff.connection_generation
+  AND connection.revoked_at IS NULL
+  AND handoff.redeemed_at IS NULL
+  AND handoff.invalidated_at IS NULL
+  AND handoff.expires_at > clock_timestamp();
+
 -- name: ConsumePlatformMCPSetupHandoff :one
 UPDATE platform_mcp_setup_handoffs AS handoff
 SET redeemed_at = clock_timestamp(),
@@ -639,10 +676,20 @@ WHERE handoff.handoff_hash = @handoff_hash
   AND EXISTS (
       SELECT 1
       FROM platform_mcp_catalog_registrations AS registration
+      JOIN projects AS project
+        ON project.id = registration.project_id
+       AND project.organization_id = registration.organization_id
+       AND project.deleted IS FALSE
+      JOIN platform_mcp_connections AS connection
+        ON connection.id = handoff.connection_id
+       AND connection.organization_id = handoff.organization_id
       WHERE registration.id = handoff.registration_id
         AND registration.organization_id = handoff.organization_id
         AND registration.project_id = handoff.project_id
         AND registration.deleted IS FALSE
+        AND connection.subject_urn = @subject_urn
+        AND connection.active_generation = handoff.connection_generation
+        AND connection.revoked_at IS NULL
   )
 RETURNING handoff.*;
 
