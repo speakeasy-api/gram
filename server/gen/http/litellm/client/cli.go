@@ -296,39 +296,3 @@ func BuildTracesPayload(litellmTracesBody string, litellmTracesApikeyToken strin
 
 	return v, nil
 }
-
-// BuildMetricsPayload builds the payload for the litellm metrics endpoint from
-// CLI flags.
-func BuildMetricsPayload(litellmMetricsBody string, litellmMetricsApikeyToken string, litellmMetricsProjectSlugInput string) (*litellm.MetricsPayload, error) {
-	var err error
-	var body MetricsRequestBody
-	{
-		err = json.Unmarshal([]byte(litellmMetricsBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceMetrics\": [\n         \"abc123\"\n      ]\n   }'")
-		}
-	}
-	var apikeyToken *string
-	{
-		if litellmMetricsApikeyToken != "" {
-			apikeyToken = &litellmMetricsApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if litellmMetricsProjectSlugInput != "" {
-			projectSlugInput = &litellmMetricsProjectSlugInput
-		}
-	}
-	v := &litellm.MetricsPayload{}
-	if body.ResourceMetrics != nil {
-		v.ResourceMetrics = make([]any, len(body.ResourceMetrics))
-		for i, val := range body.ResourceMetrics {
-			v.ResourceMetrics[i] = val
-		}
-	}
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
