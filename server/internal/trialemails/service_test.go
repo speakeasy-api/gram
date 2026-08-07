@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -226,7 +227,7 @@ func newTestServiceWithTrial(t *testing.T, active bool) (context.Context, *testI
 		FreeTrialEndsAt:    conv.ToPGTimestamptz(endsAt),
 		DisabledAt:         conv.PtrToPGTimestamptz(nil),
 	}))
-	require.NoError(t, testrepo.New(conn).InsertTrialFixture(ctx, testrepo.InsertTrialFixtureParams{
+	require.NoError(t, trialsrepo.New(conn).InsertTrialFixture(ctx, trialsrepo.InsertTrialFixtureParams{
 		OrganizationID: organizationID,
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		EndsAt:         conv.ToPGTimestamptz(endsAt),
@@ -324,11 +325,6 @@ func trialStartedEvent(ti *testInstance, admin testAdmin) loops.SendEventInput {
 		EventProperties: activeProperties(ti),
 		IdempotencyKey:  trialStartedIdempotencyKey(ti.organizationID, admin.id, ti.trialCreatedAt),
 	}
-}
-
-//go:fix inline
-func stringPtr(value string) *string {
-	return new(value)
 }
 
 type fakeWorkflowClient struct {

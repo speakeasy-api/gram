@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const trialStartedEventName = "trial_started"
@@ -42,8 +43,7 @@ func NewService(db *pgxpool.Pool, workflows loops.WorkflowClient, logger *slog.L
 
 // TrialStarted enters every active organization administrator into the trial workflow.
 func (s *Service) TrialStarted(ctx context.Context, organizationID string) error {
-	queries := orgrepo.New(s.db)
-	trial, err := queries.GetActiveTrial(ctx, organizationID)
+	trial, err := trialsrepo.New(s.db).GetActiveTrial(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -51,6 +51,7 @@ func (s *Service) TrialStarted(ctx context.Context, organizationID string) error
 		return fmt.Errorf("get active trial: %w", err)
 	}
 
+	queries := orgrepo.New(s.db)
 	organization, err := queries.GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		return fmt.Errorf("get organization metadata: %w", err)
@@ -71,8 +72,7 @@ func (s *Service) TrialStarted(ctx context.Context, organizationID string) error
 
 // AdminAdded enters a newly added administrator into an active trial workflow.
 func (s *Service) AdminAdded(ctx context.Context, organizationID, userID string) error {
-	queries := orgrepo.New(s.db)
-	trial, err := queries.GetActiveTrial(ctx, organizationID)
+	trial, err := trialsrepo.New(s.db).GetActiveTrial(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -80,6 +80,7 @@ func (s *Service) AdminAdded(ctx context.Context, organizationID, userID string)
 		return fmt.Errorf("get active trial: %w", err)
 	}
 
+	queries := orgrepo.New(s.db)
 	organization, err := queries.GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		return fmt.Errorf("get organization metadata: %w", err)
@@ -170,15 +171,19 @@ func (s *Service) updateContact(ctx context.Context, admin accessrepo.ListActive
 
 func (s *Service) findContact(ctx context.Context, admin accessrepo.ListActiveOrganizationAdminsRow) (*loops.Contact, error) {
 	if admin.ID != "" {
-		contact, err := s.workflows.FindContact(ctx, loops.FindContactInput{UserID: admin.ID})
+		contact, err := s.workflows.FindContact(ctx, loops.FindContactInput{Email: "", UserID: admin.ID})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("find contact by user ID: %w", err)
 		}
 		if contact != nil {
 			return contact, nil
 		}
 	}
-	return s.workflows.FindContact(ctx, loops.FindContactInput{Email: admin.Email})
+	contact, err := s.workflows.FindContact(ctx, loops.FindContactInput{Email: admin.Email, UserID: ""})
+	if err != nil {
+		return nil, fmt.Errorf("find contact by email: %w", err)
+	}
+	return contact, nil
 }
 
 func trialStartedIdempotencyKey(organizationID, userID string, trialCreatedAt time.Time) string {
