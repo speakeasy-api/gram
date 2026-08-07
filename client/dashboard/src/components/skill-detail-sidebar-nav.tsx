@@ -79,7 +79,13 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
     return ids;
   }, [hasFrontmatter, latestVersion]);
 
-  const scrolledSectionId = useActiveSectionOnScroll(sectionIds);
+  const hashSectionId = location.hash.replace("#", "");
+  // location.key changes on every navigation, so clicking the section already
+  // in the hash re-pins it instead of being treated as no change.
+  const trackedSectionId = useActiveSectionOnScroll(sectionIds, {
+    requestedSectionId: hashSectionId,
+    requestKey: location.key,
+  });
 
   if (!skillId) return null;
 
@@ -88,9 +94,9 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       .length ?? 0;
 
   const detailHref = routes.skills.detail.href(skillId);
-  // As the reader scrolls, the section in view drives the highlight; the hash
-  // only seeds it before the first scroll (e.g. deep-linking to a section).
-  const activeSectionId = scrolledSectionId ?? location.hash.replace("#", "");
+  // A clicked section stays highlighted until the reader scrolls; after that
+  // the section in view drives the highlight.
+  const activeSectionId = trackedSectionId ?? hashSectionId;
   const sectionItem = (
     sectionId: string,
     title: string,

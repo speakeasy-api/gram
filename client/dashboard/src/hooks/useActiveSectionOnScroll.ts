@@ -14,6 +14,35 @@ function findVerticalScrollParent(el: HTMLElement | null): HTMLElement | null {
   return node;
 }
 
+// Keys that scroll the page. Releasing the pin on any keystroke would drop it
+// on unrelated input (search shortcuts, typing in a dialog).
+const SCROLL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+]);
+
+export type ActiveSectionOptions = {
+  /**
+   * The section the reader explicitly asked for, e.g. the URL hash after
+   * clicking a sidebar link. It stays active until the reader scrolls again,
+   * so the highlight doesn't spring back when the page can't scroll far enough
+   * to bring that section to the activation line (the trailing sections that
+   * share the last screenful).
+   */
+  requestedSectionId?: string | null;
+  /**
+   * Changes on every navigation, so asking for the section that is already in
+   * the hash (clicking the same link twice) pins it again.
+   */
+  requestKey?: string;
+  topOffset?: number;
+};
+
 /**
  * Tracks which of the given page sections the reader is currently looking at
  * and returns its id, so a sidebar can keep its active item in sync as the
@@ -27,12 +56,45 @@ function findVerticalScrollParent(el: HTMLElement | null): HTMLElement | null {
  */
 export function useActiveSectionOnScroll(
   sectionIds: readonly string[],
-  topOffset = 120,
+  {
+    requestedSectionId = null,
+    requestKey = "",
+    topOffset = 120,
+  }: ActiveSectionOptions = {},
 ): string | null {
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [pinnedId, setPinnedId] = React.useState<string | null>(null);
   // Collapse the array into a primitive so the effect only re-subscribes when
   // the set of sections actually changes, not on every new array identity.
   const idsKey = sectionIds.join("\n");
+
+  // Keyed on the request alone: re-pinning whenever the section list changes
+  // would resurrect a pin the reader already scrolled away from.
+  React.useEffect(() => {
+    setPinnedId(requestedSectionId === "" ? null : requestedSectionId);
+  }, [requestedSectionId, requestKey]);
+
+  // Only real input gestures release the pin. A plain `scroll` listener would
+  // fire on the smooth scroll the click itself triggers and release it
+  // immediately.
+  React.useEffect(() => {
+    if (pinnedId === null || typeof window === "undefined") return;
+
+    const release = () => setPinnedId(null);
+    const releaseOnScrollKey = (event: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(event.key)) setPinnedId(null);
+    };
+    const options = { passive: true, capture: true } as const;
+
+    window.addEventListener("wheel", release, options);
+    window.addEventListener("touchmove", release, options);
+    window.addEventListener("keydown", releaseOnScrollKey, options);
+    return () => {
+      window.removeEventListener("wheel", release, options);
+      window.removeEventListener("touchmove", release, options);
+      window.removeEventListener("keydown", releaseOnScrollKey, options);
+    };
+  }, [pinnedId]);
 
   React.useEffect(() => {
     if (
@@ -131,5 +193,9 @@ export function useActiveSectionOnScroll(
     };
   }, [idsKey, topOffset]);
 
+  // Validated during render rather than when pinning, so a section list that
+  // grows later (frontmatter, versions) can honor an existing pin without the
+  // pin effect having to re-run.
+  if (pinnedId !== null && sectionIds.includes(pinnedId)) return pinnedId;
   return activeId;
 }

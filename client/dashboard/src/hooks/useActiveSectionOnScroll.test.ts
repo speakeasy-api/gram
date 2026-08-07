@@ -90,7 +90,7 @@ describe("useActiveSectionOnScroll", () => {
     setSectionTops({ a: TOP_OFFSET + 40, b: 600, c: 1200 });
 
     const { result } = renderHook(() =>
-      useActiveSectionOnScroll(["a", "b", "c"], TOP_OFFSET),
+      useActiveSectionOnScroll(["a", "b", "c"], { topOffset: TOP_OFFSET }),
     );
     act(() => flushFrames());
 
@@ -104,7 +104,7 @@ describe("useActiveSectionOnScroll", () => {
     setSectionTops({ a: -400, b: TOP_OFFSET - 5, c: 800 });
 
     const { result } = renderHook(() =>
-      useActiveSectionOnScroll(["a", "b", "c"], TOP_OFFSET),
+      useActiveSectionOnScroll(["a", "b", "c"], { topOffset: TOP_OFFSET }),
     );
     act(() => flushFrames());
 
@@ -127,7 +127,8 @@ describe("useActiveSectionOnScroll", () => {
     setSectionTops({ a: -400, b: -10 });
 
     const { result, rerender } = renderHook(
-      ({ ids }: { ids: string[] }) => useActiveSectionOnScroll(ids, TOP_OFFSET),
+      ({ ids }: { ids: string[] }) =>
+        useActiveSectionOnScroll(ids, { topOffset: TOP_OFFSET }),
       { initialProps: { ids: ["a", "b"] } },
     );
     act(() => flushFrames());
@@ -149,7 +150,7 @@ describe("useActiveSectionOnScroll", () => {
   // the highlight on the first section forever.
   it("starts tracking sections that mount after the hook runs", async () => {
     const { result } = renderHook(() =>
-      useActiveSectionOnScroll(["a", "b", "c"], TOP_OFFSET),
+      useActiveSectionOnScroll(["a", "b", "c"], { topOffset: TOP_OFFSET }),
     );
     act(() => flushFrames());
 
@@ -168,6 +169,86 @@ describe("useActiveSectionOnScroll", () => {
     });
 
     expect(observerCallbacks.length).toBeGreaterThan(0);
+    expect(result.current).toBe("b");
+  });
+
+  // The trailing sections share the last screenful, so scrolling can never
+  // bring them to the activation line — without the pin the highlight springs
+  // back to whichever earlier section sits on the line.
+  it("keeps a requested section active when scrolling cannot reach it", () => {
+    createSection("a");
+    createSection("b");
+    createSection("c");
+    // Only "a" is above the line; "b" and "c" can never get there.
+    setSectionTops({ a: -10, b: 500, c: 700 });
+
+    const { result } = renderHook(() =>
+      useActiveSectionOnScroll(["a", "b", "c"], {
+        topOffset: TOP_OFFSET,
+        requestedSectionId: "c",
+        requestKey: "nav-1",
+      }),
+    );
+    act(() => flushFrames());
+
+    expect(result.current).toBe("c");
+  });
+
+  it("releases the requested section once the reader scrolls", () => {
+    createSection("a");
+    createSection("b");
+    createSection("c");
+    setSectionTops({ a: -10, b: 500, c: 700 });
+
+    const { result } = renderHook(() =>
+      useActiveSectionOnScroll(["a", "b", "c"], {
+        topOffset: TOP_OFFSET,
+        requestedSectionId: "c",
+        requestKey: "nav-1",
+      }),
+    );
+    act(() => flushFrames());
+    expect(result.current).toBe("c");
+
+    // Typing is not scrolling, so the pin survives it.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "k" }));
+    });
+    expect(result.current).toBe("c");
+
+    act(() => {
+      window.dispatchEvent(new WheelEvent("wheel", { deltaY: 40 }));
+    });
+
+    // Scroll tracking takes over again.
+    expect(result.current).toBe("a");
+  });
+
+  it("re-pins the same section when its link is clicked again", () => {
+    createSection("a");
+    createSection("b");
+    setSectionTops({ a: -10, b: 500 });
+
+    const { result, rerender } = renderHook(
+      ({ requestKey }: { requestKey: string }) =>
+        useActiveSectionOnScroll(["a", "b"], {
+          topOffset: TOP_OFFSET,
+          requestedSectionId: "b",
+          requestKey,
+        }),
+      { initialProps: { requestKey: "nav-1" } },
+    );
+    act(() => flushFrames());
+    expect(result.current).toBe("b");
+
+    act(() => {
+      window.dispatchEvent(new WheelEvent("wheel", { deltaY: 40 }));
+    });
+    expect(result.current).toBe("a");
+
+    // Same hash, new navigation — the section should be pinned again.
+    act(() => rerender({ requestKey: "nav-2" }));
+
     expect(result.current).toBe("b");
   });
 });
