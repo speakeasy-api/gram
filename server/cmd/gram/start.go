@@ -1290,7 +1290,7 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			mcpapproval.Attach(mux, mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
-				mcpapprovalevidence.NewAssembler(packagemeta.NewClient(guardianPolicy.Client()), telemetryrepo.New(chDB))))
+				mcpapprovalevidence.NewAssembler(packagemeta.NewClient(guardianPolicy.PooledClient()), telemetryrepo.New(chDB))))
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
