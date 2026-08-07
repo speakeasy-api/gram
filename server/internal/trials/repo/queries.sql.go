@@ -31,16 +31,18 @@ func (q *Queries) CreateTrial(ctx context.Context, arg CreateTrialParams) error 
 
 const demoteOrganizationToFree = `-- name: DemoteOrganizationToFree :one
 WITH previous AS (
-    SELECT organization_metadata.gram_account_type
+    SELECT organization_metadata.id, organization_metadata.gram_account_type
     FROM organization_metadata
     WHERE organization_metadata.id = $1
+    FOR UPDATE
 )
 UPDATE organization_metadata
 SET gram_account_type = 'free',
     whitelisted = FALSE,
     updated_at = clock_timestamp()
-WHERE organization_metadata.id = $1
-RETURNING organization_metadata.name, organization_metadata.slug, (SELECT previous.gram_account_type FROM previous) AS previous_account_type
+FROM previous
+WHERE organization_metadata.id = previous.id
+RETURNING organization_metadata.name, organization_metadata.slug, previous.gram_account_type AS previous_account_type
 `
 
 type DemoteOrganizationToFreeRow struct {
@@ -51,6 +53,10 @@ type DemoteOrganizationToFreeRow struct {
 
 // Drops the organization to the free tier and out of the enterprise alert
 // cohort. Returns the pre-update account type.
+// The UPDATE joins the CTE rather than reading it from the RETURNING clause so
+// that the locking read runs first. A row this statement has already updated is
+// invisible to FOR UPDATE, and the join also blocks a concurrent account type
+// change from making the returned value disagree with the row that is written.
 func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID string) (DemoteOrganizationToFreeRow, error) {
 	row := q.db.QueryRow(ctx, demoteOrganizationToFree, organizationID)
 	var i DemoteOrganizationToFreeRow

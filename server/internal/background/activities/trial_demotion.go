@@ -43,7 +43,7 @@ func NewDemoteExpiredTrials(
 func (d *DemoteExpiredTrials) List(ctx context.Context) ([]string, error) {
 	organizationIDs, err := d.repo.ListExpiredTrials(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list expired trials: %w", err)
+		return nil, fmt.Errorf("query trials due for demotion: %w", err)
 	}
 
 	return organizationIDs, nil
@@ -78,6 +78,11 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	// conversion cannot land while the keys go down. A failure here rolls the
 	// stamp back and leaves the trial armed for the next sweep, which a lockdown
 	// after the commit would not get: a stamped row drops out of the sweep.
+	//
+	// DisableAPIKey writes its own disabled flag on the pool rather than on
+	// dbtx, so a key already taken down stays down through that rollback. The
+	// organization reads as enterprise with a dead key until the next sweep
+	// completes the demotion.
 	for _, keyType := range openrouter.AllKeyTypes {
 		if err := d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType); err != nil {
 			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
