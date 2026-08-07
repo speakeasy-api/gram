@@ -14,20 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 )
 
-// maxListLimit mirrors the clamp platformmcp applies inside its MCP SDK
-// handlers, which this channel bypasses by calling the Reader directly.
-const (
-	defaultListLimit = 50
-	maxListLimit     = 100
-)
-
-func boundedLimit(limit int) int {
-	if limit <= 0 {
-		return defaultListLimit
-	}
-	return min(limit, maxListLimit)
-}
-
 // principalFromContext derives the Reader principal from the assistant
 // runtime auth context. The Postgres reader scopes every query by
 // organization ID alone, so no connection identity is required.

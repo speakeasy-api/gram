@@ -161,6 +161,9 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	// re-checks rather than trusting attachment. Fail closed on evaluation
 	// errors.
 	if slug == platformtools.PlatformMCPReadToolsetSlug {
+		if s.features == nil {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
 		enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP,
 			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 		if err != nil {

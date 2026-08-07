@@ -60,7 +60,9 @@ func orgAuthContext(t *testing.T, orgID string, projectID *uuid.UUID) context.Co
 	})
 }
 
-func TestListProjectsToolPassesOrgPrincipalAndClampsLimit(t *testing.T) {
+// Limit clamping is the Reader's job (platformmcp.PostgresReader applies
+// boundedLimit internally); the adapter passes the caller's limit through.
+func TestListProjectsToolPassesOrgPrincipalAndInputThrough(t *testing.T) {
 	t.Parallel()
 
 	reader := &stubReader{
@@ -74,23 +76,12 @@ func TestListProjectsToolPassesOrgPrincipalAndClampsLimit(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, NewListProjectsTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"limit": 500}`), &out))
 	require.Equal(t, "org_123", reader.principal.OrganizationID)
-	require.Equal(t, 100, reader.projectsInput.Limit, "limit above the cap must be clamped")
+	require.Equal(t, 500, reader.projectsInput.Limit)
 
 	var result platformmcp.ListProjectsOutput
 	require.NoError(t, json.Unmarshal(out.Bytes(), &result))
 	require.Len(t, result.Projects, 1)
 	require.Equal(t, "one", result.Projects[0].Slug)
-}
-
-func TestListProjectsToolDefaultsLimit(t *testing.T) {
-	t.Parallel()
-
-	reader := &stubReader{}
-	ctx := orgAuthContext(t, "org_123", nil)
-
-	var out bytes.Buffer
-	require.NoError(t, NewListProjectsTool(reader).Call(ctx, testToolCallEnv(), nil, &out))
-	require.Equal(t, 50, reader.projectsInput.Limit)
 }
 
 func TestListProjectsToolRejectsMissingAuthContext(t *testing.T) {
@@ -126,7 +117,7 @@ func TestListProjectMCPsToolPassesInputThrough(t *testing.T) {
 	require.NoError(t, NewListProjectMCPsTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1"}`), &out))
 	require.Equal(t, "org_123", reader.principal.OrganizationID)
 	require.Equal(t, "p1", reader.mcpsInput.ProjectID)
-	require.Equal(t, 50, reader.mcpsInput.Limit)
+	require.Equal(t, 0, reader.mcpsInput.Limit, "unset limit reaches the reader untouched; the reader owns clamping")
 }
 
 func TestGetMCPToolRequiresBothIDs(t *testing.T) {

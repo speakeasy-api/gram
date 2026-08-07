@@ -49,7 +49,6 @@ func (t *ListProjects) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 		return err
 	}
 
-	input.Limit = boundedLimit(input.Limit)
 	output, err := t.reader.ListProjects(ctx, principal, input)
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)

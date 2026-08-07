@@ -52,7 +52,6 @@ func (t *ListProjectMCPs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, pa
 		return err
 	}
 
-	input.Limit = boundedLimit(input.Limit)
 	output, err := t.reader.ListProjectMCPs(ctx, principal, input)
 	if err != nil {
 		return fmt.Errorf("list project mcps: %w", err)
