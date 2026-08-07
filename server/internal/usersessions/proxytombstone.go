@@ -44,6 +44,10 @@ func (s *Service) handleRetiredProxyToken(w http.ResponseWriter, r *http.Request
 		attr.SlogToolsetMCPSlug(chi.URLParam(r, "mcpSlug")))
 
 	w.Header().Set("Content-Type", "application/json")
+	// Match the other OAuth token handlers: an intermediary must not replay a
+	// stale invalid_grant to a later client.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusBadRequest)
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		"error":             "invalid_grant",
