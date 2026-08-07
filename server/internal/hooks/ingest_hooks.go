@@ -251,7 +251,13 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
 	// including Gram-hosted targets, with no path to recover.
-	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), mcpInventory, canonicalMCPInventoryRead(payload))
+	s.cacheCanonicalMCPList(
+		context.WithoutCancel(ctx),
+		canonicalSessionID(payload),
+		mcpInventory,
+		canonicalMCPInventoryRead(payload),
+		strings.TrimSpace(payload.Event.Type) == "mcp.inventory",
+	)
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -804,7 +810,7 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead, inventoryEvent bool) {
 	if sessionID == "" {
 		return
 	}
@@ -820,12 +826,15 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 		)
 	}
 
+	// A canonical inventory event is authoritative even when its data block was
+	// omitted. Other nil events remain refresh-only unless they report a
+	// successful inventory read.
 	// Write the entries before the read status. The status is what licenses the
 	// guard to treat an empty inventory as proof no servers exist, so recording
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if len(entries) > 0 || inventoryRead {
+	if entries != nil || inventoryRead || inventoryEvent {
 		if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
 			s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 				attr.SlogEvent("hook_mcp_list_cache_set_failed"),

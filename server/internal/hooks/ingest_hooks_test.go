@@ -2124,10 +2124,12 @@ func TestIngestStoresExplicitEmptyMCPInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	sessionID := uuid.NewString()
+	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+
 	payload := canonicalIngestPayload("claude", "mcp.inventory", sessionID)
 	payload.Data = &gen.HookIngestData{
-		McpInventory:          []*gen.HookMCPData{},
-		McpInventoryCollected: new(true),
+		McpInventory: []*gen.HookMCPData{},
 	}
 
 	result, err := ti.service.Ingest(ctx, payload)
@@ -2138,6 +2140,38 @@ func TestIngestStoresExplicitEmptyMCPInventory(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, entries)
 	require.Empty(t, entries)
+}
+
+func TestIngestStoresExplicitNilMCPInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+
+	result, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "mcp.inventory", sessionID))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}
+
+func TestIngestPreservesMCPInventoryForUnrelatedNilEvent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	want := []MCPServerEntry{{Name: "current-server", URL: "https://current.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), want, sessionMCPListTTL))
+
+	result, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "session.updated", sessionID))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, want, entries)
 }
 
 // TestIngest_ShadowMCPMetaToolGateDegradesWithoutAReadInventory: the guard
