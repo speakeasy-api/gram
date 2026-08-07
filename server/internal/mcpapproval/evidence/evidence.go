@@ -35,6 +35,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/exposure"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
@@ -63,6 +65,19 @@ type Document struct {
 	// Exposure is what this project's own traffic says about the server,
 	// present only when the target had a URL to look up.
 	Exposure *ExposureSection `json:"exposure,omitempty"`
+
+	// Authority is what the server and its authorization server publish about
+	// authentication. Not yet populated by Assemble — the OAuth-discovery and
+	// credential-declaration inputs are not available at intake for arbitrary
+	// servers — but part of the version-1 shape so gathers that have them
+	// (registry-catalogued servers, scheduled re-checks) can carry them
+	// without a version bump, and so frozen snapshots stay decodable when
+	// they arrive.
+	Authority *AuthoritySection `json:"authority,omitempty"`
+
+	// Capabilities is what each tool declares about itself, with the same
+	// not-yet-populated caveat as Authority.
+	Capabilities []CapabilitySection `json:"capabilities,omitempty"`
 
 	// Gaps lists the sources that could not be consulted this gather. A
 	// reader must treat a listed source as unknown, never as clean.
@@ -110,10 +125,41 @@ type ExposureSection struct {
 	InUse        bool   `json:"in_use"`
 }
 
+// AuthoritySection mirrors authority.Authority for storage.
+type AuthoritySection struct {
+	Mode                 string              `json:"mode"`
+	Transport            string              `json:"transport,omitempty"`
+	Scopes               []string            `json:"scopes,omitempty"`
+	DynamicRegistration  bool                `json:"dynamic_registration,omitempty"`
+	DemandedSecrets      []CredentialSection `json:"demanded_secrets,omitempty"`
+	OptionalSecrets      []CredentialSection `json:"optional_secrets,omitempty"`
+	UnauthenticatedTools []string            `json:"unauthenticated_tools,omitempty"`
+	Undeclared           bool                `json:"undeclared,omitempty"`
+}
+
+// CredentialSection mirrors authority.Credential for storage.
+type CredentialSection struct {
+	Name        string `json:"name"`
+	Required    bool   `json:"required,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// CapabilitySection mirrors capability.Assessment for storage: one tool's
+// declarations, never observations.
+type CapabilitySection struct {
+	Tool          string   `json:"tool"`
+	Declared      []string `json:"declared,omitempty"`
+	SchemaImplied []string `json:"schema_implied,omitempty"`
+	ActsOnBehalf  bool     `json:"acts_on_behalf,omitempty"`
+	Unannotated   bool     `json:"unannotated,omitempty"`
+}
+
 // Gap names for the sources that can fail independently.
 const (
-	GapPackageLookup  = "package_lookup_failed"
-	GapExposureLookup = "exposure_lookup_failed"
+	GapPackageLookup    = "package_lookup_failed"
+	GapExposureLookup   = "exposure_lookup_failed"
+	GapAuthorityProbe   = "authority_probe_failed"
+	GapToolDeclarations = "tool_declarations_probe_failed"
 )
 
 // PackageLookup is the slice of the package-metadata client the assembler
@@ -124,6 +170,18 @@ type PackageLookup interface {
 
 var _ PackageLookup = (*packagemeta.Client)(nil)
 
+// AuthorityProber discovers a remote server's published OAuth metadata. A nil
+// declaration with a nil error means the probe ran and the server publishes
+// none — kept distinct from a failed probe, which is a gap.
+type AuthorityProber interface {
+	DiscoverAuthority(ctx context.Context, serverURL string) (*authority.Declaration, error)
+}
+
+// ToolProber lists a remote server's tool declarations without credentials.
+type ToolProber interface {
+	ListToolDeclarations(ctx context.Context, serverURL string) ([]capability.Declaration, error)
+}
+
 // defaultSourceTimeout bounds each source's gather independently, so one
 // unreachable source costs its own budget rather than the whole gather's —
 // an admission is delayed by a registry outage, never held for the sum of
@@ -132,9 +190,11 @@ const defaultSourceTimeout = 3 * time.Second
 
 // Assembler gathers evidence for one requested server.
 type Assembler struct {
-	packages      PackageLookup
-	traffic       exposure.Reader
-	sourceTimeout time.Duration
+	packages       PackageLookup
+	traffic        exposure.Reader
+	authorityProbe AuthorityProber
+	toolProbe      ToolProber
+	sourceTimeout  time.Duration
 }
 
 // Option configures an Assembler.
@@ -145,8 +205,14 @@ func WithSourceTimeout(timeout time.Duration) Option {
 	return func(a *Assembler) { a.sourceTimeout = timeout }
 }
 
-func NewAssembler(packages PackageLookup, traffic exposure.Reader, options ...Option) *Assembler {
-	assembler := &Assembler{packages: packages, traffic: traffic, sourceTimeout: defaultSourceTimeout}
+func NewAssembler(packages PackageLookup, traffic exposure.Reader, authorityProbe AuthorityProber, toolProbe ToolProber, options ...Option) *Assembler {
+	assembler := &Assembler{
+		packages:       packages,
+		traffic:        traffic,
+		authorityProbe: authorityProbe,
+		toolProbe:      toolProbe,
+		sourceTimeout:  defaultSourceTimeout,
+	}
 	for _, option := range options {
 		option(assembler)
 	}
@@ -174,6 +240,8 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 		Package:             nil,
 		PackageNotPublished: false,
 		Exposure:            nil,
+		Authority:           nil,
+		Capabilities:        nil,
 		Gaps:                nil,
 	}
 
@@ -227,6 +295,9 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 				InUse:        signals.InUse(),
 			}
 		}
+
+		a.probeAuthority(ctx, target, &document)
+		a.probeToolDeclarations(ctx, target, &document)
 	}
 
 	encoded, err := json.Marshal(document)
@@ -235,6 +306,84 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 	}
 
 	return encoded, nil
+}
+
+// probeAuthority asks the server's well-known endpoints what authentication
+// it publishes. A probe that finds nothing leaves the section absent — the
+// server publishing no OAuth metadata is not the server declaring it needs
+// nothing.
+func (a *Assembler) probeAuthority(ctx context.Context, serverURL string, document *Document) {
+	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+	defer cancel()
+
+	declaration, err := a.authorityProbe.DiscoverAuthority(probeCtx, serverURL)
+	if err != nil {
+		document.Gaps = append(document.Gaps, GapAuthorityProbe)
+		return
+	}
+	if declaration == nil {
+		return
+	}
+
+	summary := authority.Summarise(*declaration)
+	document.Authority = &AuthoritySection{
+		Mode:                 string(summary.Mode),
+		Transport:            summary.Transport,
+		Scopes:               summary.Scopes,
+		DynamicRegistration:  summary.DynamicRegistration,
+		DemandedSecrets:      credentialSections(summary.DemandedSecrets),
+		OptionalSecrets:      credentialSections(summary.OptionalSecrets),
+		UnauthenticatedTools: summary.UnauthenticatedTools,
+		Undeclared:           summary.Undeclared,
+	}
+}
+
+func credentialSections(credentials []authority.Credential) []CredentialSection {
+	sections := make([]CredentialSection, 0, len(credentials))
+	for _, credential := range credentials {
+		sections = append(sections, CredentialSection{
+			Name:        credential.Name,
+			Required:    credential.Required,
+			Description: credential.Description,
+		})
+	}
+
+	return sections
+}
+
+// probeToolDeclarations connects without credentials and records what each
+// tool declares about itself. A server that refuses unauthenticated callers
+// is a gap: its declarations could not be consulted, which must never read as
+// a clean empty list.
+func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string, document *Document) {
+	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+	defer cancel()
+
+	declarations, err := a.toolProbe.ListToolDeclarations(probeCtx, serverURL)
+	if err != nil {
+		document.Gaps = append(document.Gaps, GapToolDeclarations)
+		return
+	}
+
+	for _, declaration := range declarations {
+		assessment := capability.Assess(declaration)
+		document.Capabilities = append(document.Capabilities, CapabilitySection{
+			Tool:          assessment.Tool,
+			Declared:      capabilityStrings(assessment.Declared),
+			SchemaImplied: capabilityStrings(assessment.SchemaImplied),
+			ActsOnBehalf:  assessment.ActsOnBehalf,
+			Unannotated:   assessment.Unannotated,
+		})
+	}
+}
+
+func capabilityStrings(values []capability.Capability) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, string(value))
+	}
+
+	return out
 }
 
 // DecodeDocument reads a stored evidence document at the given shape version.
