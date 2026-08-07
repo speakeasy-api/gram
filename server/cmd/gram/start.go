@@ -85,6 +85,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -1300,7 +1301,12 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			mcpapproval.Attach(mux, mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
-				mcpapprovalevidence.NewAssembler(packagemeta.NewClient(guardianPolicy.PooledClient()), telemetryrepo.New(chDB))))
+				mcpapprovalevidence.NewAssembler(
+					packagemeta.NewClient(guardianPolicy.PooledClient()),
+					telemetryrepo.New(chDB),
+					remoteprobe.New(logger, guardianPolicy),
+					remoteprobe.New(logger, guardianPolicy),
+				)))
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
