@@ -234,6 +234,7 @@ trackedFiles:
   src/funcs/mcpApprovalListRequests.ts: {}
   src/funcs/mcpApprovalPromote.ts: {}
   src/funcs/mcpApprovalRecordDecision.ts: {}
+  src/funcs/mcpApprovalRefreshEvidence.ts: {}
   src/funcs/mcpEndpointsCheckSlugAvailability.ts: {}
   src/funcs/mcpEndpointsCreate.ts: {}
   src/funcs/mcpEndpointsDelete.ts: {}
@@ -1131,6 +1132,7 @@ trackedFiles:
   src/models/components/sendinviterequestbody.ts: {}
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
+  src/models/components/serveimageform.ts: {}
   src/models/components/servernameoverride.ts: {}
   src/models/components/servervariable.ts: {}
   src/models/components/serviceinfo.ts: {}
@@ -1735,6 +1737,7 @@ trackedFiles:
   src/models/operations/recordmcpapprovaldecision.ts: {}
   src/models/operations/redeploydeployment.ts: {}
   src/models/operations/refreshglobalremotesessionissuermetadata.ts: {}
+  src/models/operations/refreshmcpapprovalevidence.ts: {}
   src/models/operations/refreshorganizationremotesession.ts: {}
   src/models/operations/refreshorganizationremotesessionissuermetadata.ts: {}
   src/models/operations/refreshremotesessionissuermetadata.ts: {}
@@ -2330,6 +2333,7 @@ trackedFiles:
   src/react-query/recordMcpApprovalDecision.ts: {}
   src/react-query/redeployDeployment.ts: {}
   src/react-query/refreshGlobalRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/refreshMcpApprovalEvidence.ts: {}
   src/react-query/refreshOrganizationRemoteSession.ts: {}
   src/react-query/refreshOrganizationRemoteSessionIssuerMetadata.ts: {}
   src/react-query/refreshRemoteSessionIssuerMetadata.ts: {}
@@ -6980,6 +6984,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  refreshMcpApprovalEvidence:
+    speakeasy-default-refresh-mcp-approval-evidence:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"decisions": [], "request": {"created_at": "2025-08-24T07:03:26.445Z", "id": "<id>", "requester_count": 710, "status": "<value>", "target_kind": "<value>", "target_raw": "<value>", "updated_at": "2026-10-07T20:05:06.266Z", "version_pinned": false}, "requesters": [], "research_reports": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   refreshOrganizationRemoteSession:
     speakeasy-default-refresh-organization-remote-session:
       parameters:

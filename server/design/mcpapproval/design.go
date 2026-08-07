@@ -126,6 +126,32 @@ var _ = Service("mcpApproval", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PromoteMcpApprovalRequest"}`)
 	})
 
+	Method("refreshEvidence", func() {
+		Description("Re-run every evidence source for a request and replace its current evidence with the fresh gather. Frozen decision snapshots are never touched.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The approval request ID.")
+			Required("id")
+		})
+
+		Result(ApprovalRequestDetail)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.refreshEvidence")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshMcpApprovalEvidence")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshEvidence")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshMcpApprovalEvidence"}`)
+	})
+
 	Method("recordDecision", func() {
 		Description("Approve or deny an MCP approval request, recording the rationale and who it applies to.")
 

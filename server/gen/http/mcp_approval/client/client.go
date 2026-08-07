@@ -33,6 +33,10 @@ type Client struct {
 	// endpoint.
 	PromoteDoer goahttp.Doer
 
+	// RefreshEvidence Doer is the HTTP client used to make requests to the
+	// refreshEvidence endpoint.
+	RefreshEvidenceDoer goahttp.Doer
+
 	// RecordDecision Doer is the HTTP client used to make requests to the
 	// recordDecision endpoint.
 	RecordDecisionDoer goahttp.Doer
@@ -61,6 +65,7 @@ func NewClient(
 		GetRequestDoer:      doer,
 		CreateRequestDoer:   doer,
 		PromoteDoer:         doer,
+		RefreshEvidenceDoer: doer,
 		RecordDecisionDoer:  doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -161,6 +166,30 @@ func (c *Client) Promote() goa.Endpoint {
 		resp, err := c.PromoteDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpApproval", "promote", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshEvidence returns an endpoint that makes HTTP requests to the
+// mcpApproval service refreshEvidence server.
+func (c *Client) RefreshEvidence() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshEvidenceRequest(c.encoder)
+		decodeResponse = DecodeRefreshEvidenceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshEvidenceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshEvidenceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpApproval", "refreshEvidence", err)
 		}
 		return decodeResponse(resp)
 	}

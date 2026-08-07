@@ -7,6 +7,7 @@ import { mcpApprovalGetRequest } from "../funcs/mcpApprovalGetRequest.js";
 import { mcpApprovalListRequests } from "../funcs/mcpApprovalListRequests.js";
 import { mcpApprovalPromote } from "../funcs/mcpApprovalPromote.js";
 import { mcpApprovalRecordDecision } from "../funcs/mcpApprovalRecordDecision.js";
+import { mcpApprovalRefreshEvidence } from "../funcs/mcpApprovalRefreshEvidence.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ApprovalDecision } from "../models/components/approvaldecision.js";
 import { ApprovalRequestDetail } from "../models/components/approvalrequestdetail.js";
@@ -32,6 +33,10 @@ import {
   RecordMcpApprovalDecisionRequest,
   RecordMcpApprovalDecisionSecurity,
 } from "../models/operations/recordmcpapprovaldecision.js";
+import {
+  RefreshMcpApprovalEvidenceRequest,
+  RefreshMcpApprovalEvidenceSecurity,
+} from "../models/operations/refreshmcpapprovalevidence.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class McpApproval extends ClientSDK {
@@ -123,6 +128,25 @@ export class McpApproval extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ApprovalDecision> {
     return unwrapAsync(mcpApprovalRecordDecision(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * refreshEvidence mcpApproval
+   *
+   * @remarks
+   * Re-run every evidence source for a request and replace its current evidence with the fresh gather. Frozen decision snapshots are never touched.
+   */
+  async refreshEvidence(
+    request: RefreshMcpApprovalEvidenceRequest,
+    security?: RefreshMcpApprovalEvidenceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ApprovalRequestDetail> {
+    return unwrapAsync(mcpApprovalRefreshEvidence(
       this,
       request,
       security,

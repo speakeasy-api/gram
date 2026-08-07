@@ -37,6 +37,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/exposure"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
@@ -79,10 +80,31 @@ type Document struct {
 	// not-yet-populated caveat as Authority.
 	Capabilities []CapabilitySection `json:"capabilities,omitempty"`
 
+	// CapabilitiesSource records where Capabilities came from: the server's
+	// own unauthenticated tools/list (CapabilitiesFromServer) or its registry
+	// catalog entry (CapabilitiesFromRegistry). The registry's copy is one
+	// step further from the source, and the panel must say so. Empty when no
+	// source supplied declarations; set with an empty Capabilities when a
+	// source answered with zero tools, which is a real (if odd) declaration.
+	CapabilitiesSource string `json:"capabilities_source,omitempty"`
+
+	// Provenance is the registry catalog's maturity and popularity signals
+	// for the matched entry, present for remote targets whose catalog lookup
+	// ran. Catalogued false is checked-and-absent — every registry answered
+	// and none carries the URL — distinct from a lookup failure, which is a
+	// gap.
+	Provenance *ProvenanceSection `json:"provenance,omitempty"`
+
 	// Gaps lists the sources that could not be consulted this gather. A
 	// reader must treat a listed source as unknown, never as clean.
 	Gaps []string `json:"gaps,omitempty"`
 }
+
+// Capabilities sources, recorded in CapabilitiesSource.
+const (
+	CapabilitiesFromServer   = "server"
+	CapabilitiesFromRegistry = "registry"
+)
 
 // IdentitySection mirrors identity.Identity for storage.
 type IdentitySection struct {
@@ -154,12 +176,29 @@ type CapabilitySection struct {
 	Unannotated   bool     `json:"unannotated,omitempty"`
 }
 
+// ProvenanceSection mirrors provenance.Provenance for storage, plus which
+// registry made the claims.
+type ProvenanceSection struct {
+	Registry              string `json:"registry,omitempty"`
+	Specifier             string `json:"specifier,omitempty"`
+	Catalogued            bool   `json:"catalogued"`
+	Official              bool   `json:"official,omitempty"`
+	Status                string `json:"status,omitempty"`
+	IsLatest              bool   `json:"is_latest,omitempty"`
+	PublishedAt           string `json:"published_at,omitempty"`
+	UpdatedAt             string `json:"updated_at,omitempty"`
+	VisitorsLastWeek      int    `json:"visitors_last_week,omitempty"`
+	VisitorsLastFourWeeks int    `json:"visitors_last_four_weeks,omitempty"`
+	VisitorsTotal         int    `json:"visitors_total,omitempty"`
+}
+
 // Gap names for the sources that can fail independently.
 const (
 	GapPackageLookup    = "package_lookup_failed"
 	GapExposureLookup   = "exposure_lookup_failed"
 	GapAuthorityProbe   = "authority_probe_failed"
 	GapToolDeclarations = "tool_declarations_probe_failed"
+	GapCatalogLookup    = "catalog_lookup_failed"
 )
 
 // PackageLookup is the slice of the package-metadata client the assembler
@@ -182,6 +221,15 @@ type ToolProber interface {
 	ListToolDeclarations(ctx context.Context, serverURL string) ([]capability.Declaration, error)
 }
 
+// CatalogLookup matches a server URL against the configured MCP registries.
+// A nil match with a nil error is checked-and-absent. *catalog.Source
+// satisfies it.
+type CatalogLookup interface {
+	LookupCatalog(ctx context.Context, serverURL string) (*catalog.Match, error)
+}
+
+var _ CatalogLookup = (*catalog.Source)(nil)
+
 // defaultSourceTimeout bounds each source's gather independently, so one
 // unreachable source costs its own budget rather than the whole gather's —
 // an admission is delayed by a registry outage, never held for the sum of
@@ -194,6 +242,7 @@ type Assembler struct {
 	traffic        exposure.Reader
 	authorityProbe AuthorityProber
 	toolProbe      ToolProber
+	catalog        CatalogLookup
 	sourceTimeout  time.Duration
 }
 
@@ -205,12 +254,13 @@ func WithSourceTimeout(timeout time.Duration) Option {
 	return func(a *Assembler) { a.sourceTimeout = timeout }
 }
 
-func NewAssembler(packages PackageLookup, traffic exposure.Reader, authorityProbe AuthorityProber, toolProbe ToolProber, options ...Option) *Assembler {
+func NewAssembler(packages PackageLookup, traffic exposure.Reader, authorityProbe AuthorityProber, toolProbe ToolProber, catalogLookup CatalogLookup, options ...Option) *Assembler {
 	assembler := &Assembler{
 		packages:       packages,
 		traffic:        traffic,
 		authorityProbe: authorityProbe,
 		toolProbe:      toolProbe,
+		catalog:        catalogLookup,
 		sourceTimeout:  defaultSourceTimeout,
 	}
 	for _, option := range options {
@@ -242,6 +292,8 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 		Exposure:            nil,
 		Authority:           nil,
 		Capabilities:        nil,
+		CapabilitiesSource:  "",
+		Provenance:          nil,
 		Gaps:                nil,
 	}
 
@@ -297,7 +349,8 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 		}
 
 		a.probeAuthority(ctx, target, &document)
-		a.probeToolDeclarations(ctx, target, &document)
+		serverDeclared := a.probeToolDeclarations(ctx, target, &document)
+		a.lookupCatalog(ctx, target, &document, serverDeclared)
 	}
 
 	encoded, err := json.Marshal(document)
@@ -352,19 +405,94 @@ func credentialSections(credentials []authority.Credential) []CredentialSection 
 }
 
 // probeToolDeclarations connects without credentials and records what each
-// tool declares about itself. A server that refuses unauthenticated callers
-// is a gap: its declarations could not be consulted, which must never read as
-// a clean empty list.
-func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string, document *Document) {
+// tool declares about itself. It reports whether the server answered — a
+// refusal is not yet a gap, because the catalog lookup may still supply the
+// registry's copy of the declarations; recording the gap when both fail is
+// lookupCatalog's job.
+func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string, document *Document) bool {
 	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
 	defer cancel()
 
 	declarations, err := a.toolProbe.ListToolDeclarations(probeCtx, serverURL)
 	if err != nil {
+		return false
+	}
+
+	document.CapabilitiesSource = CapabilitiesFromServer
+	a.fillCapabilities(document, declarations)
+
+	return true
+}
+
+// lookupCatalog matches the server against the configured registries. A match
+// always fills the provenance section; its tool declarations fill the
+// capability section only when the server itself refused to answer, labeled
+// as the registry's copy. When the server refused and no registry supplies
+// declarations either, the tool-declarations gap lands here — declarations
+// could not be consulted anywhere, which must never read as a clean empty
+// list.
+func (a *Assembler) lookupCatalog(ctx context.Context, serverURL string, document *Document, serverDeclared bool) {
+	lookupCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+	defer cancel()
+
+	match, err := a.catalog.LookupCatalog(lookupCtx, serverURL)
+	if err != nil {
+		document.Gaps = append(document.Gaps, GapCatalogLookup)
+		if !serverDeclared {
+			document.Gaps = append(document.Gaps, GapToolDeclarations)
+		}
+		return
+	}
+
+	if match == nil {
+		document.Provenance = &ProvenanceSection{
+			Registry:              "",
+			Specifier:             "",
+			Catalogued:            false,
+			Official:              false,
+			Status:                "",
+			IsLatest:              false,
+			PublishedAt:           "",
+			UpdatedAt:             "",
+			VisitorsLastWeek:      0,
+			VisitorsLastFourWeeks: 0,
+			VisitorsTotal:         0,
+		}
+		if !serverDeclared {
+			document.Gaps = append(document.Gaps, GapToolDeclarations)
+		}
+		return
+	}
+
+	document.Provenance = &ProvenanceSection{
+		Registry:              match.Registry,
+		Specifier:             match.Specifier,
+		Catalogued:            match.Provenance.Catalogued,
+		Official:              match.Provenance.Official,
+		Status:                match.Provenance.Status,
+		IsLatest:              match.Provenance.IsLatest,
+		PublishedAt:           formatTime(match.Provenance.PublishedAt),
+		UpdatedAt:             formatTime(match.Provenance.UpdatedAt),
+		VisitorsLastWeek:      match.Provenance.VisitorsLastWeek,
+		VisitorsLastFourWeeks: match.Provenance.VisitorsLastFourWeeks,
+		VisitorsTotal:         match.Provenance.VisitorsTotal,
+	}
+
+	if serverDeclared {
+		return
+	}
+	if match.Tools == nil {
 		document.Gaps = append(document.Gaps, GapToolDeclarations)
 		return
 	}
 
+	document.CapabilitiesSource = CapabilitiesFromRegistry
+	a.fillCapabilities(document, match.Tools)
+}
+
+// fillCapabilities assesses each declaration and appends it to the document's
+// capability section.
+func (a *Assembler) fillCapabilities(document *Document, declarations []capability.Declaration) {
 	for _, declaration := range declarations {
 		assessment := capability.Assess(declaration)
 		document.Capabilities = append(document.Capabilities, CapabilitySection{

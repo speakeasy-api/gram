@@ -31,6 +31,13 @@ type PromoteRequestBody struct {
 	RiskPolicyBypassRequestID *string `form:"risk_policy_bypass_request_id,omitempty" json:"risk_policy_bypass_request_id,omitempty" xml:"risk_policy_bypass_request_id,omitempty"`
 }
 
+// RefreshEvidenceRequestBody is the type of the "mcpApproval" service
+// "refreshEvidence" endpoint HTTP request body.
+type RefreshEvidenceRequestBody struct {
+	// The approval request ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // RecordDecisionRequestBody is the type of the "mcpApproval" service
 // "recordDecision" endpoint HTTP request body.
 type RecordDecisionRequestBody struct {
@@ -130,6 +137,29 @@ type PromoteResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the request last changed.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RefreshEvidenceResponseBody is the type of the "mcpApproval" service
+// "refreshEvidence" endpoint HTTP response body.
+type RefreshEvidenceResponseBody struct {
+	// The request itself.
+	Request *ApprovalRequestSummaryResponseBody `form:"request" json:"request" xml:"request"`
+	// Everyone who asked.
+	Requesters []*ApprovalRequesterResponseBody `form:"requesters" json:"requesters" xml:"requesters"`
+	// The deterministic signals gathered for this server, as they stood when last
+	// collected. Every item is a declaration by the server or its registry, never
+	// an observation of behaviour.
+	Evidence any `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
+	// Shape version of the evidence payload, so an older snapshot stays
+	// interpretable.
+	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
+	// When the evidence was last gathered.
+	EvidenceCollectedAt *string `form:"evidence_collected_at,omitempty" json:"evidence_collected_at,omitempty" xml:"evidence_collected_at,omitempty"`
+	// Every decision made on this server, newest first. A repeat request starts
+	// from the last rationale rather than from zero.
+	Decisions []*ApprovalDecisionResponseBody `form:"decisions" json:"decisions" xml:"decisions"`
+	// Every research-agent run for this request, newest first.
+	ResearchReports []*ResearchReportResponseBody `form:"research_reports" json:"research_reports" xml:"research_reports"`
 }
 
 // RecordDecisionResponseBody is the type of the "mcpApproval" service
@@ -889,6 +919,193 @@ type PromoteGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RefreshEvidenceUnauthorizedResponseBody is the type of the "mcpApproval"
+// service "refreshEvidence" endpoint HTTP response body for the "unauthorized"
+// error.
+type RefreshEvidenceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceForbiddenResponseBody is the type of the "mcpApproval"
+// service "refreshEvidence" endpoint HTTP response body for the "forbidden"
+// error.
+type RefreshEvidenceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceBadRequestResponseBody is the type of the "mcpApproval"
+// service "refreshEvidence" endpoint HTTP response body for the "bad_request"
+// error.
+type RefreshEvidenceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceNotFoundResponseBody is the type of the "mcpApproval" service
+// "refreshEvidence" endpoint HTTP response body for the "not_found" error.
+type RefreshEvidenceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceConflictResponseBody is the type of the "mcpApproval" service
+// "refreshEvidence" endpoint HTTP response body for the "conflict" error.
+type RefreshEvidenceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceUnsupportedMediaResponseBody is the type of the "mcpApproval"
+// service "refreshEvidence" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RefreshEvidenceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceInvalidResponseBody is the type of the "mcpApproval" service
+// "refreshEvidence" endpoint HTTP response body for the "invalid" error.
+type RefreshEvidenceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceInvariantViolationResponseBody is the type of the
+// "mcpApproval" service "refreshEvidence" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RefreshEvidenceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceUnexpectedResponseBody is the type of the "mcpApproval"
+// service "refreshEvidence" endpoint HTTP response body for the "unexpected"
+// error.
+type RefreshEvidenceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshEvidenceGatewayErrorResponseBody is the type of the "mcpApproval"
+// service "refreshEvidence" endpoint HTTP response body for the
+// "gateway_error" error.
+type RefreshEvidenceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RecordDecisionUnauthorizedResponseBody is the type of the "mcpApproval"
 // service "recordDecision" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1268,6 +1485,56 @@ func NewPromoteResponseBody(res *mcpapproval.ApprovalRequestSummary) *PromoteRes
 		RequesterCount: res.RequesterCount,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
+	}
+	return body
+}
+
+// NewRefreshEvidenceResponseBody builds the HTTP response body from the result
+// of the "refreshEvidence" endpoint of the "mcpApproval" service.
+func NewRefreshEvidenceResponseBody(res *mcpapproval.ApprovalRequestDetail) *RefreshEvidenceResponseBody {
+	body := &RefreshEvidenceResponseBody{
+		Evidence:            res.Evidence,
+		EvidenceVersion:     res.EvidenceVersion,
+		EvidenceCollectedAt: res.EvidenceCollectedAt,
+	}
+	if res.Request != nil {
+		body.Request = marshalMcpapprovalApprovalRequestSummaryToApprovalRequestSummaryResponseBody(res.Request)
+	}
+	if res.Requesters != nil {
+		body.Requesters = make([]*ApprovalRequesterResponseBody, len(res.Requesters))
+		for i, val := range res.Requesters {
+			if val == nil {
+				body.Requesters[i] = nil
+				continue
+			}
+			body.Requesters[i] = marshalMcpapprovalApprovalRequesterToApprovalRequesterResponseBody(val)
+		}
+	} else {
+		body.Requesters = []*ApprovalRequesterResponseBody{}
+	}
+	if res.Decisions != nil {
+		body.Decisions = make([]*ApprovalDecisionResponseBody, len(res.Decisions))
+		for i, val := range res.Decisions {
+			if val == nil {
+				body.Decisions[i] = nil
+				continue
+			}
+			body.Decisions[i] = marshalMcpapprovalApprovalDecisionToApprovalDecisionResponseBody(val)
+		}
+	} else {
+		body.Decisions = []*ApprovalDecisionResponseBody{}
+	}
+	if res.ResearchReports != nil {
+		body.ResearchReports = make([]*ResearchReportResponseBody, len(res.ResearchReports))
+		for i, val := range res.ResearchReports {
+			if val == nil {
+				body.ResearchReports[i] = nil
+				continue
+			}
+			body.ResearchReports[i] = marshalMcpapprovalResearchReportToResearchReportResponseBody(val)
+		}
+	} else {
+		body.ResearchReports = []*ResearchReportResponseBody{}
 	}
 	return body
 }
@@ -1854,6 +2121,150 @@ func NewPromoteGatewayErrorResponseBody(res *goa.ServiceError) *PromoteGatewayEr
 	return body
 }
 
+// NewRefreshEvidenceUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "refreshEvidence" endpoint of the "mcpApproval"
+// service.
+func NewRefreshEvidenceUnauthorizedResponseBody(res *goa.ServiceError) *RefreshEvidenceUnauthorizedResponseBody {
+	body := &RefreshEvidenceUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceForbiddenResponseBody builds the HTTP response body from
+// the result of the "refreshEvidence" endpoint of the "mcpApproval" service.
+func NewRefreshEvidenceForbiddenResponseBody(res *goa.ServiceError) *RefreshEvidenceForbiddenResponseBody {
+	body := &RefreshEvidenceForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceBadRequestResponseBody builds the HTTP response body from
+// the result of the "refreshEvidence" endpoint of the "mcpApproval" service.
+func NewRefreshEvidenceBadRequestResponseBody(res *goa.ServiceError) *RefreshEvidenceBadRequestResponseBody {
+	body := &RefreshEvidenceBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceNotFoundResponseBody builds the HTTP response body from
+// the result of the "refreshEvidence" endpoint of the "mcpApproval" service.
+func NewRefreshEvidenceNotFoundResponseBody(res *goa.ServiceError) *RefreshEvidenceNotFoundResponseBody {
+	body := &RefreshEvidenceNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceConflictResponseBody builds the HTTP response body from
+// the result of the "refreshEvidence" endpoint of the "mcpApproval" service.
+func NewRefreshEvidenceConflictResponseBody(res *goa.ServiceError) *RefreshEvidenceConflictResponseBody {
+	body := &RefreshEvidenceConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "refreshEvidence" endpoint of the "mcpApproval"
+// service.
+func NewRefreshEvidenceUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshEvidenceUnsupportedMediaResponseBody {
+	body := &RefreshEvidenceUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceInvalidResponseBody builds the HTTP response body from the
+// result of the "refreshEvidence" endpoint of the "mcpApproval" service.
+func NewRefreshEvidenceInvalidResponseBody(res *goa.ServiceError) *RefreshEvidenceInvalidResponseBody {
+	body := &RefreshEvidenceInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "refreshEvidence" endpoint of the "mcpApproval"
+// service.
+func NewRefreshEvidenceInvariantViolationResponseBody(res *goa.ServiceError) *RefreshEvidenceInvariantViolationResponseBody {
+	body := &RefreshEvidenceInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceUnexpectedResponseBody builds the HTTP response body from
+// the result of the "refreshEvidence" endpoint of the "mcpApproval" service.
+func NewRefreshEvidenceUnexpectedResponseBody(res *goa.ServiceError) *RefreshEvidenceUnexpectedResponseBody {
+	body := &RefreshEvidenceUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshEvidenceGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "refreshEvidence" endpoint of the "mcpApproval"
+// service.
+func NewRefreshEvidenceGatewayErrorResponseBody(res *goa.ServiceError) *RefreshEvidenceGatewayErrorResponseBody {
+	body := &RefreshEvidenceGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRecordDecisionUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "recordDecision" endpoint of the "mcpApproval" service.
 func NewRecordDecisionUnauthorizedResponseBody(res *goa.ServiceError) *RecordDecisionUnauthorizedResponseBody {
@@ -2049,6 +2460,19 @@ func NewPromotePayload(body *PromoteRequestBody, sessionToken *string, apikeyTok
 	return v
 }
 
+// NewRefreshEvidencePayload builds a mcpApproval service refreshEvidence
+// endpoint payload.
+func NewRefreshEvidencePayload(body *RefreshEvidenceRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RefreshEvidencePayload {
+	v := &mcpapproval.RefreshEvidencePayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewRecordDecisionPayload builds a mcpApproval service recordDecision
 // endpoint payload.
 func NewRecordDecisionPayload(body *RecordDecisionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RecordDecisionPayload {
@@ -2095,6 +2519,15 @@ func ValidateCreateRequestRequestBody(body *CreateRequestRequestBody) (err error
 func ValidatePromoteRequestBody(body *PromoteRequestBody) (err error) {
 	if body.RiskPolicyBypassRequestID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risk_policy_bypass_request_id", "body"))
+	}
+	return
+}
+
+// ValidateRefreshEvidenceRequestBody runs the validations defined on
+// RefreshEvidenceRequestBody
+func ValidateRefreshEvidenceRequestBody(body *RefreshEvidenceRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	return
 }
