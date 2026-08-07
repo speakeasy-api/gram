@@ -93,6 +93,9 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	if authCtx.SessionID == nil && !isAssistant {
 		return ctx, nil
 	}
+	if authCtx.ActiveOrganizationID == "" {
+		return GrantsToContext(ctx, nil), nil
+	}
 
 	// Sessions in the shared demo org (which has no membership rows) get a
 	// fixed read-only grant set. This must precede scope and admin overrides so
