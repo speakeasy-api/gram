@@ -414,8 +414,8 @@ function SkillDetailSections({
           <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
         </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
-          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
+          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1 m-0">
               <Text className="text-sm font-semibold">Archive this skill</Text>
               <Text small muted className="max-w-xl">
                 Archiving removes the skill from this project's catalog and
@@ -428,7 +428,7 @@ function SkillDetailSections({
               level="component"
             >
               <Button
-                variant="destructive-secondary"
+                variant="destructive-primary"
                 onClick={() =>
                   setArchiveTarget({
                     id: skill.id,
