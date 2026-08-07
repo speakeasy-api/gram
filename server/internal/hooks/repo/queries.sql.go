@@ -466,6 +466,31 @@ func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlo
 	return err
 }
 
+const latestUserMessageMatchesOpenCode = `-- name: LatestUserMessageMatchesOpenCode :one
+SELECT COALESCE((
+  SELECT source = 'opencode' AND content = $1
+  FROM chat_messages
+  WHERE project_id = $2::uuid
+    AND chat_id = $3
+    AND role = 'user'
+  ORDER BY created_at DESC, seq DESC
+  LIMIT 1
+), FALSE)::boolean
+`
+
+type LatestUserMessageMatchesOpenCodeParams struct {
+	Content   string
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+func (q *Queries) LatestUserMessageMatchesOpenCode(ctx context.Context, arg LatestUserMessageMatchesOpenCodeParams) (bool, error) {
+	row := q.db.QueryRow(ctx, latestUserMessageMatchesOpenCode, arg.Content, arg.ProjectID, arg.ChatID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
 UPDATE chats
 SET user_account_id = $1

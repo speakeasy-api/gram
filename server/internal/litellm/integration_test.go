@@ -353,6 +353,65 @@ func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 }
 
+func TestRealHooksCoalescesLiteLLMPromptsWithOpenCodeMessages(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "ses_" + uuid.NewString()
+	prompt := "summarize this repository"
+	ingestOpenCodePrompt := func() {
+		t.Helper()
+		_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			Replayed:         nil,
+			SchemaVersion:    "hook.ingest.v1",
+			IdempotencyKey:   new("opencode-" + uuid.NewString()),
+			Source: &hooksgen.HookIngestSource{
+				Adapter:        "opencode",
+				AdapterVersion: nil,
+				RawEventName:   nil,
+				Hostname:       nil,
+				UserEmail:      nil,
+			},
+			Session: &hooksgen.HookIngestSession{ID: &sessionID, TurnID: nil, Cwd: nil, Model: nil},
+			Event:   &hooksgen.HookIngestEvent{Type: "prompt.submitted", OccurredAt: nil},
+			Data:    &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}},
+			Raw:     nil,
+		})
+		require.NoError(t, err)
+	}
+	ingestLiteLLMPrompt := func() {
+		t.Helper()
+		payload := testPayload()
+		payload.LitellmCallID = new("call-" + uuid.NewString())
+		payload.Texts = []string{prompt}
+		payload.RequestHeaders = map[string]string{"x-session-id": sessionID}
+		result, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	}
+
+	ingestOpenCodePrompt()
+	ingestLiteLLMPrompt()
+	ingestLiteLLMPrompt()
+	ingestOpenCodePrompt()
+	ingestLiteLLMPrompt()
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	for _, msg := range messages {
+		require.Equal(t, "user", msg.Role)
+		require.Equal(t, prompt, msg.Content)
+		require.Equal(t, "opencode", msg.Source.String)
+	}
+}
+
 func TestRealHooksPersistsToolCallOnlyResponse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newRealTestService(t, nil)

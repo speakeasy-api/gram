@@ -1404,6 +1404,19 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		if strings.TrimSpace(content) == "" {
 			return nil
 		}
+		if strings.EqualFold(strings.TrimSpace(hookSource), "litellm") {
+			matched, err := s.repo.LatestUserMessageMatchesOpenCode(ctx, repo.LatestUserMessageMatchesOpenCodeParams{
+				ProjectID: *authCtx.ProjectID,
+				ChatID:    sessionIDToUUID(sessionID),
+				Content:   content,
+			})
+			if err != nil {
+				return fmt.Errorf("match LiteLLM prompt to OpenCode message: %w", err)
+			}
+			if matched {
+				return nil
+			}
+		}
 		msg = baseMsg("user", content)
 		titleContent = content
 	case "assistant.responded":

@@ -132,6 +132,17 @@ RETURNING id;
 -- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = @id AND project_id = @project_id;
 
+-- name: LatestUserMessageMatchesOpenCode :one
+SELECT COALESCE((
+  SELECT source = 'opencode' AND content = @content
+  FROM chat_messages
+  WHERE project_id = @project_id::uuid
+    AND chat_id = @chat_id
+    AND role = 'user'
+  ORDER BY created_at DESC, seq DESC
+  LIMIT 1
+), FALSE)::boolean;
+
 -- name: LinkChatUserAccount :execrows
 -- Backfills the chat -> user_accounts link for a session whose chat row was
 -- created before account attribution landed. A chat is created once, on the
