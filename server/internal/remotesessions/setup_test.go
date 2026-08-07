@@ -116,13 +116,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		enc,
 		envEntries,
 		guardianPolicy,
 		audit.NewLogger(),
 		serverURL,
 		redisCache,
+		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, redisCache),
 	)
 
 	return ctx, &testInstance{
@@ -194,12 +195,13 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
-	row, err := repo.New(conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+	row, err := repo.New(conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            principal,
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
 		AccessTokenEncrypted:  "ciphertext",
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
 	})
 	require.NoError(t, err)
 	return row

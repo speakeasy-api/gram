@@ -16,6 +16,11 @@ UPDATE chat_messages
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = @slug
+WHERE id = @id;
+
 -- name: UpdateRiskResultCreatedAt :exec
 UPDATE risk_results
 SET created_at = @created_at
@@ -65,9 +70,12 @@ UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, sca
 -- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
 -- name: CountOutboxEntriesByEventType :one
+-- Counts enqueued webhook events of a given type. The event type lives in a
+-- Pub/Sub message attribute rather than a column now, because the outbox row
+-- itself is transport-agnostic.
 SELECT COUNT(*)
-FROM outbox
-WHERE event_type = @event_type;
+FROM publish_outbox
+WHERE attributes->>'event_type' = @event_type::text;
 
 -- name: ListRiskResultsAll :many
 -- Fixture query used by the risk-analysis activity tests that need to
@@ -78,6 +86,14 @@ FROM risk_results
 WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
 ORDER BY id;
+
+-- name: SeedOutboxEntry :one
+-- Fixture insert for the deprecated outbox table. Producers write to
+-- publish_outbox now, so the only thing that still needs to create one of
+-- these rows is the legacy relay's own tests; this goes away with them.
+INSERT INTO outbox (organization_id, event_type, payload)
+VALUES (@organization_id, @event_type, @payload)
+RETURNING id;
 
 -- name: GetOutboxEntry :one
 -- Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
@@ -95,6 +111,34 @@ SELECT
     last_error
 FROM outbox_relays
 WHERE outbox_id = @outbox_id;
+
+-- name: GetPublishOutboxRow :one
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, retry_after, locked_until, lease_token, created_at
+FROM publish_outbox
+WHERE id = @id;
+
+-- name: GetPublishOutboxDeadLetter :one
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, enqueued_at, created_at
+FROM publish_outbox_dead_letters
+WHERE public_id = @public_id;
+
+-- name: CountPublishOutboxRows :one
+SELECT COUNT(*) FROM publish_outbox;
+
+-- name: SeedPublishOutboxRow :one
+-- Fixture insert that can set the retry/lease columns a producer never touches.
+INSERT INTO publish_outbox (
+    public_id, organization_id, topic, message, attributes,
+    attempts, retry_after, locked_until
+)
+VALUES (
+    COALESCE(sqlc.narg(public_id)::uuid, generate_uuidv7()),
+    @organization_id, @topic, @message, @attributes,
+    @attempts, sqlc.narg(retry_after), sqlc.narg(locked_until)
+)
+RETURNING id, public_id;
 
 -- name: SetOrgWebhookConfig :exec
 -- Sets the Svix app ID and webhooks_enabled flag on an organization.
@@ -135,6 +179,18 @@ INSERT INTO organization_metadata (
 -- Test-only fixture for seeding membership counts.
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
+
+-- name: InsertTrialFixture :exec
+-- Test-only fixture for exercising active trial lifecycle states.
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
+VALUES (
+    @organization_id,
+    'enterprise',
+    @created_at,
+    @ends_at,
+    sqlc.narg('converted_at')::timestamptz,
+    sqlc.narg('demoted_at')::timestamptz
+);
 
 -- name: ForceSoftDeleteUserSessionIssuer :exec
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
@@ -231,6 +287,19 @@ UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
 
+-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+-- Test-only fixture for exercising allow-only writes against legacy rows.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
+
+-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors;
+
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a
 -- risk_results row to it.
@@ -250,3 +319,12 @@ INSERT INTO risk_results (
   @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
   @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
 );
+
+-- name: GetToolCallBlockLinksFixture :one
+-- Test-only. The block page query deliberately does not expose the optional
+-- foreign keys, but asserting that the salvage cleared exactly the link the
+-- database rejected — and left the others alone — requires reading them off
+-- the row.
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = @id;

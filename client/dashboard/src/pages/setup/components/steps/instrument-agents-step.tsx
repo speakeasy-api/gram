@@ -41,11 +41,11 @@ export function InstrumentAgentsStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Terminal className="text-foreground h-6 w-6" />
         </div>
       }
-      title="Instrument agent platforms"
+      title="Instrument agents"
       description="Choose how your team's AI coding assistants get instrumented. Deploy the Speakeasy device agent to manage every platform centrally, or set up hooks per platform by hand."
       onContinue={onComplete}
       continueLabel="Continue"
@@ -53,7 +53,7 @@ export function InstrumentAgentsStep({
       onBack={onBack}
     >
       <Tabs defaultValue="manual" className="gap-8">
-        <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 bg-transparent p-0 sm:grid-cols-2">
+        <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 divide-x-0 border-0 bg-transparent p-0 sm:grid-cols-2">
           <ChoiceTab
             value="manual"
             icon={<Wrench className="h-5 w-5" />}
@@ -91,7 +91,7 @@ export function InstrumentAgentsStep({
                   type="button"
                   onClick={() => setDrawerPlatformId(platform.id)}
                   className={cn(
-                    "flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all",
+                    "flex w-full items-center gap-4 border p-4 text-left transition-all",
                     status === "complete"
                       ? "border-foreground/10 bg-secondary/20"
                       : "border-border bg-card hover:border-foreground/20",
@@ -99,7 +99,7 @@ export function InstrumentAgentsStep({
                 >
                   <div
                     className={cn(
-                      "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
+                      "flex h-10 w-10 flex-shrink-0 items-center justify-center",
                       status === "complete"
                         ? "bg-foreground/10"
                         : "bg-secondary",
@@ -146,9 +146,9 @@ export function InstrumentAgentsStep({
                     <div
                       key={platform.id}
                       aria-disabled
-                      className="border-border bg-card flex cursor-not-allowed items-center gap-3 rounded-lg border p-3 opacity-50"
+                      className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
                     >
-                      <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
+                      <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
                         <HookSourceIcon
                           source={platform.id}
                           className="h-4 w-4"
@@ -204,11 +204,17 @@ function ChoiceTab({
   return (
     <TabsTrigger
       value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-2 rounded-md border p-5 text-left whitespace-normal"
+      // Neutralize the segmented TabsTrigger base (mono/uppercase/tracked) for
+      // the card body; the title span re-applies the mono eyebrow look itself.
+      // The active card reads as the "front sheet": white fill on the gray
+      // page, ink border + ring; inactive cards stay transparent and recede.
+      className="border-border data-[state=active]:border-primary data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:ring-1 data-[state=active]:ring-primary h-auto flex-col items-start justify-start gap-2 border bg-transparent p-5 text-left font-sans text-sm tracking-normal normal-case whitespace-normal"
     >
       <div className="flex w-full items-center gap-2">
         <span className="text-foreground">{icon}</span>
-        <span className="text-foreground text-base font-medium">{title}</span>
+        <span className="text-foreground font-mono text-[13px] font-medium tracking-[0.08em] uppercase">
+          {title}
+        </span>
         {badge}
       </div>
       <span className="text-muted-foreground text-sm font-normal">{desc}</span>

@@ -20,14 +20,11 @@ const alertVariants = cva<{
     variants: {
       variant: {
         default: "bg-card",
-        success:
-          "bg-success-softest text-default-success border-success-softest",
-        error:
-          "bg-destructive-softest text-default-destructive border-destructive-softest",
-        warning:
-          "bg-warning-softest text-default-warning border-warning-softest",
-        info: "bg-information-softest text-default-information border-information-softest",
-        feature: "bg-feature text-feature-foreground",
+        success: "bg-card text-default-success border-success-default",
+        error: "bg-card text-default-destructive border-destructive-default",
+        warning: "bg-card text-default-warning border-warning-default",
+        info: "bg-card text-default-information border-information-default",
+        feature: "bg-card text-default-information border-information-default",
       },
       modifiers: {
         inline: "inline-flex",
@@ -87,7 +84,7 @@ export function Alert({
       <button
         type="button"
         aria-label="Dismiss"
-        className="p-2 hover:rounded-lg hover:bg-accent/10"
+        className="p-2 hover:bg-accent/10"
         onClick={handleDismiss}
       >
         <Icon name="x" />
@@ -142,7 +139,7 @@ export function AlertDescription({
 }: React.HTMLAttributes<HTMLParagraphElement>): React.JSX.Element {
   return (
     <div
-      className={cn("text-sm [&_p]:leading-relaxed", className)}
+      className={cn("text-foreground text-sm [&_p]:leading-relaxed", className)}
       {...props}
     />
   );

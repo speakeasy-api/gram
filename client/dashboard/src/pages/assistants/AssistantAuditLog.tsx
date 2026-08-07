@@ -1,6 +1,5 @@
 import {
-  ActionBadge,
-  ActionDot,
+  ActionIconTile,
   AuditFeedFooter,
   DateGroupHeader,
   FacetSelect,
@@ -10,10 +9,10 @@ import {
   groupLogsByDate,
   type TimestampMode,
 } from "@/lib/audit-log-feed";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
-import { cn } from "@/lib/utils";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
@@ -41,11 +40,9 @@ function formatParams(params: unknown): string | undefined {
 function AssistantAuditLogRow({
   log,
   assistantName,
-  isOdd,
 }: {
   log: AuditLog;
   assistantName: string;
-  isOdd: boolean;
 }) {
   const [paramsExpanded, setParamsExpanded] = useState(false);
 
@@ -55,9 +52,8 @@ function AssistantAuditLogRow({
   const paramsTruncated = log.metadata?.["params_truncated"] === true;
 
   const rowContent = (
-    <div className="flex items-start gap-3.5 px-4 py-2.5">
-      <ActionDot action={log.action} />
-      <ActionBadge action={log.action} />
+    <div className="flex items-center gap-3 px-4 py-2.5">
+      <ActionIconTile action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <span>
           <strong className="text-foreground font-semibold">
@@ -81,7 +77,7 @@ function AssistantAuditLogRow({
           <button
             type="button"
             onClick={() => setParamsExpanded((v) => !v)}
-            className="ml-2 text-xs text-blue-500 hover:underline"
+            className="text-link-primary ml-2 text-xs hover:underline"
           >
             {paramsExpanded ? "Hide params ▴" : "Show params ▾"}
           </button>
@@ -96,16 +92,9 @@ function AssistantAuditLogRow({
   if (params && paramsExpanded) {
     return (
       <div>
-        <div
-          className={cn(
-            "rounded-t-lg border border-b-0",
-            isOdd ? "bg-muted/30" : "bg-background",
-          )}
-        >
-          {rowContent}
-        </div>
-        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
-          <pre className="bg-muted/30 text-muted-foreground max-h-80 overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
+        <div className="bg-card border border-b-0">{rowContent}</div>
+        <div className="bg-card border border-t-0 px-4 pt-2 pb-3">
+          <pre className="bg-muted/30 text-muted-foreground max-h-80 overflow-auto p-3 font-mono text-xs whitespace-pre-wrap">
             {params}
           </pre>
           {paramsTruncated && (
@@ -118,16 +107,7 @@ function AssistantAuditLogRow({
     );
   }
 
-  return (
-    <div
-      className={cn(
-        "rounded-none transition-colors",
-        isOdd ? "bg-muted/30" : "bg-background",
-      )}
-    >
-      {rowContent}
-    </div>
-  );
+  return <div className="bg-card transition-colors">{rowContent}</div>;
 }
 
 /**
@@ -186,7 +166,8 @@ export function AssistantsAuditLog(): React.JSX.Element {
   return (
     <div className="flex w-full flex-col gap-4">
       <div>
-        <Heading variant="h3" className="mb-2">
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
           Assistant activity
         </Heading>
         <Text muted small className="mt-1">
@@ -212,7 +193,7 @@ export function AssistantsAuditLog(): React.JSX.Element {
         />
       </div>
 
-      <div className="bg-background overflow-hidden rounded-lg border">
+      <div className="bg-card overflow-hidden border">
         {isLoading ? (
           <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
             <Icon name="loader-circle" className="size-4 animate-spin" />
@@ -237,11 +218,11 @@ export function AssistantsAuditLog(): React.JSX.Element {
             </Text>
           </div>
         ) : (
-          <div>
+          <div className="divide-border divide-y">
             {dateGroups.map((group) => (
               <React.Fragment key={group.key}>
                 <DateGroupHeader date={group.date} mode={TIMESTAMP_MODE} />
-                {group.logs.map((log, rowIndex) => (
+                {group.logs.map((log) => (
                   <AssistantAuditLogRow
                     key={log.id}
                     log={log}
@@ -249,7 +230,6 @@ export function AssistantsAuditLog(): React.JSX.Element {
                       assistantNameById.get(log.subjectId) ??
                       "Deleted assistant"
                     }
-                    isOdd={rowIndex % 2 === 1}
                   />
                 ))}
               </React.Fragment>

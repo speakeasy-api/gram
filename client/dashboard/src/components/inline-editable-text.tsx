@@ -74,7 +74,7 @@ export function InlineEditableText({
     return (
       <InputGroup
         className={cn(
-          "border-border bg-card dark:bg-card h-10 rounded-md rounded-tl-md rounded-tr-md rounded-br-md rounded-bl-md shadow-none has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/30",
+          "border-border bg-card dark:bg-card h-10 shadow-none has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/30",
           editorClassName,
         )}
       >

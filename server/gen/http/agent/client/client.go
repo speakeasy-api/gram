@@ -25,6 +25,14 @@ type Client struct {
 	// listSyncedUsers endpoint.
 	ListSyncedUsersDoer goahttp.Doer
 
+	// GetConfiguration Doer is the HTTP client used to make requests to the
+	// getConfiguration endpoint.
+	GetConfigurationDoer goahttp.Doer
+
+	// UpdateConfiguration Doer is the HTTP client used to make requests to the
+	// updateConfiguration endpoint.
+	UpdateConfigurationDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -45,13 +53,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPluginsDoer:      doer,
-		ListSyncedUsersDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetPluginsDoer:          doer,
+		ListSyncedUsersDoer:     doer,
+		GetConfigurationDoer:    doer,
+		UpdateConfigurationDoer: doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
 	}
 }
 
@@ -98,6 +108,54 @@ func (c *Client) ListSyncedUsers() goa.Endpoint {
 		resp, err := c.ListSyncedUsersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "listSyncedUsers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetConfiguration returns an endpoint that makes HTTP requests to the agent
+// service getConfiguration server.
+func (c *Client) GetConfiguration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetConfigurationRequest(c.encoder)
+		decodeResponse = DecodeGetConfigurationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetConfigurationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetConfigurationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "getConfiguration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateConfiguration returns an endpoint that makes HTTP requests to the
+// agent service updateConfiguration server.
+func (c *Client) UpdateConfiguration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateConfigurationRequest(c.encoder)
+		decodeResponse = DecodeUpdateConfigurationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateConfigurationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateConfigurationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "updateConfiguration", err)
 		}
 		return decodeResponse(resp)
 	}

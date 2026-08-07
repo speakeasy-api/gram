@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { mcpServerRouteParam } from "@/lib/sources";
+import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -17,27 +17,6 @@ import {
   VerifyRemoteMcpUrlAlert,
   VerifyRemoteMcpUrlButton,
 } from "./VerifyRemoteMcpUrlButton";
-
-// Mirrors server-side url.Parse: must be absolute, http(s), with a non-empty
-// host. We surface this client-side so the user gets feedback before the round
-// trip; the backend re-validates regardless.
-function validateRemoteMcpUrl(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return "URL is required";
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return "Enter a valid absolute URL (e.g. https://example.com/mcp)";
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return "URL must use http or https";
-  }
-  if (!parsed.hostname) {
-    return "URL must include a host";
-  }
-  return null;
-}
 
 export default function CreateRemoteMcp(): JSX.Element {
   return (
@@ -66,16 +45,16 @@ function CreateRemoteMcpForm() {
 
   const verify = useVerifyRemoteMcpUrl(url);
 
-  const validationError = touched ? validateRemoteMcpUrl(url) : null;
+  const validationError = touched ? validateMcpServerUrl(url) : null;
   const submitDisabled =
-    createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
+    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
   const verifyDisabled =
-    createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
+    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (validateRemoteMcpUrl(url) !== null) {
+    if (validateMcpServerUrl(url) !== null) {
       return;
     }
     try {
@@ -106,7 +85,7 @@ function CreateRemoteMcpForm() {
     <div className="max-w-2xl">
       <Stack gap={3} className="mb-8">
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
             <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
           </div>
           <Heading variant="h3">Add a custom remote MCP server</Heading>

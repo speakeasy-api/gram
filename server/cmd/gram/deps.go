@@ -48,6 +48,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -1045,6 +1046,28 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
+	// The outbox drain runs inside a Temporal activity, so a Pub/Sub stall must
+	// surface as a failed batch rather than as unbounded buffering behind an
+	// activity that has already claimed its rows.
+	outboxPublishSettings := pubsub.DefaultPublishSettings
+	outboxPublishSettings.Timeout = 30 * time.Second
+	outboxPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	outboxPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	outboxPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	// Registry consistency needs no boot-time assertion — the generated
+	// registry imports every topic's Go package, so declared topics resolve by
+	// construction. Broker reachability does: warming builds a publisher per
+	// declared topic now, so a broker that cannot hand one back (a
+	// misconfigured emulator, say) fails boot naming the topic instead of
+	// dead-lettering outbox rows one retry budget at a time. On the emulator
+	// this is also what reconciles the topics into existence.
+	outboxPublisher := topics.NewMux(psbroker, &outboxPublishSettings)
+	if err := outboxPublisher.Warm(ctx); err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to warm outbox topic publishers: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "outbox", pub: outboxPublisher})
+
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, pub := range pubs {
@@ -1056,6 +1079,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
+		Outbox:                  outboxPublisher,
 		PresidioAnalysis:        presidioAnalysis,
 		GitleaksAnalysis:        gitleaksAnalysis,
 		PromptInjectionAnalysis: promptInjectionAnalysis,

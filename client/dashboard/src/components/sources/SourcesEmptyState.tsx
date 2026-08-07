@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
@@ -63,6 +64,7 @@ export function SourcesEmptyState({
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
 
   return (
     <Page.Section>
@@ -71,8 +73,8 @@ export function SourcesEmptyState({
         {sourcesEmptyStateDescription(isFunctionsEnabled, isTunneledMcpEnabled)}
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-          <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
+          <div className="border-border mb-4 flex h-12 w-12 items-center justify-center border">
             <Database className="text-muted-foreground h-6 w-6" />
           </div>
           <Text variant="subheading" className="mb-1">
@@ -99,9 +101,9 @@ export function SourcesEmptyState({
                   <DropdownMenuContent align="center" className="w-[320px] p-1">
                     <DropdownMenuItem
                       onSelect={() => routes.sources.addOpenAPI.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      className="flex cursor-pointer items-start gap-3 p-2"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-blue-500/10 dark:bg-blue-500/20">
                         <FileCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div className="flex flex-col gap-0.5">
@@ -114,9 +116,9 @@ export function SourcesEmptyState({
                     {isFunctionsEnabled && (
                       <DropdownMenuItem
                         onSelect={() => routes.sources.addFunction.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                        className="flex cursor-pointer items-start gap-3 p-2"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-emerald-500/10 dark:bg-emerald-500/20">
                           <Code className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                         </div>
                         <div className="flex flex-col gap-0.5">
@@ -129,9 +131,9 @@ export function SourcesEmptyState({
                     )}
                     <DropdownMenuItem
                       onSelect={() => routes.sources.addFromCatalog.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      className="flex cursor-pointer items-start gap-3 p-2"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
                         <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                       </div>
                       <div className="flex flex-col gap-0.5">
@@ -143,9 +145,9 @@ export function SourcesEmptyState({
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={() => routes.sources.addRemoteMcp.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      className="flex cursor-pointer items-start gap-3 p-2"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
                         <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                       </div>
                       <div className="flex flex-col gap-0.5">
@@ -160,9 +162,9 @@ export function SourcesEmptyState({
                     {isTunneledMcpEnabled && (
                       <DropdownMenuItem
                         onSelect={() => routes.sources.addTunneledMcp.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                        className="flex cursor-pointer items-start gap-3 p-2"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-cyan-500/10 dark:bg-cyan-500/20">
                           <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
                         </div>
                         <div className="flex flex-col gap-0.5">
@@ -171,6 +173,25 @@ export function SourcesEmptyState({
                           </span>
                           <span className="text-muted-foreground text-xs">
                             Connect private MCP servers through a tunnel
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                    {isSpeakeasyStaff && (
+                      <DropdownMenuItem
+                        onSelect={() => routes.sources.addUnproxiedMcp.goTo()}
+                        className="flex cursor-pointer items-start gap-3 p-2"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-amber-500/10 dark:bg-amber-500/20">
+                          <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">
+                            Unproxied MCP Server
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            List a vendor server without proxying it (Speakeasy
+                            staff only)
                           </span>
                         </div>
                       </DropdownMenuItem>

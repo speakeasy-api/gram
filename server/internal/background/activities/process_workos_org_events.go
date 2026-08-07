@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -348,13 +347,10 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 		}
 	}
 
-	// Ensure RBAC is enabled for any org this event touches, new or existing.
-	// The login-time provisioning path (auth/identity) enables RBAC best-effort
-	// and can leave a freshly created org unseeded if that call fails; once that
-	// row exists this backstop would otherwise resolve it as existing and skip
-	// seeding forever. EnableRBACTx is idempotent, so re-asserting here is safe.
-	if err := productfeatures.EnableRBACTx(ctx, dbtx, resolved.organizationID); err != nil {
-		return effects, fmt.Errorf("enable RBAC for organization %q from workos event: %w", payload.ID, err)
+	// Reconcile the built-in roles and grants for any org this event touches.
+	// Seeding is idempotent and preserves existing grants.
+	if err := authz.SeedSystemRoleGrantsTx(ctx, dbtx, resolved.organizationID); err != nil {
+		return effects, fmt.Errorf("provision access defaults for organization %q from workos event: %w", payload.ID, err)
 	}
 
 	if resolved.needsExternalIDUpdate {

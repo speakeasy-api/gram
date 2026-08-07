@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -196,4 +197,8 @@ func TestService_ListChats_ExposesPinned(t *testing.T) {
 	require.True(t, *byID[pinnedID.String()].Pinned)
 	require.NotNil(t, byID[unpinnedID.String()].Pinned)
 	require.False(t, *byID[unpinnedID.String()].Pinned)
+}
+
+func (m *mockCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey(), nil
 }

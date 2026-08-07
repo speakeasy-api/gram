@@ -12,7 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 func TestIsClientIDURL(t *testing.T) {
@@ -26,30 +26,31 @@ func TestIsClientIDURL(t *testing.T) {
 }
 
 // newDocServer starts a TLS server whose /client.json responds via handler
-// and returns the server plus a fetch client that trusts its certificate —
-// the same injection pattern production uses with a guardian-built client.
-func newDocServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *http.Client) {
+// and returns the server plus a resolver whose fetch client trusts its
+// certificate — the same injection pattern production uses with a
+// guardian-built client.
+func newDocServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Resolver) {
 	t.Helper()
 
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
-	return srv, newFetchClientFrom(srv.Client())
+	return srv, newResolver(newFetchClientFrom(srv.Client()), testenv.NewMeterProvider(t), testenv.NewLogger(t))
 }
 
 // serveDocumentJSON responds 200 application/json with the document derived
 // from the request URL by fn.
-func serveDocumentJSON(t *testing.T, fn func(clientID string) map[string]any) (*httptest.Server, *http.Client, string) {
+func serveDocumentJSON(t *testing.T, fn func(clientID string) map[string]any) (*httptest.Server, *Resolver, string) {
 	t.Helper()
 
 	var clientID string
-	srv, client := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(fn(clientID)); err != nil {
 			t.Errorf("encode document: %v", err)
 		}
 	})
 	clientID = srv.URL + "/client.json"
-	return srv, client, clientID
+	return srv, resolver, clientID
 }
 
 func validDocumentJSON(clientID string) map[string]any {
@@ -64,9 +65,9 @@ func validDocumentJSON(clientID string) map[string]any {
 func TestResolve_HappyPath(t *testing.T) {
 	t.Parallel()
 
-	_, client, clientID := serveDocumentJSON(t, validDocumentJSON)
+	_, resolver, clientID := serveDocumentJSON(t, validDocumentJSON)
 
-	doc, err := Resolve(t.Context(), client, clientID)
+	doc, err := resolver.Resolve(t.Context(), clientID)
 	require.NoError(t, err)
 	require.Equal(t, clientID, doc.ClientID)
 	require.Equal(t, "CIMD Test Client", doc.ClientName)
@@ -76,11 +77,11 @@ func TestResolve_HappyPath(t *testing.T) {
 func TestResolve_Non200Rejected(t *testing.T) {
 	t.Parallel()
 
-	srv, client := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
 
-	_, err := Resolve(t.Context(), client, srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
 	require.ErrorContains(t, err, "status 404")
 }
 
@@ -90,7 +91,7 @@ func TestResolve_RedirectNotFollowed(t *testing.T) {
 	// -02 §5: the fetch MUST NOT follow redirects. The 302 must surface as
 	// a fetch failure even though its target would serve a valid document.
 	var clientID string
-	srv, client := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/target.json" {
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(validDocumentJSON(clientID)); err != nil {
@@ -102,28 +103,28 @@ func TestResolve_RedirectNotFollowed(t *testing.T) {
 	})
 	clientID = srv.URL + "/client.json"
 
-	_, err := Resolve(t.Context(), client, clientID)
+	_, err := resolver.Resolve(t.Context(), clientID)
 	require.ErrorContains(t, err, "status 302")
 }
 
 func TestResolve_OversizedDocumentRejected(t *testing.T) {
 	t.Parallel()
 
-	srv, client := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := fmt.Fprintf(w, `{"padding":%q`, strings.Repeat("a", maxDocumentBytes+1)); err != nil {
 			t.Errorf("write oversized document: %v", err)
 		}
 	})
 
-	_, err := Resolve(t.Context(), client, srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
 	require.ErrorContains(t, err, "byte limit")
 }
 
 func TestResolve_InvalidJSONRejected(t *testing.T) {
 	t.Parallel()
 
-	srv, client := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write([]byte("not json")); err != nil {
 			t.Errorf("write document: %v", err)
@@ -133,22 +134,22 @@ func TestResolve_InvalidJSONRejected(t *testing.T) {
 	// Deliberately NOT an OAuthError: a distinguishable "reachable but not
 	// JSON" outcome would let unauthenticated callers probe external hosts
 	// through Gram, so it reports like any other fetch failure.
-	_, err := Resolve(t.Context(), client, srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
 	require.ErrorContains(t, err, "parse client metadata document")
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	require.NotErrorAs(t, err, &oauthErr)
 }
 
 func TestResolve_DocumentClientIDMismatchRejected(t *testing.T) {
 	t.Parallel()
 
-	_, client, clientID := serveDocumentJSON(t, func(clientID string) map[string]any {
+	_, resolver, clientID := serveDocumentJSON(t, func(clientID string) map[string]any {
 		doc := validDocumentJSON(clientID)
 		doc["client_id"] = clientID + "?other"
 		return doc
 	})
 
-	_, err := Resolve(t.Context(), client, clientID)
+	_, err := resolver.Resolve(t.Context(), clientID)
 	requireOAuthError(t, err, "invalid_client_metadata")
 }
 
@@ -156,11 +157,11 @@ func TestResolve_InvalidClientIDURLNoFetch(t *testing.T) {
 	t.Parallel()
 
 	requests := 0
-	srv, client := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv, resolver := newDocServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 	})
 
-	_, err := Resolve(t.Context(), client, srv.URL) // no path component
+	_, err := resolver.Resolve(t.Context(), srv.URL) // no path component
 	requireOAuthError(t, err, "invalid_request")
 	require.Zero(t, requests, "syntactically invalid client_id must never be fetched")
 }
@@ -175,7 +176,7 @@ func TestResolve_ProductionPolicyBlocksLoopback(t *testing.T) {
 		t.Error("SSRF-guarded client must not reach a loopback document host")
 	})
 
-	client := NewFetchClient(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
-	_, err := Resolve(t.Context(), client, srv.URL+"/client.json")
+	resolver := NewResolver(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
 	require.ErrorContains(t, err, "request document")
 }

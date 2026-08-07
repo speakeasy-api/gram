@@ -27,7 +27,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.19.0",
   "files": [
     "src",
     "dist"
@@ -65,6 +65,7 @@
     "zx": "8.8.5-lite"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
     "@types/archiver": "^8.0.0",
     "vitest": "^4.1.10"
   }

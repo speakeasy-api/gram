@@ -26,7 +26,7 @@ const ChoiceCard = ({
   return (
     <button
       onClick={onClick}
-      className="bg-secondary hover:bg-accent group relative flex flex-col items-start rounded-lg p-5 text-left shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)] transition-colors"
+      className="bg-card hover:bg-accent group relative flex flex-col items-start border p-5 text-left transition-colors"
     >
       <Icon className="text-primary mb-2 h-6 w-6 shrink-0" strokeWidth={1.5} />
       <div className="flex flex-col gap-1">
@@ -66,7 +66,7 @@ export const InitialChoiceStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with the platform</span>
+        <span className="font-display text-2xl font-thin">Get started</span>
         <span className="text-body-sm">What would you like to do?</span>
       </Stack>
       <div className="grid grid-cols-1 gap-4">

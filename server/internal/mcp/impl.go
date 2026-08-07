@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -72,11 +73,13 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -113,8 +116,16 @@ type Service struct {
 	// to the last known state instead of failing closed on the
 	// unauthenticated OAuth surface. Guarded by cimdOrgFlagMu; holds one bool
 	// per organization that touches the surface.
-	cimdOrgFlagMu          sync.RWMutex
-	cimdOrgFlagLastKnown   map[string]bool
+	cimdOrgFlagMu        sync.RWMutex
+	cimdOrgFlagLastKnown map[string]bool
+	// cimdResolver fetches + validates Client ID Metadata Documents for
+	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
+	cimdResolver *cimd.Resolver
+	// cimdAdmissionMetrics records the per-issuer admission decisions made
+	// before the resolver runs, on their own cimd.admission.decisions
+	// instrument (a denial performs no fetch, so it has no place under
+	// cimd.fetch.attempts).
+	cimdAdmissionMetrics   *admission.Metrics
 	toolProxy              *gateway.ToolProxy
 	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
@@ -147,7 +158,7 @@ type Service struct {
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
 	// in isolation.
-	userSessionSigner *usersessions.Signer
+	userSessionSigner *sessiontokens.Signer
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
@@ -281,7 +292,7 @@ func NewService(
 	platformFeatureChecker platformtools.FeatureChecker,
 	platformToolsets map[string]platformtools.Toolset,
 	identityResolver IdentityResolver,
-	userSessionSigner *usersessions.Signer,
+	userSessionSigner *sessiontokens.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
@@ -325,6 +336,8 @@ func NewService(
 		features:             features,
 		cimdOrgFlagMu:        sync.RWMutex{},
 		cimdOrgFlagLastKnown: map[string]bool{},
+		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -374,13 +387,17 @@ func NewService(
 	}
 }
 
-func (s *Service) authorizationChallengesURL(ctx context.Context) string {
+func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return ""
 	}
 
-	return mcpaccess.AuthorizationChallengesURL(s.siteURL, authCtx.OrganizationSlug)
+	return mcpaccess.RequestAccessURL(s.siteURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+		Scope:        "mcp:connect",
+		ResourceID:   serverID,
+		ResourceName: serverName,
+	})
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
@@ -395,6 +412,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
+	o11y.AttachHandler(mux, "DELETE", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.HandleDeleteServer).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
@@ -409,6 +427,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect/remote-session", oops.ErrHandle(service.logger, service.HandleConsentAction).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect/first-party", oops.ErrHandle(service.logger, service.HandleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
@@ -461,25 +480,107 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
-// HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
-// and delegating to metadata service, or returning method not allowed for others.
+// HandleGetServer handles GET requests to /mcp/{mcpSlug}. Browser requests
+// (HTML Accept header) get the install page. SSE requests (Accept:
+// text/event-stream) against a proxy-backed (remote/tunneled) mcp_server are
+// the Streamable HTTP standalone server->client stream (spec § Listening for
+// Messages from the Server) and dispatch through the unified endpoint
+// dispatcher so the proxy relays them upstream. Everything else — including
+// SSE requests against toolset-backed servers, which never send
+// server-initiated messages — keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
-	// Check if this is a browser request (HTML Accept header)
+	var wantsHTML, wantsSSE bool
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-			// Intentionally NOT gated by enforceCustomDomainLockdown: the
-			// install page must remain reachable on the platform host even
-			// when the org's custom domain has an IP allowlist (private MCP
-			// install pages rely on the platform-host session cookie). Only
-			// the runtime POST path (ServePublic) is locked down.
-			if err := metadataService.ServeInstallPage(w, r); err != nil {
-				return fmt.Errorf("failed to serve install page: %w", err)
-			}
-			return nil
+		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
+		if err != nil {
+			continue
+		}
+		// An explicit q=0 marks the media type as not acceptable (RFC 9110
+		// § 12.4.2) — never route toward a representation the client rejected.
+		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
+			continue
+		}
+		switch mediatype {
+		case "text/html", "application/xhtml+xml":
+			wantsHTML = true
+		case "text/event-stream":
+			wantsSSE = true
+		}
+	}
+
+	if wantsHTML {
+		// Intentionally NOT gated by enforceCustomDomainLockdown: the
+		// install page must remain reachable on the platform host even
+		// when the org's custom domain has an IP allowlist (private MCP
+		// install pages rely on the platform-host session cookie). Only
+		// the runtime paths (ServePublic, serveProxyBackedEndpoint) are
+		// locked down.
+		if err := metadataService.ServeInstallPage(w, r); err != nil {
+			return fmt.Errorf("failed to serve install page: %w", err)
+		}
+		return nil
+	}
+
+	// The Streamable HTTP spec requires clients to send Accept:
+	// text/event-stream on this GET; gating on it keeps health checkers and
+	// other stray probes answering locally instead of generating upstream
+	// noise.
+	if wantsSSE {
+		if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+			return err
 		}
 	}
 
 	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+}
+
+// HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable
+// HTTP session termination (spec § Session Management). Proxy-backed servers
+// relay it upstream so the remote session is actually torn down;
+// toolset-backed servers hold no upstream session state, so the method stays
+// unsupported there.
+func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) error {
+	if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+		return err
+	}
+	return oops.E(oops.CodeMethodNotAllowed, nil, "session termination is not supported for this MCP server")
+}
+
+// serveProxyBackedEndpoint resolves {mcpSlug} and, when it maps to a
+// proxy-backed (remote or tunneled) mcp_server, dispatches the request
+// through the unified endpoint dispatcher — the same issuer gate + backend
+// switch the POST path uses. handled=true means an authoritative outcome was
+// reached (dispatched, or failed in a way the caller must propagate);
+// handled=false means the slug does not resolve or resolves to a non-proxy
+// backend, so callers fall back to their legacy behavior.
+func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Request) (handled bool, err error) {
+	ctx := r.Context()
+
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return false, nil
+	}
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		return false, nil
+	default:
+		return true, err
+	}
+
+	if !mcpServer.RemoteMcpServerID.Valid && !mcpServer.TunneledMcpServerID.Valid {
+		return false, nil
+	}
+
+	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+		return true, err
+	}
+
+	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
@@ -840,7 +941,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.authorizationChallengesURL(ctx)))
+				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, toolset.ID.String(), toolset.Name)))
 			}
 		}
 

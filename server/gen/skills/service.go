@@ -29,12 +29,15 @@ type Service interface {
 	// Restore a historical valid version as the skill's current version without
 	// changing the immutable version record or explicit distribution pins.
 	RestoreVersion(context.Context, *RestoreVersionPayload) (res *RecordSkillResult, err error)
-	// Rename an active skill or update its display name and summary. The
+	// Rename an active skill or update its display name, summary, and tags. The
 	// implementation requires the skills product feature and skill write scope.
 	Update(context.Context, *UpdatePayload) (res *types.Skill, err error)
 	// List active skills in the project. The implementation requires the skills
 	// product feature and skill read scope.
 	List(context.Context, *ListPayload) (res *ListSkillsResult, err error)
+	// List distinct tags used by active skills in the project. The implementation
+	// requires the skills product feature and skill read scope.
+	ListTags(context.Context, *ListTagsPayload) (res *ListSkillTagsResult, err error)
 	// List open skill edit suggestions in the project, newest first. The
 	// implementation requires the skills product feature and skill read scope.
 	ListSuggestions(context.Context, *ListSuggestionsPayload) (res *ListSkillSuggestionsResult, err error)
@@ -111,7 +114,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [22]string{"create", "addVersion", "restoreVersion", "update", "list", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
+var MethodNames = [23]string{"create", "addVersion", "restoreVersion", "update", "list", "listTags", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -294,6 +297,8 @@ type ListPayload struct {
 	SourceKinds []string
 	// Only return skills with these classifications.
 	Classifications []string
+	// Only return skills that have any of these tags.
+	Tags []string
 	// How to order skills.
 	Sort             string
 	SessionToken     *string
@@ -339,6 +344,12 @@ type ListSkillSuggestionsResult struct {
 	NextCursor *string
 }
 
+// ListSkillTagsResult is the result type of the skills service listTags method.
+type ListSkillTagsResult struct {
+	// Distinct tags used by active skills in the project, sorted lexicographically.
+	Tags []string
+}
+
 // ListSkillVersionsResult is the result type of the skills service
 // listVersions method.
 type ListSkillVersionsResult struct {
@@ -379,6 +390,13 @@ type ListSuggestionsPayload struct {
 	Cursor *string
 	// The number of suggestions to return per page.
 	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListTagsPayload is the payload type of the skills service listTags method.
+type ListTagsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -655,7 +673,9 @@ type UpdatePayload struct {
 	// The user-facing skill name.
 	DisplayName string
 	// The optional skill summary.
-	Summary          *string
+	Summary *string
+	// Registry tags for categorizing the skill. At most 40 tags.
+	Tags             []string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

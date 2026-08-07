@@ -1,5 +1,6 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/Dialog";
 import { Heading } from "@/components/ui/Heading";
@@ -189,14 +190,17 @@ function OrgApiKeysInner() {
 
   return (
     <>
-      <Heading variant="h4" className="mb-2">
-        API Keys
-      </Heading>
-      <Text muted small className="mb-6">
-        Create and manage API keys to authenticate programmatic access to
-        platform services, including MCP service deployments, tool management,
-        and other connections.
-      </Text>
+      <div className="mb-6">
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+          API Keys
+        </Heading>
+        <Text muted small className="mt-1">
+          Create and manage API keys to authenticate programmatic access to
+          platform services, including MCP service deployments, tool management,
+          and other connections.
+        </Text>
+      </div>
       <Stack
         direction="horizontal"
         justify="space-between"
@@ -225,7 +229,7 @@ function OrgApiKeysInner() {
       ) : (
         <div
           role="status"
-          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 rounded-md border p-6"
+          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
         >
           <Text variant="body">
             {apiKeySearch ? "No matching API keys" : "No API keys yet"}
@@ -256,11 +260,11 @@ function OrgApiKeysInner() {
           </Dialog.Header>
           {newlyCreatedKey ? (
             <div className="space-y-4 py-4">
-              <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
+              <div className="text-foreground border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
                 You will not be able to see this token value again once you
                 close this dialog. Copy it now and store it securely.
               </div>
-              <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
                   aria-label={isCopied ? "API key copied" : "Copy API key"}
@@ -325,8 +329,8 @@ function OrgApiKeysInner() {
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="hooks" id="r4" />
                         <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can send hook events and OTEL logs from agent
-                          integrations.
+                          Hooks: can ingest authenticated AI traffic, including
+                          hook events and OpenTelemetry data.
                         </Label>
                       </div>
                       <div className="flex items-center gap-3">

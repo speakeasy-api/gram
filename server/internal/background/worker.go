@@ -21,6 +21,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -157,6 +158,7 @@ func ForDeploymentProcessing(
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			Outbox:                  topics.NewNoopPublisher(),
 		},
 	}
 }
@@ -360,6 +362,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
+	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -409,12 +413,19 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	// Publish outbox relay activities
+	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
+	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
+	// Plugin publishing activities
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
 	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
 	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
+	// Pre-emptive remote session refresh activities
+	temporalWorker.RegisterActivity(activities.ClaimDueRemoteSessionRefreshCandidates)
+	temporalWorker.RegisterActivity(activities.RefreshRemoteSession)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -469,6 +480,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
+	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
@@ -505,6 +517,9 @@ func NewTemporalWorker(
 	// Outbox -> Relay workflow and GC
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	// Publish outbox -> Pub/Sub workflow and dead letter GC
+	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
+	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
@@ -519,6 +534,8 @@ func NewTemporalWorker(
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
+	// Pre-emptive remote session refresh workflows
+	temporalWorker.RegisterWorkflow(RemoteSessionRefreshWorkflow)
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -541,6 +558,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddWeeklyUsageSummarySchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add weekly usage summary schedule", attr.SlogError(err))
 	}
 
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
@@ -583,6 +604,14 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
+	if err := AddPublishOutboxSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add publish outbox schedule", attr.SlogError(err))
+	}
+
+	if err := AddPublishOutboxGCSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add publish outbox gc schedule", attr.SlogError(err))
+	}
+
 	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
@@ -603,6 +632,12 @@ func NewTemporalWorker(
 
 	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddRemoteSessionRefreshSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add remote session refresh schedule", attr.SlogError(err))
+		}
 	}
 
 	if activities.skillSuggestionAnalyzer != nil {

@@ -1,6 +1,7 @@
 package triggers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -49,7 +50,7 @@ type Definition struct {
 	EnvRequirements      []EnvRequirement
 	EventType            reflect.Type
 	DecodeConfig         func(raw map[string]any) (Config, error)
-	AuthenticateWebhook  func(body []byte, headers http.Header, env map[string]string, config Config) error
+	AuthenticateWebhook  func(ctx context.Context, body []byte, headers http.Header, env map[string]string, config Config) error
 	HandleWebhook        func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error)
 	BuildScheduledEvent  func(instance triggerrepo.TriggerInstance, config Config, firedAt time.Time) (*EventEnvelope, error)
 	BuildDirectEvent     func(instance triggerrepo.TriggerInstance, config Config, payload []byte, receivedAt time.Time) (*EventEnvelope, error)
@@ -167,6 +168,7 @@ type wakeTriggerEvent struct {
 
 var registry = map[string]Definition{
 	DefinitionSlugSlack:     newSlackDefinition(),
+	DefinitionSlugMSTeams:   newMSTeamsDefinition(),
 	DefinitionSlugLinear:    newLinearDefinition(),
 	DefinitionSlugGithub:    newGitHubDefinition(),
 	DefinitionSlugCron:      newCronDefinition(),

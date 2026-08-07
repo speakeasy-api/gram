@@ -13,7 +13,7 @@ type Story = StoryObj<typeof XYFade>;
 
 export const Vertical: Story = {
   render: () => (
-    <XYFade className="h-40 w-96 overflow-auto rounded-md border p-4">
+    <XYFade className="h-40 w-96 overflow-auto border p-4">
       <div className="flex flex-col gap-2 text-sm">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i}>Row {i + 1}</div>

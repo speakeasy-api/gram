@@ -12,6 +12,11 @@ import {
   OrganizationEntry$inboundSchema,
 } from "./organizationentry.js";
 
+export type Trial = {
+  endsAt: Date;
+  startedAt: Date;
+};
+
 export type InfoResponseBody = {
   activeOrganizationId: string;
   gramAccountType: string;
@@ -21,6 +26,7 @@ export type InfoResponseBody = {
   hasActiveSubscription: boolean;
   isAdmin: boolean;
   organizations: Array<OrganizationEntry>;
+  trial: Trial | null;
   userDisplayName?: string | undefined;
   userEmail: string;
   userId: string;
@@ -33,6 +39,36 @@ export type InfoResponseBody = {
 };
 
 /** @internal */
+export const Trial$inboundSchema: z.ZodMiniType<Trial, unknown> = z.pipe(
+  z.object({
+    ends_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+    started_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "ends_at": "endsAt",
+      "started_at": "startedAt",
+    });
+  }),
+);
+
+export function trialFromJSON(
+  jsonString: string,
+): SafeParseResult<Trial, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => Trial$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Trial' from JSON`,
+  );
+}
+
+/** @internal */
 export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   InfoResponseBody,
   unknown
@@ -43,6 +79,7 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
     has_active_subscription: z.boolean(),
     is_admin: z.boolean(),
     organizations: z.array(OrganizationEntry$inboundSchema),
+    trial: z.nullable(z.lazy(() => Trial$inboundSchema)),
     user_display_name: z.optional(z.string()),
     user_email: z.string(),
     user_id: z.string(),

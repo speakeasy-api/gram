@@ -62,6 +62,44 @@ func TestListLogsSendsAuthAndFilters(t *testing.T) {
 	require.Equal(t, time.Date(2026, 7, 16, 1, 0, 0, 123456000, time.UTC), page.LastEndTime)
 }
 
+func TestWorkspaceClientListsUnderWorkspaceScope(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/workspaces/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/logs" {
+			t.Errorf("expected workspace-scoped path, got %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("event_type"); got != "CONVERSATION_MESSAGE" {
+			t.Errorf("expected event_type CONVERSATION_MESSAGE, got %q", got)
+		}
+		_, _ = w.Write([]byte(`{"data": [], "has_more": false, "last_end_time": "2026-07-16T01:00:00Z"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewWorkspaceClient(testGuardianPolicy(t), "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	page, err := client.ListLogs(t.Context(), ListLogsParams{
+		EventType: "CONVERSATION_MESSAGE",
+		After:     time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC),
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.False(t, page.HasMore)
+}
+
+func TestWorkspaceClientRejectsNonUUIDWorkspaceID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("request should not be sent for invalid workspace id")
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewWorkspaceClient(testGuardianPolicy(t), "org-123", WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	_, err := client.ListLogs(t.Context(), ListLogsParams{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "workspace id")
+}
+
 func TestListLogsRejectsInvalidExternalOrganizationID(t *testing.T) {
 	t.Parallel()
 

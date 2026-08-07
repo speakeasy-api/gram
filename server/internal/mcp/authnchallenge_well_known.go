@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // metadataCacheMaxAgeSeconds is the Cache-Control max-age for public well-known
@@ -60,16 +61,17 @@ type oauthProtectedResourceMetadata struct {
 // the legacy package's wellknown.OAuthServerMetadata for the same reason as
 // above.
 type oauthAuthorizationServerMetadata struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	RevocationEndpoint                string   `json:"revocation_endpoint"`
-	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
+	Issuer                               string   `json:"issuer"`
+	AuthorizationEndpoint                string   `json:"authorization_endpoint"`
+	TokenEndpoint                        string   `json:"token_endpoint"`
+	RegistrationEndpoint                 string   `json:"registration_endpoint"`
+	RevocationEndpoint                   string   `json:"revocation_endpoint"`
+	ScopesSupported                      []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported               []string `json:"response_types_supported"`
+	GrantTypesSupported                  []string `json:"grant_types_supported"`
+	TokenEndpointAuthMethodsSupported    []string `json:"token_endpoint_auth_methods_supported"`
+	CodeChallengeMethodsSupported        []string `json:"code_challenge_methods_supported"`
+	RefreshTokenExpirationTypesSupported []string `json:"refresh_token_expiration_types_supported"`
 	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
 	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true
 	// only when the issuer organization's gram-user-session-cimd flag is
@@ -409,10 +411,25 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
-	// The response is served with cache headers (writeJSONMetadata), so a
-	// flag flip propagates to clients only after their cached copy expires.
+	// Advertised only when the rollout flag is on AND the issuer admits at
+	// least some CIMD client. A `disabled` issuer omits the field: claiming
+	// support while admitting nothing would steer spec-compliant clients
+	// into a guaranteed-failure flow instead of letting them fall back to
+	// dynamic client registration, which is still open on this issuer.
+	//
+	// This is advisory, not a control. The response carries cache headers
+	// (writeJSONMetadata), and clients typically cache authorization-server
+	// metadata for their whole process lifetime, so a mode flip reaches them
+	// well after the fact — some will keep attempting CIMD regardless.
+	// /authorize enforcement is the actual gate.
 	var cimdSupported *bool
-	if s.userSessionCIMDEnabled(ctx, s.logger, endpoint) {
+	mode, recognized := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
+	if !recognized {
+		s.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
+		)
+	}
+	if mode != admission.ModeDisabled && s.userSessionCIMDEnabled(ctx, s.logger, endpoint) {
 		cimdSupported = conv.PtrEmpty(true)
 	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
@@ -426,6 +443,9 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		GrantTypesSupported:               usersessions.SupportedGrantTypes,
 		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
 		CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
+		RefreshTokenExpirationTypesSupported: []string{
+			"authorization",
+		},
 		ClientIDMetadataDocumentSupported: cimdSupported,
 	})
 }

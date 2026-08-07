@@ -39,6 +39,7 @@ export function InputDialog({
   description,
   inputs,
   submitButtonText = "Submit",
+  cancelButtonText = "Cancel",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +48,7 @@ export function InputDialog({
   inputs: InputProps[] | InputProps;
   description?: string;
   submitButtonText?: string;
+  cancelButtonText?: string;
 }): JSX.Element {
   const inputsArray = Array.isArray(inputs) ? inputs : [inputs];
   inputsArray.sort((a, b) => (a.optional ? 1 : b.optional ? -1 : 0));
@@ -137,7 +139,7 @@ export function InputDialog({
             onClick={() => onOpenChange(false)}
             disabled={pending}
           >
-            Back
+            {cancelButtonText}
           </Button>
           <Button
             onClick={() => void submit()}

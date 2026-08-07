@@ -19,8 +19,8 @@
  * ```
  */
 
-import { useThreadRuntime } from "@assistant-ui/react";
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useAui, useAuiState } from "@assistant-ui/react";
+import { useCallback, useRef, useState } from "react";
 import { recordCassette } from "@/elements/lib/cassette";
 
 export function useRecordCassette(): {
@@ -35,15 +35,10 @@ export function useRecordCassette(): {
   /** Downloads the recorded conversation as a `.cassette.json` file. */
   download: (filename?: string) => void;
 } {
-  const runtime = useThreadRuntime();
+  const runtime = useAui().thread();
   const [isRecording, setIsRecording] = useState(false);
   const startIndexRef = useRef(0);
-
-  // Subscribe to runtime state to get reactive message count
-  const messageCount = useSyncExternalStore(
-    (cb) => runtime.subscribe(cb),
-    () => runtime.getState().messages.length,
-  );
+  const messageCount = useAuiState(({ thread }) => thread.messages.length);
 
   const startRecording = useCallback(() => {
     startIndexRef.current = runtime.getState().messages.length;

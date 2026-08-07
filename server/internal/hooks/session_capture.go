@@ -86,19 +86,22 @@ func claudeSurfaceFromServiceName(name string) string {
 // claudeServiceNameSpecificity ranks how precisely a service name or adapter
 // slug identifies the product surface. "cowork" is unambiguous; the desktop
 // adapter slug narrows to CCD; "claude-code" is the OTEL name shared by the
-// CLI and CCD, so it is the least specific Claude value. Non-Claude values
-// rank zero.
+// CLI and CCD; the bare "claude" adapter slug the hooks binary sends for
+// Claude Code marks a Claude-family sender with no surface information at
+// all. Non-Claude values rank zero.
 func claudeServiceNameSpecificity(name string) int {
 	switch claudeSurfaceFromServiceName(name) {
 	case agentVariantCowork:
-		return 3
+		return 4
 	case surfaceClaudeCodeDesktop:
-		return 2
+		return 3
 	case agentVariantClaudeCode:
-		return 1
-	default:
-		return 0
+		return 2
 	}
+	if strings.ToLower(strings.TrimSpace(name)) == "claude" {
+		return 1
+	}
+	return 0
 }
 
 // preferClaudeServiceName merges a freshly reported service name (or adapter
@@ -106,18 +109,21 @@ func claudeServiceNameSpecificity(name string) int {
 // the Claude product surface more precisely. This is what lets the two signals
 // compose: the OTEL stream's "cowork" upgrades a cached desktop adapter slug,
 // while a cached "claude-code-desktop" survives OTEL batches that only report
-// the ambiguous "claude-code". Ties keep the fresh value. A non-empty incoming
-// value that identifies no Claude surface (Cursor, Codex, unknown adapters)
-// always wins: non-Claude senders keep their reported name instead of being
-// overwritten by a Claude value cached under the same session id.
+// the ambiguous "claude-code", and an OTEL-cached "claude-code" survives hook
+// events carrying only the bare "claude" adapter slug. Ties keep the fresh
+// value. A non-empty incoming value that identifies no Claude sender at all
+// (Cursor, Codex, unknown adapters) always wins: non-Claude senders keep their
+// reported name instead of being overwritten by a Claude value cached under
+// the same session id.
 func preferClaudeServiceName(incoming, cached string) string {
 	if incoming == "" {
 		return cached
 	}
-	if claudeSurfaceFromServiceName(incoming) == "" {
+	specificity := claudeServiceNameSpecificity(incoming)
+	if specificity == 0 {
 		return incoming
 	}
-	if claudeServiceNameSpecificity(cached) > claudeServiceNameSpecificity(incoming) {
+	if claudeServiceNameSpecificity(cached) > specificity {
 		return cached
 	}
 	return incoming

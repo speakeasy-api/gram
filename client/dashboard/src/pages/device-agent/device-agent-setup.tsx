@@ -86,12 +86,23 @@ const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
 // we inline it (a concrete, copy-and-run value); otherwise we fall back to a
 // self-resolving one-liner so the snippet still works before the fetch lands
 // or if it fails.
+//
+// The manifest value is fetched at runtime and pasted by the user into a
+// (often sudo-adjacent) shell, so only a strictly semver-shaped version is
+// ever inlined — anything else (e.g. a tampered manifest smuggling `$(...)`)
+// takes the fallback path instead of landing in the snippet.
+const INLINABLE_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
+function inlinableVersion(version: string | null) {
+  return version !== null && INLINABLE_VERSION.test(version) ? version : null;
+}
 function bashVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
     ? `VERSION=${version}`
     : `VERSION=$(curl -s ${MANIFEST_URL} | jq -r '.latest.speakeasyd.version')`;
 }
 function psVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
     ? `$VERSION = "${version}"`
     : `$VERSION = (Invoke-RestMethod ${MANIFEST_URL}).latest.speakeasyd.version`;
@@ -119,6 +130,9 @@ type OsSpec = {
   verify: string;
   // Manifest platform keys to surface as direct-download links for this OS.
   downloadKeys: string[];
+  // The OS ships a root-helper install package (.deb/.rpm on Linux) that gets
+  // its own setup step. See HelperPackageStep.
+  hasHelperPackage?: boolean;
 };
 
 const OS_CONFIG: Record<OsKey, OsSpec> = {
@@ -198,6 +212,7 @@ sudo mv speakeasyd speakeasy /usr/local/bin/`,
 speakeasyd -service start`,
     verify: `speakeasyd status`,
     downloadKeys: ["linux/amd64", "linux/arm64"],
+    hasHelperPackage: true,
   },
 };
 
@@ -245,7 +260,7 @@ function Table({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="overflow-hidden border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-muted-foreground">
           <tr>
@@ -284,7 +299,7 @@ function BinaryDownloadButton({
       href={href}
       download
       title={`sha256: ${sha256}`}
-      className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 rounded-md border px-3 py-2 transition-colors"
+      className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 border px-3 py-2 transition-colors"
     >
       <Download className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span className="flex flex-col leading-tight">
@@ -341,7 +356,7 @@ function ManualDownload({ os }: { os: OsKey }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-hidden rounded-md border text-sm">
+      <div className="overflow-hidden border text-sm">
         {keys.map((key) => {
           const d = artifactFor(daemon, key);
           const c = artifactFor(cli, key);
@@ -426,7 +441,7 @@ function DownloadStep({ os }: { os: OsKey }) {
 // different roles.
 function BinaryLegend() {
   return (
-    <div className="border-border bg-card flex flex-col gap-2 rounded-md border p-3">
+    <div className="border-border bg-card flex flex-col gap-2 border p-3">
       <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
         <code className="text-foreground font-mono text-xs">speakeasyd</code>
         <span className="text-muted-foreground text-xs">
@@ -439,6 +454,77 @@ function BinaryLegend() {
           and enrollment.
         </span>
       </div>
+    </div>
+  );
+}
+
+// HelperPackageStep is the Linux-only step for the speakeasy-helper root
+// helper. The daemon runs as the logged-in user and can't write the root-owned
+// managed config layer itself, so enforcement of "managed" tools needs the
+// helper installed as a systemd system service — which ships as a .deb/.rpm
+// (the Linux analog of the macOS .pkg). The packages are mirrored to the same
+// public bucket as the binaries but are deliberately NOT in the release
+// manifest (a root binary updates only via a package push, never the
+// user-context auto-updater), so the URLs are built from the resolved version
+// rather than read from manifest artifacts.
+function HelperPackageStep() {
+  const { data } = useAgentReleases();
+  const version = data?.latest["speakeasyd"]?.version ?? null;
+
+  // The package installs as root, so the snippet is hardened where the
+  // user-context download script isn't: ARCH is detected at run time (uname -m
+  // mapped to the release's amd64/arm64 naming) instead of hand-edited, and
+  // the sha256 is checked against the release's published checksums.txt with
+  // the install chained behind the check — a missing or tampered package never
+  // reaches the package manager.
+  const script = (fmt: "deb" | "rpm", install: string) =>
+    `${bashVersionAssign(version)}
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+BASE=${RELEASES_BASE}/v$VERSION
+PKG="speakeasy-helper_\${VERSION}_linux_\${ARCH}.${fmt}"
+curl -fSLO "$BASE/$PKG"
+curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
+  ${install}`;
+
+  // Sits above each snippet, matching the archNote convention in DownloadStep.
+  const verifyNote = (
+    <StepNote>
+      Detects your architecture and verifies the package's <code>sha256</code>{" "}
+      against the release's <code>checksums.txt</code> before installing.
+    </StepNote>
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Text muted>
+        The daemon runs as the logged-in user and can't write root-owned config,
+        so enforcing tools your org marks{" "}
+        <strong className="font-medium">managed</strong> needs the{" "}
+        <code>speakeasy-helper</code> package: it installs a privileged writer
+        as a systemd system service. Without it the agent still runs and
+        reports, but can't enforce the managed layer.
+      </Text>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Debian / Ubuntu (.deb)</SubLabel>
+        {verifyNote}
+        <CodeBlock language="bash">
+          {script("deb", `sudo apt install "./$PKG"`)}
+        </CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>RHEL / Fedora (.rpm)</SubLabel>
+        {verifyNote}
+        <CodeBlock language="bash">
+          {script("rpm", `sudo rpm -i "$PKG"`)}
+        </CodeBlock>
+      </div>
+      <Text small muted>
+        Verify with <code>systemctl status com.speakeasy.helper</code>. The
+        helper is deliberately outside the agent's auto-update channel — it
+        updates only via a package push (apt/dnf upgrade or your config
+        management).
+      </Text>
     </div>
   );
 }
@@ -633,7 +719,6 @@ function FleetIdentity() {
         <div className="mt-4 flex flex-col gap-3">
           {generatedToken && (
             <Alert variant="warning">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>
                 {autoCopied
                   ? "managed.json copied to your clipboard"
@@ -656,7 +741,6 @@ function FleetIdentity() {
 
           {isError && (
             <Alert variant="error">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>Couldn't generate a token</AlertTitle>
               <AlertDescription>
                 Something went wrong creating the agent token. Try again, or
@@ -693,7 +777,6 @@ function FleetIdentity() {
             </Dialog.Description>
           </Dialog.Header>
           <Alert variant="error">
-            <Icon name="triangle-alert" className="h-4 w-4" />
             <AlertTitle>
               Your current MDM integration will stop working
             </AlertTitle>
@@ -745,7 +828,7 @@ function IdentityStep() {
         for an org; personal enrollment is handy for testing.
       </Text>
       <Tabs defaultValue="fleet" className="gap-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 bg-transparent p-0">
+        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 divide-x-0 border-0 bg-transparent p-0">
           <SetupTab
             value="fleet"
             icon="building-2"
@@ -785,7 +868,7 @@ function SetupTab({
   return (
     <TabsTrigger
       value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 rounded-md border p-4 text-left whitespace-normal"
+      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 border p-4 text-left whitespace-normal"
     >
       <div className="flex items-center gap-2">
         <Icon name={icon} className="h-4 w-4" />
@@ -824,6 +907,12 @@ function buildSteps(os: OsKey): SetupStep[] {
     title: "Verify it's running",
     body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
   });
+  if (cfg.hasHelperPackage) {
+    steps.push({
+      title: "Install the root helper package",
+      body: <HelperPackageStep />,
+    });
+  }
   steps.push({ title: "Set the user's identity", body: <IdentityStep /> });
   return steps;
 }
@@ -879,7 +968,7 @@ function DeviceAgentSetupSheet({
               type="button"
               onClick={() => goToDot(idx)}
               className={cn(
-                "h-1 rounded-full transition-all",
+                "h-1 transition-all",
                 idx === stepIdx
                   ? "bg-foreground w-6"
                   : idx < stepIdx
@@ -953,9 +1042,9 @@ function OsTile({ os, onClick }: { os: OsKey; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all"
+      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
     >
-      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg">
+      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center">
         <img
           src={cfg.logo}
           alt={`${cfg.label} logo`}
@@ -984,7 +1073,9 @@ export function DeviceAgentSetup(): React.JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Install the agent</Page.Section.Title>
+      {/* The Device Agent page renders the area eyebrow with its own page
+          title above the tab strip, so suppress the section-level one. */}
+      <Page.Section.Title area="">Install the agent</Page.Section.Title>
       <Page.Section.Description>
         The Speakeasy device agent runs on-device and enforces your org's
         required AI-tool plugins and MCP configuration, then reports compliance
@@ -992,18 +1083,19 @@ export function DeviceAgentSetup(): React.JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
-          <Alert variant="info">
-            <Icon name="building-2" className="h-4 w-4" />
-            <AlertTitle>Rolling out to more than a few machines?</AlertTitle>
-            <AlertDescription>
-              We recommend deploying the agent through your MDM (Kandji, Jamf,
-              Intune, or similar). It installs the binaries and drops a{" "}
-              <code>managed.json</code> so identity and enrollment are set
-              centrally — no per-user setup. The{" "}
-              <strong className="font-medium">Fleet (MDM)</strong> path in each
-              platform's walkthrough covers it.
-            </AlertDescription>
-          </Alert>
+          <div className="border-border bg-card border p-4">
+            <p className="text-eyebrow mb-2">Fleet rollout</p>
+            <Text small muted>
+              Rolling out to more than a few machines? We recommend deploying
+              the agent through your MDM (Kandji, Jamf, Intune, or similar). It
+              installs the binaries and drops a <code>managed.json</code> so
+              identity and enrollment are set centrally — no per-user setup. The{" "}
+              <strong className="text-foreground font-medium">
+                Fleet (MDM)
+              </strong>{" "}
+              path in each platform's walkthrough covers it.
+            </Text>
+          </div>
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>

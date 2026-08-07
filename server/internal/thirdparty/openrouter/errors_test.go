@@ -12,6 +12,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
@@ -172,7 +173,7 @@ func TestClassifyHTTPError_RecordsBoundedBodyOnSpan(t *testing.T) {
 	ctx, span := provider.Tracer("test").Start(t.Context(), "completion")
 
 	body := []byte(`{"error":{"message":"no auth credentials found"},"echo":"` + strings.Repeat("é", 4000) + `"}`)
-	err := classifyHTTPError(ctx, http.StatusForbidden, body)
+	err := classifyHTTPError(ctx, http.StatusForbidden, http.Header{}, body)
 	span.End()
 
 	require.Error(t, err)
@@ -196,6 +197,38 @@ func TestClassifyHTTPError_RecordsBoundedBodyOnSpan(t *testing.T) {
 	require.Contains(t, recorded, "no auth credentials found")
 	require.LessOrEqual(t, len(recorded), maxDiagnosticBodyBytes)
 	require.True(t, utf8.ValidString(recorded), "a truncated body must stay valid UTF-8")
+}
+
+func TestClassifyHTTPError_RateLimited_RecordsHeadersOnSpan(t *testing.T) {
+	t.Parallel()
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	ctx, span := provider.Tracer("test").Start(t.Context(), "completion")
+
+	header := http.Header{}
+	header.Set("X-RateLimit-Limit", "60")
+	header.Set("X-RateLimit-Remaining", "0")
+	header.Set("X-RateLimit-Reset", "1785748157000")
+	header.Set("Retry-After", "12")
+
+	err := classifyHTTPError(ctx, http.StatusTooManyRequests, header, []byte(`{"error":{"message":"rate limit exceeded: free tier"}}`))
+	span.End()
+
+	require.ErrorIs(t, err, ErrRateLimited)
+	require.NotContains(t, err.Error(), "free tier")
+
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+
+	recorded := map[attribute.Key]string{}
+	for _, kv := range spans[0].Attributes() {
+		recorded[kv.Key] = kv.Value.Emit()
+	}
+	require.Equal(t, "60", recorded[attr.OpenRouterRateLimitLimitKey])
+	require.Equal(t, "0", recorded[attr.OpenRouterRateLimitRemainingKey])
+	require.Equal(t, "1785748157000", recorded[attr.OpenRouterRateLimitResetKey])
+	require.Equal(t, "12", recorded[attr.OpenRouterRetryAfterKey])
 }
 
 func TestChatClient_GetCompletion_EmptyChoices_EmbedsResponseBody(t *testing.T) {

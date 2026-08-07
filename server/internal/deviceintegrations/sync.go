@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -105,22 +107,26 @@ type Syncer struct {
 	store    *Store
 	guardian *guardian.Policy
 	features feature.Provider
+	metrics  *syncMetrics
 }
 
 func NewSyncer(
 	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	enc *encryption.Client,
 	guardianPolicy *guardian.Policy,
 	features feature.Provider,
 ) *Syncer {
+	componentLogger := logger.With(attr.SlogComponent("deviceintegrations.syncer"))
 	return &Syncer{
-		logger:   logger.With(attr.SlogComponent("deviceintegrations.syncer")),
+		logger:   componentLogger,
 		db:       db,
 		repo:     repo.New(db),
 		store:    NewStore(logger, db, enc),
 		guardian: guardianPolicy,
 		features: features,
+		metrics:  newSyncMetrics(componentLogger, meterProvider),
 	}
 }
 
@@ -252,6 +258,10 @@ func (s *Syncer) RunSync(ctx context.Context, syncID uuid.UUID) error {
 		logger.WarnContext(ctx, "device integration sync failed", attr.SlogError(errors.New(message)))
 		return s.recordFailure(ctx, target, message, providers.IsAuthError(runErr))
 	}
+	// Reaching here means the switch returned nil: a genuine sync success
+	// (including an evidence push short-circuited by an unchanged digest). The
+	// no-op and stale paths above all return before this point.
+	s.metrics.recordOutcome(ctx, target.Provider, o11y.OutcomeSuccess)
 	return nil
 }
 
@@ -558,15 +568,26 @@ func (s *Syncer) recordFailure(ctx context.Context, target repo.GetSyncTargetRow
 	if interval := scheduleInterval(target); backoff > interval {
 		backoff = interval
 	}
-	if err := s.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
+	paused, err := s.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
 		SyncID:          target.SyncID,
 		NextInSeconds:   int32(backoff / time.Second), //nolint:gosec // backoff is bounded by the schedule interval
 		LastPollError:   conv.ToPGText(message),
 		AuthRejection:   authRejection,
 		PauseAfter:      authPauseThreshold,
 		ConfigUpdatedAt: target.ConfigUpdatedAt,
-	}); err != nil {
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// A config save moved updated_at while this sync ran: nothing was
+			// booked, so there is no outcome to record. The reset schedule
+			// re-runs under the new config.
+			return nil
+		}
 		return oops.E(oops.CodeUnexpected, err, "record device integration sync failure")
+	}
+	s.metrics.recordOutcome(ctx, target.Provider, o11y.OutcomeFailure)
+	if paused {
+		s.metrics.recordAutoPause(ctx, target.Provider)
 	}
 	return nil
 }

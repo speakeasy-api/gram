@@ -24,6 +24,7 @@ type Server struct {
 	RestoreVersion         http.Handler
 	Update                 http.Handler
 	List                   http.Handler
+	ListTags               http.Handler
 	ListSuggestions        http.Handler
 	ListFeedback           http.Handler
 	TriggerSuggestion      http.Handler
@@ -75,6 +76,7 @@ func New(
 			{"RestoreVersion", "POST", "/rpc/skills.restoreVersion"},
 			{"Update", "POST", "/rpc/skills.update"},
 			{"List", "GET", "/rpc/skills.list"},
+			{"ListTags", "GET", "/rpc/skills.listTags"},
 			{"ListSuggestions", "GET", "/rpc/skills.listSuggestions"},
 			{"ListFeedback", "GET", "/rpc/skills.listFeedback"},
 			{"TriggerSuggestion", "POST", "/rpc/skills.triggerSuggestion"},
@@ -98,6 +100,7 @@ func New(
 		RestoreVersion:         NewRestoreVersionHandler(e.RestoreVersion, mux, decoder, encoder, errhandler, formatter),
 		Update:                 NewUpdateHandler(e.Update, mux, decoder, encoder, errhandler, formatter),
 		List:                   NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		ListTags:               NewListTagsHandler(e.ListTags, mux, decoder, encoder, errhandler, formatter),
 		ListSuggestions:        NewListSuggestionsHandler(e.ListSuggestions, mux, decoder, encoder, errhandler, formatter),
 		ListFeedback:           NewListFeedbackHandler(e.ListFeedback, mux, decoder, encoder, errhandler, formatter),
 		TriggerSuggestion:      NewTriggerSuggestionHandler(e.TriggerSuggestion, mux, decoder, encoder, errhandler, formatter),
@@ -128,6 +131,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RestoreVersion = m(s.RestoreVersion)
 	s.Update = m(s.Update)
 	s.List = m(s.List)
+	s.ListTags = m(s.ListTags)
 	s.ListSuggestions = m(s.ListSuggestions)
 	s.ListFeedback = m(s.ListFeedback)
 	s.TriggerSuggestion = m(s.TriggerSuggestion)
@@ -157,6 +161,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRestoreVersionHandler(mux, h.RestoreVersion)
 	MountUpdateHandler(mux, h.Update)
 	MountListHandler(mux, h.List)
+	MountListTagsHandler(mux, h.ListTags)
 	MountListSuggestionsHandler(mux, h.ListSuggestions)
 	MountListFeedbackHandler(mux, h.ListFeedback)
 	MountTriggerSuggestionHandler(mux, h.TriggerSuggestion)
@@ -423,6 +428,59 @@ func NewListHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "list")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListTagsHandler configures the mux to serve the "skills" service
+// "listTags" endpoint.
+func MountListTagsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.listTags", f)
+}
+
+// NewListTagsHandler creates a HTTP handler which loads the HTTP request and
+// calls the "skills" service "listTags" endpoint.
+func NewListTagsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListTagsRequest(mux, decoder)
+		encodeResponse = EncodeListTagsResponse(encoder)
+		encodeError    = EncodeListTagsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listTags")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

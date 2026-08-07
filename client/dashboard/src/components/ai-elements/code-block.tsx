@@ -63,7 +63,7 @@ export const CodeBlock = ({
       <div className="group relative">
         <div
           className={cn(
-            "bg-background text-foreground w-full overflow-hidden rounded-md border",
+            "bg-background text-foreground w-full overflow-hidden border",
             className,
           )}
           {...props}

@@ -29,6 +29,7 @@ import {
   useRiskListPolicyBypassRequests,
 } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
 import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-query/riskApprovePolicyBypassRequest.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
 import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -258,7 +259,7 @@ function ApprovalSectionEmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16 text-center">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon className="text-muted-foreground h-6 w-6" />
       </div>
@@ -383,6 +384,7 @@ function ReviewRequestSheet({
   projectSlug,
   roles,
   members,
+  allowAll = false,
   open,
   isSubmitting,
   onOpenChange,
@@ -393,6 +395,9 @@ function ReviewRequestSheet({
   projectSlug: string;
   roles: Role[];
   members: AccessMember[];
+  /** The request targets an allow_all policy: approval unblocks the server
+   * for everyone in the project, so no audience is picked. */
+  allowAll?: boolean;
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
@@ -455,7 +460,8 @@ function ReviewRequestSheet({
           selectedUserPrincipalUrn,
           roles,
         });
-  const approveReady = action !== "approve" || principalUrns.length > 0;
+  const approveReady =
+    action !== "approve" || allowAll || principalUrns.length > 0;
   const canSubmit = projectSlug.length > 0 && approveReady;
   const submitLabel = reviewRequestSubmitLabel(isEditingAccess, action);
   const sheetCopy = reviewRequestSheetCopy(isEditingAccess);
@@ -496,7 +502,7 @@ function ReviewRequestSheet({
         </SheetHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
-          <section className="border-border rounded-md border px-4 py-3">
+          <section className="border-border border px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <ServerCell
                 name={getPolicyBypassRequestDisplayName(request)}
@@ -547,11 +553,11 @@ function ReviewRequestSheet({
                 setReviewDirty(true);
                 setAction(value as ReviewAction);
               }}
-              className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
+              className="border-border grid grid-cols-2 gap-4 border p-3"
             >
               <label
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                   action === "approve" && "border-border bg-card shadow-xs",
                 )}
               >
@@ -561,13 +567,15 @@ function ReviewRequestSheet({
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    Allow matching access.
+                    {allowAll
+                      ? "Unblock for everyone in the project."
+                      : "Allow matching access."}
                   </Text>
                 </span>
               </label>
               <label
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                   action === "deny" && "border-border bg-card shadow-xs",
                 )}
               >
@@ -584,8 +592,15 @@ function ReviewRequestSheet({
             </RadioGroup>
           )}
 
-          {(isEditingAccess || action === "approve") && (
-            <section className="border-border space-y-3 rounded-md border p-3">
+          {allowAll && (isEditingAccess || action === "approve") && (
+            <Text muted small>
+              This policy allows servers by default. Approving removes the block
+              rule, so the server becomes available to everyone in the project.
+            </Text>
+          )}
+
+          {!allowAll && (isEditingAccess || action === "approve") && (
+            <section className="border-border space-y-3 border p-3">
               <Text variant="small" className="font-medium">
                 Applies to
               </Text>
@@ -598,7 +613,7 @@ function ReviewRequestSheet({
               >
                 <label
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                     approvalAudience === "everyone" &&
                       "border-border bg-card shadow-xs",
                   )}
@@ -616,7 +631,7 @@ function ReviewRequestSheet({
 
                 <label
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                     approvalAudience === "role" &&
                       "border-border bg-card shadow-xs",
                   )}
@@ -662,7 +677,7 @@ function ReviewRequestSheet({
 
                 <label
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                     approvalAudience === "user" &&
                       "border-border bg-card shadow-xs",
                   )}
@@ -754,6 +769,22 @@ export function ApprovalRequestsContent({
   );
   const rolesQuery = useRoles(undefined, undefined, { enabled: canAdmin });
   const membersQuery = useMembers(undefined, undefined, { enabled: canAdmin });
+  const policiesQuery = useRiskListPolicies(
+    { gramProject: projectSlug },
+    undefined,
+    { enabled: canAdmin && projectSlug.length > 0 },
+  );
+  // Requests against an allow_all policy are approved project-wide (the URL
+  // leaves the policy's blocked list), so the audience picker does not apply.
+  const allowAllPolicyIDs = useMemo(() => {
+    const ids = new Set<string>();
+    for (const policy of policiesQuery.data?.policies ?? []) {
+      if (policy.shadowMcpDisposition === "allow_all") {
+        ids.add(policy.id);
+      }
+    }
+    return ids;
+  }, [policiesQuery.data?.policies]);
 
   const requests = useMemo(
     () => requestsQuery.data?.requests ?? [],
@@ -918,7 +949,11 @@ export function ApprovalRequestsContent({
       width: "1.5fr",
       render: (rule) => (
         <Text variant="small" className="truncate">
-          {principalSummary(rule.grantedPrincipalUrns, roles, members)}
+          {/* Allow-all approvals unblock the server project-wide and carry
+              no principal grants, so an empty list means everyone. */}
+          {allowAllPolicyIDs.has(rule.policyId)
+            ? "Everyone"
+            : principalSummary(rule.grantedPrincipalUrns, roles, members)}
         </Text>
       ),
     },
@@ -970,6 +1005,9 @@ export function ApprovalRequestsContent({
         projectSlug={projectSlug}
         roles={roles}
         members={members}
+        allowAll={
+          !!reviewRequest && allowAllPolicyIDs.has(reviewRequest.policyId)
+        }
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
@@ -978,12 +1016,13 @@ export function ApprovalRequestsContent({
         onApprove={async (principalUrns) => {
           if (!reviewRequest) return;
 
+          const allowAll = allowAllPolicyIDs.has(reviewRequest.policyId);
           await approveRequest.mutateAsync({
             request: {
               gramProject: projectSlug,
               riskPolicyBypassApprovalRequestBody: {
                 id: reviewRequest.id,
-                grantedPrincipalUrns: principalUrns,
+                grantedPrincipalUrns: allowAll ? [] : principalUrns,
               },
             },
           });
@@ -1031,12 +1070,12 @@ export function ApprovalRequestsContent({
               description="Requests will appear here when users ask for access after a policy block."
             />
           ) : (
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-hidden border">
               <Table
                 columns={pendingRequestColumns}
                 data={requests}
                 rowKey={(row) => row.id}
-                className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+                className="[&_thead]:bg-background max-h-128 overflow-y-auto border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
               />
             </div>
           )}
@@ -1067,12 +1106,12 @@ export function ApprovalRequestsContent({
             description="Approved policy bypass requests will appear here."
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="overflow-hidden border">
             <Table
               columns={ruleColumns}
               data={rules}
               rowKey={(row) => row.id}
-              className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+              className="[&_thead]:bg-background max-h-128 overflow-y-auto border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
             />
           </div>
         )}
@@ -1090,7 +1129,7 @@ export function ApprovalRequestsContent({
           </Dialog.Header>
           <Text variant="small">
             This removes the bypass grant for{" "}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+            <code className="bg-muted px-1 py-0.5 font-mono font-bold">
               {rulePendingDelete
                 ? getPolicyBypassRequestDisplayName(rulePendingDelete)
                 : "this access rule"}

@@ -159,8 +159,10 @@ function FailedScreen({ error }: { error: string }) {
   return (
     <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="mb-2 text-2xl font-bold text-red-600">Error</h1>
-        <p className="text-gray-600">{error}</p>
+        <h1 className="text-display-sm text-default-destructive mb-2 font-thin">
+          Error
+        </h1>
+        <p className="text-muted-foreground">{error}</p>
       </div>
     </div>
   );
@@ -170,8 +172,8 @@ function WaitScreen() {
   return (
     <div className="flex h-screen items-center justify-center">
       <div className="text-center">
-        <h1 className="mb-2 text-2xl font-bold">Redirecting...</h1>
-        <p className="text-gray-600">You will be redirected shortly</p>
+        <h1 className="text-display-sm mb-2 font-thin">Redirecting...</h1>
+        <p className="text-muted-foreground">You will be redirected shortly</p>
       </div>
     </div>
   );
@@ -191,7 +193,8 @@ function generateHooksKeyName(): string {
   return `Hooks Key (Generated) - ${timestamp}`.slice(0, maxLength);
 }
 
-const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
+const errInvalidCallback =
+  "Callback URL must use HTTP or HTTPS on localhost or 127.0.0.1";
 const errWrongOrganization =
   "This connection link belongs to a different organization. Switch to that organization in the dashboard, then retry the connection.";
 const PREFERRED_PROJECT_KEY = "preferredProject";
@@ -200,8 +203,9 @@ function isCallbackLocal(callbackUrl: string): boolean {
   try {
     const url = new URL(callbackUrl);
     const hostname = url.hostname.toLowerCase();
+    const isHttp = url.protocol === "http:" || url.protocol === "https:";
 
-    return hostname === "localhost" || hostname === "127.0.0.1";
+    return isHttp && (hostname === "localhost" || hostname === "127.0.0.1");
   } catch {
     return false;
   }

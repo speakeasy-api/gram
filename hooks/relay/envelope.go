@@ -36,6 +36,8 @@ func canonicalEventType(e *agenthooks.Event) components.Type {
 		return components.TypeSessionStarted
 	case agenthooks.KindSessionEnd:
 		return components.TypeSessionEnded
+	case agenthooks.KindMCPInventory:
+		return components.TypeMcpInventory
 	case agenthooks.KindPromptSubmitted:
 		return components.TypePromptSubmitted
 	case agenthooks.KindToolPre, agenthooks.KindPermission:
@@ -71,19 +73,22 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	base := agenthooks.EventOf(typed)
 	eventType := canonicalEventType(base)
 	data := &components.HookIngestData{
-		Mcp:               nil,
-		McpAttribution:    nil,
-		McpInventory:      nil,
-		Message:           nil,
-		Notification:      nil,
-		Prompt:            nil,
-		PromptAttachments: nil,
-		Skill:             nil,
-		ToolCall:          nil,
-		Usage:             nil,
+		Mcp:                   nil,
+		McpAttribution:        nil,
+		McpInventory:          nil,
+		McpInventoryCollected: nil,
+		Message:               nil,
+		Notification:          nil,
+		Prompt:                nil,
+		PromptAttachments:     nil,
+		Skill:                 nil,
+		ToolCall:              nil,
+		Usage:                 nil,
 	}
 
 	switch ev := typed.(type) {
+	case *agenthooks.MCPInventoryEvent:
+		attachMCPInventory(data, ev.Servers, ev.Complete)
 	case *agenthooks.PromptEvent:
 		if ev.Prompt != "" {
 			data.Prompt = &components.HookPromptData{Text: new(ev.Prompt)}
@@ -139,8 +144,13 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	payload := components.IngestRequestBody{
 		SchemaVersion: schemaVersion,
 		Source: components.HookIngestSource{
-			Adapter:        adapterSlug(base.Provider),
-			AdapterVersion: nil,
+			Adapter: adapterSlug(base.Provider),
+			// Doubles as the relay's capability marker: releases before this
+			// one left the field unset, so the server reads its absence as
+			// "this client cannot report MCP inventory" and degrades the
+			// codex meta-tool guard rather than denying traffic that works
+			// today (DNO-767).
+			AdapterVersion: optStr(BinaryVersion),
 			RawEventName:   optStr(base.NativeName),
 			Hostname:       optStr(hostname),
 			UserEmail:      nil,
@@ -409,7 +419,8 @@ func skillNameOf(input json.RawMessage) string {
 func isEmptyData(d *components.HookIngestData) bool {
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil &&
-		len(d.McpAttribution) == 0 && len(d.McpInventory) == 0 &&
+		(d.McpInventoryCollected == nil || !*d.McpInventoryCollected) &&
+		len(d.McpAttribution) == 0 && d.McpInventory == nil &&
 		len(d.PromptAttachments) == 0
 }
 

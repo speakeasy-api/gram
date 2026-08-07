@@ -33,7 +33,7 @@ export function OnboardingBanner(): JSX.Element | null {
           ONBOARDING_CTA_CONTENT_VT_CLASS,
         )}
       >
-        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center rounded-lg border shadow-sm">
+        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center border">
           <Wrench className="text-foreground size-5" strokeWidth={1.75} />
         </div>
 

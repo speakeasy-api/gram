@@ -74,6 +74,7 @@ export function ToolFilteringSection({
           remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
           tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
           toolsetId: mcpServer.toolsetId ?? undefined,
+          unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
           environmentId: mcpServer.environmentId ?? undefined,
           visibility: mcpServer.visibility,
           toolVariationsGroupId: groupId ?? undefined,

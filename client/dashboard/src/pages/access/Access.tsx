@@ -1,20 +1,25 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
-import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Link, Navigate, useLocation, useNavigate } from "react-router";
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
+import { GrantAccessDialog } from "./GrantAccessDialog";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
 
@@ -61,6 +66,21 @@ export default function Access(): JSX.Element {
 function AccessInner() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Access request emails deep-link here with ?grant_user=<id>&scope=<scope>
+  // to open a pre-filled one-click grant dialog.
+  const grantUserId = searchParams.get("grant_user");
+  const grantScope = searchParams.get("scope");
+  const grantResourceId = searchParams.get("resource_id") || undefined;
+
+  const closeGrantDialog = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("grant_user");
+    next.delete("scope");
+    next.delete("resource_id");
+    setSearchParams(next, { replace: true });
+  };
   const organization = useOrganization();
   const orgRoutes = useOrgRoutes();
   const { data: rolesData } = useRoles();
@@ -82,15 +102,13 @@ function AccessInner() {
 
   return (
     <>
-      <div className="-mt-4">
-        <Heading variant="h4" className="mb-2">
-          Roles &amp; Permissions
-        </Heading>
-        <Text variant="body" className="text-muted-foreground mb-2">
+      <Page.Section>
+        <Page.Section.Title>Roles &amp; Permissions</Page.Section.Title>
+        <Page.Section.Description>
           Manage access control for your team by defining roles and assigning
           permissions. View past authorization challenges.
-        </Text>
-      </div>
+        </Page.Section.Description>
+      </Page.Section>
 
       {organization.scimEnabled && (
         <Alert variant="info" dismissible={false} className="mb-6 text-sm">
@@ -132,6 +150,15 @@ function AccessInner() {
           <ChallengesTab />
         </TabsContent>
       </Tabs>
+
+      {grantUserId && grantScope && (
+        <GrantAccessDialog
+          userId={grantUserId}
+          scope={grantScope}
+          resourceId={grantResourceId}
+          onClose={closeGrantDialog}
+        />
+      )}
     </>
   );
 }
