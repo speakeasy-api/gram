@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -174,6 +176,8 @@ type testInstance struct {
 	completionClient             openrouter.CompletionClient
 	cacheDeletes                 *countingCache
 	chConn                       clickhouse.Conn
+	// assetStorage backs content-part reads on the ClickHouse reveal path.
+	assetStorage blobio.Reader
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -199,7 +203,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	cacheAdapter := &countingCache{Cache: cache.NewRedisCacheAdapter(redisClient), mu: sync.Mutex{}, deletes: nil}
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
@@ -224,6 +228,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		completionClient: nil,
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
+		assetStorage:     assetstest.NewTestBlobStore(t),
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
@@ -232,7 +237,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), nil)
+	}, chrepo.New(chConn), nil, ti.assetStorage)
 
 	return ctx, ti
 }
@@ -274,7 +279,25 @@ func shadowMCPPolicyAllowedURLs(t *testing.T, ctx context.Context, conn *pgxpool
 	return urls
 }
 
+func shadowMCPPolicyBlockedURLs(t *testing.T, ctx context.Context, conn *pgxpool.Pool, policyID string) []string {
+	t.Helper()
+
+	principals := shadowMCPPolicyURLPrincipalsForScope(t, ctx, conn, authz.ScopeRiskPolicyBlock, policyID)
+	urls := make([]string, 0, len(principals))
+	for serverURL := range principals {
+		urls = append(urls, serverURL)
+	}
+	slices.Sort(urls)
+	return urls
+}
+
 func shadowMCPPolicyURLPrincipals(t *testing.T, ctx context.Context, conn *pgxpool.Pool, policyID string) map[string][]string {
+	t.Helper()
+
+	return shadowMCPPolicyURLPrincipalsForScope(t, ctx, conn, authz.ScopeRiskPolicyBypass, policyID)
+}
+
+func shadowMCPPolicyURLPrincipalsForScope(t *testing.T, ctx context.Context, conn *pgxpool.Pool, scope authz.Scope, policyID string) map[string][]string {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -282,16 +305,13 @@ func shadowMCPPolicyURLPrincipals(t *testing.T, ctx context.Context, conn *pgxpo
 	require.NotNil(t, authCtx)
 	grants, err := authz.ListGrantsForResource(ctx, conn, authz.Resource{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
+		Scope:          scope,
 		ResourceID:     policyID,
 	})
 	require.NoError(t, err)
 
 	result := make(map[string][]string)
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		serverURL := grant.Selector[authz.SelectorKeyServerURL]
 		if serverURL == "" {
 			continue

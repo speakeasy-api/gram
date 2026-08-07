@@ -41,7 +41,7 @@ const CardHeader: FC<CardHeaderProps> = ({
     )}
   >
     {icon && (
-      <div className="flex-shrink-0 rounded-[8px] border p-2">
+      <div className="flex-shrink-0 border p-2">
         <Icon name={icon.name} size={icon.size} />
       </div>
     )}
@@ -155,7 +155,7 @@ const Card: FC<CardProps> = ({ children, onClick, href, className }) => {
   return (
     <Wrapper
       className={cn(
-        "relative flex h-full w-full flex-col rounded-[8px] border bg-card text-card-foreground shadow",
+        "relative flex h-full w-full flex-col border bg-card text-card-foreground",
         isInteractive && "cursor-pointer hover:bg-card/70",
         className,
       )}
@@ -231,7 +231,63 @@ const CardActions: FC<PropsWithChildren<{ className?: string }>> = ({
 );
 CardActions.displayName = "CardActions";
 
+type CardEntityProps = {
+  children: ReactNode;
+  /** Content centered in a bordered box on the icon rail. */
+  icon?: ReactNode;
+  /** Extra content layered on the icon rail (e.g. an "Added" badge). */
+  overlay?: ReactNode;
+  className?: string;
+  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
+};
+
+/**
+ * Horizontal entity card: a flat icon rail on the left, content on the right.
+ * Used by catalog, MCP, source and plugin index pages. Replaces the former
+ * DotCard — same API, minus the dot-pattern illustration.
+ */
+const CardEntity: FC<CardEntityProps> = ({
+  children,
+  icon,
+  className,
+  overlay,
+  onClick,
+}) => (
+  <div
+    onClick={onClick}
+    // Clickable cards are plain divs, so give them button semantics for
+    // keyboard and assistive-tech users; non-interactive cards stay plain.
+    {...(onClick && {
+      role: "button",
+      tabIndex: 0,
+      onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(e as unknown as React.MouseEvent<HTMLDivElement>);
+        }
+      },
+    })}
+    className={cn(
+      "group flex h-full min-h-[156px] flex-row overflow-hidden border bg-card text-card-foreground transition-colors",
+      "hover:border-neutral-hover",
+      className,
+    )}
+  >
+    <div className="relative w-40 shrink-0 overflow-hidden border-r bg-surface-secondary-default">
+      {icon && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="border bg-card p-3">{icon}</div>
+        </div>
+      )}
+      {overlay}
+    </div>
+    <div className="flex min-w-0 flex-1 flex-col p-4">{children}</div>
+  </div>
+);
+CardEntity.displayName = "CardEntity";
+
 const CardWithSubcomponents = Object.assign(Card, {
+  Entity: CardEntity,
   Header: CardHeader,
   Title: CardTitle,
   Description: CardDescription,

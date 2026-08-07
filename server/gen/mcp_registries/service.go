@@ -25,6 +25,9 @@ type Service interface {
 	ListCatalog(context.Context, *ListCatalogPayload) (res *ListCatalogResult, err error)
 	// Get detailed information about an MCP server including remotes
 	GetServerDetails(context.Context, *GetServerDetailsPayload) (res *types.ExternalMCPServer, err error)
+	// Get the published setup documentation for an upstream MCP server, located by
+	// endpoint URL and/or registry identifier
+	GetSetupDocs(context.Context, *GetSetupDocsPayload) (res *GetSetupDocsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -47,7 +50,7 @@ const ServiceName = "mcpRegistries"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"clearCache", "listRegistries", "listCatalog", "getServerDetails"}
+var MethodNames = [5]string{"clearCache", "listRegistries", "listCatalog", "getServerDetails", "getSetupDocs"}
 
 // ClearCachePayload is the payload type of the mcpRegistries service
 // clearCache method.
@@ -69,6 +72,27 @@ type GetServerDetailsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// GetSetupDocsPayload is the payload type of the mcpRegistries service
+// getSetupDocs method.
+type GetSetupDocsPayload struct {
+	// URL of the upstream MCP server endpoint
+	ServerURL *string
+	// Registry specifier for the server, as returned by listCatalog (e.g.,
+	// 'com.pulsemcp.mirror/box')
+	RegistrySpecifier *string
+	SessionToken      *string
+	ApikeyToken       *string
+	ProjectSlugInput  *string
+}
+
+// GetSetupDocsResult is the result type of the mcpRegistries service
+// getSetupDocs method.
+type GetSetupDocsResult struct {
+	// Matching setup guides, most specific match first. Empty when no guide has
+	// been published for the server.
+	Guides []*types.MCPSetupGuide
 }
 
 // ListCatalogPayload is the payload type of the mcpRegistries service

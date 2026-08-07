@@ -104,6 +104,9 @@ func TestComposeInstructions_DashboardIncludesElementsPrompts(t *testing.T) {
 	require.Contains(t, instructions, "Only render ONE generative UI widget")
 	require.Contains(t, instructions, "BarChart")
 	require.Contains(t, instructions, "```ui code blocks")
+	require.Contains(t, instructions, "## Linking entities")
+	require.Contains(t, instructions, "gram:skill/<ID>")
+	require.Contains(t, instructions, "Skill.ID from the skill tools")
 }
 
 func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {
@@ -230,4 +233,31 @@ func TestGitHubAdapterDecodeTurnOmitsEmptyPayload(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotContains(t, got, "<event-payload>")
+}
+
+func TestMSTeamsAdapterDecodeTurnRendersContextAndText(t *testing.T) {
+	t.Parallel()
+
+	got, err := msteamsAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","conversation_type":"personal","user_id":"29:user","user_name":"Jo Doe","reply_to_id":"123","text":"hello bot"}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "<message-context>")
+	require.Contains(t, got, "EventType: message")
+	require.Contains(t, got, "ConversationType: personal")
+	require.Contains(t, got, "UserName: Jo Doe")
+	require.Contains(t, got, "ReplyToID: 123")
+	require.True(t, strings.HasSuffix(got, "hello bot"))
+}
+
+func TestMSTeamsAdapterThreadContextRendersRef(t *testing.T) {
+	t.Parallel()
+
+	got, err := msteamsAdapter{}.ThreadContext([]byte(`{"tenant_id":"tenant-1","conversation_id":"19:chan@thread.tacv2;messageid=1","service_url":"https://smba.trafficmanager.net/teams/","user_id":"29:user"}`))
+	require.NoError(t, err)
+	require.Contains(t, got, "Microsoft Teams")
+	require.Contains(t, got, "TenantID: tenant-1")
+	require.Contains(t, got, "ConversationID: 19:chan@thread.tacv2;messageid=1")
+	require.Contains(t, got, "ServiceURL: https://smba.trafficmanager.net/teams/")
 }

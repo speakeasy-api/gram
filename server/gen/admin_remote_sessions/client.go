@@ -86,13 +86,13 @@ func (c *Client) CreateGlobalIssuer(ctx context.Context, p *CreateGlobalIssuerPa
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListGlobalIssuers(ctx context.Context, p *ListGlobalIssuersPayload) (res *ListRemoteSessionIssuersResult, err error) {
+func (c *Client) ListGlobalIssuers(ctx context.Context, p *ListGlobalIssuersPayload) (res *ListGlobalRemoteSessionIssuersResult, err error) {
 	var ires any
 	ires, err = c.ListGlobalIssuersEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListRemoteSessionIssuersResult), nil
+	return ires.(*ListGlobalRemoteSessionIssuersResult), nil
 }
 
 // GetGlobalIssuer calls the "getGlobalIssuer" endpoint of the
@@ -109,13 +109,13 @@ func (c *Client) ListGlobalIssuers(ctx context.Context, p *ListGlobalIssuersPayl
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetGlobalIssuer(ctx context.Context, p *GetGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+func (c *Client) GetGlobalIssuer(ctx context.Context, p *GetGlobalIssuerPayload) (res *GlobalRemoteSessionIssuer, err error) {
 	var ires any
 	ires, err = c.GetGlobalIssuerEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*types.RemoteSessionIssuer), nil
+	return ires.(*GlobalRemoteSessionIssuer), nil
 }
 
 // UpdateGlobalIssuer calls the "updateGlobalIssuer" endpoint of the

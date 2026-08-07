@@ -1,7 +1,8 @@
 import { cn } from "@/lib/utils";
 
-// Small inline pill toggle shared by the billing views (chart granularity,
-// usage-card average unit).
+// Small inline segment toggle shared by the billing views (chart granularity,
+// usage-card average unit). Mono uppercase segment; the active option fills as
+// a solid ink block, matching the SegmentedControl idiom.
 export function ToggleButton({
   active,
   onClick,
@@ -17,9 +18,9 @@ export function ToggleButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded px-2 py-0.5 text-xs transition-colors",
+        "px-2 py-0.5 font-mono text-xs tracking-[0.08em] uppercase transition-colors",
         active
-          ? "bg-muted text-foreground font-medium"
+          ? "bg-primary text-primary-foreground"
           : "text-muted-foreground hover:text-foreground",
       )}
     >

@@ -85,6 +85,7 @@ import {
 import {
   buildDisplayItems,
   buildTranscript,
+  displayItemContainsMessage,
   displayItemRows,
   type MessageCategory,
   rowCategory,
@@ -118,6 +119,8 @@ interface ChatDetailPanelProps {
   chatId: string;
   onClose: () => void;
   onDelete: (chatId: string) => void;
+  /** One-based raw transcript message index to load, center, and highlight. */
+  focusedMessageTurn?: number;
   /** Risk-focused view: collapse the transcript to the flagged messages plus a
    * few of context either side, expandable via "show more". Implies dimming. */
   riskFocus?: boolean;
@@ -202,6 +205,7 @@ export function ChatDetailSheet({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus,
   dimNonRisk,
 }: ChatDetailSheetProps): JSX.Element {
@@ -227,6 +231,7 @@ export function ChatDetailSheet({
                   chatId={chatId}
                   onClose={onClose}
                   onDelete={onDelete}
+                  focusedMessageTurn={focusedMessageTurn}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
                 />
@@ -294,7 +299,7 @@ function SessionSummary({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
         >
           {compact ? (
             <span className="inline-flex items-center gap-1.5">
@@ -489,7 +494,7 @@ function MessageFilterBar({
 
   return (
     <div className="flex items-center justify-end gap-3">
-      <div className="bg-muted/40 inline-flex items-center gap-1 rounded-lg border p-1">
+      <div className="border-border bg-card divide-border inline-flex items-center divide-x border">
         {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
           const on = typeFilter.has(key);
           return (
@@ -499,10 +504,10 @@ function MessageFilterBar({
               aria-pressed={on}
               onClick={() => toggleType(key)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
+                "inline-flex items-center gap-2 px-3 py-1.5 font-mono text-xs tracking-[0.08em] uppercase transition-colors",
                 on
-                  ? "bg-background text-foreground shadow-sm hover:bg-muted/60"
-                  : "text-muted-foreground hover:bg-background hover:text-foreground",
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Glyph className="size-3.5" />
@@ -519,7 +524,7 @@ function MessageFilterBar({
               checked={riskyOnly}
               onCheckedChange={onRiskyOnlyChange}
               aria-label="Show only risky messages"
-              className={riskyOnly ? "bg-red-800" : undefined}
+              className={riskyOnly ? "bg-destructive" : undefined}
             />
             <span className="text-muted-foreground text-xs font-medium">
               Risky only
@@ -558,9 +563,9 @@ function ThreadSearchBar({
   // (meaningless) prev/next nav while keeping clear available.
   const overLimit = trimmedLen > MAX_SEARCH_QUERY_LEN;
   const navBtn =
-    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
+    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center transition-colors disabled:opacity-40";
   return (
-    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 rounded-lg border px-2.5 transition-colors">
+    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 border px-2.5 transition-colors">
       {overLimit ? (
         <SimpleTooltip
           tooltip={`Queries are limited to ${MAX_SEARCH_QUERY_LEN} characters`}
@@ -735,7 +740,7 @@ function ChatDetailHeader({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
               >
                 <SlidersHorizontal className="size-4" />
                 Actions
@@ -781,7 +786,7 @@ function ChatDetailHeader({
           </DropdownMenu>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
             <Icon name="x" className="size-5" />
@@ -947,6 +952,7 @@ function ChatDetailPanel({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
@@ -1040,6 +1046,43 @@ function ChatDetailPanel({
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const validFocusedMessageTurn =
+    focusedMessageTurn !== undefined &&
+    Number.isInteger(focusedMessageTurn) &&
+    focusedMessageTurn > 0
+      ? focusedMessageTurn
+      : undefined;
+  const transcriptMessageCount = transcript.messages.length;
+  const transcriptLoading = transcript.isLoading;
+  const transcriptFetchingNewer = transcript.isFetchingNewer;
+  const transcriptHasMoreAfter = transcript.hasMoreAfter;
+  const loadNextTranscriptPage = transcript.fetchNewer;
+
+  // Provenance can cite a turn beyond the cheap first transcript page. Load
+  // forward pages only until that raw one-based message index is available.
+  useEffect(() => {
+    if (
+      validFocusedMessageTurn === undefined ||
+      transcriptLoading ||
+      transcriptFetchingNewer ||
+      transcriptMessageCount >= validFocusedMessageTurn ||
+      !transcriptHasMoreAfter
+    ) {
+      return;
+    }
+    loadNextTranscriptPage();
+  }, [
+    validFocusedMessageTurn,
+    transcriptLoading,
+    transcriptFetchingNewer,
+    transcriptMessageCount,
+    transcriptHasMoreAfter,
+    loadNextTranscriptPage,
+  ]);
+  const focusedMessageId =
+    validFocusedMessageTurn === undefined
+      ? null
+      : (transcript.messages[validFocusedMessageTurn - 1]?.id ?? null);
   const { data: membersData } = useMembers();
   const userLabel = chat
     ? chatOwnerLabel(
@@ -1186,17 +1229,25 @@ function ChatDetailPanel({
       }),
     [visibleRows, hasMoreBefore, hasMoreAfter, windowGaps],
   );
+  const focusedItemIndex = useMemo(() => {
+    if (!focusedMessageId) return null;
+    const index = displayItems.findIndex((item) =>
+      displayItemContainsMessage(item, focusedMessageId),
+    );
+    return index >= 0 ? index : null;
+  }, [displayItems, focusedMessageId]);
 
   // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
   // the first finding, however far down it is. Plain cost/default views open at
   // the top (first message) — even when the session happens to have findings.
   const initialScrollIndex = useMemo(() => {
+    if (focusedItemIndex !== null) return focusedItemIndex;
     if (!dimNonRisk) return null;
     const idx = displayItems.findIndex((it) =>
       displayItemRows(it).some((r) => rowIsFlagged(r, riskResultsByMessage)),
     );
     return idx >= 0 ? idx : null;
-  }, [dimNonRisk, displayItems, riskResultsByMessage]);
+  }, [focusedItemIndex, dimNonRisk, displayItems, riskResultsByMessage]);
 
   // Unified per-occurrence search navigation: flat-map the loaded display rows
   // into every query occurrence (message text / tool name / args / output) in
@@ -1287,8 +1338,9 @@ function ChatDetailPanel({
       // mid-thread, so suppress the top-of-list auto-load + jump-to-start button
       // that the plain from-start transcript uses — otherwise the window's top
       // edge eagerly expands older messages on mount.
-      scrollToFinding: riskWindowed || searchActive,
-      scrollToItemIndex: activeOccurrence?.itemIndex ?? null,
+      scrollToFinding:
+        riskWindowed || searchActive || validFocusedMessageTurn !== undefined,
+      scrollToItemIndex: activeOccurrence?.itemIndex ?? focusedItemIndex,
       scrollNonce,
       activeOccurrence: activeOccurrence
         ? {
@@ -1298,17 +1350,21 @@ function ChatDetailPanel({
             indexInField: activeOccurrence.indexInField,
           }
         : null,
+      focusedMessageId,
     };
   }, [
     hasMoreBefore,
     hasMoreAfter,
     riskWindowed,
     searchActive,
+    validFocusedMessageTurn,
     windowed,
     transcript,
     initialScrollIndex,
     scrollNonce,
     activeOccurrence,
+    focusedItemIndex,
+    focusedMessageId,
   ]);
 
   // "Load all messages": shown whenever part of the conversation isn't loaded

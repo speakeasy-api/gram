@@ -1762,6 +1762,59 @@ WHERE tcb.project_id = @project_id
   AND tcb.deleted IS FALSE
 ORDER BY tcb.chat_message_id, tcb.created_at DESC;
 
+-- name: GetChatMessageForUnmask :one
+-- Source material for the ClickHouse-backed reveal path: the anchored chat
+-- message's recorded content and tool calls, which the reveal reconstructs the
+-- raw match from (see unmask_ch.go). role gates the scan-surface composition
+-- exactly like batch analysis (only assistant tool-request messages compose
+-- tool-call arguments into the scanned text). chat_id backs the chat:read
+-- authorization check when the ClickHouse row carries no denormalized chat id.
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at
+FROM chat_messages cm
+WHERE cm.id = @id
+  AND cm.project_id = @project_id
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright: the
+  -- chat:read gate is evaluated against the finding's chat id, and serving
+  -- content anchored in a foreign chat would bypass it.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = cm.chat_id
+      AND c.project_id = cm.project_id
+  );
+
+-- name: GetChatContentPartForUnmask :one
+-- Content-part variant of GetChatMessageForUnmask: the part's content lives in
+-- the assets blob store, so this returns the asset URL for the caller to read
+-- (size-capped) plus the chat id for authorization.
+SELECT ccp.id, ccp.chat_id, ccp.content_asset_url
+FROM chat_content_parts ccp
+WHERE ccp.id = @id
+  AND ccp.project_id = @project_id
+  AND ccp.deleted IS FALSE
+  -- Same cross-project guard as GetChatMessageForUnmask, and the same one the
+  -- ingest-side GetChatContentPartAttribution applies: a part whose chat lives
+  -- in another project never exposes its asset url.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = ccp.chat_id
+      AND c.project_id = ccp.project_id
+  );
+
+-- name: GetChatUserAccountEmailForUnmask :one
+-- Reveal candidate for derived account_identity findings: their match is the
+-- chat's AI-account email (see scanners/accountidentity), resolved through the
+-- same chats.user_account_id link the scanner used. Org-scoped so a forged
+-- chat id cannot read another tenant's account email.
+SELECT ua.email
+FROM chats c
+JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
+WHERE c.id = @chat_id
+  AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE;
+
 -- name: CreateChatForTest :one
 INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
 VALUES (@project_id, @organization_id, @user_id, @external_user_id)
@@ -1781,6 +1834,21 @@ RETURNING id;
 INSERT INTO chat_messages (chat_id, project_id, role, content, user_id, external_user_id)
 VALUES (@chat_id, @project_id, 'user', @content, @user_id, @external_user_id)
 RETURNING id;
+
+-- name: CreateChatMessageWithToolCallsForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls)
+VALUES (@chat_id, @project_id, @role, @content, @tool_calls)
+RETURNING id;
+
+-- name: CreateUserAccountForTest :one
+INSERT INTO user_accounts (organization_id, external_account_uuid, email)
+VALUES (@organization_id, @external_account_uuid, @email)
+RETURNING id;
+
+-- name: LinkChatUserAccountForTest :exec
+UPDATE chats
+SET user_account_id = @user_account_id
+WHERE id = @chat_id;
 
 -- name: CreateChatContentPartForTest :one
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url, parent_chat_message_id)

@@ -51,7 +51,7 @@ var _ = Service("adminRemoteSessions", func() {
 			security.SessionPayload()
 		})
 
-		Result(rsissuers.ListRemoteSessionIssuersResult)
+		Result(ListGlobalRemoteSessionIssuersResult)
 
 		HTTP(func() {
 			GET("/rpc/adminRemoteSessions.listGlobalIssuers")
@@ -78,7 +78,7 @@ var _ = Service("adminRemoteSessions", func() {
 			security.SessionPayload()
 		})
 
-		Result(rsissuers.RemoteSessionIssuer)
+		Result(GlobalRemoteSessionIssuer)
 
 		HTTP(func() {
 			GET("/rpc/adminRemoteSessions.getGlobalIssuer")
@@ -303,6 +303,30 @@ var _ = Service("adminRemoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteGlobalClient")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteGlobalRemoteSessionClient"}`)
 	})
+})
+
+// GlobalRemoteSessionIssuer is the platform-admin view of a global
+// remote_session_issuer: the record plus the two client counts that decide
+// whether it can be deleted. They are reported separately because only one of
+// them is actionable by the platform admin — global clients they can delete
+// here, tenant-owned clients they can neither see nor remove.
+var GlobalRemoteSessionIssuer = Type("GlobalRemoteSessionIssuer", func() {
+	Description("A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.")
+
+	Attribute("issuer", rsissuers.RemoteSessionIssuer, "The remote_session_issuer record.")
+	Attribute("global_client_count", Int, "Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.")
+	Attribute("tenant_client_count", Int, "Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.")
+
+	Required("issuer", "global_client_count", "tenant_client_count")
+})
+
+var ListGlobalRemoteSessionIssuersResult = Type("ListGlobalRemoteSessionIssuersResult", func() {
+	Description("Result type for the platform-administrator global issuer listing.")
+
+	Attribute("items", ArrayOf(GlobalRemoteSessionIssuer))
+	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
+
+	Required("items")
 })
 
 // CreateGlobalRemoteSessionClientForm is the global-client create form: like

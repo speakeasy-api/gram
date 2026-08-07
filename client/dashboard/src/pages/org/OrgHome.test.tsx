@@ -35,8 +35,7 @@ vi.mock("@/components/ui/ContextMenu", () => ({
   ContextMenuSeparator: () => null,
 }));
 vi.mock("@/components/auditlogs/feed", () => ({
-  ActionBadge: () => null,
-  ActionDot: () => null,
+  ActionIconTile: () => null,
 }));
 vi.mock("@/pages/access/ChallengesTab", () => ({
   ChallengesEmptyState: () => null,

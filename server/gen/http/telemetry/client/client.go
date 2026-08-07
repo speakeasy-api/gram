@@ -57,6 +57,22 @@ type Client struct {
 	// getProjectOverview endpoint.
 	GetProjectOverviewDoer goahttp.Doer
 
+	// GetUnproxiedMcpServerUsage Doer is the HTTP client used to make requests to
+	// the getUnproxiedMcpServerUsage endpoint.
+	GetUnproxiedMcpServerUsageDoer goahttp.Doer
+
+	// GetUnproxiedMcpServerToolUsage Doer is the HTTP client used to make requests
+	// to the getUnproxiedMcpServerToolUsage endpoint.
+	GetUnproxiedMcpServerToolUsageDoer goahttp.Doer
+
+	// GetUnproxiedMcpServerUserUsage Doer is the HTTP client used to make requests
+	// to the getUnproxiedMcpServerUserUsage endpoint.
+	GetUnproxiedMcpServerUserUsageDoer goahttp.Doer
+
+	// GetUnproxiedMcpServerClientUsage Doer is the HTTP client used to make
+	// requests to the getUnproxiedMcpServerClientUsage endpoint.
+	GetUnproxiedMcpServerClientUsageDoer goahttp.Doer
+
 	// Query Doer is the HTTP client used to make requests to the query endpoint.
 	QueryDoer goahttp.Doer
 
@@ -148,39 +164,43 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		SearchLogsDoer:                      doer,
-		SearchToolCallsDoer:                 doer,
-		SearchChatsDoer:                     doer,
-		SearchUsersDoer:                     doer,
-		CaptureEventDoer:                    doer,
-		GetProjectMetricsSummaryDoer:        doer,
-		GetUserMetricsSummaryDoer:           doer,
-		GetEmployeeDataFlowGraphDoer:        doer,
-		GetObservabilityOverviewDoer:        doer,
-		GetProjectOverviewDoer:              doer,
-		QueryDoer:                           doer,
-		QueryTumDetailsDoer:                 doer,
-		ListSessionsDoer:                    doer,
-		ListFilterOptionsDoer:               doer,
-		ListAttributeKeysDoer:               doer,
-		GetHooksSummaryDoer:                 doer,
-		GetToolUsageSummaryDoer:             doer,
-		GetToolUsageTotalsDoer:              doer,
-		GetToolUsageTargetsDoer:             doer,
-		GetToolUsageUsersDoer:               doer,
-		GetToolUsageTargetTimeSeriesDoer:    doer,
-		GetToolUsageUserTimeSeriesDoer:      doer,
-		GetToolUsageUsersByTargetDoer:       doer,
-		GetToolUsageTargetToolBreakdownDoer: doer,
-		ListToolUsageTracesDoer:             doer,
-		GetToolUsageFilterOptionsDoer:       doer,
-		GetMcpServerActivityDoer:            doer,
-		ListHooksTracesDoer:                 doer,
-		RestoreResponseBody:                 restoreBody,
-		scheme:                              scheme,
-		host:                                host,
-		decoder:                             dec,
-		encoder:                             enc,
+		SearchLogsDoer:                       doer,
+		SearchToolCallsDoer:                  doer,
+		SearchChatsDoer:                      doer,
+		SearchUsersDoer:                      doer,
+		CaptureEventDoer:                     doer,
+		GetProjectMetricsSummaryDoer:         doer,
+		GetUserMetricsSummaryDoer:            doer,
+		GetEmployeeDataFlowGraphDoer:         doer,
+		GetObservabilityOverviewDoer:         doer,
+		GetProjectOverviewDoer:               doer,
+		GetUnproxiedMcpServerUsageDoer:       doer,
+		GetUnproxiedMcpServerToolUsageDoer:   doer,
+		GetUnproxiedMcpServerUserUsageDoer:   doer,
+		GetUnproxiedMcpServerClientUsageDoer: doer,
+		QueryDoer:                            doer,
+		QueryTumDetailsDoer:                  doer,
+		ListSessionsDoer:                     doer,
+		ListFilterOptionsDoer:                doer,
+		ListAttributeKeysDoer:                doer,
+		GetHooksSummaryDoer:                  doer,
+		GetToolUsageSummaryDoer:              doer,
+		GetToolUsageTotalsDoer:               doer,
+		GetToolUsageTargetsDoer:              doer,
+		GetToolUsageUsersDoer:                doer,
+		GetToolUsageTargetTimeSeriesDoer:     doer,
+		GetToolUsageUserTimeSeriesDoer:       doer,
+		GetToolUsageUsersByTargetDoer:        doer,
+		GetToolUsageTargetToolBreakdownDoer:  doer,
+		ListToolUsageTracesDoer:              doer,
+		GetToolUsageFilterOptionsDoer:        doer,
+		GetMcpServerActivityDoer:             doer,
+		ListHooksTracesDoer:                  doer,
+		RestoreResponseBody:                  restoreBody,
+		scheme:                               scheme,
+		host:                                 host,
+		decoder:                              dec,
+		encoder:                              enc,
 	}
 }
 
@@ -419,6 +439,102 @@ func (c *Client) GetProjectOverview() goa.Endpoint {
 		resp, err := c.GetProjectOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getProjectOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerUsage returns an endpoint that makes HTTP requests to
+// the telemetry service getUnproxiedMcpServerUsage server.
+func (c *Client) GetUnproxiedMcpServerUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerToolUsage returns an endpoint that makes HTTP requests
+// to the telemetry service getUnproxiedMcpServerToolUsage server.
+func (c *Client) GetUnproxiedMcpServerToolUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerToolUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerToolUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerToolUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerToolUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerToolUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerUserUsage returns an endpoint that makes HTTP requests
+// to the telemetry service getUnproxiedMcpServerUserUsage server.
+func (c *Client) GetUnproxiedMcpServerUserUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerUserUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerUserUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerUserUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerUserUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerUserUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerClientUsage returns an endpoint that makes HTTP
+// requests to the telemetry service getUnproxiedMcpServerClientUsage server.
+func (c *Client) GetUnproxiedMcpServerClientUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerClientUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerClientUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerClientUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerClientUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerClientUsage", err)
 		}
 		return decodeResponse(resp)
 	}

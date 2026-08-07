@@ -1,7 +1,12 @@
 import { SidebarMenuItem } from "@/components/ui/Sidebar";
-import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
+import { ChevronRightIcon } from "lucide-react";
 import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
@@ -59,11 +64,20 @@ export function NavGroupProvider({
   children: React.ReactNode;
 }): React.JSX.Element {
   const defaultsRef = React.useRef(new Set(defaultOpenGroups ?? []));
-  const [openGroups, _setOpenGroups] = React.useState<Set<string>>(() => {
+  // `open` is what renders; `explicit` tracks groups the user expanded via the
+  // chevron toggle — those survive navigation, while a group that is open only
+  // because it holds the active route collapses on navigating away. The two
+  // sets live in one state object so every updater derives them together,
+  // keeping the state-updater functions pure.
+  const [groupsState, _setGroupsState] = React.useState<{
+    open: Set<string>;
+    explicit: Set<string>;
+  }>(() => {
     const initial = new Set(defaultOpenGroups ?? []);
     if (activeGroup) initial.add(activeGroup);
-    return initial;
+    return { open: initial, explicit: new Set() };
   });
+  const openGroups = groupsState.open;
   const [hoveredItem, setHoveredItem] = React.useState<string | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const itemRefs = React.useRef<Map<string, HTMLElement>>(new Map());
@@ -73,34 +87,42 @@ export function NavGroupProvider({
 
   const toggleGroup = React.useCallback((group: string) => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
-    _setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(group)) {
-        next.delete(group);
+    _setGroupsState(({ open, explicit }) => {
+      const nextOpen = new Set(open);
+      const nextExplicit = new Set(explicit);
+      if (nextOpen.has(group)) {
+        nextOpen.delete(group);
+        nextExplicit.delete(group);
       } else {
         // Opening a non-default group collapses defaults
         if (!defaultsRef.current.has(group)) {
-          for (const d of defaultsRef.current) next.delete(d);
+          for (const d of defaultsRef.current) {
+            if (!nextExplicit.has(d)) nextOpen.delete(d);
+          }
         }
-        next.add(group);
+        nextOpen.add(group);
+        nextExplicit.add(group);
       }
-      return next;
+      return { open: nextOpen, explicit: nextExplicit };
     });
   }, []);
 
+  // Opens a group without marking it explicit — used when a closed group's
+  // header link is clicked, where the navigation is about to make the group
+  // active anyway.
   const openGroupFn = React.useCallback((group: string) => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
-    _setOpenGroups((prev) => {
-      if (prev.has(group)) return prev;
-      const next = new Set<string>();
+    _setGroupsState((prev) => {
+      if (prev.open.has(group)) return prev;
+      const nextOpen = new Set(prev.open);
       // Opening a non-default group collapses defaults
       if (!defaultsRef.current.has(group)) {
-        next.add(group);
-      } else {
-        for (const g of prev) next.add(g);
-        next.add(group);
+        for (const d of defaultsRef.current) {
+          if (!prev.explicit.has(d)) nextOpen.delete(d);
+        }
       }
-      return next;
+      nextOpen.add(group);
+      return { open: nextOpen, explicit: prev.explicit };
     });
   }, []);
 
@@ -110,16 +132,22 @@ export function NavGroupProvider({
 
   React.useEffect(() => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
-    if (activeGroup) {
-      _setOpenGroups((prev) => {
-        if (prev.has(activeGroup)) return prev;
-        const next = new Set(prev);
-        next.add(activeGroup);
-        return next;
-      });
-    } else if (defaultsRef.current.size > 0) {
-      _setOpenGroups(new Set(defaultsRef.current));
-    }
+    _setGroupsState(({ open, explicit }) => {
+      if (!activeGroup && defaultsRef.current.size > 0) {
+        // Sidebars with a default-open set reset to it on top-level pages.
+        return {
+          open: new Set([...defaultsRef.current, ...explicit]),
+          explicit,
+        };
+      }
+      // Only defaults and explicitly expanded groups stay open across
+      // navigation; the previously active group collapses.
+      const nextOpen = new Set(
+        [...open].filter((g) => defaultsRef.current.has(g) || explicit.has(g)),
+      );
+      if (activeGroup) nextOpen.add(activeGroup);
+      return { open: nextOpen, explicit };
+    });
   }, [activeGroup]);
 
   const resolvedActive = activeItem ?? activeGroup ?? null;
@@ -145,7 +173,10 @@ export function NavGroupProvider({
     });
   }, [target]);
 
-  // Compute highlight position (with post-accordion delay)
+  // Compute highlight position (with post-accordion delay). openGroups is a
+  // dependency so toggling a group re-evaluates the highlight once the
+  // accordion settles — collapsing the active group hides its highlighted row,
+  // and the suppressed ResizeObserver below won't fire again after the window.
   React.useEffect(() => {
     const remaining = suppressUntilRef.current - Date.now();
     if (remaining > 0) {
@@ -153,7 +184,7 @@ export function NavGroupProvider({
       return () => clearTimeout(timer);
     }
     computeRect();
-  }, [computeRect]);
+  }, [computeRect, openGroups]);
 
   // Recompute on layout changes, but skip during accordion
   React.useEffect(() => {
@@ -209,7 +240,7 @@ export function NavGroupProvider({
       >
         {highlightRect && (
           <motion.div
-            className="bg-card ring-border/50 pointer-events-none absolute rounded-lg ring-1"
+            className="bg-card border-border pointer-events-none absolute border"
             animate={{
               top: highlightRect.top,
               left: highlightRect.left,
@@ -386,7 +417,7 @@ export function NavButton({
       target={target}
       onClick={handleClick}
       className={cn(
-        "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
+        "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
           ? "text-foreground font-semibold"
@@ -480,13 +511,13 @@ export function CollapsibleNavGroup({
           onMouseEnter={navItem.onMouseEnter}
           onMouseLeave={navItem.onMouseLeave}
           onMouseMove={navItem.onMouseMove}
-          className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
+          className="relative group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
         >
           <Link
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
-              "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
+              "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 pr-7 text-left text-sm transition-colors hover:no-underline",
               "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
               isOpen
@@ -503,7 +534,7 @@ export function CollapsibleNavGroup({
             <span className="flex-1 truncate transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
               {label}
             </span>
-            {stage && isOpen && (
+            {stage && (
               <ReleaseStageBadge
                 stage={stage}
                 noTooltip
@@ -511,12 +542,26 @@ export function CollapsibleNavGroup({
               />
             )}
           </Link>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
+              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 z-1 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center transition-colors group-data-[collapsible=icon]:hidden"
+            >
+              <ChevronRightIcon
+                className={cn(
+                  "size-3.5 transition-transform duration-200",
+                  isOpen && "rotate-90",
+                )}
+              />
+            </button>
+          </CollapsibleTrigger>
         </div>
 
         <CollapsibleContent className="data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden">
-          <div className="border-border mt-1 ml-4 border-l pl-2 group-data-[collapsible=icon]:hidden">
+          <div className="border-border mt-0.5 ml-4 border-l pl-2 group-data-[collapsible=icon]:hidden">
             <motion.ul
-              className="flex flex-col gap-0.5 py-0.5"
+              className="flex flex-col py-0.5"
               initial={isOpen ? "open" : "closed"}
               animate={isOpen ? "open" : "closed"}
               variants={{
@@ -543,9 +588,19 @@ export function CollapsibleNavGroup({
 
 export function CollapsibleNavItem({
   item,
+  label,
   stage,
 }: {
   item: AppRoute;
+  // Display text override, when the group header already supplies the context
+  // the route title spells out (e.g. "Remote Identity Providers" under a
+  // "Platform Admin" header). Only the label changes: `useNavItem` still keys
+  // on the route title, which must stay unique across the sidebar because
+  // `registerRef` stores one element per id — two items sharing a title would
+  // overwrite each other and move the hover/active highlight to the wrong row.
+  // The title also remains what Recents and the command palette show, where
+  // there is no group header to disambiguate.
+  label?: string;
   stage?: ReleaseStage;
 }): React.JSX.Element {
   const navItem = useNavItem(item.title);
@@ -589,14 +644,14 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
-            "relative z-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
+            "relative z-1 flex items-center gap-2 px-2 py-1 text-sm transition-colors hover:no-underline",
             item.active
               ? "text-foreground font-semibold"
               : "text-muted-foreground hover:text-foreground",
           )}
         >
           <span className={cn("truncate", isLoading && "nav-shimmer")}>
-            {item.title}
+            {label ?? item.title}
           </span>
           {item.title === "Billing" && <ProductTierBadge />}
           {(stage ?? item.stage) && (

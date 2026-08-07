@@ -255,7 +255,7 @@ function TrafficSummary({
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-            <ul className="border-border divide-border divide-y rounded-md border">
+            <ul className="border-border divide-border divide-y border">
               {sorted.map((row) => (
                 <TrafficRow key={row.id} row={row} mode={mode} />
               ))}

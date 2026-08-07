@@ -153,7 +153,12 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
-	CreatedAt           time.Time          `json:"created_at"`
+	// DesiredSessionDurationHours is the subject's consent-screen session
+	// length choice. Token minting clamps it to the issuer maximum. Zero means
+	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
+	// stable so grants survive rolling deploys.
+	DesiredSessionDurationHours int       `json:"session_duration_hours,omitempty"`
+	CreatedAt                   time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -169,7 +174,7 @@ func (g UserSessionGrant) AdditionalCacheKeys() []string { return []string{} }
 
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short
-// enough to limit blast radius if the code leaks.
+// enough to limit exposure if the code leaks.
 func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 
 // errIssuerGateOrgLookup marks the post-validation operational path in
@@ -399,24 +404,38 @@ func (s *Service) ApplyIssuerGate(
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
-// FK still resolves to a live row. Returns CodeNotFound when the issuer
-// was deleted out from under the endpoint, CodeUnexpected on lookup
+// FK still resolves to a live row, and stamps the issuer configuration the
+// OAuth handlers need onto the endpoint. Returns CodeNotFound when the
+// issuer was deleted out from under the endpoint, CodeUnexpected on lookup
 // failure. Callers are responsible for first checking that the endpoint
 // is issuer-gated.
 //
+// This is where issuer config reaches an OAuth-facing
+// ResolvedMcpEndpoint, and it already had to load the row for the FK check,
+// so carrying config out of it costs no additional query.
+//
+// It is NOT run by every construction path: the runtime issuer-gate in
+// impl.go builds an endpoint without it. Nothing on that path reads the
+// config today, but any future consumer must either route through here or
+// tolerate an unstamped endpoint, which reads as an unset mode.
+//
 // Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
-// the live-FK check in the same chokepoint as the
+// the live-FK check in the same place as the
 // NewResolvedMcpEndpointFromMcpServer construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
-	if _, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:        endpoint.UserSessionIssuerID,
 		ProjectID: endpoint.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
+	// Carried verbatim, NULL included; admission.ResolveMode is the one
+	// place that decides what an absent or unrecognized value means.
+	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	return nil
 }
 

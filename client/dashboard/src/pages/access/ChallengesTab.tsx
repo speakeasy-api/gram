@@ -116,7 +116,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+        "inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1 text-xs font-medium transition-colors",
         active
           ? "border-primary bg-primary/5 text-primary"
           : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -143,7 +143,7 @@ export function ChallengesEmptyState({
   outcomeFilter: OutcomeFilter;
 }): JSX.Element {
   return (
-    <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
+    <div className="border-border/50 bg-muted/20 border px-6 py-16 text-center">
       <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Check className="text-primary h-6 w-6" />
       </div>
@@ -535,7 +535,7 @@ export function ChallengesTab(): JSX.Element {
         </>
       )}
 
-      <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
+      <div className="border-border/50 bg-muted/30 mt-8 border px-4 py-3">
         <Text variant="subheading" className="mb-3">
           About Challenges
         </Text>

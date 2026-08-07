@@ -605,6 +605,82 @@ func BuildDeleteShadowMCPInventoryPolicyBypassPayload(accessDeleteShadowMCPInven
 	return v, nil
 }
 
+// BuildBlockShadowMCPInventoryServerPayload builds the payload for the access
+// blockShadowMCPInventoryServer endpoint from CLI flags.
+func BuildBlockShadowMCPInventoryServerPayload(accessBlockShadowMCPInventoryServerBody string, accessBlockShadowMCPInventoryServerSessionToken string) (*access.BlockShadowMCPInventoryServerPayload, error) {
+	var err error
+	var body BlockShadowMCPInventoryServerRequestBody
+	{
+		err = json.Unmarshal([]byte(accessBlockShadowMCPInventoryServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessBlockShadowMCPInventoryServerSessionToken != "" {
+			sessionToken = &accessBlockShadowMCPInventoryServerSessionToken
+		}
+	}
+	v := &access.BlockShadowMCPInventoryServerPayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+		PolicyID:  body.PolicyID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUnblockShadowMCPInventoryServerPayload builds the payload for the
+// access unblockShadowMCPInventoryServer endpoint from CLI flags.
+func BuildUnblockShadowMCPInventoryServerPayload(accessUnblockShadowMCPInventoryServerProjectID string, accessUnblockShadowMCPInventoryServerServerURL string, accessUnblockShadowMCPInventoryServerPolicyID string, accessUnblockShadowMCPInventoryServerSessionToken string) (*access.UnblockShadowMCPInventoryServerPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessUnblockShadowMCPInventoryServerProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverURL string
+	{
+		serverURL = accessUnblockShadowMCPInventoryServerServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var policyID string
+	{
+		policyID = accessUnblockShadowMCPInventoryServerPolicyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUnblockShadowMCPInventoryServerSessionToken != "" {
+			sessionToken = &accessUnblockShadowMCPInventoryServerSessionToken
+		}
+	}
+	v := &access.UnblockShadowMCPInventoryServerPayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.PolicyID = policyID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildResolveShadowMCPInventoryRequestPayload builds the payload for the
 // access resolveShadowMCPInventoryRequest endpoint from CLI flags.
 func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventoryRequestBody string, accessResolveShadowMCPInventoryRequestSessionToken string) (*access.ResolveShadowMCPInventoryRequestPayload, error) {
@@ -649,46 +725,47 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 	return v, nil
 }
 
-// BuildGetRBACStatusPayload builds the payload for the access getRBACStatus
+// BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
-func BuildGetRBACStatusPayload(accessGetRBACStatusSessionToken string) (*access.GetRBACStatusPayload, error) {
-	var sessionToken *string
+func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {
+	var err error
+	var body RequestAccessRequestBody
 	{
-		if accessGetRBACStatusSessionToken != "" {
-			sessionToken = &accessGetRBACStatusSessionToken
+		err = json.Unmarshal([]byte(accessRequestAccessBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
+		}
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read"}))
+		}
+		if body.Message != nil {
+			if utf8.RuneCountInString(*body.Message) > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
-	v := &access.GetRBACStatusPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildEnableRBACPayload builds the payload for the access enableRBAC endpoint
-// from CLI flags.
-func BuildEnableRBACPayload(accessEnableRBACSessionToken string) (*access.EnableRBACPayload, error) {
-	var sessionToken *string
+	var apikeyToken *string
 	{
-		if accessEnableRBACSessionToken != "" {
-			sessionToken = &accessEnableRBACSessionToken
+		if accessRequestAccessApikeyToken != "" {
+			apikeyToken = &accessRequestAccessApikeyToken
 		}
 	}
-	v := &access.EnableRBACPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildDisableRBACPayload builds the payload for the access disableRBAC
-// endpoint from CLI flags.
-func BuildDisableRBACPayload(accessDisableRBACSessionToken string) (*access.DisableRBACPayload, error) {
 	var sessionToken *string
 	{
-		if accessDisableRBACSessionToken != "" {
-			sessionToken = &accessDisableRBACSessionToken
+		if accessRequestAccessSessionToken != "" {
+			sessionToken = &accessRequestAccessSessionToken
 		}
 	}
-	v := &access.DisableRBACPayload{}
+	v := &access.RequestAccessPayload{
+		Scope:        body.Scope,
+		ResourceID:   body.ResourceID,
+		ResourceName: body.ResourceName,
+		Message:      body.Message,
+	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

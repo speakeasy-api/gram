@@ -35,11 +35,13 @@ const SOURCE_ICONS = {
   openapi: FileCode,
   function: Code,
   externalmcp: Server,
-  // Remote MCP servers are project-scoped, not deployment-bound, so they cannot
-  // appear in failed deployment sources — but the icon map must cover the full
-  // SourceType union for the indexed lookup at the call site to typecheck.
+  // Remote/tunneled/unproxied MCP servers are project-scoped, not
+  // deployment-bound, so they cannot appear in failed deployment sources —
+  // but the icon map must cover the full SourceType union for the indexed
+  // lookup at the call site to typecheck.
   remotemcp: Network,
   tunneledmcp: Network,
+  unproxiedmcp: Network,
 } as const;
 
 export function FailedSourcesSection({
@@ -139,6 +141,8 @@ export function FailedSourcesSection({
             break;
           case "tunneledmcp":
             break;
+          case "unproxiedmcp":
+            break;
         }
       }
 
@@ -177,7 +181,7 @@ export function FailedSourcesSection({
 
   return (
     <>
-      <section className="border-destructive/40 bg-destructive/5 space-y-3 rounded-lg border p-4">
+      <section className="border-destructive/40 bg-destructive/5 space-y-3 border p-4">
         <div className="flex items-center gap-2">
           <CircleAlert className="text-destructive size-5 shrink-0" />
           <h3 className="text-sm font-semibold">
@@ -203,7 +207,7 @@ export function FailedSourcesSection({
               <div
                 key={source.id}
                 className={cn(
-                  "rounded-lg border p-3 transition-colors",
+                  "border p-3 transition-colors",
                   isSelected
                     ? "border-destructive/40 bg-destructive/5"
                     : "border-border bg-card",
@@ -215,7 +219,7 @@ export function FailedSourcesSection({
                     onCheckedChange={() => toggleSelected(source.id)}
                     disabled={pending}
                   />
-                  <div className="bg-destructive/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
+                  <div className="bg-destructive/10 flex h-8 w-8 shrink-0 items-center justify-center">
                     <IconComponent className="text-destructive h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -245,7 +249,7 @@ export function FailedSourcesSection({
                     <button
                       type="button"
                       onClick={() => toggleExpanded(source.id)}
-                      className="hover:bg-muted text-muted-foreground rounded p-1 transition-colors"
+                      className="hover:bg-muted text-muted-foreground p-1 transition-colors"
                     >
                       {isExpanded ? (
                         <ChevronDown className="size-4" />
@@ -260,7 +264,7 @@ export function FailedSourcesSection({
                     {source.errors.map((err) => (
                       <div
                         key={err.id}
-                        className="text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono text-xs break-all"
+                        className="text-destructive bg-destructive/5 px-2 py-1.5 font-mono text-xs break-all"
                       >
                         {err.message}
                       </div>
@@ -272,13 +276,13 @@ export function FailedSourcesSection({
           })}
 
           {generalErrors.length > 0 && (
-            <div className="border-border bg-card rounded-lg border p-3">
+            <div className="border-border bg-card border p-3">
               <span className="text-sm font-medium">General errors</span>
               <div className="mt-2 space-y-1">
                 {generalErrors.map((err) => (
                   <div
                     key={err.id}
-                    className="text-destructive bg-destructive/5 rounded px-2 py-1.5 font-mono text-xs break-all"
+                    className="text-destructive bg-destructive/5 px-2 py-1.5 font-mono text-xs break-all"
                   >
                     {err.message}
                   </div>

@@ -103,7 +103,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.CreateGcpIamCredentialForm, {
+  const body = encodeJSON("body", payload.CreatePlatformGcpIamCredentialForm, {
     explode: true,
   });
 

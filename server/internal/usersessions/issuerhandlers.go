@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	rsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -109,6 +110,12 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
+	// Validated in app code: the column carries no CHECK constraint by
+	// convention, and the Goa Enum only guards the generated client. A
+	// direct API caller can still send anything.
+	if payload.ClientIDMetadataAdmissionMode != nil && !admission.IsValidMode(*payload.ClientIDMetadataAdmissionMode) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_id_metadata_admission_mode must be one of %v", admission.Modes()).LogError(ctx, s.logger)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -135,8 +142,11 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		Slug:               conv.PtrToPGText(payload.Slug),
 		AuthnChallengeMode: conv.PtrToPGText(payload.AuthnChallengeMode),
 		SessionDuration:    conv.PtrToPGInterval(durPtr),
-		ID:                 id,
-		ProjectID:          *authCtx.ProjectID,
+		// Omitted leaves the stored value untouched, NULL included; the
+		// query COALESCEs on it.
+		ClientIDMetadataAdmissionMode: conv.PtrToPGText(payload.ClientIDMetadataAdmissionMode),
+		ID:                            id,
+		ProjectID:                     *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -450,14 +460,20 @@ func (s *Service) MigrateLegacyGramRegistrations(ctx context.Context, payload *g
 
 func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
 	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
+	// The EFFECTIVE mode, never the raw column: an issuer that has never had
+	// one set stores NULL and reports the resolved default. Clients of this
+	// API — including the audit snapshots built from this view — should never
+	// have to know the unset state exists.
+	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
 	return &types.UserSessionIssuer{
-		ID:                   row.ID.String(),
-		ProjectID:            row.ProjectID.String(),
-		Slug:                 row.Slug,
-		AuthnChallengeMode:   row.AuthnChallengeMode,
-		SessionDurationHours: int(dur / time.Hour),
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                            row.ID.String(),
+		ProjectID:                     row.ProjectID.String(),
+		Slug:                          row.Slug,
+		AuthnChallengeMode:            row.AuthnChallengeMode,
+		SessionDurationHours:          int(dur / time.Hour),
+		ClientIDMetadataAdmissionMode: string(mode),
+		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

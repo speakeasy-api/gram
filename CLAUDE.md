@@ -130,6 +130,7 @@ Activate a skill when your task falls within its scope.
 | `clickhouse`                      | Working with ClickHouse queries, schema, or migrations in the `server/` package |
 | `frontend`                        | Working on the React frontend in `client/`                                      |
 | `vercel-react-best-practices`     | Optimizing React performance, reviewing components for best practices           |
+| `gram-demo-seed`                  | Editing or extending the demo org seed SQL, or a demo-seed-safety CI failure    |
 | `gram-functions`                  | Understanding or modifying the Gram Functions serverless execution feature      |
 | `gram-management-api`             | Designing or modifying management API endpoints (Goa design, impl)              |
 | `gram-audit-logging`              | Recording or exposing audit events via the auditlogs management API             |

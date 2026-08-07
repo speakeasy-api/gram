@@ -230,7 +230,7 @@ export function AddVariableSheet({
               </Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="border-input bg-background hover:bg-accent flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm transition-colors">
+                  <button className="border-input bg-background hover:bg-accent flex h-10 w-full items-center justify-between border px-3 text-sm transition-colors">
                     <span className="text-muted-foreground">
                       Select a variable to add...
                     </span>
@@ -244,7 +244,7 @@ export function AddVariableSheet({
                   {availableEnvVarsFromAttached.map((varName) => (
                     <div
                       key={varName}
-                      className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm"
+                      className="hover:bg-accent flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
                       onClick={() => onLoadFromEnvironment(varName)}
                     >
                       <div className="font-mono">{varName}</div>
@@ -289,7 +289,7 @@ export function AddVariableSheet({
                   onChange={(e) => updateEntry(index, "key", e.target.value)}
                   onPaste={(e) => handleDotEnvPaste(index, e)}
                   placeholder="CLIENT_KEY..."
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
               <div className="flex-1">
@@ -303,7 +303,7 @@ export function AddVariableSheet({
                   value={entry.value}
                   onChange={(e) => updateEntry(index, "value", e.target.value)}
                   placeholder=""
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
               <div className="shrink-0">

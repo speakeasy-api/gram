@@ -8,8 +8,12 @@
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
 //USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
 //USAGE flag "--skip-build" help="Skip building plugins; use dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
+
+// @ts-nocheck This script is plain untyped JS; the root tsconfig has checkJs
+// enabled for the rest of .mise-tasks. Remove once it is properly annotated.
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -218,6 +222,130 @@ function psqlArgs(sql) {
     sql,
   ];
 }
+// The codex binary is not reliably on PATH. OpenAI merged the standalone Codex
+// app into the ChatGPT app, and a machine can carry only that, or only an
+// editor extension's bundled copy — spawning bare "codex" fails there with
+// ENOENT before any scenario runs. Mirrors the probe order the relay uses
+// (hooks/relay/identity.go): a real CLI install wins, then the maintained app
+// bundle, then editor extensions newest-first, then the frozen Codex.app.
+let cachedCodexBinary = null;
+async function resolveCodexBinary() {
+  if (cachedCodexBinary) return cachedCodexBinary;
+
+  const onPath = await codexOnPath();
+  if (onPath) {
+    cachedCodexBinary = onPath;
+    return cachedCodexBinary;
+  }
+
+  const home = os.homedir();
+  const codexHome = process.env.CODEX_HOME || path.join(home, ".codex");
+  const candidates = [
+    path.join(codexHome, "packages", "standalone", "current", "bin", "codex"),
+    path.join(home, ".local", "bin", "codex"),
+    "/usr/local/bin/codex",
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    ...(await editorExtensionCodexBinaries(home)),
+    "/Applications/Codex.app/Contents/Resources/codex",
+  ];
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      cachedCodexBinary = candidate;
+      return cachedCodexBinary;
+    } catch {
+      // try the next location
+    }
+  }
+  throw new Error(
+    "codex binary not found. Looked on PATH and in the managed install, " +
+      "the unified ChatGPT app, the ChatGPT editor extensions, and Codex.app.",
+  );
+}
+
+// PATH is walked here rather than shelled out to. The harness spawns codex
+// with its own environment, so the probe has to resolve against that same
+// PATH — a login shell reads a different profile and would miss a binary the
+// harness can actually spawn, silently falling through to another candidate.
+// Walking it also puts the PATH hit through the same X_OK check every other
+// candidate gets, so a non-executable or shell-only "codex" cannot be cached
+// as the spawn command.
+async function codexOnPath() {
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    // An empty entry means the working directory; a relative codex is not
+    // something the harness should drive.
+    if (!path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, "codex");
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // try the next PATH entry
+    }
+  }
+  return null;
+}
+
+// Both path segments carry versions, so they are globbed. Sorted newest-first
+// by parsed version: an editor leaves the superseded build on disk across an
+// upgrade, and driving a stale codex would test the wrong binary.
+async function editorExtensionCodexBinaries(home) {
+  const found = [];
+  for (const editor of [
+    ".vscode",
+    ".vscode-insiders",
+    ".vscode-server",
+    ".cursor",
+    ".windsurf",
+  ]) {
+    const root = path.join(home, editor, "extensions");
+    let entries;
+    try {
+      entries = await fs.readdir(root);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.startsWith("openai.chatgpt-")) continue;
+      const binRoot = path.join(root, entry, "bin");
+      let triples;
+      try {
+        triples = await fs.readdir(binRoot);
+      } catch {
+        continue;
+      }
+      for (const triple of triples) {
+        found.push({
+          version: parseExtensionVersion(entry),
+          binary: path.join(binRoot, triple, "codex"),
+        });
+      }
+    }
+  }
+  found.sort((a, b) => compareExtensionVersions(a.version, b.version));
+  return found.map((f) => f.binary);
+}
+
+function parseExtensionVersion(dirName) {
+  const rest = dirName.slice("openai.chatgpt-".length);
+  const version = rest.split("-")[0];
+  const parts = version.split(".").map((n) => Number.parseInt(n, 10));
+  return parts.some(Number.isNaN) ? null : parts;
+}
+
+// Newest first; an unparseable version sorts last but is never dropped.
+function compareExtensionVersions(a, b) {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const left = a[i] ?? 0;
+    const right = b[i] ?? 0;
+    if (left !== right) return right - left;
+  }
+  return 0;
+}
+
 async function runProcess(command, args, opts = {}) {
   return await new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -1050,16 +1178,24 @@ async function prepareShadowMCPProviderConfig(args) {
       "internal error: codex shadow MCP setup requires isolated Codex environment",
     );
   }
-  await runProcess("codex", ["mcp", "remove", args.fixture.shadowServerName], {
-    env: args.env,
-    timeoutMs: 30_000,
-  });
-  await runProcess("codex", ["mcp", "remove", args.fixture.gramServerName], {
-    env: args.env,
-    timeoutMs: 30_000,
-  });
+  await runProcess(
+    await resolveCodexBinary(),
+    ["mcp", "remove", args.fixture.shadowServerName],
+    {
+      env: args.env,
+      timeoutMs: 30_000,
+    },
+  );
+  await runProcess(
+    await resolveCodexBinary(),
+    ["mcp", "remove", args.fixture.gramServerName],
+    {
+      env: args.env,
+      timeoutMs: 30_000,
+    },
+  );
   await runChecked(
-    "codex",
+    await resolveCodexBinary(),
     [
       "mcp",
       "add",
@@ -1074,7 +1210,7 @@ async function prepareShadowMCPProviderConfig(args) {
     },
   );
   await runChecked(
-    "codex",
+    await resolveCodexBinary(),
     [
       "mcp",
       "add",
@@ -1194,7 +1330,7 @@ async function runProviderScenario(args) {
     return res;
   }
   const res = await runProcess(
-    "codex",
+    await resolveCodexBinary(),
     [
       "exec",
       "--json",
@@ -1287,7 +1423,7 @@ async function runProviderShadowMCPScenario(args) {
     return res;
   }
   const res = await runProcess(
-    "codex",
+    await resolveCodexBinary(),
     [
       "exec",
       "--json",
@@ -2438,7 +2574,7 @@ async function runSkillScenario(args) {
   );
   if (args.provider === "codex") {
     const res = await runProcess(
-      "codex",
+      await resolveCodexBinary(),
       [
         "exec",
         "--json",

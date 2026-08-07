@@ -173,16 +173,16 @@ export function MCPTableRowSkeleton(): JSX.Element {
   return (
     <DotRow>
       <td className="px-3 py-3">
-        <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
+        <div className="bg-muted h-4 w-2/3 animate-pulse" />
       </td>
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
           <div className="bg-muted h-2 w-2 animate-pulse rounded-full" />
-          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
+          <div className="bg-muted h-3.5 w-12 animate-pulse" />
         </div>
       </td>
       <td className="px-3 py-3">
-        <div className="bg-muted h-3.5 w-40 animate-pulse rounded" />
+        <div className="bg-muted h-3.5 w-40 animate-pulse" />
       </td>
       <td className="px-3 py-3">
         <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />

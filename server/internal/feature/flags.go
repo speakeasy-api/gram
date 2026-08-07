@@ -43,6 +43,9 @@ const (
 	// server-side per organization with distinctID = the issuer's org ID and
 	// no groups.
 	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
+	// FlagPlatformMCPRollout gates the organization-targeted Platform MCP rollout.
+	// It is evaluated in addition to the durable Platform MCP product capability.
+	FlagPlatformMCPRollout Flag = "platform-mcp-rollout"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.

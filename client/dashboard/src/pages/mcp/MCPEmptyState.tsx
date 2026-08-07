@@ -11,7 +11,7 @@ export function MCPEmptyState({ cta }: { cta?: React.ReactNode }): JSX.Element {
         MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+        <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
           <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
             <Network className="text-muted-foreground h-6 w-6" />
           </div>

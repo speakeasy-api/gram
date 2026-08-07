@@ -47,7 +47,12 @@ export default function Integrations(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <Page.Section>
-          <Page.Section.Title>Integrations</Page.Section.Title>
+          {/* The integrations slug isn't in the nav-area map, so the eyebrow
+              can't auto-derive; the page distributes packages, so it reads as
+              Distribute. */}
+          <Page.Section.Title area="Distribute">
+            Integrations
+          </Page.Section.Title>
           <Page.Section.Description>
             Distribute platform toolsets as installable packages your customers
             can pull from npm.
@@ -59,6 +64,13 @@ export default function Integrations(): JSX.Element {
           ) : null}
           <Page.Section.Body>
             <Cards>
+              {/* Leading the grid keeps the dashed request card anchored to
+                  the first column regardless of how many integrations exist. */}
+              <CreateThingCard
+                onClick={() => setRequestIntegrationDialogOpen(true)}
+              >
+                Request an Integration
+              </CreateThingCard>
               {integrations?.integrations?.map((integration) => (
                 <IntegrationCard
                   key={integration.packageName}
@@ -68,11 +80,6 @@ export default function Integrations(): JSX.Element {
                   }}
                 />
               ))}
-              <CreateThingCard
-                onClick={() => setRequestIntegrationDialogOpen(true)}
-              >
-                Request an Integration
-              </CreateThingCard>
             </Cards>
           </Page.Section.Body>
         </Page.Section>
@@ -288,7 +295,7 @@ function IntegrationCard({
             {integration.packageImageAssetId && (
               <AssetImage
                 assetId={integration.packageImageAssetId}
-                className="h-8 w-8 rounded-md"
+                className="h-8 w-8"
               />
             )}
             <span>

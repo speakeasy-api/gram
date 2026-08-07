@@ -33,6 +33,10 @@ type Client struct {
 	// getServerDetails endpoint.
 	GetServerDetailsDoer goahttp.Doer
 
+	// GetSetupDocs Doer is the HTTP client used to make requests to the
+	// getSetupDocs endpoint.
+	GetSetupDocsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -58,6 +62,7 @@ func NewClient(
 		ListRegistriesDoer:   doer,
 		ListCatalogDoer:      doer,
 		GetServerDetailsDoer: doer,
+		GetSetupDocsDoer:     doer,
 		RestoreResponseBody:  restoreBody,
 		scheme:               scheme,
 		host:                 host,
@@ -157,6 +162,30 @@ func (c *Client) GetServerDetails() goa.Endpoint {
 		resp, err := c.GetServerDetailsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpRegistries", "getServerDetails", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSetupDocs returns an endpoint that makes HTTP requests to the
+// mcpRegistries service getSetupDocs server.
+func (c *Client) GetSetupDocs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSetupDocsRequest(c.encoder)
+		decodeResponse = DecodeGetSetupDocsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSetupDocsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSetupDocsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpRegistries", "getSetupDocs", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -33,14 +35,19 @@ type cimdDocServer struct {
 	srv      *httptest.Server
 	clientID string
 	doc      map[string]any
+	// requests counts document fetches. Admission control's whole value is
+	// that a denial costs no outbound request, which is only observable by
+	// asserting this stays at zero.
+	requests atomic.Int64
 }
 
 func startCIMDDocServer(t *testing.T) *cimdDocServer {
 	t.Helper()
 
-	ds := &cimdDocServer{srv: nil, clientID: "", doc: nil}
+	ds := &cimdDocServer{srv: nil, clientID: "", doc: nil, requests: atomic.Int64{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oauth/client.json", func(w http.ResponseWriter, r *http.Request) {
+		ds.requests.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(ds.doc); err != nil {
 			t.Errorf("encode cimd document: %v", err)
@@ -69,6 +76,12 @@ func (ds *cimdDocServer) certPool() *x509.CertPool {
 // policy trusts the doc server's TLS certificate, seeds a public
 // issuer-gated toolset, and returns the org id used as the flag distinctID.
 // The flag is NOT enabled here — tests opt in via ti.features.SetFlag.
+//
+// The seeded issuer is put in "open" admission mode. These tests exercise
+// DOCUMENT validation, and the doc server's URL is (necessarily) not a
+// catalog preset, so the default "presets" mode would deny every one of them
+// before a document was ever fetched. Admission itself is covered by
+// authnchallenge_cimd_admission_test.go, which seeds modes explicitly.
 func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset, string) {
 	t.Helper()
 
@@ -76,6 +89,7 @@ func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocS
 	ctx, ti := newTestMCPServiceWithGuardianOptions(t, guardian.WithTLSRootCAs(ds.certPool()))
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
 	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
 		Name:                   toolset.Name,
 		Description:            toolset.Description,
@@ -225,7 +239,7 @@ func TestOAuthCIMD_FlagOff_RejectsURLClientID(t *testing.T) {
 }
 
 // TestOAuthCIMD_FlagOffAfterResolution_RejectsAtAuthorize pins the
-// kill-switch semantics: once the flag is disabled, even a
+// off-switch semantics: once the flag is disabled, even a
 // previously-resolved CIMD client is rejected on new authorize flows.
 func TestOAuthCIMD_FlagOffAfterResolution_RejectsAtAuthorize(t *testing.T) {
 	t.Parallel()
@@ -368,6 +382,7 @@ func TestOAuthCIMD_ASMetadataAdvertisesSupportWhenFlagOn(t *testing.T) {
 	var meta map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
 	require.Equal(t, true, meta["client_id_metadata_document_supported"])
+	require.Equal(t, []any{"authorization"}, meta["refresh_token_expiration_types_supported"])
 }
 
 func TestOAuthCIMD_ASMetadataOmitsSupportWhenFlagOff(t *testing.T) {

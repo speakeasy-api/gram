@@ -143,7 +143,7 @@ export function SkillPickerDialog({
     pickerContent = <Skeleton className="h-24 w-full" />;
   } else if (visibleSkills.length > 0) {
     pickerContent = (
-      <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto rounded-md border p-1">
+      <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto border p-1">
         {visibleSkills.map((skill) => (
           <SkillOption
             key={skill.id}
@@ -236,7 +236,7 @@ function SkillOption({
   return (
     <label
       className={cn(
-        "flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
+        "flex items-center gap-2 px-2 py-1.5 text-sm",
         isDistributable ? "hover:bg-accent cursor-pointer" : "opacity-70",
       )}
     >

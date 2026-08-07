@@ -39,10 +39,7 @@ func TestExternalCredentials_CreateForbiddenWithoutGrants(t *testing.T) {
 	_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "denied",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

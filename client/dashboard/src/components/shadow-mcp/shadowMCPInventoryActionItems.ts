@@ -1,6 +1,7 @@
 import type { Action } from "@/components/ui/MoreActions";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { InventoryActionMode } from "./ShadowMCPInventoryActions";
+import type { ShadowMCPPolicyDisposition } from "./shadowMCPInventoryStatus";
 
 export const ALLOW_RULE_POLICY_REQUIRED =
   "An enabled blocking Shadow MCP policy is required.";
@@ -17,10 +18,12 @@ export function shadowMCPInventoryActions(
   {
     canManageAllowRules,
     disabled,
+    disposition = null,
     onOpenAction,
   }: {
     canManageAllowRules: boolean;
     disabled: boolean;
+    disposition?: ShadowMCPPolicyDisposition | null;
     onOpenAction: (
       mode: InventoryActionMode,
       server: ShadowMCPInventoryServer,
@@ -45,6 +48,26 @@ export function shadowMCPInventoryActions(
       disabled,
       onClick: openAction("review"),
     });
+  }
+  if (disposition === "allow_all") {
+    // Allow-all policies manage a blocked list instead of allow rules: the
+    // primary action flips to blocking (or unblocking) the server for the
+    // whole project.
+    if (server.access === "blocked") {
+      actions.push({
+        label: "Unblock Server",
+        disabled,
+        onClick: openAction("unblock"),
+      });
+    } else if (!hasRequest) {
+      actions.push({
+        label: "Block Server",
+        destructive: true,
+        disabled,
+        onClick: openAction("block"),
+      });
+    }
+    return actions;
   }
   if (!hasRequest && !hasAllowDecision) {
     actions.push({

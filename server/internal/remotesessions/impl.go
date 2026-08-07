@@ -53,6 +53,7 @@ type Service struct {
 	auditLogger         *audit.Logger
 	serverURL           *url.URL
 	legacyRegistrations LegacyRegistrationStore
+	refresher           *RefreshService
 }
 
 var (
@@ -72,7 +73,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, legacyRegistrations LegacyRegistrationStore) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, legacyRegistrations LegacyRegistrationStore, refresher *RefreshService) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
@@ -87,6 +88,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auditLogger:         auditLogger,
 		serverURL:           serverURL,
 		legacyRegistrations: legacyRegistrations,
+		refresher:           refresher,
 	}
 }
 

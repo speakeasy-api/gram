@@ -4,10 +4,12 @@
 
 import { mcpRegistriesClearCache } from "../funcs/mcpRegistriesClearCache.js";
 import { mcpRegistriesGetServerDetails } from "../funcs/mcpRegistriesGetServerDetails.js";
+import { mcpRegistriesGetSetupDocs } from "../funcs/mcpRegistriesGetSetupDocs.js";
 import { mcpRegistriesListCatalog } from "../funcs/mcpRegistriesListCatalog.js";
 import { mcpRegistriesListRegistries } from "../funcs/mcpRegistriesListRegistries.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ExternalMCPServer } from "../models/components/externalmcpserver.js";
+import { GetSetupDocsResponseBody } from "../models/components/getsetupdocsresponsebody.js";
 import { ListCatalogResponseBody } from "../models/components/listcatalogresponsebody.js";
 import { ListRegistriesResponseBody } from "../models/components/listregistriesresponsebody.js";
 import {
@@ -18,6 +20,10 @@ import {
   GetMCPServerDetailsRequest,
   GetMCPServerDetailsSecurity,
 } from "../models/operations/getmcpserverdetails.js";
+import {
+  GetMCPSetupDocsRequest,
+  GetMCPSetupDocsSecurity,
+} from "../models/operations/getmcpsetupdocs.js";
 import {
   ListMCPCatalogRequest,
   ListMCPCatalogSecurity,
@@ -60,6 +66,25 @@ export class McpRegistries extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ExternalMCPServer> {
     return unwrapAsync(mcpRegistriesGetServerDetails(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getSetupDocs mcpRegistries
+   *
+   * @remarks
+   * Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier
+   */
+  async getSetupDocs(
+    request?: GetMCPSetupDocsRequest | undefined,
+    security?: GetMCPSetupDocsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetSetupDocsResponseBody> {
+    return unwrapAsync(mcpRegistriesGetSetupDocs(
       this,
       request,
       security,

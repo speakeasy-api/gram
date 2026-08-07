@@ -2,6 +2,8 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AIIntegrationConnectionRow } from "@/pages/org/ai-integration-connection-row";
 import { AI_INTEGRATION_PROVIDERS } from "@/pages/org/ai-integration-providers";
+import { LiteLLMIntegrationRow } from "@/pages/org/litellm-integration-row";
+import { useRBAC } from "@/hooks/useRBAC";
 
 // AI Integrations: one row per provider connection that expands to reveal its
 // event and metric streams, each with its own status and pause toggle.
@@ -20,7 +22,9 @@ export default function OrgAIIntegrations(): JSX.Element {
   );
 }
 
-function OrgAIIntegrationsInner() {
+export function OrgAIIntegrationsInner(): JSX.Element {
+  const { hasScope } = useRBAC();
+
   return (
     <Page.Section>
       <Page.Section.Title>AI Integrations</Page.Section.Title>
@@ -30,7 +34,8 @@ function OrgAIIntegrationsInner() {
         connection.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <div className="border-border bg-card divide-border divide-y overflow-hidden border">
+          {hasScope("org:admin") ? <LiteLLMIntegrationRow /> : null}
           {AI_INTEGRATION_PROVIDERS.map((provider) => (
             <AIIntegrationConnectionRow
               key={provider.provider}

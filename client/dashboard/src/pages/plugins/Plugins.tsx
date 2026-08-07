@@ -3,9 +3,10 @@ import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/Dialog";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Plugin } from "@gram/client/models/components/plugin.js";
@@ -125,7 +126,7 @@ export default function Plugins(): JSX.Element {
         action: {
           label: "Open",
           onClick: () => {
-            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+            openSafeExternalUrl(data.repoUrl);
           },
         },
       });
@@ -557,7 +558,7 @@ function ObservabilityPluginCard({
       : undefined;
 
   return (
-    <DotCard
+    <Card.Entity
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -658,7 +659,7 @@ function ObservabilityPluginCard({
         open={isInstallSheetOpen}
         onOpenChange={setIsInstallSheetOpen}
       />
-    </DotCard>
+    </Card.Entity>
   );
 }
 

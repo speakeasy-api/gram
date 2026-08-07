@@ -288,12 +288,20 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 	return workflow.NewContinueAsNewError(ctx, AssistantThreadWorkflow, input)
 }
 
-func assistantCoordinatorWorkflowID(assistantID uuid.UUID) string {
-	return "v1:assistant-coordinator:" + assistantID.String()
+// Workflow ids are scoped to the task queue that will poll them. Preview
+// environments share this Temporal namespace (and database) with the
+// long-lived environment but poll their own task queues, and SignalWithStart
+// only starts a workflow when no run with the id is open: an unscoped id let
+// a preview claim THE coordinator for an assistant on a queue that stops
+// being polled when the preview is torn down. The stranded run then swallowed
+// every later kick — signals are accepted by an open workflow regardless of
+// whether anything polls its queue — and no turn was ever admitted again.
+func assistantCoordinatorWorkflowID(taskQueue string, assistantID uuid.UUID) string {
+	return "v1:assistant-coordinator:" + taskQueue + ":" + assistantID.String()
 }
 
-func assistantThreadWorkflowID(threadID uuid.UUID) string {
-	return "v1:assistant-thread:" + threadID.String()
+func assistantThreadWorkflowID(taskQueue string, threadID uuid.UUID) string {
+	return "v1:assistant-thread:" + taskQueue + ":" + threadID.String()
 }
 
 type AssistantWorkflowSignaler struct {
@@ -301,7 +309,7 @@ type AssistantWorkflowSignaler struct {
 }
 
 func (s *AssistantWorkflowSignaler) SignalCoordinator(ctx context.Context, assistantID uuid.UUID) error {
-	wfID := assistantCoordinatorWorkflowID(assistantID)
+	wfID := assistantCoordinatorWorkflowID(string(s.TemporalEnv.Queue()), assistantID)
 	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(
 		ctx,
 		wfID,
@@ -322,7 +330,7 @@ func (s *AssistantWorkflowSignaler) SignalCoordinator(ctx context.Context, assis
 }
 
 func (s *AssistantWorkflowSignaler) SignalThread(ctx context.Context, threadID, projectID uuid.UUID) error {
-	wfID := assistantThreadWorkflowID(threadID)
+	wfID := assistantThreadWorkflowID(string(s.TemporalEnv.Queue()), threadID)
 	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(
 		ctx,
 		wfID,

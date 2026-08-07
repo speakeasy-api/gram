@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -411,4 +412,70 @@ func TestListUserSessions_StatusRevokedFilter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, gotAll.Items, 2)
+}
+
+// The session view carries the CIMD/DCR discriminator across the join to
+// user_session_clients so the badge renders on the session listings that
+// already exist, without a second round trip per row. A session with no bound
+// client (the LEFT JOIN missing) must stay nil rather than error.
+func TestListUserSessions_ClientIDMetadataURI(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "sessions-cimd-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+
+	dcrClient, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, "sessions-dcr-client")
+	require.NoError(t, err)
+
+	const documentURL = "https://client.example.com/sessions-oauth-client.json"
+	cimdClient, err := seedCimdUserSessionClient(t, ctx, ti.conn, issuerID, documentURL)
+	require.NoError(t, err)
+
+	dcrSession, err := seedUserSessionForClient(t, ctx, ti.conn, issuerID, dcrClient.ID, urn.NewUserSubject("dcr-subject"))
+	require.NoError(t, err)
+	cimdSession, err := seedUserSessionForClient(t, ctx, ti.conn, issuerID, cimdClient.ID, urn.NewUserSubject("cimd-subject"))
+	require.NoError(t, err)
+	unboundSession, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewUserSubject("unbound-subject"))
+	require.NoError(t, err)
+
+	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: &issuer.ID,
+		Status:              nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 3)
+
+	bySessionID := make(map[string]*types.UserSession, len(got.Items))
+	for _, item := range got.Items {
+		bySessionID[item.ID] = item
+	}
+
+	gotDCR := bySessionID[dcrSession.ID.String()]
+	require.NotNil(t, gotDCR)
+	require.Nil(t, gotDCR.ClientIDMetadataURI, "a session on a DCR client must not advertise a metadata document")
+
+	gotCIMD := bySessionID[cimdSession.ID.String()]
+	require.NotNil(t, gotCIMD)
+	require.NotNil(t, gotCIMD.ClientIDMetadataURI)
+	require.Equal(t, documentURL, *gotCIMD.ClientIDMetadataURI)
+
+	gotUnbound := bySessionID[unboundSession.ID.String()]
+	require.NotNil(t, gotUnbound)
+	require.Nil(t, gotUnbound.ClientIDMetadataURI, "a session with no bound client must not advertise a metadata document")
 }
