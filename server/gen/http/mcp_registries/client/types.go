@@ -1048,6 +1048,11 @@ type ExternalMCPServerEntryResponseBody struct {
 	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
+	// The source repository the registry links for this server, when it declares
+	// one
+	Repository *ExternalMCPRepositoryResponseBody `form:"repository,omitempty" json:"repository,omitempty" xml:"repository,omitempty"`
+	// Published packages that run this server, when the registry declares any
+	Packages []*ExternalMCPPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
 
 // ExternalMCPRemoteResponseBody is used to define fields on response body
@@ -1092,6 +1097,34 @@ type ExternalMCPRemoteVariableResponseBody struct {
 	Default *string `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
 	// Allowed values for the variable
 	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
+// ExternalMCPRepositoryResponseBody is used to define fields on response body
+// types.
+type ExternalMCPRepositoryResponseBody struct {
+	// Repository URL
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Hosting service the repository lives on, such as github
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Path within the repository holding the server, for monorepos
+	Subfolder *string `form:"subfolder,omitempty" json:"subfolder,omitempty" xml:"subfolder,omitempty"`
+}
+
+// ExternalMCPPackageResponseBody is used to define fields on response body
+// types.
+type ExternalMCPPackageResponseBody struct {
+	// Package registry the artifact is published to, such as npm or pypi
+	RegistryType *string `form:"registry_type,omitempty" json:"registry_type,omitempty" xml:"registry_type,omitempty"`
+	// Registry base URL when the package lives outside the default public registry
+	RegistryBaseURL *string `form:"registry_base_url,omitempty" json:"registry_base_url,omitempty" xml:"registry_base_url,omitempty"`
+	// Package identifier, scope included
+	Identifier *string `form:"identifier,omitempty" json:"identifier,omitempty" xml:"identifier,omitempty"`
+	// Published version
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Launcher the publisher suggests, such as npx or uvx
+	RuntimeHint *string `form:"runtime_hint,omitempty" json:"runtime_hint,omitempty" xml:"runtime_hint,omitempty"`
+	// SHA-256 of the packaged artifact, when the registry publishes one
+	FileSha256 *string `form:"file_sha256,omitempty" json:"file_sha256,omitempty" xml:"file_sha256,omitempty"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
@@ -3334,6 +3367,18 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 			}
 		}
 	}
+	if body.Repository != nil {
+		if err2 := ValidateExternalMCPRepositoryResponseBody(body.Repository); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Packages {
+		if e != nil {
+			if err2 := ValidateExternalMCPPackageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -3369,6 +3414,36 @@ func ValidateExternalMCPRemoteResponseBody(body *ExternalMCPRemoteResponseBody) 
 func ValidateExternalMCPRemoteHeaderResponseBody(body *ExternalMCPRemoteHeaderResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateExternalMCPRepositoryResponseBody runs the validations defined on
+// ExternalMCPRepositoryResponseBody
+func ValidateExternalMCPRepositoryResponseBody(body *ExternalMCPRepositoryResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateExternalMCPPackageResponseBody runs the validations defined on
+// ExternalMCPPackageResponseBody
+func ValidateExternalMCPPackageResponseBody(body *ExternalMCPPackageResponseBody) (err error) {
+	if body.RegistryType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_type", "body"))
+	}
+	if body.Identifier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("identifier", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.RegistryBaseURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_base_url", *body.RegistryBaseURL, goa.FormatURI))
 	}
 	return
 }
