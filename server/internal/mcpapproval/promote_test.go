@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -171,6 +172,33 @@ func TestPromote_JoinsAnExistingReview(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, created.ID, promoted.ID, "one server, one review, whatever the entry point")
 	require.Equal(t, 2, promoted.RequesterCount)
+}
+
+// A promoted bypass with no note does not erase the justification the same
+// person gave proactively.
+func TestPromote_EmptyBypassNoteKeepsTheEarlierJustification(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	proactive := *ti.authContext
+	proactive.UserID = "blocked-user"
+	proactiveCtx := contextvalues.SetAuthContext(ctx, &proactive)
+	created, err := ti.service.CreateRequest(proactiveCtx, createPayload("server_url", "https://mcp.example.com/sse", "the original why"))
+	require.NoError(t, err)
+
+	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com/sse", "blocked-user", "")
+
+	promoted, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
+	require.NoError(t, err)
+	require.Equal(t, created.ID, promoted.ID)
+	require.Equal(t, 1, promoted.RequesterCount)
+
+	detail, err := ti.service.GetRequest(ctx, getPayload(promoted.ID))
+	require.NoError(t, err)
+	require.Len(t, detail.Requesters, 1)
+	require.NotNil(t, detail.Requesters[0].Note)
+	require.Equal(t, "the original why", *detail.Requesters[0].Note)
 }
 
 func TestPromote_RequiresDecideScope(t *testing.T) {

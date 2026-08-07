@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	mcpapproval "github.com/speakeasy-api/gram/server/gen/mcp_approval"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildListRequestsPayload builds the payload for the mcpApproval listRequests
@@ -114,7 +115,13 @@ func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalC
 	{
 		err = json.Unmarshal([]byte(mcpApprovalCreateRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"note\": \"abc123\",\n      \"target\": \"abc123\",\n      \"target_kind\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"note\": \"abc123\",\n      \"target\": \"abc123\",\n      \"target_kind\": \"stdio_command\"\n   }'")
+		}
+		if !(body.TargetKind == "server_url" || body.TargetKind == "stdio_command") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", body.TargetKind, []any{"server_url", "stdio_command"}))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
