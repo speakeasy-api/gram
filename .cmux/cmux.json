@@ -24,6 +24,14 @@
       "commandName": "New Branch",
       "icon": { "type": "symbol", "name": "arrow.triangle.branch" }
     },
+    "wt-import-worktrees": {
+      "type": "command",
+      "title": "Import Existing Worktrees",
+      "subtitle": "one workspace per git worktree, named by branch",
+      "target": "newTabInCurrentPane",
+      "command": "\"$(git rev-parse --show-toplevel)/.cmux/import-worktrees.sh\"; echo done — close this tab",
+      "icon": { "type": "symbol", "name": "square.stack.3d.up" }
+    },
     "wt-open-branch": {
       "type": "workspaceCommand",
       "title": "Open Branch (worktrunk)",
