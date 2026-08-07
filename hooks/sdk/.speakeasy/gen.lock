@@ -6,9 +6,9 @@ management:
   generationVersion: 2.926.2
   releaseVersion: 0.1.0
 persistentEdits:
-  generation_id: fb6668be-0ab3-4117-a89c-998e2dc5b859
-  pristine_commit_hash: c5e9b362b11fabdd85a1de57b4dbbf78b1fb7cee
-  pristine_tree_hash: 27fc5a1577957aaaadc3a998c87abeb4b288eaa1
+  generation_id: 24194af0-4224-4f48-8d18-b0dd5ff74af0
+  pristine_commit_hash: b4715fcefeb2733ca10c7af186a20f69a01d06be
+  pristine_tree_hash: 5af3c193222af5acdec37bf69b6cc16b4552f551
 features:
   go:
     additionalDependencies: 0.1.0
@@ -39,8 +39,8 @@ trackedFiles:
     pristine_git_object: ecd5befa619aa0a4c56caeb4ec6bdbb16a7157b9
   docs/models/components/hookingestdata.md:
     id: 4608888270c7
-    last_write_checksum: sha1:0f492cfda686ee10aec4e38154503d3df607c02f
-    pristine_git_object: 84c50d44b4caddae80f7d59a584012382c99c600
+    last_write_checksum: sha1:a55e58be1e435227acc36908ff190faf25010d13
+    pristine_git_object: 25ccdb0d32895f109496f87920144a4bcb5e7e63
   docs/models/components/hookingestevent.md:
     id: 9b7dbd5878b0
     last_write_checksum: sha1:8a2ce7d602a1746573667e05ad0a8be48ccef156
@@ -239,8 +239,8 @@ trackedFiles:
     pristine_git_object: ad6f697c0eb7980a4afaf2d85d6794de2d580cb1
   models/components/hookingestdata.go:
     id: 90dcfdc649c4
-    last_write_checksum: sha1:dd4971782fd7506c6485c63611067c760fa53de6
-    pristine_git_object: 6f01a9538a85c031e19f4ceb42ef903a99844921
+    last_write_checksum: sha1:853696c2e0f76ed1fd21f0ff0ce19f0d01451c7f
+    pristine_git_object: 4719cf58e95fbf9e7e60d968258ba8b9b866271b
   models/components/hookingestevent.go:
     id: 1eb70a4d9ec7
     last_write_checksum: sha1:24f9cc8e52e6a291313920d1e9914479fee45f8e

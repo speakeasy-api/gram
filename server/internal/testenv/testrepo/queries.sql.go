@@ -409,6 +409,35 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 	return i, err
 }
 
+const getToolCallBlockLinksFixture = `-- name: GetToolCallBlockLinksFixture :one
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = $1
+`
+
+type GetToolCallBlockLinksFixtureRow struct {
+	ChatID        uuid.NullUUID
+	ChatMessageID uuid.NullUUID
+	RiskResultID  uuid.NullUUID
+	RiskPolicyID  uuid.NullUUID
+}
+
+// Test-only. The block page query deliberately does not expose the optional
+// foreign keys, but asserting that the salvage cleared exactly the link the
+// database rejected — and left the others alone — requires reading them off
+// the row.
+func (q *Queries) GetToolCallBlockLinksFixture(ctx context.Context, id uuid.UUID) (GetToolCallBlockLinksFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallBlockLinksFixture, id)
+	var i GetToolCallBlockLinksFixtureRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.ChatMessageID,
+		&i.RiskResultID,
+		&i.RiskPolicyID,
+	)
+	return i, err
+}
+
 const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
 VALUES ($1, $2, $3, $4)

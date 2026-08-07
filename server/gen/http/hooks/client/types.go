@@ -1760,11 +1760,18 @@ type HookIngestDataRequestBody struct {
 	Mcp      *HookMCPDataRequestBody      `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
 	// Configured MCP server snapshot captured at session start or configuration
 	// change. Transport credentials must be redacted by the sender.
-	McpInventory []*HookMCPDataRequestBody        `form:"mcp_inventory,omitempty" json:"mcp_inventory,omitempty" xml:"mcp_inventory,omitempty"`
-	Usage        *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
-	Message      *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	Skill        *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
-	Notification *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
+	McpInventory []*HookMCPDataRequestBody `form:"mcp_inventory,omitempty" json:"mcp_inventory,omitempty" xml:"mcp_inventory,omitempty"`
+	// Whether the sender was able to read the agent's MCP server list for this
+	// session. True with an empty mcp_inventory means the agent genuinely has no
+	// servers configured; absent or false means the list could not be read (no
+	// agent binary, a failed probe) and the inventory says nothing about what the
+	// session can reach. Enforcement that treats a missing inventory as proof of
+	// absence must consult this first.
+	McpInventoryCollected *bool                            `form:"mcp_inventory_collected,omitempty" json:"mcp_inventory_collected,omitempty" xml:"mcp_inventory_collected,omitempty"`
+	Usage                 *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
+	Message               *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	Skill                 *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
+	Notification          *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
 	McpAttribution []*HookMCPAttributionEntryRequestBody `form:"mcp_attribution,omitempty" json:"mcp_attribution,omitempty" xml:"mcp_attribution,omitempty"`
 	// Transcript-derived prompt attachment content (Claude

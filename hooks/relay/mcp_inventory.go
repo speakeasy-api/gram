@@ -8,8 +8,9 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
-func attachMCPInventory(data *components.HookIngestData, entries []agenthooks.MCPServer) {
+func attachMCPInventory(data *components.HookIngestData, entries []agenthooks.MCPServer, complete bool) {
 	data.McpInventory = make([]components.HookMCPData, 0, len(entries))
+	data.McpInventoryCollected = &complete
 	for _, entry := range entries {
 		redactedURL := ""
 		if entry.URL != "" {

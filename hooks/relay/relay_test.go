@@ -1489,10 +1489,8 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
 }
 
-// TestEnvelopeReportsBinaryVersion: the server reads adapter_version's presence
-// as "this relay can report MCP inventory" and degrades the codex meta-tool
-// shadow-MCP guard without it. Dropping this field would silently disable that
-// enforcement for every user rather than failing visibly.
+// TestEnvelopeReportsBinaryVersion keeps relay version skew diagnosable from
+// ingested events.
 func TestEnvelopeReportsBinaryVersion(t *testing.T) {
 	previous := BinaryVersion
 	t.Cleanup(func() { BinaryVersion = previous })
@@ -1524,10 +1522,13 @@ func TestMCPInventoryEnvelopeRedactsCredentials(t *testing.T) {
 			{Name: "remote", URL: "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", Command: ""},
 			{Name: "local", URL: "", Command: "env GITHUB_TOKEN=secret local-mcp --auth token"},
 		},
+		Complete: true,
 	}, "host")
 
 	require.Equal(t, components.TypeMcpInventory, payload.Event.Type)
 	require.NotNil(t, payload.Data)
+	require.NotNil(t, payload.Data.McpInventoryCollected)
+	require.True(t, *payload.Data.McpInventoryCollected)
 	require.Len(t, payload.Data.McpInventory, 2)
 	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *payload.Data.McpInventory[0].URL)
 	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *payload.Data.McpInventory[1].Command)
@@ -1554,6 +1555,9 @@ func TestRunnerRelaysMCPInventoryBeforeFirstMCPTool(t *testing.T) {
 	require.Equal(t, components.TypeMcpInventory, inventory.Event.Type)
 	require.NotNil(t, inventory.Data)
 	require.Len(t, inventory.Data.McpInventory, 1)
+	require.NotNil(t, inventory.Data.McpInventoryCollected)
+	require.False(t, *inventory.Data.McpInventoryCollected,
+		"the config fallback is ordered but remains incomplete when the CLI probe fails")
 	require.Equal(t, "remote", *inventory.Data.McpInventory[0].ServerName)
 	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=test", *inventory.Data.McpInventory[0].URL)
 
@@ -1564,7 +1568,7 @@ func TestRunnerRelaysMCPInventoryBeforeFirstMCPTool(t *testing.T) {
 	require.Equal(t, "mcp__remote__call", *tool.Data.ToolCall.Name)
 }
 
-func TestRunnerRelaysExplicitEmptyMCPInventory(t *testing.T) {
+func TestRunnerRelaysIncompleteEmptyMCPInventory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
@@ -1583,6 +1587,27 @@ func TestRunnerRelaysExplicitEmptyMCPInventory(t *testing.T) {
 	require.Equal(t, components.TypeMcpInventory, inventory.Event.Type)
 	require.NotNil(t, inventory.Data)
 	require.NotNil(t, inventory.Data.McpInventory)
+	require.NotNil(t, inventory.Data.McpInventoryCollected)
+	require.False(t, *inventory.Data.McpInventoryCollected,
+		"a failed CLI probe must not turn an empty fallback into proof that no servers exist")
 	require.Empty(t, inventory.Data.McpInventory)
 	require.Equal(t, components.TypeSessionStarted, fs.requests[1].Event.Type)
+}
+
+func TestMCPInventoryEnvelopeReportsIncompleteSnapshot(t *testing.T) {
+	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "partial-inventory-session"},
+		},
+		Servers:  []agenthooks.MCPServer{{Name: "known", URL: "https://mcp.example.test"}},
+		Complete: false,
+	}, "host")
+
+	require.NotNil(t, payload.Data)
+	require.Len(t, payload.Data.McpInventory, 1)
+	require.NotNil(t, payload.Data.McpInventoryCollected)
+	require.False(t, *payload.Data.McpInventoryCollected)
 }

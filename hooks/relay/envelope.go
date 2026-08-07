@@ -73,21 +73,22 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	base := agenthooks.EventOf(typed)
 	eventType := canonicalEventType(base)
 	data := &components.HookIngestData{
-		Mcp:               nil,
-		McpAttribution:    nil,
-		McpInventory:      nil,
-		Message:           nil,
-		Notification:      nil,
-		Prompt:            nil,
-		PromptAttachments: nil,
-		Skill:             nil,
-		ToolCall:          nil,
-		Usage:             nil,
+		Mcp:                   nil,
+		McpAttribution:        nil,
+		McpInventory:          nil,
+		McpInventoryCollected: nil,
+		Message:               nil,
+		Notification:          nil,
+		Prompt:                nil,
+		PromptAttachments:     nil,
+		Skill:                 nil,
+		ToolCall:              nil,
+		Usage:                 nil,
 	}
 
 	switch ev := typed.(type) {
 	case *agenthooks.MCPInventoryEvent:
-		attachMCPInventory(data, ev.Servers)
+		attachMCPInventory(data, ev.Servers, ev.Complete)
 	case *agenthooks.PromptEvent:
 		if ev.Prompt != "" {
 			data.Prompt = &components.HookPromptData{Text: new(ev.Prompt)}
@@ -418,6 +419,7 @@ func skillNameOf(input json.RawMessage) string {
 func isEmptyData(d *components.HookIngestData) bool {
 	return d.Prompt == nil && d.ToolCall == nil && d.Mcp == nil && d.Usage == nil &&
 		d.Message == nil && d.Skill == nil && d.Notification == nil &&
+		(d.McpInventoryCollected == nil || !*d.McpInventoryCollected) &&
 		len(d.McpAttribution) == 0 && d.McpInventory == nil &&
 		len(d.PromptAttachments) == 0
 }
