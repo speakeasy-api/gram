@@ -427,9 +427,21 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 
 ### Styling and Design System
 
-- **ALWAYS use the design system** in `@/components/ui` and its token-based utilities instead of hardcoded Tailwind color values. Every component lives in its own directory (`@/components/ui/Button`, `@/components/ui/Table`, …) with an `index.stories.tsx` beside it; add a story whenever you add a component.
-- **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
+The dashboard follows an editorial, print-like design language. The load-bearing rules:
+
+- **Square corners.** The Tailwind radius scale is wiped (`--radius-*: initial` in `App.css`), so `rounded-sm/md/lg/...` generate nothing — never write them. `rounded-full` is reserved for true circles (avatars, status dots, spinners); pills on wide elements are off-style. The login/marketing surfaces keep documented pill styling — do not "fix" them.
+- **Flat.** No `shadow-*` on in-flow surfaces (cards, buttons, inputs, tiles, sticky bars). Shadows are allowed only on floating overlays (menus, dialogs, tooltips, sheets). No gradients, no colored tint washes (`bg-blue-500/10`, `bg-amber-100`, `bg-*-softest` panels) — express semantics with colored text, borders, or a small dot on a neutral surface.
+- **Hairline borders** via the default border token; the content area is a white `bg-card` sheet on the gray page gutter. Beware: `bg-background` is the page-gray token, NOT white — use `bg-card` for white surfaces.
+- **Page pattern**: every page shows an area micro-label + thin serif title. `Page.Section.Title` renders both automatically (`area` prop overrides, `""` suppresses); custom headers render `<PageEyebrow />` from `@/components/page-eyebrow` above an `h1` with `text-display-sm font-thin`. The area derives from the URL via `useNavArea()` — one source shared with the sidebar highlight.
+- **`text-eyebrow`** (mono 11px uppercase tracked muted utility) is THE style for table headers, section overlines, and stat labels. Never hand-roll `text-xs font-medium uppercase tracking-*`.
+- **Stat tiles**: `MetricCard` from `@/components/ui/MetricCard` inside `MetricCard.Group` (one bordered strip, hairline dividers; the Group lays tiles side by side — render one `MetricCard` per stat inside it). `tone` is a required prop (TypeScript errors if omitted — there is no default) — declare a semantic tone (counts → `information`, health → `success`, errors → conditional `destructive`, blocked/stale → conditional `warning`, `neutral` only when nothing applies).
+- **Charts** import colors from `@/components/chart/palette` (exports `SERIES` — ink + muted brand hues, `ACCENT_RED` for risk/error only, `TOOLTIP` — square Chart.js tooltip styling, and `AXIS` tokens). Components resolve the themed ramp with `useSeriesColors()` from `@/components/chart/useSeriesColors`; pure data builders take a `colors` param instead of calling hooks.
+- **Avatars/initials** use `getIdentityTint(label)` from `@/components/gradient-colors` — never random-hue or saturated gradient fills.
+- **Tabs**: segmented `ui/Tabs`/`SegmentedControl` (mono uppercase, solid-ink active) for mode switches; `PageTabsList` + `PageTabsTrigger` (flush underline, no outer box) for page-level tabs. Pairing plain `TabsList` with `PageTabsTrigger` draws a boxed underline hybrid — wrong.
+- **ALWAYS use the design system** in `@/components/ui`; every component lives in its own directory with an `index.stories.tsx` beside it; add a story whenever you add a component.
+- **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, `bg-emerald-*`, etc. — tokens only.
 - `@tailwindcss/typography` must remain in `devDependencies` — the dashboard uses `prose` and `not-prose` classes directly (e.g. `CatalogDetail.tsx`, `tool.tsx`) which are provided by this plugin.
+- Tailwind v4's Vite plugin registers classes from NEW files only at server start — restart the dev server / Storybook after adding a file with arbitrary classes, or they silently emit nothing.
 
 ### Release Stage Badges (Preview / Beta)
 
@@ -437,7 +449,7 @@ Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwis
 
 **Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
 
-**Underlying primitive:** the design system `<Badge>` (`@/components/ui/Badge`). `ReleaseStageBadge` composes it with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+**Underlying primitive:** the design system `<Badge>` (`@/components/ui/Badge`). `ReleaseStageBadge` composes it with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, hairline-bordered, square). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
 
 **Variant → stage mapping** (variant names are hooks, not literal semantics):
 
