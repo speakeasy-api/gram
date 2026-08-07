@@ -1,5 +1,4 @@
 import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
@@ -579,10 +578,6 @@ export default function PluginDetail(): JSX.Element | null {
                 </Stack>
               </div>
 
-              <AgentPluginCompatibilityWarning
-                compatible={plugin.agentPluginsV1Compatible}
-              />
-
               <MetricCardGroup>
                 <MetricCard
                   title="MCP servers"
@@ -1117,7 +1112,7 @@ export function PluginInstallControl({
               disabled={isDownloading}
               onClick={() => onDownload("agent-plugin")}
             >
-              Download Agent Plugin 1.0 ZIP
+              Download Agent Plugins ZIP
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -1139,28 +1134,6 @@ export function PluginInstallControl({
         />
       )}
     </Stack>
-  );
-}
-
-export function AgentPluginCompatibilityWarning({
-  compatible,
-}: {
-  compatible: boolean;
-}): JSX.Element | null {
-  if (compatible) return null;
-
-  return (
-    <Alert variant="warning" dismissible={false}>
-      <div>
-        <AlertTitle>Unavailable in Agent Plugins 1.0.0</AlertTitle>
-        <AlertDescription>
-          At least one included MCP server is private without OAuth, requires
-          user-provided credentials, uses an unsupported transport, or otherwise
-          can't be represented safely. Export is all-or-nothing, so Cursor and
-          Codex continue using the existing package formats for this plugin.
-        </AlertDescription>
-      </div>
-    </Alert>
   );
 }
 

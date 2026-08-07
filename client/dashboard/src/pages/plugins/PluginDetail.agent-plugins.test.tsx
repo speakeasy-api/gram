@@ -1,10 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  AgentPluginCompatibilityWarning,
-  PluginInstallControl,
-} from "./PluginDetail";
+import { PluginInstallControl } from "./PluginDetail";
 import type { PluginPackagePlatform } from "./downloadPluginPackage";
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
@@ -63,11 +60,9 @@ describe("Plugin detail Agent Plugins controls", () => {
     const onDownload = renderControl(true);
 
     const action = screen.getByRole("button", {
-      name: "Download Agent Plugin 1.0 ZIP",
+      name: "Download Agent Plugins ZIP",
     });
-    expect(screen.getAllByText("Download Agent Plugin 1.0 ZIP")).toHaveLength(
-      1,
-    );
+    expect(screen.getAllByText("Download Agent Plugins ZIP")).toHaveLength(1);
     fireEvent.click(action);
     expect(onDownload).toHaveBeenCalledWith("agent-plugin");
   });
@@ -75,7 +70,7 @@ describe("Plugin detail Agent Plugins controls", () => {
   it("omits only the portable action for incompatible plugins", () => {
     renderControl(false);
 
-    expect(screen.queryByText("Download Agent Plugin 1.0 ZIP")).toBeNull();
+    expect(screen.queryByText("Download Agent Plugins ZIP")).toBeNull();
     for (const platform of ["Claude", "Cursor", "Codex"]) {
       const action = screen.getByRole("button", {
         name: `Download as zip — ${platform}`,
@@ -95,19 +90,5 @@ describe("Plugin detail Agent Plugins controls", () => {
     const trigger = screen.getByRole("button", { name: "Downloading..." });
     expect(trigger.getAttribute("aria-busy")).toBe("true");
     expect((trigger as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it("shows the full warning once only when incompatible", () => {
-    const view = render(<AgentPluginCompatibilityWarning compatible={false} />);
-
-    expect(
-      screen.getAllByText("Unavailable in Agent Plugins 1.0.0"),
-    ).toHaveLength(1);
-    expect(screen.getByRole("alert").textContent).toContain(
-      "At least one included MCP server is private without OAuth, requires user-provided credentials, uses an unsupported transport, or otherwise can't be represented safely. Export is all-or-nothing, so Cursor and Codex continue using the existing package formats for this plugin.",
-    );
-
-    view.rerender(<AgentPluginCompatibilityWarning compatible />);
-    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

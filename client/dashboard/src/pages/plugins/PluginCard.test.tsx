@@ -98,7 +98,7 @@ describe("PluginCard Agent Plugins actions", () => {
     renderCard(true);
 
     const action = screen.getByRole("button", {
-      name: "Download Agent Plugin 1.0 ZIP",
+      name: "Download Agent Plugins ZIP",
     });
     fireEvent.click(action);
 
@@ -109,15 +109,14 @@ describe("PluginCard Agent Plugins actions", () => {
         "agent-plugin",
       );
     });
-    expect(screen.getAllByText("Download Agent Plugin 1.0 ZIP")).toHaveLength(
-      1,
-    );
+    expect(screen.getAllByText("Download Agent Plugins ZIP")).toHaveLength(1);
+    expect(screen.getByLabelText("Agent Plugins available")).toBeTruthy();
   });
 
   it("warns when unavailable while retaining native downloads", async () => {
     renderCard(false);
 
-    expect(screen.queryByText("Download Agent Plugin 1.0 ZIP")).toBeNull();
+    expect(screen.queryByText("Download Agent Plugins ZIP")).toBeNull();
     for (const platform of ["Claude", "Cursor", "Codex"]) {
       const action = screen.getByRole("button", {
         name: `Download as zip — ${platform}`,
@@ -130,7 +129,7 @@ describe("PluginCard Agent Plugins actions", () => {
     fireEvent.focus(warning);
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip.textContent).toContain(
-      "Cursor and Codex continue using their existing package formats.",
+      "Cursor and Codex downloads remain available.",
     );
   });
 });
