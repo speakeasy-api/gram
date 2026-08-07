@@ -29,6 +29,7 @@ var All = []outbox.EventRegistration{
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,
 	LiteLLMInstanceV1,
+	McpApprovalRequestV1,
 	McpCollectionV1,
 	McpEndpointV1,
 	McpServerV1,

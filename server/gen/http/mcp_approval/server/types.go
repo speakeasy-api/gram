@@ -69,6 +69,13 @@ type RecordDecisionResponseBody struct {
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
+	// The evidence as it stood when this decision was made. Frozen at decision
+	// time: a later re-gather updates the request's evidence but never this
+	// snapshot, so what the reviewer actually saw stays inspectable.
+	Evidence any `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
+	// Shape version of the frozen evidence payload, copied from the request at
+	// decision time.
+	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
 	// When the decision was made.
 	DecidedAt string `form:"decided_at" json:"decided_at" xml:"decided_at"`
 }
@@ -676,6 +683,13 @@ type ApprovalDecisionResponseBody struct {
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
+	// The evidence as it stood when this decision was made. Frozen at decision
+	// time: a later re-gather updates the request's evidence but never this
+	// snapshot, so what the reviewer actually saw stays inspectable.
+	Evidence any `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
+	// Shape version of the frozen evidence payload, copied from the request at
+	// decision time.
+	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
 	// When the decision was made.
 	DecidedAt string `form:"decided_at" json:"decided_at" xml:"decided_at"`
 }
@@ -743,11 +757,13 @@ func NewGetRequestResponseBody(res *mcpapproval.ApprovalRequestDetail) *GetReque
 // of the "recordDecision" endpoint of the "mcpApproval" service.
 func NewRecordDecisionResponseBody(res *mcpapproval.ApprovalDecision) *RecordDecisionResponseBody {
 	body := &RecordDecisionResponseBody{
-		ID:        res.ID,
-		Decision:  res.Decision,
-		DecidedBy: res.DecidedBy,
-		Rationale: res.Rationale,
-		DecidedAt: res.DecidedAt,
+		ID:              res.ID,
+		Decision:        res.Decision,
+		DecidedBy:       res.DecidedBy,
+		Rationale:       res.Rationale,
+		Evidence:        res.Evidence,
+		EvidenceVersion: res.EvidenceVersion,
+		DecidedAt:       res.DecidedAt,
 	}
 	if res.GrantedPrincipalUrns != nil {
 		body.GrantedPrincipalUrns = make([]string, len(res.GrantedPrincipalUrns))

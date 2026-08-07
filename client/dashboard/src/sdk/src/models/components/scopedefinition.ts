@@ -25,6 +25,8 @@ export const ExclusionScope = {
   SkillBlockedRead: "skill:blocked_read",
   SkillBlockedWrite: "skill:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
+  McpApprovalBlockedRead: "mcp_approval:blocked_read",
+  McpApprovalBlockedDecide: "mcp_approval:blocked_decide",
 } as const;
 /**
  * The scope used to store exception rules for this scope.
@@ -42,6 +44,7 @@ export const ResourceType = {
   Skill: "skill",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  McpApproval: "mcp_approval",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -78,6 +81,10 @@ export const Slug = {
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
+  McpApprovalRead: "mcp_approval:read",
+  McpApprovalBlockedRead: "mcp_approval:blocked_read",
+  McpApprovalDecide: "mcp_approval:decide",
+  McpApprovalBlockedDecide: "mcp_approval:blocked_decide",
 } as const;
 /**
  * Unique scope identifier.

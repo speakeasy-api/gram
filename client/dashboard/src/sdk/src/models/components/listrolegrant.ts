@@ -40,6 +40,10 @@ export const ListRoleGrantScope = {
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
+  McpApprovalRead: "mcp_approval:read",
+  McpApprovalBlockedRead: "mcp_approval:blocked_read",
+  McpApprovalDecide: "mcp_approval:decide",
+  McpApprovalBlockedDecide: "mcp_approval:blocked_decide",
 } as const;
 /**
  * The scope slug this grant applies to.
@@ -73,6 +77,10 @@ export const SubScopes = {
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
+  McpApprovalRead: "mcp_approval:read",
+  McpApprovalBlockedRead: "mcp_approval:blocked_read",
+  McpApprovalDecide: "mcp_approval:decide",
+  McpApprovalBlockedDecide: "mcp_approval:blocked_decide",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 
