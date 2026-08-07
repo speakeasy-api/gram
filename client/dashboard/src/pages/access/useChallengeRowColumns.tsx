@@ -1,10 +1,10 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/contexts/Auth";
@@ -13,7 +13,7 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { Column } from "@speakeasy-api/moonshine";
+import { Column } from "@/components/ui/Table";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
@@ -124,7 +124,7 @@ export function useChallengeRowColumns(
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Type
+                <Text
                   variant="body"
                   className={cn(
                     "min-w-0 truncate text-sm font-medium",
@@ -132,7 +132,7 @@ export function useChallengeRowColumns(
                   )}
                 >
                   {display}
-                </Type>
+                </Text>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (
                 <TooltipContent side="bottom">
@@ -167,7 +167,7 @@ export function useChallengeRowColumns(
             <TooltipTrigger asChild>
               <code
                 className={cn(
-                  "bg-muted min-w-0 truncate rounded px-1.5 py-0.5 font-mono text-xs",
+                  "bg-muted min-w-0 truncate px-1.5 py-0.5 font-mono text-xs",
                   rowFade(row),
                 )}
               >
@@ -207,9 +207,9 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (!row.resolvedBy) {
             return (
-              <Type variant="body" className="text-muted-foreground/40 text-sm">
+              <Text variant="body" className="text-muted-foreground/40 text-sm">
                 —
-              </Type>
+              </Text>
             );
           }
           const userId = row.resolvedBy.replace(/^user:/, "");
@@ -242,12 +242,12 @@ export function useChallengeRowColumns(
             <div className={cn("flex items-center gap-1.5", rowFade(row))}>
               <Tooltip delayDuration={500}>
                 <TooltipTrigger asChild>
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground cursor-default text-sm whitespace-nowrap underline decoration-dotted underline-offset-4"
                   >
                     <HumanizeDateTime date={row.lastSeen} />
-                  </Type>
+                  </Text>
                 </TooltipTrigger>
                 <TooltipContent>{row.lastSeen.toLocaleString()}</TooltipContent>
               </Tooltip>

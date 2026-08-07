@@ -162,60 +162,6 @@ func TestApplyMCPInventoryAttrs(t *testing.T) {
 	})
 }
 
-func TestIsGramHostedMCPURL(t *testing.T) {
-	t.Parallel()
-
-	t.Run("canonical host only", func(t *testing.T) {
-		t.Parallel()
-		cases := []struct {
-			url  string
-			want bool
-		}{
-			{"https://app.getgram.ai/mcp/team-foo", true},
-			{"https://APP.GETGRAM.AI/mcp/team-foo", true}, // case-insensitive
-			{"http://app.getgram.ai/mcp/team-foo", true},  // http allowed (rare but valid)
-			{"https://chat.speakeasy.com/mcp/linear", true},
-			{"https://CHAT.SPEAKEASY.COM/mcp/linear", true},
-			{"https://evil.getgram.ai/mcp/x", false}, // subdomain squat must NOT pass
-			{"https://mcp.slack.com/mcp", false},
-			{"http://localhost:8080/mcp/x", false},
-			{"", false},
-			{"not a url at all", false},
-		}
-		for _, tc := range cases {
-			t.Run(tc.url, func(t *testing.T) {
-				t.Parallel()
-				assert.Equal(t, tc.want, isGramHostedMCPURL(tc.url))
-			})
-		}
-	})
-
-	t.Run("with additional trusted hosts", func(t *testing.T) {
-		t.Parallel()
-		cases := []struct {
-			url         string
-			extraHosts  []string
-			want        bool
-			description string
-		}{
-			{"https://docs.example.com/mcp/linear", []string{"docs.example.com"}, true, "custom domain matches"},
-			{"https://DOCS.EXAMPLE.COM/mcp/linear", []string{"docs.example.com"}, true, "custom domain case-insensitive"},
-			{"https://localhost:8080/mcp/local-org", []string{"localhost:8080"}, true, "configured local Gram server host and port matches"},
-			{"https://localhost:35294/mcp/local-shadow", []string{"localhost:8080"}, false, "different local dev port stays external"},
-			{"https://app.getgram.ai/mcp/x", []string{"chat.speakeasy.com"}, true, "canonical still works with extra hosts"},
-			{"https://other.example.com/mcp/x", []string{"chat.speakeasy.com"}, false, "unknown host rejected"},
-			{"https://mcp.slack.com/mcp", []string{"chat.speakeasy.com"}, false, "third party rejected"},
-			{"", []string{"chat.speakeasy.com"}, false, "empty URL"},
-		}
-		for _, tc := range cases {
-			t.Run(tc.description, func(t *testing.T) {
-				t.Parallel()
-				assert.Equal(t, tc.want, isGramHostedMCPURL(tc.url, tc.extraHosts...))
-			})
-		}
-	})
-}
-
 func TestParseClaudeToolName(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

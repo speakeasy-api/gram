@@ -8,9 +8,14 @@ import (
 
 // InjectToolsetIDConstant injects a required [XGramToolsetIDField] string
 // property into a tool's input JSON Schema, fixed via "const" to the given
-// scopeID. Tool callers must echo the value back so downstream
-// validators can recover which Gram-managed scope (a toolset for `/mcp`
-// servers, a remote MCP server for `/x/mcp`) authored the call.
+// scopeID. Tool callers must echo the value back so downstream validators
+// can recover which Gram toolset authored the call.
+//
+// Only the toolset-backed `/mcp` path injects today. The remote MCP proxy
+// (`/x/mcp`, plus `/mcp` remote-backed and tunneled servers) stopped
+// injecting and stopped validating the echo in DNO-603, because models
+// routinely failed to echo the value and the proxy already knew which
+// server it had routed to.
 //
 // The schema is mutated as a structural map operation: the function
 // unmarshals the schema into [map[string]any], adds the property to
@@ -71,6 +76,11 @@ func InjectToolsetIDConstant(schema json.RawMessage, scopeID string) (json.RawMe
 // input schema and echoed back by the caller; strip it before forwarding
 // the arguments to the underlying tool so the tool sees its declared
 // shape, not the proxy's envelope.
+//
+// Callers on hot paths should note that a JSON object is unmarshaled in
+// full before the property lookup happens, so the cost scales with the
+// payload rather than with whether the property is present. Byte-scan for
+// [XGramToolsetIDField] first when most calls are expected to miss.
 func StripToolsetIDProperty(args json.RawMessage) (json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(args)
 	if len(trimmed) == 0 || trimmed[0] != '{' {

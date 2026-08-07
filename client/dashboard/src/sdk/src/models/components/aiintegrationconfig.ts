@@ -39,7 +39,7 @@ export type AIIntegrationConfig = {
    */
   enabled: boolean;
   /**
-   * Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
+   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.
    */
   externalOrganizationId?: string | undefined;
   /**
@@ -79,7 +79,7 @@ export type AIIntegrationConfig = {
    */
   projectId?: string | undefined;
   /**
-   * AI provider identifier. Supported values include cursor and anthropic_compliance.
+   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
    */
   provider: string;
   /**

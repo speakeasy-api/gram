@@ -126,7 +126,18 @@ func insertStoredSession(t *testing.T, ctx context.Context, chConn clickhouse.Co
 	t.Helper()
 
 	err := chConn.Exec(ctx, `
-		INSERT INTO attribute_metrics_summaries
+		INSERT INTO attribute_metrics_summaries (
+			gram_project_id, time_bucket,
+			department_name, job_title, employee_type, division_name, cost_center_name,
+			user_email, model, hook_source, roles, groups,
+			total_chats, total_input_tokens, total_output_tokens, total_tokens,
+			cache_read_input_tokens, cache_creation_input_tokens, total_cost,
+			total_tool_calls, unique_tool_calls,
+			account_type, provider, billing_mode,
+			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
+		)
 		SELECT
 			toUUID(?) AS gram_project_id,
 			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
@@ -146,7 +157,11 @@ func insertStoredSession(t *testing.T, ctx context.Context, chConn clickhouse.Co
 			'' AS account_type, '' AS provider, '' AS billing_mode,
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
-			toUInt8(0) AS generation, toUInt8(1) AS is_active
+			toUInt8(0) AS generation, toUInt8(1) AS is_active,
+			'' AS hook_hostname,
+			sumIfState(toFloat64(0), toUInt8(0)) AS total_work_units,
+			sumIfState(toFloat64(0), toUInt8(0)) AS scored_cost,
+			sumIfState(toInt64(0), toUInt8(0)) AS scored_tokens
 	`, projectID, timestamp.UnixNano(), totalTokens, totalTokens)
 	require.NoError(t, err)
 }

@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
       .fn()
       .mockResolvedValue({ slug: "env-new", name: "Toolset OAuth" }),
     deleteEnvironment: vi.fn().mockResolvedValue(undefined),
+    discoverIssuer: vi.fn(),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
@@ -85,7 +86,11 @@ vi.mock("@/contexts/Fetcher", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({}),
+  useSdkClient: () => ({
+    remoteSessionIssuers: {
+      fetchMetadata: mocks.discoverIssuer,
+    },
+  }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
@@ -113,24 +118,6 @@ vi.mock("@/components/FeatureRequestModal", () => ({
 
 // moonshine bundles dynamic icon imports that don't resolve in vitest. Stub
 // it down to plain HTML matching the existing test pattern.
-vi.mock("@speakeasy-api/moonshine", () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) => (
-    <button onClick={onClick} disabled={disabled}>
-      {children}
-    </button>
-  ),
-  Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-}));
-
 // ---------------------------------------------------------------------------
 // Now import the component (after mocks are registered).
 // ---------------------------------------------------------------------------
@@ -195,6 +182,16 @@ beforeEach(() => {
   for (const fn of Object.values(mocks)) {
     if (typeof fn === "function" && "mockClear" in fn) fn.mockClear();
   }
+  mocks.discoverIssuer.mockResolvedValue({
+    issuer: "https://auth.example.com",
+    authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+    tokenEndpoint: "https://auth.example.com/oauth/token",
+    registrationEndpoint: "https://auth.example.com/oauth/register",
+    clientIdMetadataDocumentSupported: false,
+    discoveryWarnings: [],
+    oidc: false,
+    passthrough: true,
+  });
   mocks.isFeatureEnabled.mockReturnValue(false);
 });
 
@@ -213,6 +210,274 @@ describe("OAuthWizard — rendering", () => {
     expect(screen.getByText("Connect OAuth")).toBeTruthy();
     expect(screen.getByRole("button", { name: /OAuth Proxy/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /External OAuth/ })).toBeTruthy();
+  });
+
+  it("can open directly on the external OAuth management form", () => {
+    renderWizard({ initialPath: "external" });
+
+    expect(screen.getAllByText("Configure External OAuth")).toHaveLength(2);
+    expect(
+      screen.getByPlaceholderText("https://login.example.com"),
+    ).toBeTruthy();
+    expect(screen.getByPlaceholderText("my-oauth-server")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /OAuth Proxy/ })).toBeNull();
+  });
+
+  it("cancels direct entry instead of navigating to the OAuth chooser", () => {
+    const onClose = vi.fn();
+    renderWizard({
+      initialPath: "external",
+      onClose: () => void onClose(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /OAuth Proxy/ })).toBeNull();
+  });
+
+  it("keeps Back navigation for the chooser entry", () => {
+    renderWizard();
+
+    fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(screen.getByRole("button", { name: /OAuth Proxy/ })).toBeTruthy();
+  });
+
+  it("auto-fetches metadata and verifies it before enabling save", async () => {
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("my-oauth-server"), {
+      target: { value: "example-oauth" },
+    });
+
+    await waitFor(() => {
+      expect(mocks.discoverIssuer).toHaveBeenCalledWith({
+        fetchIssuerMetadataRequestBody: {
+          issuer: "https://auth.example.com",
+        },
+      });
+    });
+
+    const testButton = screen.getByRole("button", {
+      name: "Test Configuration",
+    });
+    expect((testButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(testButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Issuer discovery succeeded/)).toBeTruthy();
+    });
+
+    const saveButton = screen.getByRole("button", {
+      name: "Configure External OAuth",
+    });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    expect(
+      (
+        screen.getByLabelText(
+          "OAuth Authorization Server Metadata",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toContain('"registration_endpoint"');
+  });
+
+  it("shows missing DCR metadata inline and allows an advanced override", async () => {
+    mocks.discoverIssuer.mockResolvedValueOnce({
+      issuer: "http://localhost:4000",
+      authorizationEndpoint: "http://localhost:4000/authorize",
+      tokenEndpoint: "http://localhost:4000/token",
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: true,
+      passthrough: true,
+    });
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "http://localhost:4000" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("my-oauth-server"), {
+      target: { value: "local-oauth" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/registration_endpoint/)).toBeTruthy();
+    });
+
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    const metadata = JSON.parse(metadataInput.value) as Record<string, unknown>;
+    metadata.registration_endpoint = "http://localhost:4000/register";
+    fireEvent.change(metadataInput, {
+      target: { value: JSON.stringify(metadata) },
+    });
+
+    const saveButton = screen.getByRole("button", {
+      name: "Configure External OAuth",
+    });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not overwrite manual metadata when auto-discovery finishes late", async () => {
+    let resolveDiscovery:
+      | ((value: Awaited<ReturnType<typeof mocks.discoverIssuer>>) => void)
+      | undefined;
+    mocks.discoverIssuer.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDiscovery = resolve;
+      }),
+    );
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+    await waitFor(() => {
+      expect(mocks.discoverIssuer).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    const manualMetadata = JSON.stringify({
+      issuer: "https://auth.example.com",
+      authorization_endpoint: "https://manual.example.com/authorize",
+      token_endpoint: "https://manual.example.com/token",
+      registration_endpoint: "https://manual.example.com/register",
+    });
+    fireEvent.change(metadataInput, {
+      target: { value: manualMetadata },
+    });
+
+    resolveDiscovery?.({
+      issuer: "https://auth.example.com",
+      authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+      tokenEndpoint: "https://auth.example.com/oauth/token",
+      registrationEndpoint: "https://auth.example.com/oauth/register",
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: false,
+      passthrough: true,
+    });
+
+    await waitFor(() => {
+      expect(metadataInput.value).toBe(manualMetadata);
+    });
+  });
+
+  it("does not overwrite manual metadata entered during the auto-discovery debounce", async () => {
+    let resolveDiscovery:
+      | ((value: Awaited<ReturnType<typeof mocks.discoverIssuer>>) => void)
+      | undefined;
+    mocks.discoverIssuer.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDiscovery = resolve;
+      }),
+    );
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    const manualMetadata = JSON.stringify({
+      issuer: "https://auth.example.com",
+      authorization_endpoint: "https://manual.example.com/authorize",
+      token_endpoint: "https://manual.example.com/token",
+      registration_endpoint: "https://manual.example.com/register",
+    });
+    fireEvent.change(metadataInput, {
+      target: { value: manualMetadata },
+    });
+
+    await waitFor(() => {
+      expect(mocks.discoverIssuer).toHaveBeenCalledTimes(1);
+    });
+    resolveDiscovery?.({
+      issuer: "https://auth.example.com",
+      authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+      tokenEndpoint: "https://auth.example.com/oauth/token",
+      registrationEndpoint: "https://auth.example.com/oauth/register",
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: false,
+      passthrough: true,
+    });
+
+    await waitFor(() => {
+      expect(metadataInput.value).toBe(manualMetadata);
+    });
+  });
+
+  it("applies automatic metadata after switching away from a manually overridden issuer", async () => {
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://first.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(metadataInput, {
+      target: {
+        value: JSON.stringify({
+          issuer: "https://first.example.com",
+          authorization_endpoint: "https://manual.example.com/authorize",
+          token_endpoint: "https://manual.example.com/token",
+          registration_endpoint: "https://manual.example.com/register",
+        }),
+      },
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/OAuth metadata fetched automatically/),
+      ).toBeTruthy();
+    });
+    expect(metadataInput.value).toContain(
+      '"authorization_endpoint": "https://auth.example.com/oauth/authorize"',
+    );
+    expect(metadataInput.value).not.toContain("manual.example.com");
+  });
+
+  it("offers an explicit retry after automatic discovery fails", async () => {
+    mocks.discoverIssuer.mockRejectedValueOnce(new Error("Temporary failure"));
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Temporary failure")).toBeTruthy();
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry Metadata Fetch" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/OAuth metadata fetched automatically/),
+      ).toBeTruthy();
+    });
+    expect(mocks.discoverIssuer).toHaveBeenCalledTimes(2);
   });
 
   it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {

@@ -2,28 +2,34 @@
 //MISE description="Run provider hook E2E checks against a local Gram server"
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
-//USAGE flag "--providers <list>" default="claude,cursor,codex" help="Comma-separated providers to drive: claude,cursor,codex."
+//USAGE flag "--providers <list>" default="claude,cursor,codex,opencode" help="Comma-separated providers to drive: claude,cursor,codex,opencode."
 //USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
 //USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
 //USAGE flag "--skip-build" help="Skip building plugins; use dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
+
+// @ts-nocheck This script is plain untyped JS; the root tsconfig has checkJs
+// enabled for the rest of .mise-tasks. Remove once it is properly annotated.
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
 import { keysCreate } from "#gram/client/funcs/keysCreate.js";
-const VALID_PROVIDERS = new Set(["claude", "cursor", "codex"]);
+const VALID_PROVIDERS = new Set(["claude", "cursor", "codex", "opencode"]);
 const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
 const SOURCE_ALIASES = {
   claude: ["claude", "claude-code"],
   cursor: ["cursor"],
   codex: ["codex"],
+  opencode: ["opencode"],
 };
 function parseArgs(argv) {
   const args = {};
@@ -46,7 +52,7 @@ function parseArgs(argv) {
     args[key] = next;
     i++;
   }
-  const providers = String(args.providers ?? "claude,cursor,codex")
+  const providers = String(args.providers ?? "claude,cursor,codex,opencode")
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
@@ -56,7 +62,9 @@ function parseArgs(argv) {
     .filter(Boolean);
   for (const p of providers) {
     if (!VALID_PROVIDERS.has(p)) {
-      throw new Error(`Unsupported provider "${p}". Use claude,cursor,codex.`);
+      throw new Error(
+        `Unsupported provider "${p}". Use claude,cursor,codex,opencode.`,
+      );
     }
   }
   for (const s of suites) {
@@ -196,7 +204,7 @@ async function provisionHooksAuth(serverURL, session, projectSlug, rootDir) {
     ].join("\n"),
     { mode: 0o600 },
   );
-  return authFile;
+  return { authFile, key: keyRes.value.key };
 }
 function psqlArgs(sql) {
   const databaseURL = process.env.GRAM_DATABASE_URL;
@@ -214,6 +222,130 @@ function psqlArgs(sql) {
     sql,
   ];
 }
+// The codex binary is not reliably on PATH. OpenAI merged the standalone Codex
+// app into the ChatGPT app, and a machine can carry only that, or only an
+// editor extension's bundled copy — spawning bare "codex" fails there with
+// ENOENT before any scenario runs. Mirrors the probe order the relay uses
+// (hooks/relay/identity.go): a real CLI install wins, then the maintained app
+// bundle, then editor extensions newest-first, then the frozen Codex.app.
+let cachedCodexBinary = null;
+async function resolveCodexBinary() {
+  if (cachedCodexBinary) return cachedCodexBinary;
+
+  const onPath = await codexOnPath();
+  if (onPath) {
+    cachedCodexBinary = onPath;
+    return cachedCodexBinary;
+  }
+
+  const home = os.homedir();
+  const codexHome = process.env.CODEX_HOME || path.join(home, ".codex");
+  const candidates = [
+    path.join(codexHome, "packages", "standalone", "current", "bin", "codex"),
+    path.join(home, ".local", "bin", "codex"),
+    "/usr/local/bin/codex",
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    ...(await editorExtensionCodexBinaries(home)),
+    "/Applications/Codex.app/Contents/Resources/codex",
+  ];
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      cachedCodexBinary = candidate;
+      return cachedCodexBinary;
+    } catch {
+      // try the next location
+    }
+  }
+  throw new Error(
+    "codex binary not found. Looked on PATH and in the managed install, " +
+      "the unified ChatGPT app, the ChatGPT editor extensions, and Codex.app.",
+  );
+}
+
+// PATH is walked here rather than shelled out to. The harness spawns codex
+// with its own environment, so the probe has to resolve against that same
+// PATH — a login shell reads a different profile and would miss a binary the
+// harness can actually spawn, silently falling through to another candidate.
+// Walking it also puts the PATH hit through the same X_OK check every other
+// candidate gets, so a non-executable or shell-only "codex" cannot be cached
+// as the spawn command.
+async function codexOnPath() {
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    // An empty entry means the working directory; a relative codex is not
+    // something the harness should drive.
+    if (!path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, "codex");
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // try the next PATH entry
+    }
+  }
+  return null;
+}
+
+// Both path segments carry versions, so they are globbed. Sorted newest-first
+// by parsed version: an editor leaves the superseded build on disk across an
+// upgrade, and driving a stale codex would test the wrong binary.
+async function editorExtensionCodexBinaries(home) {
+  const found = [];
+  for (const editor of [
+    ".vscode",
+    ".vscode-insiders",
+    ".vscode-server",
+    ".cursor",
+    ".windsurf",
+  ]) {
+    const root = path.join(home, editor, "extensions");
+    let entries;
+    try {
+      entries = await fs.readdir(root);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.startsWith("openai.chatgpt-")) continue;
+      const binRoot = path.join(root, entry, "bin");
+      let triples;
+      try {
+        triples = await fs.readdir(binRoot);
+      } catch {
+        continue;
+      }
+      for (const triple of triples) {
+        found.push({
+          version: parseExtensionVersion(entry),
+          binary: path.join(binRoot, triple, "codex"),
+        });
+      }
+    }
+  }
+  found.sort((a, b) => compareExtensionVersions(a.version, b.version));
+  return found.map((f) => f.binary);
+}
+
+function parseExtensionVersion(dirName) {
+  const rest = dirName.slice("openai.chatgpt-".length);
+  const version = rest.split("-")[0];
+  const parts = version.split(".").map((n) => Number.parseInt(n, 10));
+  return parts.some(Number.isNaN) ? null : parts;
+}
+
+// Newest first; an unparseable version sorts last but is never dropped.
+function compareExtensionVersions(a, b) {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const left = a[i] ?? 0;
+    const right = b[i] ?? 0;
+    if (left !== right) return right - left;
+  }
+  return 0;
+}
+
 async function runProcess(command, args, opts = {}) {
   return await new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -279,19 +411,80 @@ async function runProcess(command, args, opts = {}) {
     child.stdin.end();
   });
 }
-// session_capture gates hook ingest; logs gates telemetry_logs writes — the
-// evidence checks read both, so provision both.
-async function enableSessionCapture(organizationId) {
+// session_capture gates hook ingest; logs gates telemetry_logs writes; skills
+// enables content capture. Keep metadata-only disabled so the E2E exercises
+// the upload path.
+async function setProductFeature(serverURL, sessionId, featureName, enabled) {
+  const res = await fetchOrFail(
+    `${serverURL}/rpc/productFeatures.set`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Gram-Session": sessionId,
+      },
+      body: JSON.stringify({ feature_name: featureName, enabled }),
+    },
+    `set ${featureName}=${enabled}`,
+  );
+  if (!res.ok) {
+    fail(
+      `failed to set ${featureName}=${enabled}: ${res.status} ${await res.text()}`,
+    );
+  }
+}
+async function enableSessionCapture(serverURL, session) {
   const sql = `
-    INSERT INTO organization_features (organization_id, feature_name)
-    VALUES
-      ('${sqlString(organizationId)}', 'session_capture'),
-      ('${sqlString(organizationId)}', 'logs')
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+    SELECT feature_name
+    FROM organization_features
+    WHERE organization_id = '${sqlString(session.organizationId)}'
+      AND feature_name IN ('session_capture', 'logs', 'skills', 'skill_capture_metadata_only')
+      AND deleted IS FALSE
+    ORDER BY feature_name;
   `;
   const res = await runProcess("psql", psqlArgs(sql));
   if (res.exitCode !== 0) {
     fail(`failed to enable session_capture:\n${res.stderr || res.stdout}`);
+  }
+  const previous = res.stdout.trim().split("\n").filter(Boolean);
+  try {
+    await setProductFeature(
+      serverURL,
+      session.sessionId,
+      "skill_capture_metadata_only",
+      false,
+    );
+    for (const feature of ["session_capture", "logs", "skills"]) {
+      await setProductFeature(serverURL, session.sessionId, feature, true);
+    }
+  } catch (err) {
+    await restoreSessionCapture(serverURL, session, previous);
+    throw err;
+  }
+  return previous;
+}
+async function restoreSessionCapture(serverURL, session, previousFeatures) {
+  const previous = new Set(previousFeatures);
+  const errors = [];
+  for (const feature of [
+    "session_capture",
+    "logs",
+    "skills",
+    "skill_capture_metadata_only",
+  ]) {
+    try {
+      await setProductFeature(
+        serverURL,
+        session.sessionId,
+        feature,
+        previous.has(feature),
+      );
+    } catch (err) {
+      errors.push(err);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(errors, "failed to restore capture features");
   }
 }
 function sqlString(value) {
@@ -394,8 +587,8 @@ async function writeIsolatedCodexConfig(home) {
   await fs.writeFile(
     configPath,
     [
-      'model = "gpt-5.5"',
-      'model_reasoning_effort = "high"',
+      'model = "gpt-5.4-mini"',
+      'model_reasoning_effort = "low"',
       "",
       "[features]",
       "hooks = true",
@@ -405,6 +598,55 @@ async function writeIsolatedCodexConfig(home) {
       "",
     ].join("\n"),
   );
+}
+// prepareOpenCodeEnv isolates the OpenCode config surface: a fresh
+// XDG_CONFIG_HOME keeps global plugins out of the run, while model provider
+// auth (XDG_DATA_HOME) stays available.
+async function prepareOpenCodeEnv(rootDir, pluginDir) {
+  const configHome = path.join(rootDir, "opencode-config");
+  await fs.mkdir(configHome, { recursive: true });
+  const shim = path.join(pluginDir, ".opencode", "plugin", "agenthooks.ts");
+  const configPath = path.join(configHome, "opencode.json");
+  await fs.writeFile(
+    configPath,
+    JSON.stringify(
+      {
+        $schema: "https://opencode.ai/config.json",
+        model: "baseten/zai-org/GLM-5.2-Fast",
+        // Baseten's Model APIs are OpenAI-compatible; the key is read from
+        // BASETEN_API_KEY in the run environment (runProcess forwards it).
+        provider: {
+          baseten: {
+            npm: "@ai-sdk/openai-compatible",
+            name: "Baseten",
+            options: {
+              baseURL: "https://inference.baseten.co/v1",
+              apiKey: "{env:BASETEN_API_KEY}",
+            },
+            models: {
+              "zai-org/GLM-5.2-Fast": { name: "GLM-5.2-Fast (Baseten)" },
+            },
+          },
+        },
+        plugin: [pathToFileURL(shim).href],
+        // Headless runs auto-reject permission prompts; the temp workspace
+        // counts as an external directory. The bypass-permissions analogue
+        // of the other providers' trust flags.
+        permission: {
+          edit: "allow",
+          bash: "allow",
+          webfetch: "allow",
+          external_directory: "allow",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  return {
+    XDG_CONFIG_HOME: configHome,
+    OPENCODE_CONFIG: configPath,
+  };
 }
 async function prepareShadowMCPFixture(rootDir, runId) {
   const fixtureDir = path.join(rootDir, "shadow-mcp");
@@ -490,7 +732,7 @@ function handle(message) {
       jsonrpc: "2.0",
       id: message.id,
       result: {
-        content: [{ type: "text", text: \`GRAM_HOOKS_E2E_MCP_TOOL_OK \${marker}\` }]
+        content: [{ type: "text", text: \`GRAM_HOOKS_E2E_MCP_TOOL_OK stdio \${marker}\` }]
       }
     });
     return;
@@ -590,7 +832,10 @@ async function startHostedMCPHTTPFixture(runId) {
           id: msg.id,
           result: {
             content: [
-              { type: "text", text: `GRAM_HOOKS_E2E_MCP_TOOL_OK ${marker}` },
+              {
+                type: "text",
+                text: `GRAM_HOOKS_E2E_MCP_TOOL_OK hosted ${marker}`,
+              },
             ],
             isError: false,
           },
@@ -654,6 +899,122 @@ async function rpcJSON(args) {
   }
   return await res.json();
 }
+// mintHostedMCPBearerToken performs the OAuth 2.1 dance every remote-backed
+// MCP endpoint requires: dynamic client registration, authorize (public
+// endpoints stamp an anonymous subject, no IDP hop), consent approval, and
+// the PKCE token exchange.
+async function mintHostedMCPBearerToken(serverURL, endpointSlug) {
+  const redirectURI = "http://127.0.0.1/gram-hooks-e2e-callback";
+  const registerRes = await fetchOrFail(
+    `${serverURL}/mcp/${endpointSlug}/register`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "gram-hooks-e2e",
+        redirect_uris: [redirectURI],
+        grant_types: ["authorization_code"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      }),
+    },
+    "register hosted MCP OAuth client",
+  );
+  if (registerRes.status !== 201) {
+    fail(
+      `hosted MCP client registration failed: ${registerRes.status} ${await registerRes.text()}`,
+    );
+  }
+  const clientID = (await registerRes.json()).client_id;
+  const verifier = crypto.randomBytes(32).toString("base64url");
+  const challenge = crypto
+    .createHash("sha256")
+    .update(verifier)
+    .digest("base64url");
+  const authorizeURL = new URL(`${serverURL}/mcp/${endpointSlug}/authorize`);
+  authorizeURL.searchParams.set("response_type", "code");
+  authorizeURL.searchParams.set("client_id", clientID);
+  authorizeURL.searchParams.set("redirect_uri", redirectURI);
+  authorizeURL.searchParams.set(
+    "state",
+    crypto.randomBytes(16).toString("hex"),
+  );
+  authorizeURL.searchParams.set("code_challenge", challenge);
+  authorizeURL.searchParams.set("code_challenge_method", "S256");
+  const authorizeRes = await fetchOrFail(
+    authorizeURL,
+    { redirect: "manual" },
+    "authorize hosted MCP OAuth client",
+  );
+  const consentLocation = authorizeRes.headers.get("location");
+  if (!consentLocation) {
+    fail(
+      `hosted MCP authorize did not redirect to consent: ${authorizeRes.status} ${await authorizeRes.text()}`,
+    );
+  }
+  const consentURL = new URL(consentLocation, serverURL);
+  const consentRes = await fetchOrFail(
+    consentURL,
+    {},
+    "load hosted MCP consent page",
+  );
+  const consentHTML = await consentRes.text();
+  const csrfToken = consentHTML.match(/name="csrf_token" value="([^"]+)"/)?.[1];
+  const challengeID = consentURL.searchParams.get("state");
+  if (!consentRes.ok || !csrfToken || !challengeID) {
+    fail(
+      `hosted MCP consent page did not yield a CSRF token (status=${consentRes.status})`,
+    );
+  }
+  const consentPost = await fetchOrFail(
+    `${serverURL}/mcp/${endpointSlug}/connect`,
+    {
+      method: "POST",
+      redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        state: challengeID,
+        csrf_token: csrfToken,
+        action: "approve",
+      }),
+    },
+    "approve hosted MCP consent",
+  );
+  const callbackLocation = consentPost.headers.get("location");
+  const code =
+    callbackLocation &&
+    new URL(callbackLocation, serverURL).searchParams.get("code");
+  if (!code) {
+    fail(
+      `hosted MCP consent approval did not return an authorization code (status=${consentPost.status}, location=${callbackLocation ?? "(none)"})`,
+    );
+  }
+  const tokenRes = await fetchOrFail(
+    `${serverURL}/mcp/${endpointSlug}/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectURI,
+        client_id: clientID,
+        code_verifier: verifier,
+      }),
+    },
+    "exchange hosted MCP authorization code",
+  );
+  if (!tokenRes.ok) {
+    fail(
+      `hosted MCP token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`,
+    );
+  }
+  const token = await tokenRes.json();
+  if (!token.access_token) {
+    fail("hosted MCP token response is missing access_token");
+  }
+  return token.access_token;
+}
 async function createHostedMCPFixture(args) {
   const endpointSuffix = `${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
   const endpointSlug =
@@ -697,12 +1058,17 @@ async function createHostedMCPFixture(args) {
     },
     label: "create hosted MCP endpoint",
   });
+  const bearerToken = await mintHostedMCPBearerToken(
+    args.serverURL,
+    endpoint.slug,
+  );
   return {
     remoteId: remote.id,
     mcpServerId: mcpServer.id,
     endpointId: endpoint.id,
     endpointSlug: endpoint.slug,
     url: `${args.serverURL}/mcp/${endpoint.slug}`,
+    bearerToken,
   };
 }
 async function deleteHostedMCPFixture(args) {
@@ -745,6 +1111,7 @@ async function deleteHostedMCPFixture(args) {
   }
 }
 async function prepareShadowMCPProviderConfig(args) {
+  const gramAuthorization = `Bearer ${args.fixture.gramHostedBearer}`;
   const config = {
     mcpServers: {
       [args.fixture.shadowServerName]: {
@@ -754,6 +1121,7 @@ async function prepareShadowMCPProviderConfig(args) {
       [args.fixture.gramServerName]: {
         type: "http",
         url: args.fixture.gramHostedURL,
+        headers: { Authorization: gramAuthorization },
       },
     },
   };
@@ -775,21 +1143,59 @@ async function prepareShadowMCPProviderConfig(args) {
     );
     return {};
   }
+  if (args.provider === "opencode") {
+    await fs.writeFile(
+      path.join(args.workdir, "opencode.json"),
+      JSON.stringify(
+        {
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            [args.fixture.shadowServerName]: {
+              type: "local",
+              command: [process.execPath, args.fixture.scriptPath],
+              enabled: true,
+            },
+            [args.fixture.gramServerName]: {
+              type: "remote",
+              url: args.fixture.gramHostedURL,
+              enabled: true,
+              headers: { Authorization: gramAuthorization },
+              // Without this, OpenCode auto-detects the endpoint's OAuth
+              // metadata and drives its own (stale, mcp-auth.json-cached)
+              // dance instead of sending the header.
+              oauth: false,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    return {};
+  }
   if (!args.env) {
     fail(
       "internal error: codex shadow MCP setup requires isolated Codex environment",
     );
   }
-  await runProcess("codex", ["mcp", "remove", args.fixture.shadowServerName], {
-    env: args.env,
-    timeoutMs: 30_000,
-  });
-  await runProcess("codex", ["mcp", "remove", args.fixture.gramServerName], {
-    env: args.env,
-    timeoutMs: 30_000,
-  });
+  await runProcess(
+    await resolveCodexBinary(),
+    ["mcp", "remove", args.fixture.shadowServerName],
+    {
+      env: args.env,
+      timeoutMs: 30_000,
+    },
+  );
+  await runProcess(
+    await resolveCodexBinary(),
+    ["mcp", "remove", args.fixture.gramServerName],
+    {
+      env: args.env,
+      timeoutMs: 30_000,
+    },
+  );
   await runChecked(
-    "codex",
+    await resolveCodexBinary(),
     [
       "mcp",
       "add",
@@ -804,19 +1210,24 @@ async function prepareShadowMCPProviderConfig(args) {
     },
   );
   await runChecked(
-    "codex",
+    await resolveCodexBinary(),
     [
       "mcp",
       "add",
       args.fixture.gramServerName,
       "--url",
       args.fixture.gramHostedURL,
+      "--bearer-token-env-var",
+      "GRAM_HOOKS_E2E_MCP_BEARER",
     ],
     {
       env: args.env,
       timeoutMs: 30_000,
     },
   );
+  // Scenario spawns reuse this same env object, so the token is present when
+  // codex launches the streamable HTTP client.
+  args.env.GRAM_HOOKS_E2E_MCP_BEARER = args.fixture.gramHostedBearer;
   return {};
 }
 function providerPrompt(runId, provider, scenario, workdir) {
@@ -858,6 +1269,8 @@ async function runProviderScenario(args) {
     const res = await runProcess(
       "claude",
       [
+        "--model",
+        "haiku",
         "--setting-sources",
         "project,local",
         "--plugin-dir",
@@ -886,25 +1299,38 @@ async function runProviderScenario(args) {
       "cursor",
       [
         "agent",
+        "--model",
+        "composer-2.5",
         "--print",
         "--output-format",
         "stream-json",
         "--trust",
         "--force",
         "--approve-mcps",
-        "--plugin-dir",
-        args.pluginDir,
         "--workspace",
         args.workdir,
         prompt,
       ],
-      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = args.provider;
+    return res;
+  }
+  if (args.provider === "opencode") {
+    const res = await runProcess(
+      "opencode",
+      ["run", "--dir", args.workdir, prompt],
+      {
+        cwd: args.workdir,
+        env: args.env,
+        timeoutMs: args.timeoutMs,
+      },
     );
     res.provider = args.provider;
     return res;
   }
   const res = await runProcess(
-    "codex",
+    await resolveCodexBinary(),
     [
       "exec",
       "--json",
@@ -930,6 +1356,8 @@ async function runProviderShadowMCPScenario(args) {
   if (args.provider === "claude") {
     const sessionId = crypto.randomUUID();
     const claudeArgs = [
+      "--model",
+      "haiku",
       "--setting-sources",
       "project,local",
       "--plugin-dir",
@@ -962,25 +1390,40 @@ async function runProviderShadowMCPScenario(args) {
       "cursor",
       [
         "agent",
+        "--model",
+        "composer-2.5",
         "--print",
         "--output-format",
         "stream-json",
         "--trust",
         "--force",
         "--approve-mcps",
-        "--plugin-dir",
-        args.pluginDir,
         "--workspace",
         args.workdir,
         prompt,
       ],
-      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = args.provider;
+    return res;
+  }
+  if (args.provider === "opencode") {
+    // JSON event output: the plain format renders tool titles but not tool
+    // results, which the shadow-mcp output checks need.
+    const res = await runProcess(
+      "opencode",
+      ["run", "--dir", args.workdir, "--format", "json", prompt],
+      {
+        cwd: args.workdir,
+        env: args.env,
+        timeoutMs: args.timeoutMs,
+      },
     );
     res.provider = args.provider;
     return res;
   }
   const res = await runProcess(
-    "codex",
+    await resolveCodexBinary(),
     [
       "exec",
       "--json",
@@ -1001,6 +1444,8 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
   const targetDir = path.join(workdir, ".cursor");
   const targetPath = path.join(targetDir, "hooks.json");
   const hooks = JSON.parse(await fs.readFile(sourcePath, "utf8"));
+  // Project hooks are the single registration path for headless runs. Passing
+  // the same directory through --plugin-dir races two identical hook commands.
   const escapedPluginDir = pluginDir.replace(/(["\\$`])/g, "\\$1");
   for (const entries of Object.values(hooks.hooks ?? {})) {
     if (!Array.isArray(entries)) {
@@ -1012,6 +1457,14 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
           "$CURSOR_PLUGIN_ROOT",
           escapedPluginDir,
         );
+        // Per-event relay diagnostics land in the workdir so failed runs
+        // show which events reached the relay and with what result. The
+        // command is a shell string, so the path is quoted with the same
+        // escaping as the plugin dir above.
+        const debugLog = path
+          .join(workdir, "relay-debug.log")
+          .replace(/(["\\$`])/g, "\\$1");
+        entry.command += ` --debug-log="${debugLog}"`;
       }
     }
   }
@@ -1214,6 +1667,127 @@ async function listChatMessages(projectId, runId) {
         toolCallID,
       };
     });
+}
+async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
+  const providerAliases = SOURCE_ALIASES[expectedProvider]
+    .map((alias) => `'${sqlString(alias)}'`)
+    .join(", ");
+  const sql = `
+    WITH latest AS (
+      SELECT
+        provider,
+        COALESCE(source_level, '') AS source_level,
+        COALESCE(source_path, '') AS source_path,
+        COALESCE(raw_sha256, '') AS raw_sha256,
+        COALESCE(skill_id::text, '') AS skill_id,
+        COALESCE(skill_version_id::text, '') AS skill_version_id
+      FROM skill_observations
+      WHERE project_id = '${sqlString(projectId)}'
+        AND skill_name = '${sqlString(skillName)}'
+        AND provider IN (${providerAliases})
+      ORDER BY seen_at DESC, id DESC
+      LIMIT 1
+    ), mapped AS (
+      SELECT
+        latest.*,
+        skill_raw_hashes.canonical_sha256
+      FROM latest
+      LEFT JOIN skill_raw_hashes
+        ON skill_raw_hashes.project_id = '${sqlString(projectId)}'
+        AND skill_raw_hashes.raw_sha256 = latest.raw_sha256
+    )
+    SELECT
+      provider,
+      source_level,
+      source_path,
+      raw_sha256,
+      skill_id,
+      skill_version_id,
+      canonical_sha256 IS NOT NULL,
+      EXISTS (
+        SELECT 1
+        FROM skills
+        JOIN skill_versions
+          ON skill_versions.skill_id = skills.id
+          AND skill_versions.canonical_sha256 = mapped.canonical_sha256
+        JOIN skill_version_origins
+          ON skill_version_origins.skill_version_id = skill_versions.id
+          AND skill_version_origins.skill_id = skills.id
+          AND skill_version_origins.project_id = skills.project_id
+          AND skill_version_origins.origin = 'captured'
+        WHERE skills.project_id = '${sqlString(projectId)}'
+          AND skills.name = '${sqlString(skillName)}'
+          AND skills.archived_at IS NULL
+          AND skills.id = NULLIF(mapped.skill_id, '')::uuid
+          AND skill_versions.id = NULLIF(mapped.skill_version_id, '')::uuid
+      )
+    FROM mapped;
+  `;
+  const res = await runProcess("psql", psqlArgs(sql));
+  if (res.exitCode !== 0) {
+    fail(`skill capture query failed:\n${res.stderr || res.stdout}`);
+  }
+  const line = res.stdout.trim();
+  if (!line) {
+    return null;
+  }
+  const [
+    provider = "",
+    sourceLevel = "",
+    sourcePath = "",
+    rawSHA256 = "",
+    skillId = "",
+    skillVersionId = "",
+    hasRawHashMapping = "f",
+    hasCapturedVersion = "f",
+  ] = line.split("\x1f");
+  return {
+    provider,
+    sourceLevel,
+    sourcePath,
+    rawSHA256,
+    skillId,
+    skillVersionId,
+    hasRawHashMapping: hasRawHashMapping === "t",
+    hasCapturedVersion: hasCapturedVersion === "t",
+  };
+}
+async function countSkillObservations(projectId, skillName) {
+  const sql = `
+    SELECT COUNT(*)
+    FROM skill_observations
+    WHERE project_id = '${sqlString(projectId)}'
+      AND skill_name = '${sqlString(skillName)}';
+  `;
+  const res = await runProcess("psql", psqlArgs(sql));
+  if (res.exitCode !== 0) {
+    fail(`skill observation count query failed:\n${res.stderr || res.stdout}`);
+  }
+  return Number(res.stdout.trim() || "0");
+}
+function skillCaptureCheck(provider, fixture, evidence) {
+  const expectedRawSHA256 = crypto
+    .createHash("sha256")
+    .update(fixture.content)
+    .digest("hex");
+  const matches =
+    evidence !== null &&
+    SOURCE_ALIASES[provider].includes(evidence.provider) &&
+    evidence.sourceLevel === (provider === "codex" ? "personal" : "project") &&
+    evidence.sourcePath === fixture.manifestPath &&
+    evidence.rawSHA256 === expectedRawSHA256 &&
+    evidence.skillId !== "" &&
+    evidence.skillVersionId !== "" &&
+    evidence.hasRawHashMapping &&
+    evidence.hasCapturedVersion;
+  return {
+    provider,
+    feature: "skill.content_captured",
+    status: matches ? "PASS" : "FAIL",
+    detail: evidence
+      ? `provider=${evidence.provider} level=${evidence.sourceLevel} path=${evidence.sourcePath} raw_sha256=${evidence.rawSHA256} skill_id=${evidence.skillId} skill_version_id=${evidence.skillVersionId} mapped=${evidence.hasRawHashMapping} captured-origin=${evidence.hasCapturedVersion}`
+      : `no skill_observations row found for ${fixture.skillName}`,
+  };
 }
 async function verifyOnboarding(args) {
   const url = new URL(
@@ -1432,8 +2006,17 @@ async function poll(deadlineMs, fn, done) {
 }
 function featureChecks(provider, evidence, chats, opts = {}) {
   const events = new Set(evidence.map((r) => r.event).filter(Boolean));
-  const cursorHeadlessAssistantUnsupported =
-    provider === "cursor" && !events.has("assistant.responded");
+  // Both Cursor Agent and OpenCode's one-shot `run` deliver the end-of-turn
+  // signal (afterAgentResponse / session.idle) through a fire-and-forget path
+  // the process does not await, so headless runs tear down before it reaches
+  // the relay. The mapping is exercised by unit tests; skip the live check.
+  const headlessAssistantUnsupported =
+    (provider === "cursor" || provider === "opencode") &&
+    !events.has("assistant.responded");
+  const headlessAssistantDetail =
+    provider === "cursor"
+      ? "Cursor Agent headless does not reliably emit afterAgentResponse"
+      : "OpenCode headless `run` does not reliably deliver session.idle";
   const hasToolFailure = events.has("tool.failed");
   const sourceAliases = SOURCE_ALIASES[provider];
   const providerChats = chats.filter((m) => sourceAliases.includes(m.source));
@@ -1471,13 +2054,13 @@ function featureChecks(provider, evidence, chats, opts = {}) {
     feature: "assistant.responded",
     status: events.has("assistant.responded")
       ? "PASS"
-      : cursorHeadlessAssistantUnsupported
+      : headlessAssistantUnsupported
         ? "SKIP"
         : "FAIL",
     detail: events.has("assistant.responded")
       ? "observed in ClickHouse hook telemetry"
-      : cursorHeadlessAssistantUnsupported
-        ? "Cursor Agent headless does not reliably emit afterAgentResponse"
+      : headlessAssistantUnsupported
+        ? headlessAssistantDetail
         : `missing from events: ${[...events].join(", ") || "(none)"}`,
   });
   checks.unshift({
@@ -1563,7 +2146,7 @@ function featureChecks(provider, evidence, chats, opts = {}) {
         ? "provider rows load in one chat generation"
         : `chat rows split across generations: ${splitGenerationChats.join("; ")}`,
   });
-  if (provider === "claude" || provider === "codex") {
+  if (["claude", "cursor", "codex"].includes(provider)) {
     const skillName = opts.skillName;
     const skillActivated = evidence.some(
       (r) =>
@@ -1633,7 +2216,12 @@ function shadowMCPToolExpectation(provider, serverName) {
     provider,
     serverName,
     toolName: "shadow_lookup",
-    routedName: `mcp__${serverName}__shadow_lookup`,
+    // OpenCode registers MCP tools as <server>_<tool> with no reserved
+    // prefix; everything else uses the mcp__<server>__<tool> dialect.
+    routedName:
+      provider === "opencode"
+        ? `${serverName}_shadow_lookup`
+        : `mcp__${serverName}__shadow_lookup`,
   };
 }
 function outputHasShadowMCPAttempt(output, expected) {
@@ -1651,6 +2239,11 @@ function outputHasShadowMCPAttempt(output, expected) {
       output.includes(`"name":"${expected.routedName}"`) ||
       output.includes(`"tool_name":"${expected.routedName}"`)
     );
+  }
+  if (expected.provider === "opencode") {
+    // JSON event output carries raw tool names; the bare tool name would
+    // also match a same-named tool on a different server.
+    return output.includes(expected.routedName);
   }
   return (
     output.includes(`"name":"${expected.routedName}"`) ||
@@ -1678,7 +2271,10 @@ function telemetryRowMatchesShadowMCPTool(row, expected) {
     attrs.includes(`"mcp_server_name":"${expected.serverName}"`) ||
     // Unified-ingest rows identify stdio MCP servers by launch command; the
     // fixture's script path is unique to this harness.
-    attrs.includes("/shadow-mcp/server.mjs")
+    attrs.includes("/shadow-mcp/server.mjs") ||
+    // Cursor's remote-MCP hook payloads carry the server URL, never the
+    // configured name, so hosted-phase rows are identified by endpoint URL.
+    (expected.url && attrs.includes(expected.url))
   ) {
     return true;
   }
@@ -1738,10 +2334,18 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
     checks.push({
       provider,
       feature: "shadow_mcp.block_recorded",
-      status: blocks.some((b) => b.toolName === expectedTool.toolName)
+      status: blocks.some(
+        (b) =>
+          b.toolName === expectedTool.toolName ||
+          b.toolName === expectedTool.routedName,
+      )
         ? "PASS"
         : "FAIL",
-      detail: blocks.some((b) => b.toolName === expectedTool.toolName)
+      detail: blocks.some(
+        (b) =>
+          b.toolName === expectedTool.toolName ||
+          b.toolName === expectedTool.routedName,
+      )
         ? "tool_call_blocks row persisted"
         : `missing durable tool_call_blocks row for ${expectedTool.toolName}`,
     });
@@ -1756,16 +2360,21 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
     status: attemptedTool ? "PASS" : "FAIL",
     detail: `provider called ${expectedTool.routedName}`,
   });
+  // The two fixture servers stamp their origin into the reply so a call
+  // that landed on the wrong server cannot satisfy this check.
+  const toolOutputOrigin = phase === "gram-hosted" ? "hosted" : "stdio";
   checks.push({
     provider,
     feature:
       phase === "gram-hosted"
         ? "shadow_mcp.gram_hosted_tool_output"
         : "shadow_mcp.exemption_tool_output",
-    status: output.includes(`GRAM_HOOKS_E2E_MCP_TOOL_OK ${extra.marker}`)
+    status: output.includes(
+      `GRAM_HOOKS_E2E_MCP_TOOL_OK ${toolOutputOrigin} ${extra.marker}`,
+    )
       ? "PASS"
       : "FAIL",
-    detail: "fixture MCP server returned marker output",
+    detail: `${toolOutputOrigin} fixture MCP server returned marker output`,
   });
   checks.push({
     provider,
@@ -1795,24 +2404,142 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
   return checks;
 }
 async function prepareSkillFixture(skillsRoot, runId, provider) {
-  const skillName = `gram-hooks-e2e-skill-${runId.split("-").pop()}`;
+  const skillName = `gram-hooks-e2e-skill-${provider}-${runId.split("-").pop()}`;
   const skillDir = path.join(skillsRoot, skillName);
+  const manifestPath = path.join(skillDir, "SKILL.md");
+  const content = [
+    "---",
+    `name: ${skillName}`,
+    `description: Gram hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Gram hooks E2E skill probe.`,
+    "---",
+    "",
+    "# Gram hooks E2E skill probe",
+    "",
+    `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
+    "",
+  ].join("\n");
   await fs.mkdir(skillDir, { recursive: true });
+  await fs.writeFile(manifestPath, content);
+  const realManifestPath = await fs.realpath(manifestPath);
+  return {
+    skillName,
+    skillDir: path.dirname(realManifestPath),
+    manifestPath: realManifestPath,
+    content,
+  };
+}
+async function startHookRequestProbe(targetServerURL) {
+  let uploadRequests = 0;
+  const server = http.createServer(async (req, res) => {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      if (req.url?.startsWith("/rpc/hooks.uploadSkillContent")) {
+        uploadRequests++;
+      }
+      const headers = { ...req.headers };
+      for (const name of [
+        "host",
+        "connection",
+        "content-length",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+      ]) {
+        delete headers[name];
+      }
+      const upstream = await fetch(new URL(req.url ?? "/", targetServerURL), {
+        method: req.method,
+        headers,
+        body: chunks.length > 0 ? Buffer.concat(chunks) : undefined,
+        redirect: "manual",
+      });
+      const responseHeaders = Object.fromEntries(upstream.headers);
+      // fetch transparently decodes compressed responses, so forwarding the
+      // original encoding or length would corrupt the downstream response.
+      for (const name of [
+        "connection",
+        "content-encoding",
+        "content-length",
+        "transfer-encoding",
+      ]) {
+        delete responseHeaders[name];
+      }
+      res.writeHead(upstream.status, responseHeaders);
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      res.writeHead(502);
+      res.end(String(err));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    fail("hook request probe did not bind a TCP port");
+  }
+  return {
+    serverURL: `http://127.0.0.1:${address.port}`,
+    uploadRequests: () => uploadRequests,
+    close: async () =>
+      await new Promise((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      ),
+  };
+}
+async function uploadCountRemains(probe, expected, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (probe.uploadRequests() !== expected) {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return probe.uploadRequests() === expected;
+}
+async function runSyntheticClaudeSkillActivation(args) {
+  const configDir = path.join(args.rootDir, "synthetic-skill-hook");
+  const configPath = path.join(configDir, "speakeasy.json");
+  await fs.mkdir(configDir, { recursive: true });
   await fs.writeFile(
-    path.join(skillDir, "SKILL.md"),
-    [
-      "---",
-      `name: ${skillName}`,
-      `description: Gram hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Gram hooks E2E skill probe.`,
-      "---",
-      "",
-      "# Gram hooks E2E skill probe",
-      "",
-      `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
-      "",
-    ].join("\n"),
+    configPath,
+    JSON.stringify({
+      server_url: args.serverURL,
+      project: args.projectSlug,
+      org: args.organizationId,
+    }),
   );
-  return { skillName, skillDir };
+  const payload = JSON.stringify({
+    session_id: crypto.randomUUID(),
+    cwd: args.workdir,
+    hook_event_name: "PreToolUse",
+    permission_mode: "default",
+    tool_name: "Skill",
+    tool_input: { skill: args.skillName },
+    tool_use_id: crypto.randomUUID(),
+  });
+  return await runProcess(
+    args.binary,
+    [`--config=${configPath}`, "agenthooks", "run", "--provider=claude-code"],
+    {
+      cwd: args.workdir,
+      input: payload,
+      env: {
+        GRAM_HOOKS_API_KEY: args.hookKey,
+        GRAM_HOOKS_DISABLE_LOCAL_AUTH: "1",
+      },
+      timeoutMs: args.timeoutMs,
+    },
+  );
 }
 // Codex has no Skill tool: the sender infers activation from a $name prompt
 // mention (validated against the skill roots on disk) or from a reader tool
@@ -1823,6 +2550,13 @@ function skillPrompt(runId, skillName, provider, skillDir) {
       `Gram hooks E2E skill run ${runId} for codex.`,
       `Use the $${skillName} skill: read ${path.join(skillDir, "SKILL.md")} and follow its instructions.`,
       `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} codex skill`,
+    ].join(" ");
+  }
+  if (provider === "cursor") {
+    return [
+      `Gram hooks E2E skill run ${runId} for cursor.`,
+      `Use the ${skillName} skill and follow its instructions.`,
+      `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} cursor skill`,
     ].join(" ");
   }
   return [
@@ -1840,7 +2574,7 @@ async function runSkillScenario(args) {
   );
   if (args.provider === "codex") {
     const res = await runProcess(
-      "codex",
+      await resolveCodexBinary(),
       [
         "exec",
         "--json",
@@ -1856,10 +2590,35 @@ async function runSkillScenario(args) {
     res.provider = "codex";
     return res;
   }
+  if (args.provider === "cursor") {
+    await prepareCursorProjectHooks(args.pluginDir, args.workdir);
+    const res = await runProcess(
+      "cursor",
+      [
+        "agent",
+        "--model",
+        "composer-2.5",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--trust",
+        "--force",
+        "--approve-mcps",
+        "--workspace",
+        args.workdir,
+        prompt,
+      ],
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = "cursor";
+    return res;
+  }
   const sessionId = crypto.randomUUID();
   const res = await runProcess(
     "claude",
     [
+      "--model",
+      "haiku",
       "--setting-sources",
       "project,local",
       "--plugin-dir",
@@ -1945,9 +2704,179 @@ async function runRatchetSuite(args) {
   return { checks, commandResults };
 }
 
+async function runSkillUploadControlSuite(args) {
+  const checks = [];
+  const commandResults = [];
+  if (!args.providers.includes("claude")) {
+    return { checks, commandResults };
+  }
+  const binary = await buildHookBinary(args.artifactsDir);
+  const probe = await startHookRequestProbe(args.serverURL);
+  let metadataOnlyEnabled = false;
+  try {
+    const fixture = await prepareSkillFixture(
+      path.join(args.workdir, ".claude", "skills"),
+      `${args.runId}-known-hash`,
+      "control",
+    );
+    const run = async (skillFixture, label) => {
+      const result = await runSyntheticClaudeSkillActivation({
+        binary,
+        rootDir: args.rootDir,
+        workdir: args.workdir,
+        serverURL: probe.serverURL,
+        projectSlug: args.projectSlug,
+        organizationId: args.session.organizationId,
+        hookKey: args.hookKey,
+        skillName: skillFixture.skillName,
+        timeoutMs: args.timeoutSeconds * 1000,
+      });
+      result.provider = "claude";
+      commandResults.push(result);
+      await writeCommandArtifacts(args.artifactsDir, "claude", label, result);
+      if (result.exitCode !== 0 || result.timedOut) {
+        fail(
+          `synthetic ${label} activation failed:\n${result.stderr || result.stdout}`,
+        );
+      }
+    };
+
+    await run(fixture, "capture-skill-unknown-hash");
+    const initial = await poll(
+      Date.now() + args.pollSeconds * 1000,
+      async () =>
+        skillCaptureCheck(
+          "claude",
+          fixture,
+          await getSkillCaptureEvidence(
+            args.session.projectId,
+            fixture.skillName,
+            "claude",
+          ),
+        ),
+      (check) => check.status === "PASS",
+    );
+    checks.push(initial);
+    const baselineUploads = probe.uploadRequests();
+    const observationsBefore = await countSkillObservations(
+      args.session.projectId,
+      fixture.skillName,
+    );
+
+    await run(fixture, "capture-skill-known-hash");
+    const observationsAfter = await poll(
+      Date.now() + args.pollSeconds * 1000,
+      () => countSkillObservations(args.session.projectId, fixture.skillName),
+      (count) => count > observationsBefore,
+    );
+    const knownHashUploadCountStable = await uploadCountRemains(
+      probe,
+      baselineUploads,
+      args.pollSeconds * 1000,
+    );
+    checks.push({
+      provider: "claude",
+      feature: "skill.known_hash_metadata_only",
+      status:
+        baselineUploads > 0 &&
+        observationsAfter > observationsBefore &&
+        knownHashUploadCountStable
+          ? "PASS"
+          : "FAIL",
+      detail: `observations=${observationsBefore}->${observationsAfter} uploads=${baselineUploads}->${probe.uploadRequests()}`,
+    });
+
+    await setProductFeature(
+      args.serverURL,
+      args.session.sessionId,
+      "skill_capture_metadata_only",
+      true,
+    );
+    metadataOnlyEnabled = true;
+    const metadataFixture = await prepareSkillFixture(
+      path.join(args.workdir, ".claude", "skills"),
+      `${args.runId}-metadata-only`,
+      "privacy",
+    );
+    const uploadsBeforeMetadata = probe.uploadRequests();
+    await run(metadataFixture, "capture-skill-metadata-only");
+    const metadataEvidence = await poll(
+      Date.now() + args.pollSeconds * 1000,
+      () =>
+        getSkillCaptureEvidence(
+          args.session.projectId,
+          metadataFixture.skillName,
+          "claude",
+        ),
+      (evidence) => evidence !== null,
+    );
+    const expectedMetadataHash = crypto
+      .createHash("sha256")
+      .update(metadataFixture.content)
+      .digest("hex");
+    const metadataUploadCountStable = await uploadCountRemains(
+      probe,
+      uploadsBeforeMetadata,
+      args.pollSeconds * 1000,
+    );
+    checks.push({
+      provider: "claude",
+      feature: "skill.metadata_only_org_does_not_upload",
+      status:
+        metadataEvidence !== null &&
+        SOURCE_ALIASES.claude.includes(metadataEvidence.provider) &&
+        metadataEvidence.rawSHA256 === expectedMetadataHash &&
+        metadataEvidence.sourcePath === metadataFixture.manifestPath &&
+        metadataEvidence.sourceLevel === "project" &&
+        !metadataEvidence.hasRawHashMapping &&
+        !metadataEvidence.hasCapturedVersion &&
+        metadataUploadCountStable
+          ? "PASS"
+          : "FAIL",
+      detail: metadataEvidence
+        ? `raw_sha256=${metadataEvidence.rawSHA256} mapped=${metadataEvidence.hasRawHashMapping} captured-origin=${metadataEvidence.hasCapturedVersion} uploads=${uploadsBeforeMetadata}->${probe.uploadRequests()}`
+        : `no skill_observations row found for ${metadataFixture.skillName}`,
+    });
+  } finally {
+    const cleanups = [probe.close()];
+    if (metadataOnlyEnabled) {
+      cleanups.push(
+        setProductFeature(
+          args.serverURL,
+          args.session.sessionId,
+          "skill_capture_metadata_only",
+          false,
+        ),
+      );
+    }
+    const failed = (await Promise.allSettled(cleanups)).filter(
+      (result) => result.status === "rejected",
+    );
+    if (failed.length > 0) {
+      throw new AggregateError(
+        failed.map((result) => result.reason),
+        "failed to clean up skill upload controls",
+      );
+    }
+  }
+  return { checks, commandResults };
+}
+
+function providerEnv(provider, args) {
+  if (provider === "codex") {
+    return args.codexEnv;
+  }
+  if (provider === "opencode") {
+    return args.opencodeEnv;
+  }
+  if (provider === "cursor") {
+    return args.cursorEnv;
+  }
+  return undefined;
+}
 async function runCaptureSuite(args) {
   const commandResults = [];
-  const skillNamesByProvider = new Map();
+  const skillFixturesByProvider = new Map();
   for (const provider of args.providers) {
     for (const scenario of ["success", "failure"]) {
       log.info(`${provider}: running capture ${scenario} scenario`);
@@ -1957,7 +2886,7 @@ async function runCaptureSuite(args) {
         workdir: args.workdir,
         runId: args.runId,
         scenario,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
       });
       commandResults.push(res);
@@ -2002,16 +2931,20 @@ async function runCaptureSuite(args) {
         }
       }
     }
-    if (provider === "claude" || provider === "codex") {
+    if (["claude", "cursor", "codex"].includes(provider)) {
       // Codex validates $name mentions against the skill roots on disk;
       // CODEX_HOME/skills is the only root the isolated env controls
       // regardless of the hook process cwd.
       const skillsRoot =
         provider === "codex"
           ? path.join(args.codexEnv.CODEX_HOME, "skills")
-          : path.join(args.workdir, ".claude", "skills");
+          : path.join(
+              args.workdir,
+              provider === "cursor" ? ".cursor" : ".claude",
+              "skills",
+            );
       const skill = await prepareSkillFixture(skillsRoot, args.runId, provider);
-      skillNamesByProvider.set(provider, skill.skillName);
+      skillFixturesByProvider.set(provider, skill);
       log.info(`${provider}: running capture skill-activation scenario`);
       const skillRes = await runSkillScenario({
         provider,
@@ -2020,7 +2953,7 @@ async function runCaptureSuite(args) {
         runId: args.runId,
         skillName: skill.skillName,
         skillDir: skill.skillDir,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
       });
       commandResults.push(skillRes);
@@ -2049,7 +2982,8 @@ async function runCaptureSuite(args) {
   });
   const checks = [];
   for (const provider of args.providers) {
-    const skillName = skillNamesByProvider.get(provider) ?? null;
+    const skillFixture = skillFixturesByProvider.get(provider) ?? null;
+    const skillName = skillFixture?.skillName ?? null;
     // Cursor Agent headless does not reliably emit afterAgentResponse
     // (featureChecks marks it SKIP), so don't burn the whole poll window
     // waiting for it.
@@ -2092,7 +3026,27 @@ async function runCaptureSuite(args) {
         rows.some((r) => r.role === "assistant"),
     );
     checks.push(...featureChecks(provider, evidence, chats, { skillName }));
+    if (skillFixture) {
+      const captureCheck = await poll(
+        Date.now() + args.pollSeconds * 1000,
+        async () =>
+          skillCaptureCheck(
+            provider,
+            skillFixture,
+            await getSkillCaptureEvidence(
+              args.session.projectId,
+              skillFixture.skillName,
+              provider,
+            ),
+          ),
+        (check) => check.status === "PASS",
+      );
+      checks.push(captureCheck);
+    }
   }
+  const uploadControls = await runSkillUploadControlSuite(args);
+  checks.push(...uploadControls.checks);
+  commandResults.push(...uploadControls.commandResults);
   return { checks, commandResults };
 }
 async function runShadowMCPSuite(args) {
@@ -2125,13 +3079,14 @@ async function runShadowMCPSuite(args) {
         shadowServerName: `${provider}shadowe2e`,
         gramServerName: `${provider}grame2e`,
         gramHostedURL: hostedMCP.url,
+        gramHostedBearer: hostedMCP.bearerToken,
       };
       const providerConfig = await prepareShadowMCPProviderConfig({
         provider,
         pluginDir: args.pluginDirs.get(provider),
         workdir: args.workdir,
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
       });
       const blockedSince = BigInt(Date.now()) * 1000000n;
       log.info(`${provider}: running shadow-mcp blocked scenario`);
@@ -2142,7 +3097,7 @@ async function runShadowMCPSuite(args) {
         runId: args.runId,
         variant: "blocked",
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
         ...providerConfig,
       });
@@ -2237,7 +3192,7 @@ async function runShadowMCPSuite(args) {
         runId: args.runId,
         variant: "approved",
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
         ...providerConfig,
       });
@@ -2274,7 +3229,7 @@ async function runShadowMCPSuite(args) {
         runId: args.runId,
         variant: "gram-hosted",
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
         ...providerConfig,
       });
@@ -2302,10 +3257,13 @@ async function runShadowMCPSuite(args) {
           [],
           {
             marker: `${args.runId} ${provider} gram-hosted`,
-            expectedTool: shadowMCPToolExpectation(
-              provider,
-              providerFixture.gramServerName,
-            ),
+            expectedTool: {
+              ...shadowMCPToolExpectation(
+                provider,
+                providerFixture.gramServerName,
+              ),
+              url: providerFixture.gramHostedURL,
+            },
           },
         ),
       );
@@ -2391,7 +3349,9 @@ async function main() {
   const serverURL = requireEnv("GRAM_SERVER_URL");
   const runId = `gram-hooks-e2e-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
   const startedUnixNano = BigInt(Date.now()) * 1000000n;
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), `${runId}-`));
+  const rootDir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), `${runId}-`)),
+  );
   const artifactsDir = path.join(rootDir, "artifacts");
   const workdir = path.join(rootDir, "workspace");
   let codexEnv = null;
@@ -2403,14 +3363,20 @@ async function main() {
   );
   intro(`Gram hooks E2E ${runId}`);
   let success = false;
+  let organizationId = null;
+  let sessionId = null;
+  let previousCaptureFeatures = null;
+  let cleanupError = null;
   try {
     const session = await getSessionInfo(serverURL, args.project);
+    organizationId = session.organizationId;
+    sessionId = session.sessionId;
     log.info(
       `Authenticated as ${session.userEmail}; org=${session.organizationId} project=${args.project}`,
     );
-    await enableSessionCapture(session.organizationId);
-    log.info("Enabled session_capture for the active org");
-    const hooksAuthFile = await provisionHooksAuth(
+    previousCaptureFeatures = await enableSessionCapture(serverURL, session);
+    log.info("Enabled session_capture, logs, and skills for the active org");
+    const hooksAuth = await provisionHooksAuth(
       serverURL,
       session,
       args.project,
@@ -2418,10 +3384,10 @@ async function main() {
     );
     // Make the provisioned cache authoritative for every provider spawn:
     // scrub ambient key env vars that would otherwise short-circuit it.
-    process.env.GRAM_HOOKS_AUTH_FILE = hooksAuthFile;
+    process.env.GRAM_HOOKS_AUTH_FILE = hooksAuth.authFile;
     delete process.env.GRAM_HOOKS_API_KEY;
     delete process.env.GRAM_API_KEY;
-    log.info(`Provisioned hooks auth cache at ${hooksAuthFile}`);
+    log.info(`Provisioned hooks auth cache at ${hooksAuth.authFile}`);
     if (args.providers.includes("codex")) {
       codexEnv = await prepareCodexEnv(rootDir);
       log.info(`Prepared isolated Codex home at ${codexEnv.HOME}`);
@@ -2450,6 +3416,28 @@ async function main() {
       pluginDirs.set(provider, pluginDir);
       log.info(`${provider}: using plugin ${pluginDir}`);
     }
+    let opencodeEnv = null;
+    if (args.providers.includes("opencode")) {
+      opencodeEnv = await prepareOpenCodeEnv(
+        rootDir,
+        pluginDirs.get("opencode"),
+      );
+      log.info(
+        `Prepared isolated OpenCode config at ${opencodeEnv.XDG_CONFIG_HOME}`,
+      );
+    }
+    let cursorEnv = null;
+    if (args.providers.includes("cursor")) {
+      // A per-run global-config dir keeps machine-level cursor state (MCP
+      // auth cache, approvals) out of the run. Cursor still loads the global
+      // ~/.cursor/hooks.json regardless; a developer's real speakeasy-hooks
+      // install firing alongside the run's is handled by the relay's
+      // per-install dedup scoping.
+      const cursorConfigDir = path.join(rootDir, "cursor-config");
+      await fs.mkdir(cursorConfigDir, { recursive: true });
+      cursorEnv = { CURSOR_CONFIG_DIR: cursorConfigDir };
+      log.info(`Prepared isolated Cursor config at ${cursorConfigDir}`);
+    }
     const allChecks = [];
     const commandResults = [];
     const suiteArgs = {
@@ -2460,11 +3448,14 @@ async function main() {
       workdir,
       runId,
       codexEnv,
+      opencodeEnv,
+      cursorEnv,
       timeoutSeconds: args.timeoutSeconds,
       pollSeconds: args.pollSeconds,
       serverURL,
       session,
       projectSlug: args.project,
+      hookKey: hooksAuth.key,
       startedUnixNano,
     };
     if (args.suites.includes("capture")) {
@@ -2496,12 +3487,29 @@ async function main() {
     }
     success = true;
   } finally {
+    if (organizationId && sessionId && previousCaptureFeatures) {
+      try {
+        await restoreSessionCapture(
+          serverURL,
+          { organizationId, sessionId },
+          previousCaptureFeatures,
+        );
+        log.info("Restored capture feature settings for the active org");
+      } catch (err) {
+        cleanupError = err;
+        success = false;
+        console.error(`failed to restore capture feature settings: ${err}`);
+      }
+    }
     if (args.keepArtifacts || !success) {
       log.info(`Artifacts kept at ${rootDir}`);
     } else {
       await fs.rm(rootDir, { recursive: true, force: true });
     }
     outro(success ? "hooks:e2e passed" : "hooks:e2e failed");
+  }
+  if (cleanupError) {
+    throw cleanupError;
   }
 }
 try {

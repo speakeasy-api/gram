@@ -18,13 +18,15 @@ import (
 
 // Server lists the hooks service endpoint HTTP handlers.
 type Server struct {
-	Mounts  []*MountPoint
-	Claude  http.Handler
-	Cursor  http.Handler
-	Codex   http.Handler
-	Ingest  http.Handler
-	Logs    http.Handler
-	Metrics http.Handler
+	Mounts             []*MountPoint
+	Claude             http.Handler
+	Cursor             http.Handler
+	Codex              http.Handler
+	Ingest             http.Handler
+	UploadSkillContent http.Handler
+	SkillFeedback      http.Handler
+	Logs               http.Handler
+	Metrics            http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -58,15 +60,19 @@ func New(
 			{"Cursor", "POST", "/rpc/hooks.cursor"},
 			{"Codex", "POST", "/rpc/hooks.codex"},
 			{"Ingest", "POST", "/rpc/hooks.ingest"},
+			{"UploadSkillContent", "POST", "/rpc/hooks.uploadSkillContent"},
+			{"SkillFeedback", "POST", "/rpc/hooks.skillFeedback"},
 			{"Logs", "POST", "/rpc/hooks.otel/v1/logs"},
 			{"Metrics", "POST", "/rpc/hooks.otel/v1/metrics"},
 		},
-		Claude:  NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
-		Cursor:  NewCursorHandler(e.Cursor, mux, decoder, encoder, errhandler, formatter),
-		Codex:   NewCodexHandler(e.Codex, mux, decoder, encoder, errhandler, formatter),
-		Ingest:  NewIngestHandler(e.Ingest, mux, decoder, encoder, errhandler, formatter),
-		Logs:    NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
-		Metrics: NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
+		Claude:             NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
+		Cursor:             NewCursorHandler(e.Cursor, mux, decoder, encoder, errhandler, formatter),
+		Codex:              NewCodexHandler(e.Codex, mux, decoder, encoder, errhandler, formatter),
+		Ingest:             NewIngestHandler(e.Ingest, mux, decoder, encoder, errhandler, formatter),
+		UploadSkillContent: NewUploadSkillContentHandler(e.UploadSkillContent, mux, decoder, encoder, errhandler, formatter),
+		SkillFeedback:      NewSkillFeedbackHandler(e.SkillFeedback, mux, decoder, encoder, errhandler, formatter),
+		Logs:               NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
+		Metrics:            NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -79,6 +85,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Cursor = m(s.Cursor)
 	s.Codex = m(s.Codex)
 	s.Ingest = m(s.Ingest)
+	s.UploadSkillContent = m(s.UploadSkillContent)
+	s.SkillFeedback = m(s.SkillFeedback)
 	s.Logs = m(s.Logs)
 	s.Metrics = m(s.Metrics)
 }
@@ -92,6 +100,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCursorHandler(mux, h.Cursor)
 	MountCodexHandler(mux, h.Codex)
 	MountIngestHandler(mux, h.Ingest)
+	MountUploadSkillContentHandler(mux, h.UploadSkillContent)
+	MountSkillFeedbackHandler(mux, h.SkillFeedback)
 	MountLogsHandler(mux, h.Logs)
 	MountMetricsHandler(mux, h.Metrics)
 }
@@ -290,6 +300,112 @@ func NewIngestHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "ingest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUploadSkillContentHandler configures the mux to serve the "hooks"
+// service "uploadSkillContent" endpoint.
+func MountUploadSkillContentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/hooks.uploadSkillContent", f)
+}
+
+// NewUploadSkillContentHandler creates a HTTP handler which loads the HTTP
+// request and calls the "hooks" service "uploadSkillContent" endpoint.
+func NewUploadSkillContentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUploadSkillContentRequest(mux, decoder)
+		encodeResponse = EncodeUploadSkillContentResponse(encoder)
+		encodeError    = EncodeUploadSkillContentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "uploadSkillContent")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSkillFeedbackHandler configures the mux to serve the "hooks" service
+// "skillFeedback" endpoint.
+func MountSkillFeedbackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/hooks.skillFeedback", f)
+}
+
+// NewSkillFeedbackHandler creates a HTTP handler which loads the HTTP request
+// and calls the "hooks" service "skillFeedback" endpoint.
+func NewSkillFeedbackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSkillFeedbackRequest(mux, decoder)
+		encodeResponse = EncodeSkillFeedbackResponse(encoder)
+		encodeError    = EncodeSkillFeedbackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "skillFeedback")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
 		payload, err := decodeRequest(r)
 		if err != nil {

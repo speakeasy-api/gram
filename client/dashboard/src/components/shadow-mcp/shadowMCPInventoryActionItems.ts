@@ -1,6 +1,10 @@
-import type { Action } from "@/components/ui/more-actions";
+import type { Action } from "@/components/ui/MoreActions";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { InventoryActionMode } from "./ShadowMCPInventoryActions";
+import type { ShadowMCPPolicyDisposition } from "./shadowMCPInventoryStatus";
+
+export const ALLOW_RULE_POLICY_REQUIRED =
+  "An enabled blocking Shadow MCP policy is required.";
 
 /**
  * The per-server action set, shared by the visible "⋯" dropdown and the row's
@@ -12,10 +16,14 @@ import type { InventoryActionMode } from "./ShadowMCPInventoryActions";
 export function shadowMCPInventoryActions(
   server: ShadowMCPInventoryServer,
   {
+    canManageAllowRules,
     disabled,
+    disposition = null,
     onOpenAction,
   }: {
+    canManageAllowRules: boolean;
     disabled: boolean;
+    disposition?: ShadowMCPPolicyDisposition | null;
     onOpenAction: (
       mode: InventoryActionMode,
       server: ShadowMCPInventoryServer,
@@ -24,6 +32,10 @@ export function shadowMCPInventoryActions(
 ): Action[] {
   const hasRequest = server.requestCount > 0;
   const hasAllowDecision = server.access === "allowed";
+  const allowRuleDisabled = disabled || !canManageAllowRules;
+  const allowRuleDescription = canManageAllowRules
+    ? undefined
+    : ALLOW_RULE_POLICY_REQUIRED;
 
   const openAction = (mode: InventoryActionMode) => () => {
     window.setTimeout(() => onOpenAction(mode, server), 0);
@@ -37,16 +49,42 @@ export function shadowMCPInventoryActions(
       onClick: openAction("review"),
     });
   }
+  if (disposition === "allow_all") {
+    // Allow-all policies manage a blocked list instead of allow rules: the
+    // primary action flips to blocking (or unblocking) the server for the
+    // whole project.
+    if (server.access === "blocked") {
+      actions.push({
+        label: "Unblock Server",
+        disabled,
+        onClick: openAction("unblock"),
+      });
+    } else if (!hasRequest) {
+      actions.push({
+        label: "Block Server",
+        destructive: true,
+        disabled,
+        onClick: openAction("block"),
+      });
+    }
+    return actions;
+  }
   if (!hasRequest && !hasAllowDecision) {
     actions.push({
       label: "Add Allow Rule",
-      disabled,
+      description: allowRuleDescription,
+      disabled: allowRuleDisabled,
       onClick: openAction("add"),
     });
   }
   if (hasAllowDecision) {
     actions.push(
-      { label: "Edit Rule", disabled, onClick: openAction("edit") },
+      {
+        label: "Edit Rule",
+        description: allowRuleDescription,
+        disabled: allowRuleDisabled,
+        onClick: openAction("edit"),
+      },
       {
         label: "Delete Rule",
         destructive: true,

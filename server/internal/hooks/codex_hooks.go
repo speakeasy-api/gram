@@ -30,11 +30,12 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	logger := s.logger.With(
@@ -101,6 +102,16 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	if hookEvent != nil {
 		switch ev := hookEvent.(type) {
 		case *hookevents.BeforeToolUse:
+			// Spend gate runs before any risk-policy evaluation: an over-budget
+			// user gets tool calls denied even mid-turn, for native and MCP
+			// tools alike.
+			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+				blockReason = spendBlockReason("tool call", block)
+				userReason = blockReason
+				isToolCallBlock = true
+				blockToolName = ev.ToolName
+				break
+			}
 			// Acknowledged warn is excluded from the enforcement block so it
 			// falls through to the shadow-MCP guard below: an ack clears the
 			// risk challenge but must never bypass unapproved-toolset validation.
@@ -131,7 +142,14 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				codexMetaServer, isCodexMetaTool := codexMCPMetaToolServer(payload)
 				var detail string
 				var denied bool
-				if isCodexMetaTool {
+				switch {
+				case policy.IsAllowAll():
+					// Permit-by-default: the blocked-list membership check is
+					// the whole gate. The fail-closed inventory/provenance
+					// checks below are block_all concepts — an unverified or
+					// unmatched server is simply allowed here.
+					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
+				case isCodexMetaTool:
 					// Codex's built-in MCP resource tools are not Gram
 					// toolset calls, so they never carry x-gram-toolset-id.
 					// Enforce them from the inventory target instead.
@@ -148,10 +166,12 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 							denied = true
 						}
 					}
-				} else {
-					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, toolName, evidence)
+				default:
+					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
 				}
-				if !denied && !isCodexMetaTool {
+				// No inventory fail-closed pass runs under allow-all; the
+				// blocked-list check above is the whole gate.
+				if !policy.IsAllowAll() && !denied && !isCodexMetaTool {
 					// The inventory snapshot pins where the call actually
 					// routes: deny when it points at a non-Gram target, or
 					// when the active inventory cannot uniquely prove the
@@ -167,7 +187,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 							detail, denied = inventoryDetail, true
 						}
 					}
-				} else if denied && !isCodexMetaTool && evidence.ServerIdentity != "" && matched == nil {
+				} else if !policy.IsAllowAll() && denied && !isCodexMetaTool && evidence.ServerIdentity != "" && matched == nil {
 					detail = fmt.Sprintf("MCP server %q could not be verified from Codex inventory", evidence.ServerIdentity)
 				}
 				if denied {
@@ -195,6 +215,13 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				}
 			}
 		case *hookevents.PermissionRequest:
+			// Over-budget users are denied here too: a permission request is a
+			// tool call awaiting approval, so it must not slip past the gate.
+			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+				blockReason = spendBlockReason("permission request", block)
+				userReason = blockReason
+				break
+			}
 			// Acknowledged warn is excluded so it clears without a block; an
 			// unacknowledged warn is challenged (deny + ack link), not
 			// hard-blocked with the raw user_message — consistent with tool calls.
@@ -212,6 +239,13 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
 		case *hookevents.UserPromptSubmit:
+			// Spend gate runs before any risk-policy evaluation: an over-budget
+			// user is denied outright.
+			if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+				blockReason = spendBlockReason("prompt", block)
+				userReason = blockReason
+				break
+			}
 			// warn never hard-blocks at prompt submit (no confirmation primitive
 			// here); it defers to the follow-on tool call. Matches Claude/Cursor.
 			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
@@ -224,8 +258,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	}
 
 	// Tool-call blocks get a durable block page; mint its URL and attach it to
-	// the agent-facing reason, persisting the row off the hot path.
-	if isToolCallBlock && blockReason != "" {
+	// the agent-facing reason, persisting the row off the hot path. Idempotent
+	// redeliveries keep the deny but must not mint a second row (matching the
+	// Claude and ingest paths), so the retried delivery's reason carries no
+	// link.
+	if isToolCallBlock && blockReason != "" && !s.isHookDuplicate(ctx) {
 		if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 			Provider:       "codex",
 			OrganizationID: orgID,
@@ -269,7 +306,10 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 
 	if payload.HookEventName == "SessionStart" {
 		s.captureCodexMCPListSnapshot(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
-		if metadata.SessionID != "" && metadata.UserEmail != "" {
+		// Hostname counts as cacheable identity alongside the email: an
+		// identity-less session carries nothing else, and later events may
+		// omit the hostname the fallback attribution needs.
+		if metadata.SessionID != "" && (metadata.UserEmail != "" || metadata.Hostname != "") {
 			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),
@@ -337,16 +377,16 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
 		UserID:      "",
 		Provider:    providerOpenAI,
-		// Account-scope attribution (external org/account identity, account
-		// type, billing mode) is wired only for Anthropic sessions today. The
-		// Codex payload carries no account identity for attributeSession to
-		// key on, and ai_integration_configs has no "openai" provider to
-		// declare an org-level billing mode, so these fields stay empty and
-		// cost surfaces treat Codex spend as unclassified (an estimate).
+		// The Codex payload carries no account-scope identity (no account
+		// UUID, org id, or auth mode), so these fields stay empty and
+		// classification below is email-based: a resolved work email is team,
+		// anything else personal, with the org-level codex_compliance billing
+		// mode riding on team sessions (DNO-734).
 		ExternalOrgID:       "",
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -355,19 +395,69 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ProjectID:           projectID,
 	}
 
+	var cached SessionMetadata
+	cachedOK := false
 	if metadata.SessionID != "" {
-		cached, err := s.getSessionMetadata(ctx, metadata.SessionID)
-		if err == nil && cached.ServiceName == "Codex" && cached.GramOrgID == orgID && cached.ProjectID == projectID {
+		c, err := s.getSessionMetadata(ctx, metadata.SessionID)
+		if err == nil && c.ServiceName == "Codex" && c.GramOrgID == orgID && c.ProjectID == projectID {
+			cached, cachedOK = c, true
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
+			}
+			if metadata.Hostname == "" {
+				metadata.Hostname = cached.Hostname
 			}
 		}
 	}
 
+	// On this path user_email is the account's own report (the authenticated
+	// ChatGPT account), so it doubles as the observed email consumers keep
+	// separate from actor identity.
+	metadata.ObservedUserEmail = metadata.UserEmail
+
+	// Attribute the account. Codex identity is the email alone, so when the
+	// cached classification was computed from the same email this event brings
+	// nothing new — adopt it, including the resolved UserID, instead of
+	// re-resolving per event. Otherwise resolve and classify fresh (email-based
+	// for openai; billing mode rides on team sessions — see classifyAccount /
+	// attributeSession) and write the result back so later events, and the
+	// OTEL/ingest paths, inherit it regardless of which event seeded it.
+	// Billing mode is frozen with the classification for the cache lifetime,
+	// matching the Claude path's attribute-once semantics. Failures leave the
+	// session unclassified rather than blocking capture or enforcement.
+	if cachedOK && cached.AccountType != "" && sameCodexIdentity(cached.UserEmail, metadata.UserEmail) {
+		metadata.UserID = cached.UserID
+		metadata.AccountType = cached.AccountType
+		metadata.BillingMode = cached.BillingMode
+		return metadata
+	}
+
 	if metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, orgID)
-	} else {
-		metadata.UserID = ""
+	}
+	if err := s.attributeSession(ctx, metadata); err != nil {
+		s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
+			attr.SlogEvent("account_attribution_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(metadata.SessionID),
+		)
+		// Leave the session unclassified rather than half-attributed:
+		// attributeSession stamps AccountType before the step that failed,
+		// and the fast path above (plus recordCodexHook's SessionStart cache
+		// write) keys on AccountType alone — keeping the half state would
+		// freeze an empty billing mode for the cache lifetime.
+		metadata.AccountType = ""
+		metadata.BillingMode = ""
+	} else if metadata.SessionID != "" && metadata.AccountType != "" && payload.HookEventName != "SessionStart" {
+		// SessionStart is excluded: recordCodexHook already persists this
+		// metadata (attribution included) for that event; this write-back
+		// exists for sessions whose SessionStart was never seen.
+		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(metadata.SessionID),
+			)
+		}
 	}
 
 	return metadata
@@ -423,8 +513,10 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
-		attr.ProviderKey:       providerOpenAI,
 	}
+	// Provider plus the session's account attribution (account_type,
+	// billing_mode) — stamped up front so both return paths below carry it.
+	stampAccountAttribution(attrs, *metadata)
 
 	if payload.Model != nil && *payload.Model != "" {
 		attrs[attr.GenAIResponseModelKey] = *payload.Model
@@ -433,6 +525,14 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	if payload.SessionID != nil && *payload.SessionID != "" {
 		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
 		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.SessionID)
+		// Tool events trace per (session, tool) rather than per session so the
+		// trace id stays derivable from the recorded chat tool-call id — the
+		// provenance join requires trace_id = hash(recorded id), and
+		// writeCodexToolCallRequestToPG records this same key (DNO-604). The
+		// full tool name is used, not the server/function split applied below.
+		if key := syntheticToolCallID(*payload.SessionID, toolName); key != "" {
+			attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(key)
+		}
 	}
 
 	if payload.HookEventName == "UserPromptSubmit" && payload.Prompt != nil && *payload.Prompt != "" {
@@ -510,11 +610,15 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 
 	chatID := sessionIDToUUID(metadata.SessionID)
 
+	// The recorded id must hash to the telemetry trace id written by
+	// buildCodexTelemetryAttributes or the shadow-MCP provenance lookup can
+	// never join this call back to its hook log (DNO-604).
+	toolName := conv.PtrValOr(payload.ToolName, "")
 	toolCalls := []map[string]any{{
-		"id":   conv.PtrValOr(payload.ToolName, ""),
+		"id":   syntheticToolCallID(metadata.SessionID, toolName),
 		"type": "function",
 		"function": map[string]any{
-			"name":      conv.PtrValOr(payload.ToolName, ""),
+			"name":      toolName,
 			"arguments": marshalToJSON(payload.ToolInput),
 		},
 	}}
@@ -580,7 +684,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 		Content:          marshalToJSON(payload.ToolOutput),
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
 		Source:           conv.ToPGText("Codex"),
-		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolName, "")),
+		ToolCallID:       conv.ToPGTextEmpty(syntheticToolCallID(metadata.SessionID, conv.PtrValOr(payload.ToolName, ""))),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,

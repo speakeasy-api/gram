@@ -25,6 +25,8 @@ type Endpoints struct {
 	ListGcpIamCredentials   goa.Endpoint
 	GetAwsIamCredential     goa.Endpoint
 	GetGcpIamCredential     goa.Endpoint
+	VerifyGcpIamCredential  goa.Endpoint
+	GetGcpSetupInfo         goa.Endpoint
 	DeleteAwsIamCredential  goa.Endpoint
 	DeleteGcpIamCredential  goa.Endpoint
 }
@@ -44,6 +46,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListGcpIamCredentials:   NewListGcpIamCredentialsEndpoint(s, a.APIKeyAuth),
 		GetAwsIamCredential:     NewGetAwsIamCredentialEndpoint(s, a.APIKeyAuth),
 		GetGcpIamCredential:     NewGetGcpIamCredentialEndpoint(s, a.APIKeyAuth),
+		VerifyGcpIamCredential:  NewVerifyGcpIamCredentialEndpoint(s, a.APIKeyAuth),
+		GetGcpSetupInfo:         NewGetGcpSetupInfoEndpoint(s, a.APIKeyAuth),
 		DeleteAwsIamCredential:  NewDeleteAwsIamCredentialEndpoint(s, a.APIKeyAuth),
 		DeleteGcpIamCredential:  NewDeleteGcpIamCredentialEndpoint(s, a.APIKeyAuth),
 	}
@@ -61,6 +65,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListGcpIamCredentials = m(e.ListGcpIamCredentials)
 	e.GetAwsIamCredential = m(e.GetAwsIamCredential)
 	e.GetGcpIamCredential = m(e.GetGcpIamCredential)
+	e.VerifyGcpIamCredential = m(e.VerifyGcpIamCredential)
+	e.GetGcpSetupInfo = m(e.GetGcpSetupInfo)
 	e.DeleteAwsIamCredential = m(e.DeleteAwsIamCredential)
 	e.DeleteGcpIamCredential = m(e.DeleteGcpIamCredential)
 }
@@ -269,6 +275,52 @@ func NewGetGcpIamCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.GetGcpIamCredential(ctx, p)
+	}
+}
+
+// NewVerifyGcpIamCredentialEndpoint returns an endpoint function that calls
+// the method "verifyGcpIamCredential" of service "externalCredentials".
+func NewVerifyGcpIamCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyGcpIamCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyGcpIamCredential(ctx, p)
+	}
+}
+
+// NewGetGcpSetupInfoEndpoint returns an endpoint function that calls the
+// method "getGcpSetupInfo" of service "externalCredentials".
+func NewGetGcpSetupInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGcpSetupInfoPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGcpSetupInfo(ctx, p)
 	}
 }
 

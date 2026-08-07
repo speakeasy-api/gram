@@ -130,10 +130,10 @@ Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller
 
 ### Tables
 
-Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. The legacy `@/components/ui/table` wrapper has been removed; do **not** recreate it, add new shadcn table wrappers, or hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. If you find a lingering legacy table pattern, migrate it to Moonshine when touched.
+Use the design system `Table` from `@/components/ui/Table` for dashboard tables. Do **not** add new shadcn table wrappers or hand-roll table styling with raw `<table>` markup when `Table` can express the UI. If you find a lingering legacy table pattern, migrate it when touched.
 
 ```tsx
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Column, Table } from "@/components/ui/Table";
 ```
 
 For normal data tables, prefer the declarative `columns` / `data` / `rowKey` API. Define `Column<T>[]` near the component so render functions stay typed, use `render` for rich cells, and use `width` for stable layouts instead of ad hoc cell class widths.
@@ -169,7 +169,7 @@ For empty and loading states, use the Table's built-in empty surface and the sha
 />
 ```
 
-Search and filter controls are siblings above the table. Keep filter state outside the table, derive filtered rows with `useMemo`, and pass the result to `data`. Use existing controls such as `SearchBar`, `MultiSelect`, `Select`, or page-specific filter pills; do not put form controls inside `Table.Header` unless they are truly column headers. If the table is paginated, reset the page index when filters change.
+Search and filter controls are siblings above the table. On pages, wrap them in `Page.Toolbar` (see the `page-toolbar` skill); the bare `Stack` form below is for non-page surfaces like dialogs and sheets. Keep filter state outside the table, derive filtered rows with `useMemo`, and pass the result to `data`. Use existing controls such as `SearchBar`, `MultiSelect`, `Select`, or page-specific filter pills; do not put form controls inside `Table.Header` unless they are truly column headers. If the table is paginated, reset the page index when filters change.
 
 ```tsx
 const [search, setSearch] = useState("");
@@ -220,7 +220,7 @@ const filteredRows = useMemo(() => {
 />;
 ```
 
-Footers that summarize, paginate, or load more rows should usually be sibling bars immediately below the table. Moonshine's table API does not require a special footer component for this; keep the table declarative and put pagination/load-more controls after it.
+Footers that summarize, paginate, or load more rows should usually be sibling bars immediately below the table. The table API does not require a special footer component for this; keep the table declarative and put pagination/load-more controls after it.
 
 ```tsx
 <Table columns={columns} data={visibleRows} rowKey={(row) => row.id} />;
@@ -254,7 +254,7 @@ Footers that summarize, paginate, or load more rows should usually be sibling ba
 }
 ```
 
-Use the compound API only when the body needs custom structure that the declarative API cannot express, such as mixed rows, a full-width CTA row, or a custom no-results branch. Keep the Moonshine wrapper, header, row, and cell components as the default primitives.
+Use the compound API only when the body needs custom structure that the declarative API cannot express, such as mixed rows, a full-width CTA row, or a custom no-results branch. Keep the design system wrapper, header, row, and cell components as the default primitives.
 
 ```tsx
 <Table columns={columns}>
@@ -281,7 +281,7 @@ Use the compound API only when the body needs custom structure that the declarat
 </Table>
 ```
 
-Use grouped or expandable rows through Moonshine's table props instead of nesting unrelated cards or custom accordions around a table. Current patterns use `hideHeader` for grouped parent rows and `renderExpandedContent` for nested details.
+Use grouped or expandable rows through the table props instead of nesting unrelated cards or custom accordions around a table. Current patterns use `hideHeader` for grouped parent rows and `renderExpandedContent` for nested details.
 
 ```tsx
 <Table
@@ -300,7 +300,7 @@ Use grouped or expandable rows through Moonshine's table props instead of nestin
 />
 ```
 
-Raw `<tr>` / `<td>` should be rare and stay inside a Moonshine `<Table.Body>` only when native table semantics are needed and Moonshine does not expose them, such as a `colSpan` overflow row. If the row is a normal data row, use `<Table.Row row={row} columns={columns} />` or the declarative `data` prop.
+Raw `<tr>` / `<td>` should be rare and stay inside a `<Table.Body>` only when native table semantics are needed and `Table` does not expose them, such as a `colSpan` overflow row. If the row is a normal data row, use `<Table.Row row={row} columns={columns} />` or the declarative `data` prop.
 
 ### React Performance Patterns
 
@@ -425,11 +425,77 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 - **Don't fight the Tailwind class sorter.** Prettier's `prettier-plugin-tailwindcss` reorders classes on save. Write classes in any order; the formatter will normalize them and the diff stays clean across the codebase.
 - **AI context strings shadow user-visible names.** When renaming a chart or card (e.g. "Most Used LLM Clients" → "Most Used Agents"), search for the old name in nearby `contextInfo=` / `suggestions=` props passed to `ExploreWithAI` / `InsightsConfig`. Those strings are sent to the LLM as analytical context; if they drift from the visible label, the AI assistant talks about a card the user can't see.
 
+### Building a new page (required pattern)
+
+Every new dashboard page follows the same skeleton — no exceptions, no bespoke headers:
+
+```tsx
+import { Page } from "@/components/page-layout";
+
+export default function MyNewPage(): JSX.Element {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <Page.Section>
+          {/* Renders the area eyebrow (OBSERVE/SECURE/CONNECT/DISTRIBUTE/
+              ORGANIZATION, derived from the URL) above a thin serif title
+              automatically. Pass area="..." to override, area="" to suppress. */}
+          <Page.Section.Title>My New Page</Page.Section.Title>
+          <Page.Section.Description>One-line purpose.</Page.Section.Description>
+          <Page.Section.Body>{/* content */}</Page.Section.Body>
+        </Page.Section>
+      </Page.Body>
+    </Page>
+  );
+}
+```
+
+Checklist for the content below the title:
+
+- **One page title per page.** Secondary sections get `text-eyebrow` overlines (utility groupings, table/list sections) or a smaller serif `text-display-xs` (content subsections with their own body) — never a second eyebrow + full-size serif stack.
+- Stat rows → `MetricCard` in `MetricCard.Group` with explicit `tone`s:
+
+  ```tsx
+  <MetricCard.Group>
+    <MetricCard label="Total rules" value={total} tone="information" />
+    <MetricCard
+      label="Violations"
+      value={violations}
+      tone={violations > 0 ? "destructive" : "neutral"}
+      delta="+3"
+      description="last 7 days"
+    />
+  </MetricCard.Group>
+  ```
+
+- Tables → design-system `Table` (headers come out as eyebrows for free); hand-rolled grids use `text-eyebrow` header labels.
+- List/filter controls → `Page.Toolbar` (see the `page-toolbar` skill), mono uppercase segments for mode switches.
+- Empty states → the `EmptyState` component exported from `@/components/page-layout` (graphic + heading + description + CTA) for full-page voids; inline ones follow the same idiom by hand: square dashed hairline frame, square hairline icon tile (no gray circle blobs), sentence-case CTA.
+- Loading → content-shaped skeletons (`SkeletonTable`, geometry-matched rows), never a lone spinner or a premature empty state.
+- Cards white (`bg-card`), page gutter gray, hairline borders, no shadows/gradients/washes, square corners — per the styling rules below.
+
+A page that renders its own `<h1>` instead of this pattern is a defect; if a custom header is unavoidable, it must still render `<PageEyebrow />` + `text-display-sm font-thin`.
+
 ### Styling and Design System
 
-- **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values
-- **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
+The dashboard follows an editorial, print-like design language. The load-bearing rules:
+
+- **Square corners.** The Tailwind radius scale is wiped (`--radius-*: initial` in `App.css`), so `rounded-sm/md/lg/...` generate nothing — never write them. `rounded-full` is reserved for true circles (avatars, status dots, spinners); pills on wide elements are off-style.
+- **Flat.** No `shadow-*` on in-flow surfaces (cards, buttons, inputs, tiles, sticky bars). Shadows are allowed only on floating overlays (menus, dialogs, tooltips, sheets). No gradients, no colored tint washes (`bg-blue-500/10`, `bg-amber-100`, `bg-*-softest` panels) — express semantics with colored text, borders, or a small dot on a neutral surface.
+- **Hairline borders** via the default border token; the content area is a white `bg-card` sheet on the gray page gutter. Beware: `bg-background` is the page-gray token, NOT white — use `bg-card` for white surfaces.
+- **Page pattern**: every page shows an area micro-label + thin serif title. `Page.Section.Title` renders both automatically (`area` prop overrides, `""` suppresses); custom headers render `<PageEyebrow />` from `@/components/page-eyebrow` above an `h1` with `text-display-sm font-thin`. The area derives from the URL via `useNavArea()` — one source shared with the sidebar highlight.
+- **`text-eyebrow`** (mono 11px uppercase tracked muted utility) is THE style for table headers, section overlines, and stat labels. Never hand-roll `text-xs font-medium uppercase tracking-*`.
+- **Stat tiles**: `MetricCard` from `@/components/ui/MetricCard` inside `MetricCard.Group` (one bordered strip, hairline dividers; the Group lays tiles side by side — render one `MetricCard` per stat inside it). `tone` is a required prop (TypeScript errors if omitted — there is no default) — declare a semantic tone (counts → `information`, health → `success`, errors → conditional `destructive`, blocked/stale → conditional `warning`, `neutral` only when nothing applies).
+- **Charts** import colors from `@/components/chart/palette` (exports `SERIES` — ink + muted brand hues, `ACCENT_RED` for risk/error only, `TOOLTIP` — square Chart.js tooltip styling, and `AXIS` tokens). Components resolve the themed ramp with `useSeriesColors()` from `@/components/chart/useSeriesColors`; pure data builders take a `colors` param instead of calling hooks.
+- **Avatars/initials** use `getIdentityTint(label)` from `@/components/gradient-colors` — never random-hue or saturated gradient fills.
+- **Tabs**: segmented `ui/Tabs`/`SegmentedControl` (mono uppercase, solid-ink active) for mode switches; `PageTabsList` + `PageTabsTrigger` (flush underline, no outer box) for page-level tabs. Pairing plain `TabsList` with `PageTabsTrigger` draws a boxed underline hybrid — wrong.
+- **ALWAYS use the design system** in `@/components/ui`; every component lives in its own directory with an `index.stories.tsx` beside it; add a story whenever you add a component.
+- **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, `bg-emerald-*`, etc. — tokens only.
 - `@tailwindcss/typography` must remain in `devDependencies` — the dashboard uses `prose` and `not-prose` classes directly (e.g. `CatalogDetail.tsx`, `tool.tsx`) which are provided by this plugin.
+- Tailwind v4's Vite plugin registers classes from NEW files only at server start — restart the dev server / Storybook after adding a file with arbitrary classes, or they silently emit nothing.
 
 ### Release Stage Badges (Preview / Beta)
 
@@ -437,16 +503,16 @@ Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwis
 
 **Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
 
-**Underlying primitive:** Moonshine's `<Badge>` component (`@speakeasy-api/moonshine`). `ReleaseStageBadge` composes Moonshine's Badge with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+**Underlying primitive:** the design system `<Badge>` (`@/components/ui/Badge`). `ReleaseStageBadge` composes it with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, hairline-bordered, square). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
 
 **Variant → stage mapping** (variant names are hooks, not literal semantics):
 
-- `preview` → Moonshine `warning` variant (amber).
-- `beta` → Moonshine `information` variant (Speakeasy brand blue).
+- `preview` → the `warning` variant (amber).
+- `beta` → the `information` variant (Speakeasy brand blue).
 
-> Moonshine's badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
+> The badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
 
-**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing Moonshine variant or add one upstream.
+**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing variant or add one to `@/components/ui/Badge`.
 
 #### Surface 1 — sidebar nav (route-driven)
 

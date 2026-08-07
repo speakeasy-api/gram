@@ -1,8 +1,12 @@
 package activities_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -22,6 +26,56 @@ func (f *stubProvisionerFactory) Provisioner(_ k8s.ProvisionerKind) k8s.CustomDo
 	return f.provisioner
 }
 
+type blockingProvisioner struct {
+	applyStarted chan struct{}
+	releaseApply chan struct{}
+	calls        []k8s.StubCall
+}
+
+func newBlockingProvisioner() *blockingProvisioner {
+	return &blockingProvisioner{
+		applyStarted: make(chan struct{}, 1),
+		releaseApply: make(chan struct{}),
+		calls:        nil,
+	}
+}
+
+func (p *blockingProvisioner) Kind() k8s.ProvisionerKind {
+	return k8s.ProvisionerKindIngress
+}
+
+func (p *blockingProvisioner) Apply(ctx context.Context, config k8s.RouteConfig) (k8s.SetupResult, error) {
+	p.calls = append(p.calls, k8s.StubCall{
+		Method:       "Apply",
+		Domain:       config.Domain,
+		ResourceName: "",
+		SecretName:   "",
+		IPAllowlist:  config.IPAllowlist,
+		RootTarget:   config.RootTarget,
+	})
+	p.applyStarted <- struct{}{}
+	select {
+	case <-ctx.Done():
+		return k8s.SetupResult{}, fmt.Errorf("wait for apply release: %w", ctx.Err())
+	case <-p.releaseApply:
+		return k8s.SetupResult{ResourceName: "race-resource", SecretName: "race-secret"}, nil
+	}
+}
+
+func (p *blockingProvisioner) Get(_ context.Context, resourceName string) error {
+	p.calls = append(p.calls, k8s.StubCall{Method: "Get", ResourceName: resourceName})
+	return nil
+}
+
+func (p *blockingProvisioner) Delete(_ context.Context, resourceName, secretName string) error {
+	p.calls = append(p.calls, k8s.StubCall{Method: "Delete", ResourceName: resourceName, SecretName: secretName})
+	return nil
+}
+
+func (p *blockingProvisioner) Calls() []k8s.StubCall {
+	return p.calls
+}
+
 // --- Delete path (no DB required) ---
 
 func TestCustomDomainIngress_Delete_EmptyResourceName_Errors(t *testing.T) {
@@ -30,7 +84,7 @@ func TestCustomDomainIngress_Delete_EmptyResourceName_Errors(t *testing.T) {
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
+	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub})
 
 	err := act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:        "org-1",
@@ -49,7 +103,7 @@ func TestCustomDomainIngress_Delete_ResourceNameTakesPriority(t *testing.T) {
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
+	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub})
 
 	err := act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:        "org-1",
@@ -72,7 +126,7 @@ func TestCustomDomainIngress_Delete_IngressNameFallback(t *testing.T) {
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
+	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub})
 
 	err := act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:       "org-1",
@@ -119,7 +173,7 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:           orgID,
@@ -129,10 +183,10 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Setup → Get, in that order
+	// Apply → Get, in that order
 	calls := stub.Calls()
 	require.Len(t, calls, 2)
-	require.Equal(t, "Setup", calls[0].Method)
+	require.Equal(t, "Apply", calls[0].Method)
 	require.Equal(t, domain, calls[0].Domain)
 	require.Equal(t, "Get", calls[1].Method)
 
@@ -142,54 +196,6 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	require.True(t, row.Verified)
 	require.Equal(t, "ingress", row.ProvisionerKind)
 	require.True(t, row.IngressName.Valid, "IngressName must be set after setup")
-}
-
-func TestCustomDomainIngress_Setup_Gateway_WritesNullCertSecret(t *testing.T) {
-	t.Parallel()
-
-	const orgID = "org-gateway-setup"
-	const domain = "gateway-setup.example.com"
-	ctx := t.Context()
-	logger := testenv.NewLogger(t)
-
-	conn, err := infra.CloneTestDatabase(t, "gateway_setup_test")
-	require.NoError(t, err)
-
-	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          orgID,
-		Name:        orgID,
-		Slug:        orgID,
-		WorkosID:    pgtype.Text{},
-		Whitelisted: pgtype.Bool{},
-	})
-	require.NoError(t, err)
-
-	_, err = customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-		OrganizationID:  orgID,
-		Domain:          domain,
-		ProvisionerKind: "gateway",
-		IpAllowlist:     []string{},
-	})
-	require.NoError(t, err)
-
-	// GatewayProvisioner returns empty SecretName — stub mirrors this behaviour.
-	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindGateway, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindGateway, activities.WithSetupSleep(0))
-
-	err = act.Do(ctx, activities.CustomDomainIngressArgs{
-		OrgID:           orgID,
-		Domain:          domain,
-		Action:          activities.CustomDomainIngressActionSetup,
-		ProvisionerKind: k8s.ProvisionerKindGateway,
-	})
-	require.NoError(t, err)
-
-	row, err := customdomainsRepo.New(conn).GetCustomDomainByDomain(ctx, domain)
-	require.NoError(t, err)
-	require.True(t, row.Activated)
-	require.Equal(t, "gateway", row.ProvisionerKind)
-	// Gateway owns TLS at the parent level — HTTPRoute never has a cert secret.
-	require.False(t, row.CertSecretName.Valid, "CertSecretName must be NULL for gateway kind")
 }
 
 func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
@@ -212,16 +218,25 @@ func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+	created, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
-		IpAllowlist:     []string{},
+		IpAllowlist:     []string{"1.2.3.4", "10.0.0.0/8"},
+	})
+	require.NoError(t, err)
+	_, err = customdomainsRepo.New(conn).UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
+		ID:              created.ID,
+		Verified:        true,
+		Activated:       true,
+		IngressName:     pgtype.Text{String: "reapply-example-com", Valid: true},
+		CertSecretName:  pgtype.Text{String: "reapply-example-com-tls", Valid: true},
+		ProvisionerKind: "ingress",
 	})
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:           orgID,
@@ -232,11 +247,11 @@ func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Reapply runs a single idempotent Setup with the allowlist from args
-	// (not the DB) — no convergence Get, no DB write.
+	// Reapply runs a single idempotent Apply with desired state from the DB —
+	// no convergence Get and no activation write for an already-active domain.
 	calls := stub.Calls()
 	require.Len(t, calls, 1)
-	require.Equal(t, "Setup", calls[0].Method)
+	require.Equal(t, "Apply", calls[0].Method)
 	require.Equal(t, domain, calls[0].Domain)
 	require.Equal(t, []string{"1.2.3.4", "10.0.0.0/8"}, calls[0].IPAllowlist)
 }
@@ -271,7 +286,7 @@ func TestCustomDomainIngress_Setup_KindResolution_DefaultsToIngress(t *testing.T
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
 	// No default provisioner set and no kind in args — must resolve to ingress.
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, "", activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:  orgID,
@@ -314,7 +329,7 @@ func TestCustomDomainIngress_Setup_WrongOrg_Errors(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:  "org-intruder",
@@ -323,4 +338,212 @@ func TestCustomDomainIngress_Setup_WrongOrg_Errors(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "custom domain does not belong to organization")
+}
+
+func TestReconcileCustomDomain_DeleteDuringApplyRemovesAppliedResource(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-delete-during-apply"
+	const domain = "delete-during-apply.example.com"
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "delete_during_apply_test")
+	require.NoError(t, err)
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        orgID,
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  orgID,
+		Domain:          domain,
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	provisioner := newBlockingProvisioner()
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner})
+	reconcileResult := make(chan error, 1)
+	go func() {
+		reconcileResult <- reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID})
+	}()
+
+	select {
+	case <-provisioner.applyStarted:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "Apply did not start")
+	}
+	require.NoError(t, customdomainsRepo.New(conn).DeleteCustomDomain(ctx, orgID))
+	close(provisioner.releaseApply)
+	require.NoError(t, <-reconcileResult)
+
+	calls := provisioner.Calls()
+	require.Len(t, calls, 2)
+	require.Equal(t, "Apply", calls[0].Method)
+	require.Equal(t, "Delete", calls[1].Method)
+	require.Equal(t, "race-resource", calls[1].ResourceName)
+	require.Equal(t, "race-secret", calls[1].SecretName)
+
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+	require.False(t, deleted.IngressName.Valid)
+	require.False(t, deleted.CertSecretName.Valid)
+}
+
+func TestReconcileCustomDomain_DeleteDuringConvergenceConvergesToDeleted(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-delete-during-convergence"
+	const domain = "delete-during-convergence.example.com"
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "delete_during_convergence_test")
+	require.NoError(t, err)
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        orgID,
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  orgID,
+		Domain:          domain,
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	provisioner := newBlockingProvisioner()
+	reconciler := activities.NewCustomDomainIngress(
+		logger,
+		conn,
+		&stubProvisionerFactory{provisioner: provisioner},
+		activities.WithSetupSleep(time.Second),
+	)
+	reconcileResult := make(chan error, 1)
+	go func() {
+		reconcileResult <- reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID})
+	}()
+	select {
+	case <-provisioner.applyStarted:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "Apply did not start")
+	}
+	close(provisioner.releaseApply)
+	require.Eventually(t, func() bool {
+		route, routeErr := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+		return routeErr == nil && route.IngressName.Valid
+	}, 5*time.Second, 10*time.Millisecond)
+
+	require.NoError(t, customdomainsRepo.New(conn).DeleteCustomDomain(ctx, orgID))
+	require.NoError(t, <-reconcileResult)
+	require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
+
+	calls := provisioner.Calls()
+	require.Len(t, calls, 3)
+	require.Equal(t, "Apply", calls[0].Method)
+	require.Equal(t, "Get", calls[1].Method)
+	require.Equal(t, "Delete", calls[2].Method)
+	require.Equal(t, "race-resource", calls[2].ResourceName)
+
+	_, err = customdomainsRepo.New(conn).GetCustomDomainByID(ctx, customDomain.ID)
+	require.Error(t, err)
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	require.NoError(t, err)
+	require.False(t, deleted.IngressName.Valid)
+	require.False(t, deleted.CertSecretName.Valid)
+}
+
+func TestReconcileCustomDomain_DeletedWithoutResourcesNoops(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-delete-unactivated"
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "delete_unactivated_test")
+	require.NoError(t, err)
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        orgID,
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  orgID,
+		Domain:          "delete-unactivated.example.com",
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, customdomainsRepo.New(conn).DeleteCustomDomain(ctx, orgID))
+
+	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner})
+	require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
+	require.Empty(t, provisioner.Calls())
+}
+
+func TestReconcileCustomDomain_DeletedRetriesDeleteIdempotently(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-delete-retry"
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "delete_retry_test")
+	require.NoError(t, err)
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        orgID,
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  orgID,
+		Domain:          "delete-retry.example.com",
+		IngressName:     pgtype.Text{String: "retry-resource", Valid: true},
+		CertSecretName:  pgtype.Text{String: "retry-secret", Valid: true},
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, customdomainsRepo.New(conn).DeleteCustomDomain(ctx, orgID))
+
+	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner})
+	for range 2 {
+		require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
+	}
+	calls := provisioner.Calls()
+	require.Len(t, calls, 1)
+	require.Equal(t, "Delete", calls[0].Method)
+	require.Equal(t, "retry-resource", calls[0].ResourceName)
+	require.Equal(t, "retry-secret", calls[0].SecretName)
+
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	require.NoError(t, err)
+	require.False(t, deleted.IngressName.Valid)
+	require.False(t, deleted.CertSecretName.Valid)
+}
+
+func TestReconcileCustomDomain_NotFoundNoops(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "reconcile_not_found_test")
+	require.NoError(t, err)
+	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner})
+	require.NoError(t, reconciler.ReconcileCustomDomain(t.Context(), activities.ReconcileCustomDomainArgs{CustomDomainID: uuid.New()}))
+	require.Empty(t, provisioner.Calls())
 }

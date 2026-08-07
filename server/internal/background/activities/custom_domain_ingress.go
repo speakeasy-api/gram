@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -19,10 +21,7 @@ type CustomDomainIngressAction string
 const (
 	CustomDomainIngressActionSetup  CustomDomainIngressAction = "setup"
 	CustomDomainIngressActionDelete CustomDomainIngressAction = "delete"
-	// CustomDomainIngressActionReapply re-applies the current IP allowlist to an
-	// already-provisioned resource. Used by the edit flow. It skips the
-	// convergence wait and the verified/activated DB flip since the resource and
-	// its cert already exist.
+	// CustomDomainIngressActionReapply is retained for Temporal compatibility.
 	CustomDomainIngressActionReapply CustomDomainIngressAction = "reapply"
 )
 
@@ -30,7 +29,6 @@ type CustomDomainIngress struct {
 	domains            *customdomainsRepo.Queries
 	logger             *slog.Logger
 	provisionerFactory k8s.ProvisionerFactory
-	defaultProvisioner k8s.ProvisionerKind
 	setupSleep         time.Duration
 }
 
@@ -44,12 +42,11 @@ func WithSetupSleep(d time.Duration) CustomDomainIngressOption {
 	}
 }
 
-func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, defaultProvisioner k8s.ProvisionerKind, opts ...CustomDomainIngressOption) *CustomDomainIngress {
+func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, opts ...CustomDomainIngressOption) *CustomDomainIngress {
 	c := &CustomDomainIngress{
 		domains:            customdomainsRepo.New(db),
 		logger:             logger,
 		provisionerFactory: k8sClient,
-		defaultProvisioner: defaultProvisioner,
 		setupSleep:         120 * time.Second,
 	}
 	for _, opt := range opts {
@@ -64,21 +61,21 @@ type CustomDomainIngressArgs struct {
 	Action CustomDomainIngressAction
 	// TODO: Remove IngressName in a follow-up release once all in-flight workflows have drained.
 	IngressName     string // Legacy field — kept for in-flight workflow compat. Prefer ResourceName when non-empty.
-	ResourceName    string // Generic resource name (Ingress or HTTPRoute). Preferred over IngressName.
+	ResourceName    string // Generic resource name. Preferred over IngressName.
 	CertSecretName  string
 	ProvisionerKind k8s.ProvisionerKind // Empty = use activity default.
-	// IPAllowlist is the allowlist to apply on the Reapply action. It is passed
-	// explicitly (not read from the DB) so the caller can reconcile k8s before
-	// persisting. Unused by Setup (which reads the persisted value) and Delete.
+	// IPAllowlist is retained only for Temporal compatibility with workflow
+	// histories created before reconciliation became DB-derived.
 	IPAllowlist []string
+}
+
+type ReconcileCustomDomainArgs struct {
+	CustomDomainID uuid.UUID
 }
 
 func (c *CustomDomainIngress) resolveKind(args CustomDomainIngressArgs) k8s.ProvisionerKind {
 	if args.ProvisionerKind != "" {
 		return args.ProvisionerKind
-	}
-	if c.defaultProvisioner != "" {
-		return c.defaultProvisioner
 	}
 	return k8s.ProvisionerKindIngress
 }
@@ -112,56 +109,117 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").LogError(ctx, c.logger)
 	}
 
-	if args.Action == CustomDomainIngressActionReapply {
-		c.logger.InfoContext(ctx, "re-applying custom domain ip allowlist",
-			attr.SlogCustomDomainProvisionerKind(string(kind)),
-			attr.SlogURLDomain(customDomain.Domain),
-		)
+	if args.Action == CustomDomainIngressActionSetup || args.Action == CustomDomainIngressActionReapply {
+		return c.ReconcileCustomDomain(ctx, ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID})
+	}
 
-		// Setup is idempotent (create-or-update) and applies the allowlist passed
-		// in args (the caller persists it only after this succeeds). The resource
-		// and its cert already exist, so there is no convergence wait and no
-		// verified/activated flip.
-		if _, err := provisioner.Setup(ctx, customDomain.Domain, args.IPAllowlist); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to re-apply custom domain ip allowlist").LogError(ctx, c.logger)
+	return nil
+}
+
+// ReconcileCustomDomain is the single desired-state write path for custom
+// domain Kubernetes resources. The domain-scoped Temporal workflow serializes
+// calls and schedules another pass when desired state changes during Apply.
+func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args ReconcileCustomDomainArgs) error {
+	desired, err := c.domains.GetCustomDomainRouteConfig(ctx, args.CustomDomainID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load custom domain route config").LogError(ctx, c.logger)
+	}
+
+	kind := k8s.ProvisionerKind(desired.ProvisionerKind)
+	if kind == "" {
+		kind = k8s.ProvisionerKindIngress
+	}
+
+	var rootTarget *string
+	if desired.RootSlug != "" {
+		target := "/mcp/" + desired.RootSlug
+		rootTarget = &target
+	}
+	config := k8s.RouteConfig{
+		Domain:      desired.Domain,
+		IPAllowlist: desired.IpAllowlist,
+		RootTarget:  rootTarget,
+	}
+	c.logger.InfoContext(ctx, "reconciling custom domain resource",
+		attr.SlogCustomDomainProvisionerKind(string(kind)),
+		attr.SlogURLDomain(desired.Domain),
+	)
+
+	provisioner := c.provisionerFactory.Provisioner(kind)
+	if desired.Deleted {
+		// No names on tombstone = never applied or already cleaned: DeleteDomain checkpoints derived identity before tombstoning. Never re-derive here — hostname reuse would delete a successor domain's live resources.
+		if !desired.IngressName.Valid || desired.IngressName.String == "" {
+			return nil
 		}
-
+		if err := provisioner.Delete(ctx, desired.IngressName.String, desired.CertSecretName.String); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "delete custom domain resource").LogError(ctx, c.logger)
+		}
+		if err := c.domains.ClearDeletedCustomDomainResourceNames(ctx, desired.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "clear deleted custom domain resource names").LogError(ctx, c.logger)
+		}
 		return nil
 	}
 
-	if args.Action == CustomDomainIngressActionSetup {
-		c.logger.InfoContext(ctx, "provisioning custom domain resource",
+	result, err := provisioner.Apply(ctx, config)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "apply custom domain route").LogError(ctx, c.logger)
+	}
+	persisted, err := c.domains.UpdateCustomDomainResourceNames(ctx, customdomainsRepo.UpdateCustomDomainResourceNamesParams{
+		IngressName:     conv.ToPGText(result.ResourceName),
+		CertSecretName:  conv.PtrToPGText(conv.PtrEmpty(result.SecretName)),
+		ProvisionerKind: string(kind),
+		ID:              desired.ID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "persist custom domain resource names").LogError(ctx, c.logger)
+	}
+	if persisted.Deleted {
+		c.logger.InfoContext(ctx, "custom domain deletion won during apply; removing applied resource",
 			attr.SlogCustomDomainProvisionerKind(string(kind)),
-			attr.SlogURLDomain(customDomain.Domain),
+			attr.SlogURLDomain(desired.Domain),
 		)
-
-		result, err := provisioner.Setup(ctx, customDomain.Domain, customDomain.IpAllowlist)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to provision custom domain resource").LogError(ctx, c.logger)
+		if err := provisioner.Delete(ctx, result.ResourceName, result.SecretName); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "delete custom domain resource applied after deletion").LogError(ctx, c.logger)
 		}
-
-		// Wait for resource convergence — cert issuance and LB propagation.
-		// Both Ingress and Gateway kinds keep this sleep until status-condition polling is implemented.
-		time.Sleep(c.setupSleep)
-
-		if err := provisioner.Get(ctx, result.ResourceName); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to verify custom domain resource exists").LogError(ctx, c.logger)
+		if err := c.domains.ClearDeletedCustomDomainResourceNames(ctx, desired.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "clear deleted custom domain resource names").LogError(ctx, c.logger)
 		}
-
-		_, err = c.domains.UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
-			ID:              customDomain.ID,
-			Verified:        true,
-			Activated:       true,
-			IngressName:     conv.ToPGText(result.ResourceName),
-			CertSecretName:  conv.PtrToPGText(conv.PtrEmpty(result.SecretName)),
-			ProvisionerKind: string(kind),
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to update custom domain").LogError(ctx, c.logger)
-		}
-
+		return nil
+	}
+	if desired.Activated {
 		return nil
 	}
 
+	timer := time.NewTimer(c.setupSleep)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return oops.E(oops.CodeUnexpected, ctx.Err(), "wait for custom domain resource convergence").LogError(ctx, c.logger)
+	case <-timer.C:
+	}
+
+	if err := provisioner.Get(ctx, result.ResourceName); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "verify custom domain resource exists").LogError(ctx, c.logger)
+	}
+	if _, err := c.domains.UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
+		ID:              desired.ID,
+		Verified:        true,
+		Activated:       true,
+		IngressName:     conv.ToPGText(result.ResourceName),
+		CertSecretName:  conv.PtrToPGText(conv.PtrEmpty(result.SecretName)),
+		ProvisionerKind: string(kind),
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.logger.InfoContext(ctx, "custom domain deletion won during resource convergence; skipping activation",
+				attr.SlogCustomDomainProvisionerKind(string(kind)),
+				attr.SlogURLDomain(desired.Domain),
+			)
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "reconcile custom domain").LogError(ctx, c.logger)
+	}
 	return nil
 }

@@ -9,8 +9,9 @@ if ! supervisor_output="$(pitchfork supervisor start 2>&1)"; then
   exit 1
 fi
 
+pitchfork stop --all-local
 pitchfork clean
-pitchfork start --all-local --force
+pitchfork start --all-local
 
 gum style \
   --foreground 10 --border-foreground 10 --border rounded \

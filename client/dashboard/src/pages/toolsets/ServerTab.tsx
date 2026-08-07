@@ -1,7 +1,7 @@
-import { Card } from "@/components/ui/card";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import { Text } from "@/components/ui/Text";
 import { Toolset } from "@/lib/toolTypes";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { Server } from "lucide-react";
 
 interface ServerTabContentProps {
@@ -34,31 +34,31 @@ export function ServerTabContent({
       <Card>
         <Card.Title>
           <Stack direction="horizontal" gap={3} align="center">
-            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center">
               <Server className="text-primary h-5 w-5" />
             </div>
             <Stack gap={1}>
-              <Type variant="subheading">External MCP Server</Type>
-              <Type small muted>
+              <Text variant="subheading">External MCP Server</Text>
+              <Text small muted>
                 {tool.slug}
-              </Type>
+              </Text>
             </Stack>
           </Stack>
         </Card.Title>
         <Card.Description>
           <Stack direction="vertical" gap={4} className="mt-4">
             <div>
-              <Type small muted className="mb-1 block">
+              <Text small muted className="mb-1 block">
                 Remote URL
-              </Type>
-              <Type className="font-mono text-sm">{tool.remoteUrl}</Type>
+              </Text>
+              <Text className="font-mono text-sm">{tool.remoteUrl}</Text>
             </div>
             {tool.requiresOauth && (
               <div>
-                <Type small muted className="mb-1 block">
+                <Text small muted className="mb-1 block">
                   Authentication
-                </Type>
-                <Type>OAuth required</Type>
+                </Text>
+                <Text>OAuth required</Text>
               </div>
             )}
           </Stack>

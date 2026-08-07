@@ -358,7 +358,8 @@ SELECT
   EXISTS (
     SELECT 1 FROM mcp_endpoints e
     WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
-  ) AS has_endpoint
+  ) AS has_endpoint,
+  (s.unproxied_mcp_server_id IS NOT NULL)::boolean AS is_unproxied
 FROM mcp_servers s
 WHERE
   s.id = $1
@@ -377,11 +378,15 @@ type GetMcpServerForPluginServerRow struct {
 	Slug        pgtype.Text
 	Visibility  string
 	HasEndpoint bool
+	IsUnproxied bool
 }
 
 // Resolve an mcp_server for plugin-server validation, scoped to the project so
 // IDs alone are never trusted. has_endpoint reports whether the server has at
 // least one usable endpoint so the caller can reject unpublishable servers.
+// is_unproxied reports whether the server is backed by an unproxied MCP
+// server, which is never proxied and so never has an mcp_endpoints row; the
+// caller exempts those servers from the has_endpoint requirement.
 func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpServerForPluginServerParams) (GetMcpServerForPluginServerRow, error) {
 	row := q.db.QueryRow(ctx, getMcpServerForPluginServer, arg.McpServerID, arg.ProjectID)
 	var i GetMcpServerForPluginServerRow
@@ -391,6 +396,7 @@ func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpSer
 		&i.Slug,
 		&i.Visibility,
 		&i.HasEndpoint,
+		&i.IsUnproxied,
 	)
 	return i, err
 }
@@ -829,14 +835,20 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.content
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT NULL
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC
 `
@@ -897,6 +909,7 @@ SELECT
     WHERE sd.plugin_id = p.id
       AND sd.project_id = p.project_id
       AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
       AND sd.revoked_at IS NULL
       AND EXISTS (
         SELECT 1
@@ -982,8 +995,9 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
-  ep.slug AS endpoint_slug,
-  ep.custom_domain AS endpoint_custom_domain
+  COALESCE(ep.slug, '') AS endpoint_slug,
+  ep.custom_domain AS endpoint_custom_domain,
+  ump.url AS unproxied_url
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
@@ -1001,9 +1015,10 @@ LEFT JOIN LATERAL (
   ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
+LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
-  AND ep.slug IS NOT NULL
+  AND (ep.slug IS NOT NULL OR ump.url IS NOT NULL)
 ORDER BY p.slug, ps.sort_order ASC
 `
 
@@ -1019,6 +1034,7 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	McpServerID          uuid.NullUUID
 	EndpointSlug         string
 	EndpointCustomDomain pgtype.Text
+	UnproxiedUrl         pgtype.Text
 }
 
 // Plugin-generation companion to ListPluginsWithServersForProject covering
@@ -1028,7 +1044,10 @@ type ListPluginsWithMcpServersForProjectRow struct {
 // rule; per-plugin endpoint preference is a follow-up). Resolving the host
 // inside the selection keeps endpoint choice and URL-host construction in
 // lockstep, so a dangling custom-domain endpoint is never picked and emitted as
-// a (wrong) platform URL. Servers without a usable endpoint are dropped.
+// a (wrong) platform URL. A server backed by an unproxied MCP server never has
+// an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
+// unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
+// usable endpoint nor an unproxied backing are dropped.
 // Scoped to project_id; the mcp_server must live in the same project as the
 // plugin, and disabled servers are excluded.
 func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithMcpServersForProjectRow, error) {
@@ -1052,6 +1071,7 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, proje
 			&i.McpServerID,
 			&i.EndpointSlug,
 			&i.EndpointCustomDomain,
+			&i.UnproxiedUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -1137,6 +1157,35 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 		return nil, err
 	}
 	return items, nil
+}
+
+const pluginServerDisplayNameExists = `-- name: PluginServerDisplayNameExists :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers
+  JOIN plugins ON plugins.id = plugin_servers.plugin_id
+  WHERE plugin_servers.plugin_id = $1
+    AND plugins.project_id = $2
+    AND plugin_servers.display_name = $3
+    AND plugin_servers.deleted IS FALSE
+)
+`
+
+type PluginServerDisplayNameExistsParams struct {
+	PluginID    uuid.UUID
+	ProjectID   uuid.UUID
+	DisplayName string
+}
+
+// Reports whether a live plugin server on the plugin already uses the display
+// name. AttachToDefaultPlugin checks this before inserting so it can uniquify
+// the name instead of tripping the (plugin_id, display_name) unique index,
+// whose failed insert would abort the caller's surrounding transaction.
+// Joins plugins to scope by project_id as defense-in-depth against IDOR.
+func (q *Queries) PluginServerDisplayNameExists(ctx context.Context, arg PluginServerDisplayNameExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, pluginServerDisplayNameExists, arg.PluginID, arg.ProjectID, arg.DisplayName)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const promoteToDefaultPlugin = `-- name: PromoteToDefaultPlugin :one
@@ -1237,17 +1286,23 @@ JOIN skills s ON s.id = prev.skill_id
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = prev.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
   AND sd.project_id = $1
   AND sd.plugin_id = $2
+  AND sd.channel = 'plugin'
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
-RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name
 `
 
 type RevokeSkillDistributionsByPluginParams struct {
@@ -1261,6 +1316,7 @@ type RevokeSkillDistributionsByPluginRow struct {
 	SkillID           uuid.UUID
 	PinnedVersionID   uuid.NullUUID
 	PluginID          uuid.NullUUID
+	AssistantID       uuid.NullUUID
 	Channel           string
 	CreatedByUserID   string
 	RevokedAt         pgtype.Timestamptz
@@ -1290,6 +1346,7 @@ func (q *Queries) RevokeSkillDistributionsByPlugin(ctx context.Context, arg Revo
 			&i.SkillID,
 			&i.PinnedVersionID,
 			&i.PluginID,
+			&i.AssistantID,
 			&i.Channel,
 			&i.CreatedByUserID,
 			&i.RevokedAt,
@@ -1322,6 +1379,122 @@ WHERE plugin_id = $1
 func (q *Queries) SoftDeletePluginServers(ctx context.Context, pluginID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeletePluginServers, pluginID)
 	return err
+}
+
+const softDeletePluginServersByMCPServerID = `-- name: SoftDeletePluginServersByMCPServerID :many
+UPDATE plugin_servers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins
+WHERE plugins.id = plugin_servers.plugin_id
+  AND plugins.project_id = $1
+  AND plugin_servers.mcp_server_id = $2
+  AND plugin_servers.deleted IS FALSE
+RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug
+`
+
+type SoftDeletePluginServersByMCPServerIDParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+type SoftDeletePluginServersByMCPServerIDRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+	PluginName  string
+	PluginSlug  string
+}
+
+// Soft-deletes every live plugin server backed by the mcp_server, joining
+// plugins for project scoping. Returns the removed rows with their plugin's
+// name and slug so callers can audit-log each removal. Used by mcpservers on
+// server deletion so a deleted server does not keep holding a plugin's
+// display name: the (plugin_id, display_name) unique index only excludes
+// soft-deleted rows.
+func (q *Queries) SoftDeletePluginServersByMCPServerID(ctx context.Context, arg SoftDeletePluginServersByMCPServerIDParams) ([]SoftDeletePluginServersByMCPServerIDRow, error) {
+	rows, err := q.db.Query(ctx, softDeletePluginServersByMCPServerID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeletePluginServersByMCPServerIDRow
+	for rows.Next() {
+		var i SoftDeletePluginServersByMCPServerIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.PluginName,
+			&i.PluginSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const syncMcpServerDisplayName = `-- name: SyncMcpServerDisplayName :execrows
+UPDATE plugin_servers ps
+SET display_name = $1,
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = $2
+  AND p.deleted IS FALSE
+  AND ps.mcp_server_id = $3
+  AND ps.display_name = $4
+  AND ps.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM plugin_servers sibling
+    WHERE sibling.plugin_id = ps.plugin_id
+      AND sibling.id <> ps.id
+      AND sibling.display_name = $1
+      AND sibling.deleted IS FALSE
+  )
+`
+
+type SyncMcpServerDisplayNameParams struct {
+	NewDisplayName string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.NullUUID
+	OldDisplayName string
+}
+
+// Keep auto-derived plugin server names in sync with their MCP server while
+// preserving names customized through UpdatePluginServer.
+func (q *Queries) SyncMcpServerDisplayName(ctx context.Context, arg SyncMcpServerDisplayNameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, syncMcpServerDisplayName,
+		arg.NewDisplayName,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.OldDisplayName,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updatePlugin = `-- name: UpdatePlugin :one

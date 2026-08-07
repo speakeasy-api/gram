@@ -74,11 +74,12 @@ func TestCustomProvider_RefreshToken_NoRotation(t *testing.T) {
 func TestCustomProvider_RefreshToken_BasicAuth(t *testing.T) {
 	t.Parallel()
 
-	var gotAuth string
+	var gotUser, gotPass string
+	var gotOK bool
 	var formHasClientID bool
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
+		gotUser, gotPass, gotOK = r.BasicAuth()
 		_ = r.ParseForm()
 		_, formHasClientID = r.PostForm["client_id"]
 
@@ -92,12 +93,15 @@ func TestCustomProvider_RefreshToken_BasicAuth(t *testing.T) {
 
 	prov := baseProvider(srv.URL + "/token")
 	prov.TokenEndpointAuthMethodsSupported = []string{"client_secret_basic"}
+	prov.Secrets = []byte(`{"client_id":"ab+cd/ef=","client_secret":"s+e/c=="}`)
 
 	_, err := newProvider(t).RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
 	require.NoError(t, err)
 
-	require.Contains(t, gotAuth, "Basic ", "should use Basic auth header")
+	require.True(t, gotOK, "should use Basic auth header")
 	require.False(t, formHasClientID, "client_id should NOT be in form body for basic auth")
+	require.Equal(t, "ab%2Bcd%2Fef%3D", gotUser, "client_id must be form-urlencoded per RFC 6749 §2.3.1")
+	require.Equal(t, "s%2Be%2Fc%3D%3D", gotPass, "client_secret must be form-urlencoded per RFC 6749 §2.3.1")
 }
 
 func TestCustomProvider_RefreshToken_PostAuth(t *testing.T) {

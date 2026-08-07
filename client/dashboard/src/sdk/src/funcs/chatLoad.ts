@@ -121,6 +121,10 @@ async function $do(
       payload["Gram-Chat-Session"],
       { explode: false, charEncoding: "none" },
     ),
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
@@ -149,6 +153,18 @@ async function $do(
         fieldName: "Authorization",
         type: "http:bearer",
         value: security?.option2?.chatSessionsTokenHeaderGramChatSession,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option3?.apikeyHeaderGramKey,
+      },
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option3?.projectSlugHeaderGramProject,
       },
     ],
   );

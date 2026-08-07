@@ -21,6 +21,16 @@ var AssistantMCPServerRef = Type("AssistantMCPServerRef", func() {
 	Required("mcp_server_slug")
 })
 
+var AssistantSkillRef = Type("AssistantSkillRef", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("skill_id", String, "The attached skill ID.", func() { Format(FormatUUID) })
+	Attribute("pinned_version_id", String, "The pinned version, absent when tracking latest valid.", func() { Format(FormatUUID) })
+	Attribute("resolved_version_id", String, "The currently resolved valid version.", func() { Format(FormatUUID) })
+
+	Required("skill_id", "resolved_version_id")
+})
+
 var Assistant = Type("Assistant", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -36,6 +46,7 @@ var Assistant = Type("Assistant", func() {
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(AssistantToolsetRef), "Toolsets available to the assistant.")
 	Attribute("mcp_servers", ArrayOf(AssistantMCPServerRef), "MCP servers attached directly to the assistant (remote- or tunnelled-backed).")
+	Attribute("skills", ArrayOf(AssistantSkillRef), "Skills attached to the assistant.")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes for the assistant.")
 	Attribute("status", String, "The assistant status.", func() {
@@ -56,6 +67,7 @@ var Assistant = Type("Assistant", func() {
 		"instructions",
 		"toolsets",
 		"mcp_servers",
+		"skills",
 		"warm_ttl_seconds",
 		"max_concurrency",
 		"status",

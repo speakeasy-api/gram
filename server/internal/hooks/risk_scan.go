@@ -13,6 +13,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
+// riskScanTrackerKey carries a flag the transport handlers install before
+// dispatching an event, flipped when an enforcement scan actually executes
+// (rather than short-circuiting on a guard). It feeds the risk_scanned
+// dimension on hooks.event.duration so gating latency that includes a scan is
+// separable from the no-scan baseline.
+type riskScanTrackerKey struct{}
+
+func withRiskScanTracker(ctx context.Context) (context.Context, *bool) {
+	scanned := new(bool)
+	return context.WithValue(ctx, riskScanTrackerKey{}, scanned), scanned
+}
+
+func markRiskScanned(ctx context.Context) {
+	if scanned, ok := ctx.Value(riskScanTrackerKey{}).(*bool); ok {
+		*scanned = true
+	}
+}
+
 func (s *Service) scanUserPromptForEnforcement(ctx context.Context, ev *hookevents.UserPromptSubmit) *risk.ScanResult {
 	if ev == nil {
 		return nil
@@ -60,6 +78,7 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 		return nil
 	}
 
+	markRiskScanned(ctx)
 	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for hook event",

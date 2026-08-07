@@ -15,8 +15,8 @@ import (
 
 const (
 	defaultBaseURL = "https://api.cursor.com"
-	// Cursor supports a maximum page size of 500.
-	defaultPageSize = 500
+	// Cursor supports a maximum usage-events page size of 1000.
+	defaultPageSize = 1000
 )
 
 type Client struct {

@@ -6,8 +6,14 @@ package components
 type HookSkillData struct {
 	// Activated skill name.
 	Name string `json:"name"`
+	// SHA-256 of the raw skill manifest, if available.
+	RawSha256 *string `json:"raw_sha256,omitzero"`
 	// Skill source or namespace, if available.
 	Source *string `json:"source,omitzero"`
+	// Scope where the skill was resolved, if available.
+	SourceLevel *string `json:"source_level,omitzero"`
+	// Local path where the skill was resolved, if available.
+	SourcePath *string `json:"source_path,omitzero"`
 }
 
 func (h *HookSkillData) GetName() string {
@@ -17,9 +23,30 @@ func (h *HookSkillData) GetName() string {
 	return h.Name
 }
 
+func (h *HookSkillData) GetRawSha256() *string {
+	if h == nil {
+		return nil
+	}
+	return h.RawSha256
+}
+
 func (h *HookSkillData) GetSource() *string {
 	if h == nil {
 		return nil
 	}
 	return h.Source
+}
+
+func (h *HookSkillData) GetSourceLevel() *string {
+	if h == nil {
+		return nil
+	}
+	return h.SourceLevel
+}
+
+func (h *HookSkillData) GetSourcePath() *string {
+	if h == nil {
+		return nil
+	}
+	return h.SourcePath
 }

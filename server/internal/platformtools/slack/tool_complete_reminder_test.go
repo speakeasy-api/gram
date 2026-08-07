@@ -40,6 +40,7 @@ func TestCompleteReminderTool_CallsRemindersCompleteWithUserToken(t *testing.T) 
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"reminder":"Rm12345678"}`), io.Discard)
 	require.NoError(t, err)
 	require.Equal(t, "/reminders.complete", requestPath)
@@ -60,6 +61,7 @@ func TestCompleteReminderTool_RequiresReminderID(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{}`), io.Discard)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "reminder")

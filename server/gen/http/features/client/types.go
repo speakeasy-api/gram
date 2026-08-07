@@ -32,8 +32,6 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
-	// Whether webhooks are enabled
-	Webhooks *bool `form:"webhooks,omitempty" json:"webhooks,omitempty" xml:"webhooks,omitempty"`
 	// Whether SSO setup is enabled for the organization
 	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
 	// Whether SCIM/directory sync setup is enabled for the organization
@@ -48,6 +46,19 @@ type GetProductFeaturesResponseBody struct {
 	CustomModelKeysEnabled *bool `form:"custom_model_keys_enabled,omitempty" json:"custom_model_keys_enabled,omitempty" xml:"custom_model_keys_enabled,omitempty"`
 	// Whether the Skills page is enabled for the organization
 	SkillsEnabled *bool `form:"skills_enabled,omitempty" json:"skills_enabled,omitempty" xml:"skills_enabled,omitempty"`
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
+	// Whether the organization is eligible for the Gram Platform MCP capability
+	PlatformMcpEnabled *bool `form:"platform_mcp_enabled,omitempty" json:"platform_mcp_enabled,omitempty" xml:"platform_mcp_enabled,omitempty"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled *bool `form:"customer_managed_encryption_keys_enabled,omitempty" json:"customer_managed_encryption_keys_enabled,omitempty" xml:"customer_managed_encryption_keys_enabled,omitempty"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled *bool `form:"remote_session_auto_refresh_enabled,omitempty" json:"remote_session_auto_refresh_enabled,omitempty" xml:"remote_session_auto_refresh_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -441,18 +452,22 @@ func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetP
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
 func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *features.GetProductFeaturesResult {
 	v := &features.GetProductFeaturesResult{
-		LogsEnabled:                  *body.LogsEnabled,
-		ToolIoLogsEnabled:            *body.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        *body.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: *body.AuthzChallengeLoggingEnabled,
-		Webhooks:                     *body.Webhooks,
-		SsoEnabled:                   *body.SsoEnabled,
-		ScimEnabled:                  *body.ScimEnabled,
-		HooksBrowserLoginEnabled:     *body.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:         *body.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:       *body.CustomModelKeysEnabled,
-		SkillsEnabled:                *body.SkillsEnabled,
-		DeviceAgent:                  *body.DeviceAgent,
+		LogsEnabled:                          *body.LogsEnabled,
+		ToolIoLogsEnabled:                    *body.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                *body.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:         *body.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                           *body.SsoEnabled,
+		ScimEnabled:                          *body.ScimEnabled,
+		HooksBrowserLoginEnabled:             *body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                 *body.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:               *body.CustomModelKeysEnabled,
+		SkillsEnabled:                        *body.SkillsEnabled,
+		SkillCaptureMetadataOnly:             *body.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:    *body.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                   *body.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled: *body.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:      *body.RemoteSessionAutoRefreshEnabled,
+		DeviceAgent:                          *body.DeviceAgent,
 	}
 
 	return v
@@ -773,9 +788,6 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	if body.AuthzChallengeLoggingEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "body"))
 	}
-	if body.Webhooks == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("webhooks", "body"))
-	}
 	if body.SsoEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sso_enabled", "body"))
 	}
@@ -793,6 +805,21 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.SkillsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skills_enabled", "body"))
+	}
+	if body.SkillCaptureMetadataOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_capture_metadata_only", "body"))
+	}
+	if body.AiPlatformPushIntegrationsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
+	}
+	if body.PlatformMcpEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform_mcp_enabled", "body"))
+	}
+	if body.CustomerManagedEncryptionKeysEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("customer_managed_encryption_keys_enabled", "body"))
+	}
+	if body.RemoteSessionAutoRefreshEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

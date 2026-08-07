@@ -59,7 +59,7 @@ export type McpServersQueryError =
  * listMcpServers mcpServers
  *
  * @remarks
- * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+ * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServers(
   request?: ListMcpServersRequest | undefined,
@@ -82,7 +82,7 @@ export function useMcpServers(
  * listMcpServers mcpServers
  *
  * @remarks
- * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+ * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServersSuspense(
   request?: ListMcpServersRequest | undefined,
@@ -108,6 +108,7 @@ export function setMcpServersData(
       remoteMcpServerId?: string | undefined;
       tunneledMcpServerId?: string | undefined;
       toolsetId?: string | undefined;
+      unproxiedMcpServerId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -127,6 +128,7 @@ export function invalidateMcpServers(
       remoteMcpServerId?: string | undefined;
       tunneledMcpServerId?: string | undefined;
       toolsetId?: string | undefined;
+      unproxiedMcpServerId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

@@ -13,6 +13,10 @@ import {
   AssistantMCPServerRef$inboundSchema,
 } from "./assistantmcpserverref.js";
 import {
+  AssistantSkillRef,
+  AssistantSkillRef$inboundSchema,
+} from "./assistantskillref.js";
+import {
   AssistantToolsetRef,
   AssistantToolsetRef$inboundSchema,
 } from "./assistanttoolsetref.js";
@@ -67,6 +71,10 @@ export type Assistant = {
    */
   projectId: string;
   /**
+   * Skills attached to the assistant.
+   */
+  skills: Array<AssistantSkillRef>;
+  /**
    * The assistant status.
    */
   status: AssistantStatus;
@@ -105,6 +113,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       model: z.string(),
       name: z.string(),
       project_id: z.string(),
+      skills: z.array(AssistantSkillRef$inboundSchema),
       status: AssistantStatus$inboundSchema,
       toolsets: z.array(AssistantToolsetRef$inboundSchema),
       updated_at: z.pipe(

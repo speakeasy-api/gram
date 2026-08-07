@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -211,6 +212,7 @@ func TestServePublic_PrivateWithOAuth_ValidToken_Succeeds(t *testing.T) {
 		ProjectID:          *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, toolset.ID.String())
 
 	// Issue a real Gram OAuth token with the session as the external secret.
 	upstreamExpiry := time.Now().Add(24 * time.Hour)
@@ -622,6 +624,8 @@ func TestServePublic_PrivateWithOAuth_WrongToolsetToken_Returns401(t *testing.T)
 	// Two independent private OAuth toolsets in the same project.
 	toolsetA := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, "wrong-aud-a")
 	toolsetB := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, "wrong-aud-b")
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, toolsetA.ID.String())
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, toolsetB.ID.String())
 
 	// Issue a real Gram OAuth token bound to toolset A. Use a session as
 	// the upstream credential, mirroring the pattern in

@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
  * Skill activation payload.
@@ -13,25 +14,52 @@ export type HookSkillData = {
    */
   name: string;
   /**
+   * SHA-256 of the raw skill manifest, if available.
+   */
+  rawSha256?: string | undefined;
+  /**
    * Skill source or namespace, if available.
    */
   source?: string | undefined;
+  /**
+   * Scope where the skill was resolved, if available.
+   */
+  sourceLevel?: string | undefined;
+  /**
+   * Local path where the skill was resolved, if available.
+   */
+  sourcePath?: string | undefined;
 };
 
 /** @internal */
 export type HookSkillData$Outbound = {
   name: string;
+  raw_sha256?: string | undefined;
   source?: string | undefined;
+  source_level?: string | undefined;
+  source_path?: string | undefined;
 };
 
 /** @internal */
 export const HookSkillData$outboundSchema: z.ZodMiniType<
   HookSkillData$Outbound,
   HookSkillData
-> = z.object({
-  name: z.string(),
-  source: z.optional(z.string()),
-});
+> = z.pipe(
+  z.object({
+    name: z.string(),
+    rawSha256: z.optional(z.string()),
+    source: z.optional(z.string()),
+    sourceLevel: z.optional(z.string()),
+    sourcePath: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      rawSha256: "raw_sha256",
+      sourceLevel: "source_level",
+      sourcePath: "source_path",
+    });
+  }),
+);
 
 export function hookSkillDataToJSON(hookSkillData: HookSkillData): string {
   return JSON.stringify(HookSkillData$outboundSchema.parse(hookSkillData));

@@ -1,6 +1,6 @@
 import { useProject } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import {
@@ -64,7 +64,7 @@ export const AgentifyProvider = ({
 
     const example = await fetch(exampleUrl!).then((res) => res.text());
 
-    const result = await generateObject({
+    const result = await generateText({
       model,
       prompt: `
 <instructions>
@@ -100,19 +100,21 @@ export const AgentifyProvider = ({
 </example-agent>
       `,
       temperature: 0.5,
-      schema: z.object({
-        agentCode: z.string(),
+      output: Output.object({
+        schema: z.object({
+          agentCode: z.string(),
+        }),
       }),
     });
 
     setInProgress(false);
-    setResult((result.object as { agentCode: string }).agentCode);
+    setResult((result.output as { agentCode: string }).agentCode);
     setResultLang(lang);
     setResultFramework(framework);
     setResultPrompt(prompt);
     setResultNumMessages(messages.length);
 
-    return (result.object as { agentCode: string }).agentCode;
+    return (result.output as { agentCode: string }).agentCode;
   };
 
   const outdated =

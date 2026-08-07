@@ -1,19 +1,19 @@
 import { ToolList } from "@/components/tool-list";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { EditToolDialog } from "./EditToolDialog";
+import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
 
 interface ManageToolsDialogProps {
   open: boolean;
@@ -22,6 +22,7 @@ interface ManageToolsDialogProps {
   currentTools: Tool[];
   onAddTools: (toolUrns: string[]) => void;
   onRemoveTools: (toolUrns: string[]) => void;
+  onToolUpdate: (tool: Tool, updates: ToolUpdatePayload) => Promise<void>;
   initialGroup?: string; // If provided, filter to this source initially
 }
 
@@ -32,6 +33,7 @@ export function ManageToolsDialog({
   currentTools,
   onAddTools,
   onRemoveTools,
+  onToolUpdate,
   initialGroup,
 }: ManageToolsDialogProps): JSX.Element {
   const [search, setSearch] = useState("");
@@ -248,17 +250,26 @@ export function ManageToolsDialog({
         tool={editingTool}
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}
-        onSave={(updates) => {
-          // TODO: Implement save functionality
-          console.log("Save tool:", editingTool?.name, updates);
-          toast.success("Tool updated");
-        }}
-        onRemove={() => {
-          if (editingTool?.toolUrn) {
-            onRemoveTools([editingTool.toolUrn]);
-            toast.success("Tool removed");
+        onSave={async (updates) => {
+          if (!editingTool) return;
+
+          try {
+            await onToolUpdate(editingTool, updates);
+            toast.success("Tool updated");
+          } catch (error) {
+            toast.error("Failed to update tool");
+            throw error;
           }
         }}
+        onRemove={
+          mode === "manage"
+            ? () => {
+                if (editingTool?.toolUrn) {
+                  onRemoveTools([editingTool.toolUrn]);
+                }
+              }
+            : undefined
+        }
       />
     </Dialog>
   );

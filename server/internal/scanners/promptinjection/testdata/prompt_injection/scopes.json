@@ -1,5 +1,5 @@
 {
-  "_comment": "Granular prompt-injection scope. scope_exempt drops a message from scanning: the agent's own free-text and read-only tool CALLS. Everything that can carry an injection stays in scope (user input, tool OUTPUT, write/exec tool calls). Read-only allowlist kept narrow so exfil-in-toolargs isn't exempted.",
+  "_comment": "Prompt-injection scope. scope_exempt drops a message from scanning: the agent's own free text and all-read-only tool-call batches. Everything that can carry an injection stays in scope: user input, tool output, and write or exec tool calls.",
   "scope_include": "",
   "scope_exempt": "kind == \"assistant_message\" || (kind == \"tool_request\" && tool_calls.exists(t, t.name.matchRegex(\"^(Read|Grep|Glob|LS|NotebookRead|ExitPlanMode|TodoWrite|AskUserQuestion|ToolSearch|WebSearch)$\")) && !tool_calls.exists(t, !t.name.matchRegex(\"^(Read|Grep|Glob|LS|NotebookRead|ExitPlanMode|TodoWrite|AskUserQuestion|ToolSearch|WebSearch)$\")))"
 }

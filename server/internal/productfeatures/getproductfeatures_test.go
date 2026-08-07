@@ -10,6 +10,7 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // GetProductFeatures exposes device_agent as a member-readable signal derived
@@ -45,4 +46,20 @@ func TestProductFeaturesService_GetProductFeatures_DeviceAgent(t *testing.T) {
 	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
 	require.NoError(t, err)
 	require.True(t, res.DeviceAgent, "a device has synced")
+}
+
+func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	require.NoError(t, err)
+	require.False(t, res.SkillCaptureMetadataOnly)
+	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		FeatureName: string(productfeatures.FeatureSkillCaptureMetadataOnly),
+		Enabled:     true,
+	}))
+	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	require.NoError(t, err)
+	require.True(t, res.SkillCaptureMetadataOnly)
 }

@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -17,7 +17,10 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Alert, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -35,6 +38,7 @@ function mcpServerVisibilityUpdateForm(
     remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
     tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
     toolsetId: mcpServer.toolsetId ?? undefined,
+    unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
     environmentId: mcpServer.environmentId ?? undefined,
     toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
     visibility,
@@ -66,12 +70,12 @@ function ServerControlRow({
   return (
     <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <Type small className="font-medium">
+        <Text small className="font-medium">
           {title}
-        </Type>
-        <Type muted small className="max-w-2xl">
+        </Text>
+        <Text muted small className="max-w-2xl">
           {description}
-        </Type>
+        </Text>
       </div>
       <div className="flex shrink-0 items-center gap-2">{children}</div>
     </div>
@@ -171,9 +175,9 @@ export function DangerZoneSection({
                     : "This MCP server is offline and will not serve client traffic."
                 }
               >
-                <Type muted small>
+                <Text muted small>
                   {enabled ? "Enabled" : "Disabled"}
-                </Type>
+                </Text>
                 <RequireScope scope="mcp:write" level="component">
                   <Switch
                     checked={enabled}
@@ -272,16 +276,12 @@ function ServerAvailabilityDialog({
             disabled={isLoading}
             onClick={onConfirm}
           >
-            {isLoading ? (
-              <>
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
-                </Button.LeftIcon>
-                <Button.Text>Saving</Button.Text>
-              </>
-            ) : (
-              <Button.Text>Continue</Button.Text>
+            {isLoading && (
+              <Button.LeftIcon>
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              </Button.LeftIcon>
             )}
+            <Button.Text>{isLoading ? "Saving" : "Continue"}</Button.Text>
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
@@ -340,27 +340,27 @@ function DeleteMcpServerDialogContent({
         <Dialog.Title>Delete this MCP server?</Dialog.Title>
       </Dialog.Header>
       <Stack gap={3}>
-        <Type>
+        <Text>
           This will soft-delete the MCP server <strong>{mcpServer.name}</strong>{" "}
           and the following endpoints. The action cannot be undone.
-        </Type>
+        </Text>
         {endpoints.length > 0 ? (
           <ul className="list-disc pl-6">
             {endpoints.map((endpoint) => (
               <li key={endpoint.id}>
-                <Type small className="font-mono">
+                <Text small className="font-mono">
                   {endpoint.slug}
                   {endpoint.customDomainId
                     ? " (custom domain)"
                     : " (platform-hosted)"}
-                </Type>
+                </Text>
               </li>
             ))}
           </ul>
         ) : (
-          <Type muted small>
+          <Text muted small>
             No endpoints are currently associated with this MCP server.
-          </Type>
+          </Text>
         )}
         {remove.isError && (
           <Alert variant="error" dismissible={false}>

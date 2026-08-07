@@ -14,6 +14,14 @@ export type CustomDomain = {
    */
   activated: boolean;
   /**
+   * When the currently observed TLS certificate expires.
+   */
+  certificateExpiresAt?: Date | undefined;
+  /**
+   * The number of consecutive failed health checks
+   */
+  consecutiveFailures?: number | undefined;
+  /**
    * When the custom domain was created.
    */
   createdAt: Date;
@@ -21,6 +29,18 @@ export type CustomDomain = {
    * The custom domain name
    */
   domain: string;
+  /**
+   * When the domain health was last checked.
+   */
+  healthCheckedAt?: Date | undefined;
+  /**
+   * The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.
+   */
+  healthIssue?: string | undefined;
+  /**
+   * The latest observed domain health status. One of: unknown, healthy, unhealthy.
+   */
+  healthStatus?: string | undefined;
   /**
    * The ID of the custom domain
    */
@@ -34,9 +54,21 @@ export type CustomDomain = {
    */
   isUpdating: boolean;
   /**
+   * The token served for OpenAI app-submission domain verification, if configured
+   */
+  openaiAppsChallengeToken?: string | undefined;
+  /**
    * The ID of the organization this domain belongs to
    */
   organizationId: string;
+  /**
+   * The MCP endpoint currently mapped to the domain root, if any
+   */
+  rootMcpEndpointId?: string | undefined;
+  /**
+   * When the current unhealthy period began.
+   */
+  unhealthySince?: Date | undefined;
   /**
    * When the custom domain was last updated.
    */
@@ -52,15 +84,29 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
   z.pipe(
     z.object({
       activated: z.boolean(),
+      certificate_expires_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
+      consecutive_failures: z.optional(z.int()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
       domain: z.string(),
+      health_checked_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
+      health_issue: z.optional(z.string()),
+      health_status: z.optional(z.string()),
       id: z.string(),
       ip_allowlist: z.array(z.string()),
       is_updating: z.boolean(),
+      openai_apps_challenge_token: z.optional(z.string()),
       organization_id: z.string(),
+      root_mcp_endpoint_id: z.optional(z.string()),
+      unhealthy_since: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -69,10 +115,18 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "certificate_expires_at": "certificateExpiresAt",
+        "consecutive_failures": "consecutiveFailures",
         "created_at": "createdAt",
+        "health_checked_at": "healthCheckedAt",
+        "health_issue": "healthIssue",
+        "health_status": "healthStatus",
         "ip_allowlist": "ipAllowlist",
         "is_updating": "isUpdating",
+        "openai_apps_challenge_token": "openaiAppsChallengeToken",
         "organization_id": "organizationId",
+        "root_mcp_endpoint_id": "rootMcpEndpointId",
+        "unhealthy_since": "unhealthySince",
         "updated_at": "updatedAt",
       });
     }),

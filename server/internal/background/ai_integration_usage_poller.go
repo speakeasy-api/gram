@@ -90,12 +90,12 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 		batch := make([]runningPoller, 0, len(candidates))
 		for _, candidate := range candidates {
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.ID, candidate.Provider),
+				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.SyncID),
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				WaitForCancellation:   true,
 			})
 
-			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.ID.String())
+			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.SyncID.String())
 			if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				if !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 					return fmt.Errorf("start poller child: %w", err)
@@ -129,7 +129,7 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
+func AIUsagePollerWorkflow(ctx workflow.Context, input string) error {
 	taskQueue := AIUsagePollerTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		TaskQueue:              taskQueue,
@@ -145,27 +145,27 @@ func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.PollAIData, configID).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, a.PollAIData, input).Get(ctx, nil); err != nil {
 		return fmt.Errorf("poll and persist ai integration usage: %w", err)
 	}
 
 	return nil
 }
 
-func buildAIUsagePollerWorkflowID(organizationSlug string, configID uuid.UUID, provider string) string {
-	return fmt.Sprintf("v1:ai-usage-poller:%s:%s:%s", organizationSlug, configID.String(), provider)
+func buildAIUsagePollerWorkflowID(organizationSlug string, syncID uuid.UUID) string {
+	return fmt.Sprintf("v1:ai-usage-poller:%s:%s", organizationSlug, syncID.String())
 }
 
 type TemporalAIUsagePoller struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
+func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug string, syncID uuid.UUID) error {
 	_, err := p.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, configID, provider),
+		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, syncID),
 		TaskQueue:             string(p.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}, AIUsagePollerWorkflow, configID.String())
+	}, AIUsagePollerWorkflow, syncID.String())
 	return err
 }
 

@@ -65,6 +65,10 @@ func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 	return 0, nil
 }
 
+func (m *mockProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
+	return nil
+}
+
 func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
 	return 0, 0, nil
 }
@@ -1604,7 +1608,12 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 
 func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "openai/gpt-5.4", ResolveModel("openai/gpt-5.4"))
+	require.Equal(t, "anthropic/claude-opus-5", ResolveModel("anthropic/claude-opus-5"))
+}
+
+func TestDefaultChatModel_UsesClaudeOpus5(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "anthropic/claude-opus-5", DefaultChatModel)
 }
 
 func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {

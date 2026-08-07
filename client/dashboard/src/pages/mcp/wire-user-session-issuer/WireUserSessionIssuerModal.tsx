@@ -1,17 +1,18 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { remoteLoginCallbackURL } from "@/lib/externalMcpUserSessions";
+import { resolveRemoteSessionIssuerByTierPrecedence } from "@/lib/sources";
 import { Toolset } from "@/lib/toolTypes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import {
@@ -28,7 +29,8 @@ import {
   useUserSessionIssuers,
 } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -190,9 +192,15 @@ function WireUserSessionIssuerBody({
       (issuer) => issuer.slug === defaults.userSessionIssuerSlug,
     ) ?? null;
 
+  // A slug can now appear across more than one tier (a project issuer, an
+  // inherited org issuer, and a platform issuer may all share it), so resolve by
+  // tier precedence — project > organization > platform — rather than taking the
+  // first list match, which is ordered by creation time and tier-blind.
   const existingRemoteSessionIssuer =
-    remoteIssuers.data?.result.items?.find(
-      (issuer) => issuer.slug === defaults.remoteSessionIssuerSlug,
+    resolveRemoteSessionIssuerByTierPrecedence(
+      remoteIssuers.data?.result.items?.filter(
+        (issuer) => issuer.slug === defaults.remoteSessionIssuerSlug,
+      ) ?? [],
     ) ?? null;
 
   const existingRemoteSessionClient =
@@ -327,16 +335,16 @@ function StepHeading({
 }) {
   return (
     <Stack gap={1}>
-      <Type
+      <Text
         small
         className="text-muted-foreground text-[11px] tracking-wide uppercase"
       >
         Step {index + 1} of {total}
-      </Type>
-      <Type className="text-lg font-medium">{step.resourceLabel}</Type>
-      <Type small className="text-muted-foreground">
+      </Text>
+      <Text className="text-lg font-medium">{step.resourceLabel}</Text>
+      <Text small className="text-muted-foreground">
         {step.description}
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -412,7 +420,7 @@ function StepIndicator({
               ordinal={idx + 1}
               emphasized={isActive}
             />
-            <Type
+            <Text
               small
               className={
                 isActive
@@ -423,7 +431,7 @@ function StepIndicator({
               }
             >
               {s.resourceLabel}
-            </Type>
+            </Text>
             {idx < steps.length - 1 && (
               <span
                 className={`mx-1 h-px w-6 ${
@@ -509,11 +517,11 @@ function CurrentStepBody({
               </SelectContent>
             </Select>
           </FieldLabel>
-          <Type small className="text-muted-foreground">
+          <Text small className="text-muted-foreground">
             authn_challenge_mode is fixed to{" "}
             <code className="font-mono">interactive</code> — the chain mode is
             retained only for legacy proxies.
-          </Type>
+          </Text>
         </Stack>
       );
     case "remoteSessionIssuer":
@@ -532,12 +540,12 @@ function CurrentStepBody({
               onChange={(value) => setForm({ issuerUrl: value })}
             />
           </FieldLabel>
-          <Type small className="text-muted-foreground">
+          <Text small className="text-muted-foreground">
             The platform hits this URL's RFC 8414 well-known document to prefill
             the authorization, token, registration, and JWKS endpoints. If the
             upstream does not publish one, the platform falls back to the
             endpoints already stored on the OAuth proxy provider.
-          </Type>
+          </Text>
         </Stack>
       );
     case "remoteSessionClient":
@@ -652,7 +660,7 @@ function ClientStrategyChooser({
             type="button"
             disabled={disabled}
             onClick={() => onPick(opt.key)}
-            className={`border-border w-full rounded-md border p-3 text-left transition-colors ${
+            className={`border-border w-full border p-3 text-left transition-colors ${
               disabled
                 ? "cursor-not-allowed opacity-50"
                 : "hover:bg-muted/60 hover:border-foreground/30"
@@ -660,19 +668,19 @@ function ClientStrategyChooser({
           >
             <Stack gap={1}>
               <div className="flex items-center justify-between">
-                <Type className="font-medium">{opt.title}</Type>
+                <Text className="font-medium">{opt.title}</Text>
                 {disabled && (
-                  <Type
+                  <Text
                     small
                     className="text-muted-foreground text-[10px] tracking-wide uppercase"
                   >
                     No registration endpoint
-                  </Type>
+                  </Text>
                 )}
               </div>
-              <Type small className="text-muted-foreground">
+              <Text small className="text-muted-foreground">
                 {opt.blurb}
-              </Type>
+              </Text>
             </Stack>
           </button>
         );
@@ -718,12 +726,12 @@ function ClonePane({
           mono
         />
       </Stack>
-      <Type small className="text-muted-foreground">
+      <Text small className="text-muted-foreground">
         Cloning reads the client_id / client_secret out of the{" "}
         <code className="font-mono">{proxyProviderSlug}</code> proxy provider
         and persists them on a new remote_session_client server-side. The secret
         never leaves the server.
-      </Type>
+      </Text>
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
@@ -759,12 +767,12 @@ function RegisterPane({
         title="Register via Dynamic Client Registration"
         onBack={onBack}
       />
-      <Type small className="text-muted-foreground">
+      <Text small className="text-muted-foreground">
         The platform sends an RFC 7591 Dynamic Client Registration request to
         the issuer's registration_endpoint. The issuer mints a new client_id and
         client_secret; the platform persists both as a remote_session_client.
         Use this when the upstream IdP supports DCR.
-      </Type>
+      </Text>
       <FieldReadOnly
         label="Registration endpoint"
         value={remoteSessionIssuer?.registrationEndpoint ?? "—"}
@@ -798,11 +806,11 @@ function ManualPane({
   return (
     <Stack gap={3}>
       <StrategyHeader title="Manual" onBack={onBack} />
-      <Type small className="text-muted-foreground">
+      <Text small className="text-muted-foreground">
         Paste a client_id and client_secret you registered with the upstream
         authorization server. The platform encrypts the secret before persisting
         it.
-      </Type>
+      </Text>
       <FieldLabel label="Client ID">
         <Input
           value={form.manualClientId}
@@ -837,7 +845,7 @@ function StrategyHeader({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <Type className="font-medium">{title}</Type>
+      <Text className="font-medium">{title}</Text>
       <button
         type="button"
         onClick={onBack}
@@ -858,9 +866,9 @@ function FieldLabel({
 }) {
   return (
     <Stack gap={1}>
-      <Type small className="font-medium">
+      <Text small className="font-medium">
         {label}
-      </Type>
+      </Text>
       {children}
     </Stack>
   );
@@ -879,20 +887,20 @@ function FieldReadOnly({
 }) {
   return (
     <Stack gap={1}>
-      <Type small className="font-medium">
+      <Text small className="font-medium">
         {label}
-      </Type>
+      </Text>
       <div
-        className={`bg-muted/40 border-border rounded-md border px-2 py-1.5 text-sm break-all ${
+        className={`bg-muted/40 border-border border px-2 py-1.5 text-sm break-all ${
           mono ? "font-mono" : ""
         }`}
       >
         {value}
       </div>
       {hint && (
-        <Type small className="text-muted-foreground">
+        <Text small className="text-muted-foreground">
           {hint}
-        </Type>
+        </Text>
       )}
     </Stack>
   );
@@ -915,7 +923,7 @@ function Callout({
           : "border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
   return (
     <div
-      className={`rounded-md border px-3 py-2 text-sm ${toneClasses}`}
+      className={`border px-3 py-2 text-sm ${toneClasses}`}
       role={tone === "error" ? "alert" : undefined}
     >
       {children}

@@ -93,6 +93,7 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",

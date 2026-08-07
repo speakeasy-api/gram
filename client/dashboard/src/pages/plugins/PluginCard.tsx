@@ -1,22 +1,22 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
-import type { Action } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import type { Action } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginInstallButton } from "./PluginInstallButton";
 
 export function PluginCard({
   plugin,
@@ -112,7 +113,7 @@ export function PluginCard({
   return (
     <CardContextMenu actions={actions}>
       <div>
-        <DotCard
+        <Card.Entity
           className="cursor-pointer"
           onClick={() => {
             void navigate(detailHref);
@@ -124,14 +125,14 @@ export function PluginCard({
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <Type
+                <Text
                   variant="subheading"
                   as="div"
                   className="text-md group-hover:text-primary truncate transition-colors"
                   title={plugin.name}
                 >
                   {plugin.name}
-                </Type>
+                </Text>
                 {isDefault && (
                   <Badge variant="information">
                     <Badge.Text>Default</Badge.Text>
@@ -143,14 +144,14 @@ export function PluginCard({
                   </Badge>
                 )}
               </div>
-              <Type
+              <Text
                 small
                 muted
                 className="truncate font-mono"
                 title={plugin.slug}
               >
                 {plugin.slug}
-              </Type>
+              </Text>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Badge variant="neutral">
@@ -175,11 +176,11 @@ export function PluginCard({
           </div>
 
           {description && (
-            <Type small muted className="mb-1 line-clamp-3">
+            <Text small muted className="mb-1 line-clamp-3">
               {description}
-            </Type>
+            </Text>
           )}
-          <Type small className="text-muted-foreground/60 mt-2 mb-3">
+          <Text small className="text-muted-foreground/60 mt-2 mb-3">
             {publishStatus?.lastPublishedAt ? (
               <>
                 Published{" "}
@@ -190,7 +191,7 @@ export function PluginCard({
                 Updated <HumanizeDateTime date={plugin.updatedAt} />
               </>
             )}
-          </Type>
+          </Text>
 
           <div className="mt-auto flex items-center justify-end gap-2 pt-2">
             <div className="flex items-center gap-2">
@@ -200,13 +201,7 @@ export function PluginCard({
                   onOpenChange={setIsDownloadMenuOpen}
                 >
                   <DropdownMenuTrigger asChild>
-                    <Button variant="primary" size="sm">
-                      <Button.Text>Install</Button.Text>
-                      <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                      <Button.RightIcon>
-                        <Icon name="chevron-down" className="h-4 w-4" />
-                      </Button.RightIcon>
-                    </Button>
+                    <PluginInstallButton size="sm" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {installActions.map((action) => (
@@ -242,7 +237,7 @@ export function PluginCard({
               </Link>
             </div>
           </div>
-        </DotCard>
+        </Card.Entity>
         {installTarget && (
           <div onClick={(e) => e.stopPropagation()}>
             <InstallInstructionsDialog

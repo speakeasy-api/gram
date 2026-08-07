@@ -4,34 +4,46 @@ import "context"
 
 var _ CustomDomainProvisioner = (*StubProvisioner)(nil)
 var _ CustomDomainProvisioner = (*IngressProvisioner)(nil)
-var _ CustomDomainProvisioner = (*GatewayProvisioner)(nil)
 
 type ProvisionerKind string
 
+const ProvisionerKindIngress ProvisionerKind = "ingress"
+
+// Orphan reconciliation relies on every provisioner applying these labels.
 const (
-	ProvisionerKindIngress ProvisionerKind = "ingress"
-	ProvisionerKindGateway ProvisionerKind = "gateway"
+	managedByLabelKey             = "app.kubernetes.io/managed-by"
+	managedByLabelValue           = "custom-domain-chart"
+	customDomainLabelKey          = "custom-domain"
+	customDomainRoleKey           = "custom-domain-role"
+	customDomainRoleMain          = "primary"
+	customDomainRoleRoot          = "root"
+	customDomainRoleWellKnownRoot = "wellknown-root"
 )
 
-// SetupResult carries the provisioned resource identifiers.
-// SecretName is empty when the provisioner does not own a TLS Secret
-// (Gateway rows: parent Gateway owns TLS, HTTPRoute does not reference a Secret).
+// RouteConfig is the desired routing state for one custom domain.
+type RouteConfig struct {
+	Domain      string
+	IPAllowlist []string
+	RootTarget  *string
+}
+
+// SetupResult carries the provisioned primary resource identifiers.
+// SecretName is empty when the provisioner does not own a TLS Secret.
 type SetupResult struct {
 	ResourceName string
 	SecretName   string
 }
 
-// CustomDomainProvisioner abstracts Kubernetes Ingress and Gateway API provisioning.
+// CustomDomainProvisioner abstracts Kubernetes custom-domain provisioning.
 // Get probes resource existence only; readiness polling is a follow-up.
-// Delete is idempotent; Gateway impl must not touch any Secret it did not create.
+// Delete is idempotent.
 //
-// Setup accepts an ipAllowlist of IPv4 addresses and/or CIDR ranges. A non-empty
-// list restricts inbound traffic to those sources; an empty/nil list removes any
-// previously applied restriction (open to all). Setup is idempotent and is also
-// the re-apply path when only the allowlist changes.
+// Apply accepts the complete desired route state. It is idempotent: a non-empty
+// allowlist restricts inbound traffic, an empty list removes the restriction,
+// and RootTarget controls whether the custom-domain root route exists.
 type CustomDomainProvisioner interface {
 	Kind() ProvisionerKind
-	Setup(ctx context.Context, domain string, ipAllowlist []string) (SetupResult, error)
+	Apply(ctx context.Context, config RouteConfig) (SetupResult, error)
 	Get(ctx context.Context, resourceName string) error
 	Delete(ctx context.Context, resourceName, secretName string) error
 }

@@ -25,6 +25,16 @@ const (
 	// fails before the backend MCP response can be relayed. Set by the gateway
 	// and by gram-server routing; read by the retry/failover policy.
 	HeaderTunnelError = "X-Gram-Tunnel-Error"
+	// HeaderTunnelAgentSession is an internal gram-server <-> gateway header
+	// with dual use: on a forward request it pins the forward to one exact
+	// agent session (set by gram-server for session-bearing anonymous MCP
+	// traffic; the gateway answers no-live-session if that session is gone
+	// rather than spilling to a sibling agent whose backend does not know the
+	// MCP session). On a forward response it reports the agent session the
+	// gateway actually served, so gram-server can record it at MCP session
+	// mint time. Stripped by the gateway before agent forwarding and by
+	// gram-server before client relay.
+	HeaderTunnelAgentSession = "X-Gram-Tunnel-Agent-Session"
 )
 
 // Tunnel forward error statuses reported in HeaderTunnelError. Callers switch on

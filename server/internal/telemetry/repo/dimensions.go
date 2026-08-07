@@ -17,6 +17,7 @@ type attributeDimension struct {
 	column                 string
 	kind                   attributeDimensionKind
 	coLocateSessionFilters bool
+	emptyIsNotApplicable   bool
 }
 
 type telemetryDimension struct {
@@ -24,6 +25,22 @@ type telemetryDimension struct {
 	rawExpr                string
 	kind                   attributeDimensionKind
 	coLocateSessionFilters bool
+	// emptyIsNotApplicable marks dimensions where an empty value means the
+	// attribute does not apply to the row at all (e.g. a turn that ran no
+	// skill), rather than an unclassified/unset population worth surfacing.
+	// dimension_values drops '' for these; for every other dimension '' is the
+	// real, drillable "(unset)" bucket the breakdown table renders, and
+	// consumers (the cost explorer's axis pruning) must be able to count it
+	// (DNO-384, DNO-425).
+	emptyIsNotApplicable bool
+	// summaryColumn is the chat_session_summaries column carrying the
+	// dimension's per-chat distinct values (a groupUniqArrayArray-merged
+	// Array(String) for scalar/array dimensions; the key column for
+	// project_id). Empty for the co-located Claude attribution dimensions,
+	// whose registry key doubles as their field name in the
+	// attribution_tuples named tuple (enforced by the registry bindings
+	// test in sessions_schema_sync_test.go).
+	summaryColumn string
 }
 
 // telemetryDimensionRegistry is the single allowlist for public telemetry
@@ -36,36 +53,68 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "toString(attributes.user.attributes.department_name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "department_names",
 	},
 	"job_title": {
 		aggregateColumn:        "job_title",
 		rawExpr:                "toString(attributes.user.attributes.job_title)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "job_titles",
 	},
 	"employee_type": {
 		aggregateColumn:        "employee_type",
 		rawExpr:                "toString(attributes.user.attributes.employee_type)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "employee_types",
 	},
 	"division_name": {
 		aggregateColumn:        "division_name",
 		rawExpr:                "toString(attributes.user.attributes.division_name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "division_names",
 	},
 	"cost_center_name": {
 		aggregateColumn:        "cost_center_name",
 		rawExpr:                "toString(attributes.user.attributes.cost_center_name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "cost_center_names",
 	},
 	"email": {
-		aggregateColumn:        "user_email",
-		rawExpr:                "user_email",
+		// The user breakdown falls back to the device hostname when a session
+		// carries no email: company-credential sessions emit no user identity,
+		// but the Go hooks report gram.hook.hostname on every event (and the
+		// session cache propagates it onto Claude OTEL rows), so identity-less
+		// spend splits per device instead of pooling into one empty bucket.
+		// Group, filter, and dimension_values all share this expression, which
+		// keeps the hostname buckets drillable. Rows with neither email nor
+		// hostname still land in the '' bucket.
+		aggregateColumn:        "if(user_email != '', user_email, hook_hostname)",
+		rawExpr:                "if(user_email != '', user_email, toString(attributes.gram.hook.hostname))",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "emails",
+	},
+	"hostname": {
+		// The device hostname the Go hooks report on every event
+		// (gram.hook.hostname), propagated onto Claude OTEL rows via the
+		// session cache. A standalone per-device breakdown, independent of the
+		// email dimension's fallback use of the same column.
+		aggregateColumn:        "hook_hostname",
+		rawExpr:                "toString(attributes.gram.hook.hostname)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "hostnames",
 	},
 	"model": {
 		aggregateColumn: "model",
@@ -76,12 +125,16 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                sessionModelExpr,
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "models",
 	},
 	"hook_source": {
 		aggregateColumn:        "hook_source",
 		rawExpr:                "hook_source",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "hook_sources",
 	},
 	"account_type": {
 		// AI account classification: 'team' | 'personal' | '' (unclassified).
@@ -91,6 +144,8 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "account_type",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "account_types",
 	},
 	"provider": {
 		// AI provider for the account: 'anthropic' | 'openai' | 'cursor' | ''.
@@ -100,6 +155,8 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "provider",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "providers",
 	},
 	"billing_mode": {
 		// How the account is billed: 'metered' (pay-per-token; cost is real spend)
@@ -111,54 +168,72 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "billing_mode",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "billing_modes",
 	},
 	"query_source": {
 		aggregateColumn:        "query_source",
 		rawExpr:                "toString(attributes.query_source)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
+		summaryColumn:          "",
 	},
 	"skill_name": {
 		aggregateColumn:        "skill_name",
 		rawExpr:                "toString(attributes.skill.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
+		summaryColumn:          "",
 	},
 	"agent_name": {
 		aggregateColumn:        "agent_name",
 		rawExpr:                "toString(attributes.agent.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
+		summaryColumn:          "",
 	},
 	"mcp_server_name": {
 		aggregateColumn:        "mcp_server_name",
 		rawExpr:                "toString(attributes.mcp_server.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
+		summaryColumn:          "",
 	},
 	"mcp_tool_name": {
 		aggregateColumn:        "mcp_tool_name",
 		rawExpr:                "toString(attributes.mcp_tool.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
+		summaryColumn:          "",
 	},
 	"role": {
 		aggregateColumn:        "roles",
 		rawExpr:                "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))",
 		kind:                   attributeDimArray,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "roles",
 	},
 	"group": {
 		aggregateColumn:        "groups",
 		rawExpr:                "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))",
 		kind:                   attributeDimArray,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "groups",
 	},
 	"project_id": {
 		aggregateColumn:        "gram_project_id",
 		rawExpr:                "gram_project_id",
 		kind:                   attributeDimProject,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
+		summaryColumn:          "gram_project_id",
 	},
 }
 
@@ -169,6 +244,7 @@ func buildDimensionRegistry(columnFor func(telemetryDimension) string) map[strin
 			column:                 columnFor(dim),
 			kind:                   dim.kind,
 			coLocateSessionFilters: dim.coLocateSessionFilters,
+			emptyIsNotApplicable:   dim.emptyIsNotApplicable,
 		}
 	}
 	return out
@@ -180,4 +256,12 @@ var attributeDimensionRegistry = buildDimensionRegistry(func(dim telemetryDimens
 
 var sessionDimensionRegistry = buildDimensionRegistry(func(dim telemetryDimension) string {
 	return dim.rawExpr
+})
+
+// sessionSummaryDimensionRegistry resolves dimensions against the
+// chat_session_summaries columns for the summary-backed ListSessions path.
+// Co-located attribution dimensions resolve to "" here; their registry key is
+// their field name in the attribution_tuples named tuple.
+var sessionSummaryDimensionRegistry = buildDimensionRegistry(func(dim telemetryDimension) string {
+	return dim.summaryColumn
 })

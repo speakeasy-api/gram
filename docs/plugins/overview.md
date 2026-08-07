@@ -4,7 +4,7 @@ cwd: ../..
 
 # Plugins
 
-Plugins are distributable bundles of MCP servers (and observability hooks) that org admins create in Gram and publish to AI coding platforms. Once published, team members install the plugin through Claude Code, Cursor, or Codex's native plugin marketplace instead of configuring MCP servers manually.
+Plugins are distributable bundles of MCP servers (and observability hooks) that org admins create in Gram and publish to AI coding platforms. Once published, team members install the plugin through each platform's native plugin marketplace instead of configuring MCP servers manually.
 
 ## What a plugin is
 

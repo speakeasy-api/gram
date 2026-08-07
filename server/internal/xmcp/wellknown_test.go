@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -233,11 +234,16 @@ func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithExternalOAuth(t *t
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 
-	// External OAuth toolsets surface the upstream provider's metadata
-	// verbatim — confirm we passed the stored JSON through unmodified.
+	// External OAuth toolsets re-serve the upstream provider's captured
+	// metadata, but the issuer is rewritten to the Gram resource URL so the
+	// document satisfies RFC 8414 §3.3 (served issuer must equal the URL the
+	// client fetched it under, i.e. the /x/mcp/{slug} surface). The upstream's
+	// own authorization/token endpoints are preserved verbatim.
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.Equal(t, "https://test-oauth-server.example.com", metadata["issuer"])
+	require.Equal(t, "http://0.0.0.0/x/mcp/"+slug, metadata["issuer"])
+	require.Equal(t, "https://test-oauth-server.example.com/authorize", metadata["authorization_endpoint"])
+	require.Equal(t, "https://test-oauth-server.example.com/token", metadata["token_endpoint"])
 }
 
 // TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend verifies
@@ -573,4 +579,49 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend_
 	authServers, ok := metadata["authorization_servers"].([]any)
 	require.True(t, ok)
 	require.Equal(t, []any{expectedResource}, authServers)
+}
+
+// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn verifies the
+// /x/mcp well-known variant advertises client_id_metadata_document_supported
+// when the issuer organization's gram-user-session-cimd flag is on — the
+// shared mcp.ServeGetAuthorizationServer emits it for both route families.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, authCtx.ActiveOrganizationID, true)
+	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+
+	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.Equal(t, true, metadata["client_id_metadata_document_supported"])
+}
+
+// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff pins the
+// omit-when-disabled behavior on the /x/mcp variant.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+
+	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.NotContains(t, metadata, "client_id_metadata_document_supported")
 }

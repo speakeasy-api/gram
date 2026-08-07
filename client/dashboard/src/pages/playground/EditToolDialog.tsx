@@ -1,9 +1,9 @@
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { TextArea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
+import { TextArea } from "@/components/ui/Textarea";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import {
   Tool,
@@ -11,10 +11,10 @@ import {
   getToolTypeLabel,
   toolSupportsAnnotations,
 } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { McpIcon } from "@/components/ui/mcp-icon";
+import { McpIcon } from "@/components/ui/McpIcon";
 
 function getToolIcon(tool: Tool) {
   if (tool.type === "http") return FileCode;
@@ -71,7 +71,7 @@ interface EditToolDialogProps {
   documentIdToName?: Record<string, string>;
   functionIdToName?: Record<string, string>;
   onSave: (updates: ToolUpdatePayload) => void | Promise<void>;
-  onRemove: () => void;
+  onRemove?: () => void;
 }
 
 export function EditToolDialog({
@@ -93,6 +93,7 @@ export function EditToolDialog({
   // TODO: extend tag variations to prompt tools once they support tags.
   const [tags, setTags] = useState<string[] | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const hasAnnotations = tool ? toolSupportsAnnotations(tool) : false;
@@ -104,6 +105,30 @@ export function EditToolDialog({
     [tool],
   );
   const origTags = supportsTags ? tool?.variation?.tags : undefined;
+  const origTitle = tool?.variation?.title ?? tool?.annotations?.title ?? "";
+  const origReadOnly = tool
+    ? getAnnotationValue(tool, "readOnlyHint")
+    : undefined;
+  const origDestructive = tool
+    ? getAnnotationValue(tool, "destructiveHint")
+    : undefined;
+  const origIdempotent = tool
+    ? getAnnotationValue(tool, "idempotentHint")
+    : undefined;
+  const origOpenWorld = tool
+    ? getAnnotationValue(tool, "openWorldHint")
+    : undefined;
+
+  const hasChanges =
+    !!tool &&
+    (name !== tool.name ||
+      title !== origTitle ||
+      description !== (tool.description || "") ||
+      readOnlyHint !== origReadOnly ||
+      destructiveHint !== origDestructive ||
+      idempotentHint !== origIdempotent ||
+      openWorldHint !== origOpenWorld ||
+      (supportsTags && !tagsEqual(tags, origTags)));
 
   // Reset form when tool changes
   useEffect(() => {
@@ -161,7 +186,8 @@ export function EditToolDialog({
   ]);
 
   const handleSave = async () => {
-    if (!tool) return;
+    if (!tool || !hasChanges || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onSave({
@@ -181,18 +207,27 @@ export function EditToolDialog({
         ...(supportsTags && { tags }),
       });
       onOpenChange(false);
+    } catch {
+      // The mutation owner reports the error. Keep the editor open for retry.
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const handleRemove = () => {
-    onRemove();
+    if (savingRef.current) return;
+    onRemove?.();
     onOpenChange(false);
   };
 
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && savingRef.current) return;
+    onOpenChange(nextOpen);
+  };
+
   const handleClose = () => {
-    onOpenChange(false);
+    handleDialogOpenChange(false);
   };
 
   if (!tool) return null;
@@ -204,30 +239,14 @@ export function EditToolDialog({
   });
   const typeLabel = getToolTypeLabel(tool);
 
-  const origTitle = tool.variation?.title ?? tool.annotations?.title ?? "";
-  const origReadOnly = getAnnotationValue(tool, "readOnlyHint");
-  const origDestructive = getAnnotationValue(tool, "destructiveHint");
-  const origIdempotent = getAnnotationValue(tool, "idempotentHint");
-  const origOpenWorld = getAnnotationValue(tool, "openWorldHint");
-
-  const hasChanges =
-    name !== tool.name ||
-    title !== origTitle ||
-    description !== (tool.description || "") ||
-    readOnlyHint !== origReadOnly ||
-    destructiveHint !== origDestructive ||
-    idempotentHint !== origIdempotent ||
-    openWorldHint !== origOpenWorld ||
-    (supportsTags && !tagsEqual(tags, origTags));
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <Dialog.Content className="max-w-3xl min-w-2xl">
         <Dialog.Header>
           <Dialog.Title className="flex items-center gap-2">
             <ToolIcon className="text-muted-foreground size-4" />
             <span>{source}</span>
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" className="text-xs">
               {typeLabel}
             </Badge>
           </Dialog.Title>
@@ -352,20 +371,28 @@ export function EditToolDialog({
 
         {/* Actions */}
         <div className="flex items-center justify-between border-t pt-4">
-          <Button variant="destructive-secondary" onClick={handleRemove}>
-            Remove
-          </Button>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={handleClose}>
+          {onRemove && (
+            <Button
+              variant="destructive-secondary"
+              onClick={handleRemove}
+              disabled={saving}
+            >
+              Remove
+            </Button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="secondary" onClick={handleClose} disabled={saving}>
               Cancel
             </Button>
             <Button
               onClick={() => void handleSave()}
               disabled={!hasChanges || saving}
             >
-              {saving ? "Saving..." : "Save"}
+              <Button.Text>{saving ? "Saving..." : "Save"}</Button.Text>
               {hasChanges && !saving && (
-                <span className="ml-2 text-xs opacity-60">⌘⏎</span>
+                <Button.RightIcon>
+                  <span className="text-xs opacity-60">⌘⏎</span>
+                </Button.RightIcon>
               )}
             </Button>
           </div>

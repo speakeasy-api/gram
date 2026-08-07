@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
+import { Icon } from "@/components/ui/Icon";
+import { Text } from "@/components/ui/Text";
 import { type Tool, parseMentionedTools } from "./tool-mention-utils";
 
 interface ToolMentionProps {
@@ -165,7 +165,7 @@ export function ToolMentionAutocomplete({
     <div
       ref={suggestionsRef}
       className={cn(
-        "bg-popover absolute z-[100] max-w-[400px] min-w-[200px] rounded-md border shadow-md",
+        "bg-popover absolute z-[100] max-w-[400px] min-w-[200px] border shadow-md",
         "max-h-[200px] overflow-auto",
       )}
       style={{
@@ -180,7 +180,7 @@ export function ToolMentionAutocomplete({
             type="button"
             key={tool.id}
             className={cn(
-              "flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors",
+              "flex w-full items-start gap-2 px-2 py-1.5 text-left text-sm transition-colors",
               "hover:bg-accent hover:text-accent-foreground",
               index === selectedIndex && "bg-accent text-accent-foreground",
             )}
@@ -197,22 +197,22 @@ export function ToolMentionAutocomplete({
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1">
-                <Type variant="small" className="font-medium">
+                <Text variant="small" className="font-medium">
                   {tool.name}
-                </Type>
+                </Text>
                 {tool.httpMethod && tool.path && (
-                  <Type variant="small" className="text-muted-foreground">
+                  <Text variant="small" className="text-muted-foreground">
                     {tool.httpMethod} {tool.path}
-                  </Type>
+                  </Text>
                 )}
               </div>
               {tool.description && (
-                <Type
+                <Text
                   variant="small"
                   className="text-muted-foreground line-clamp-2"
                 >
                   {tool.description}
-                </Type>
+                </Text>
               )}
             </div>
           </button>
@@ -238,14 +238,14 @@ export function MentionedToolsBadges({
 
   return (
     <div className="bg-background flex flex-wrap gap-1 border-t p-2">
-      <Type variant="small" className="text-muted-foreground mr-1">
+      <Text variant="small" className="text-muted-foreground mr-1">
         Selected tools:
-      </Type>
+      </Text>
       {mentionedTools.map((tool) => (
         <div
           key={tool.id}
           className={cn(
-            "inline-flex items-center gap-1 rounded-md px-2 py-0.5",
+            "inline-flex items-center gap-1 px-2 py-0.5",
             "bg-primary/10 text-primary text-xs",
           )}
         >

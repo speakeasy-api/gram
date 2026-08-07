@@ -71,12 +71,12 @@ export function CreateMarketplaceStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <GitBranch className="text-foreground h-6 w-6" />
         </div>
       }
       title="Create plugin marketplace"
-      description="Speakeasy publishes a private GitHub repo that acts as your team's plugin marketplace for Claude Code, Cursor, and Codex. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Speakeasy later get published — so this only needs to be set up once per project."
+      description="Speakeasy publishes a private GitHub repo that acts as your team's plugin marketplace for supported coding agents. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Speakeasy later get published — so this only needs to be set up once per project."
       onContinue={primaryAction}
       continueLabel={primaryLabel}
       isLoading={publishMutation.isPending || isLoading}
@@ -95,9 +95,9 @@ export function CreateMarketplaceStep({
             onManageCollaborators={openManageDialog}
           />
         ) : (
-          <div className="bg-card border-border rounded-lg border p-4">
+          <div className="bg-card border-border border p-4">
             <div className="flex items-start gap-3">
-              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <GitBranch className="text-muted-foreground h-4 w-4" />
               </div>
               <div>
@@ -108,7 +108,7 @@ export function CreateMarketplaceStep({
                   Clicking the button below opens a dialog where you can
                   optionally add GitHub usernames who get read access to the
                   repo. At least one user needs access so they can connect the
-                  marketplace to Claude, Cursor, or Codex on their machine.
+                  marketplace to their coding agents.
                 </p>
               </div>
             </div>

@@ -116,6 +116,7 @@ export function setLoadChatData(
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
+      gramKey?: string | undefined;
     },
   ],
   data: LoadChatQueryData,
@@ -140,6 +141,7 @@ export function invalidateLoadChat(
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
+      gramKey?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

@@ -83,7 +83,6 @@ func syncRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizatio
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
@@ -100,7 +99,6 @@ func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizati
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: nil,
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
@@ -122,9 +120,6 @@ func riskPolicyAudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organiza
 
 	principalURNs := make([]string, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
 			continue
 		}
@@ -134,4 +129,34 @@ func riskPolicyAudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organiza
 	principalURNs = slices.Compact(principalURNs)
 
 	return principalURNs, nil
+}
+
+// riskPolicyAudienceURNsByPolicy batch-loads audience principal URNs for the
+// given risk policies in a single query, keyed by policy id. Batched form of
+// riskPolicyAudiencePrincipalURNs used by ListRiskPolicies to avoid a per-policy
+// round trip. Scoped to policyIDs so it never loads the whole org. Policies with
+// no audience grants are simply absent from the map.
+func riskPolicyAudienceURNsByPolicy(ctx context.Context, db repo.DBTX, organizationID string, policyIDs []string) (map[string][]string, error) {
+	grants, err := authz.ListGrantsForResourceIDs(ctx, db, organizationID, authz.ScopeRiskPolicyEvaluate, policyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list risk policy audience grants: %w", err)
+	}
+
+	byPolicy := make(map[string][]string)
+	for _, grant := range grants {
+		// Attribute the grant to its policy via the selector's resource_id, then
+		// re-check against the canonical selector so grants carrying extra keys
+		// (or wildcards) are excluded exactly as the single-policy path does.
+		policyID := grant.Selector.ResourceID()
+		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
+			continue
+		}
+		byPolicy[policyID] = append(byPolicy[policyID], grant.PrincipalUrn)
+	}
+	for policyID, principalURNs := range byPolicy {
+		slices.Sort(principalURNs)
+		byPolicy[policyID] = slices.Compact(principalURNs)
+	}
+
+	return byPolicy, nil
 }

@@ -1,4 +1,5 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
@@ -8,7 +9,8 @@ import {
   invalidateAllListChats,
   useListChats,
 } from "@gram/client/react-query/listChats.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
@@ -57,24 +59,24 @@ export function AssistantSessionsList({
 
   if (error) {
     return (
-      <Type small muted>
+      <Text small muted>
         Couldn't load sessions. {error.message}
-      </Type>
+      </Text>
     );
   }
 
   if (chats.length === 0) {
     return (
-      <Type small muted>
+      <Text small muted>
         No sessions yet. Conversations with this assistant will appear here.
-      </Type>
+      </Text>
     );
   }
 
   return (
     <>
       <Stack gap={2}>
-        <div className="divide-border/60 overflow-hidden rounded-md border divide-y">
+        <div className="divide-border/60 overflow-hidden border divide-y">
           {chats.map((chat) => {
             const isSelected = selectedChatId === chat.id;
             const lastActivity = chat.lastMessageTimestamp ?? chat.createdAt;
@@ -88,9 +90,9 @@ export function AssistantSessionsList({
                   isSelected && "bg-primary/5",
                 )}
               >
-                <Type small className="line-clamp-2 font-medium">
+                <Text small className="line-clamp-2 font-medium">
                   {chat.title || "Untitled session"}
-                </Type>
+                </Text>
                 <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
                   <span>
                     {chat.numMessages}{" "}
@@ -106,7 +108,7 @@ export function AssistantSessionsList({
                           source={chat.source}
                           className="size-3"
                         />
-                        {chat.source}
+                        {formatPlatform(chat.source)}
                       </span>
                     </>
                   )}
@@ -119,7 +121,7 @@ export function AssistantSessionsList({
         {(data?.total ?? chats.length) > chats.length && (
           <routes.agentSessions.Link
             queryParams={{ assistantId }}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start rounded-md px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
           >
             View all sessions
             <Icon name="chevron-right" className="h-3 w-3" />

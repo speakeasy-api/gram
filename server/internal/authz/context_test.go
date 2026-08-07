@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func rbacAlwaysEnabled(context.Context, string) (bool, error)             { return true, nil }
 func challengeLoggingAlwaysEnabled(context.Context, string) (bool, error) { return true, nil }
 
 func TestPrepareContext_loadsUserGrants(t *testing.T) {
@@ -24,7 +23,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -49,7 +48,7 @@ func TestPrepareContext_rejectsInvalidUserPrincipal(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -70,7 +69,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -85,6 +84,28 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestPrepareContext_sessionWithoutActiveOrganizationGetsNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	ctx, err = engine.PrepareContext(ctx)
+	require.NoError(t, err)
+
+	grants, ok := GrantsFromContext(ctx)
+	require.True(t, ok)
+	require.Empty(t, grants)
+}
+
 func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 	t.Parallel()
 
@@ -92,7 +113,7 @@ func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -122,7 +143,7 @@ func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -140,14 +161,14 @@ func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
 	require.True(t, enforce)
 }
 
-func TestShouldEnforce_assistantPrincipalOnNonEnterpriseSkips(t *testing.T) {
+func TestShouldEnforce_assistantPrincipalOnNonEnterpriseOrgEnforces(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -161,17 +182,17 @@ func TestShouldEnforce_assistantPrincipalOnNonEnterpriseSkips(t *testing.T) {
 
 	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
-	require.False(t, enforce)
+	require.True(t, enforce)
 }
 
-func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
+func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -179,11 +200,14 @@ func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedActiveOrganizationUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID)
 	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
 	ctx, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	_, ok = GrantsFromContext(ctx)
-	require.False(t, ok)
+	grants, ok := GrantsFromContext(ctx)
+	require.True(t, ok)
+	require.Len(t, grants, 1)
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_non_enterprise"}))
 }

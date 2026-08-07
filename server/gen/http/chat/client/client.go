@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	ListChatsDoer goahttp.Doer
 
+	// GetWorkUnitsTrend Doer is the HTTP client used to make requests to the
+	// getWorkUnitsTrend endpoint.
+	GetWorkUnitsTrendDoer goahttp.Doer
+
 	// LoadChat Doer is the HTTP client used to make requests to the loadChat
 	// endpoint.
 	LoadChatDoer goahttp.Doer
@@ -40,6 +44,10 @@ type Client struct {
 	// SetPinned Doer is the HTTP client used to make requests to the setPinned
 	// endpoint.
 	SetPinnedDoer goahttp.Doer
+
+	// Summarize Doer is the HTTP client used to make requests to the summarize
+	// endpoint.
+	SummarizeDoer goahttp.Doer
 
 	// SubmitFeedback Doer is the HTTP client used to make requests to the
 	// submitFeedback endpoint.
@@ -69,19 +77,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListChatsDoer:       doer,
-		LoadChatDoer:        doer,
-		GenerateTitleDoer:   doer,
-		CreditUsageDoer:     doer,
-		DeleteChatDoer:      doer,
-		SetPinnedDoer:       doer,
-		SubmitFeedbackDoer:  doer,
-		ListSourcesDoer:     doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListChatsDoer:         doer,
+		GetWorkUnitsTrendDoer: doer,
+		LoadChatDoer:          doer,
+		GenerateTitleDoer:     doer,
+		CreditUsageDoer:       doer,
+		DeleteChatDoer:        doer,
+		SetPinnedDoer:         doer,
+		SummarizeDoer:         doer,
+		SubmitFeedbackDoer:    doer,
+		ListSourcesDoer:       doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -104,6 +114,30 @@ func (c *Client) ListChats() goa.Endpoint {
 		resp, err := c.ListChatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listChats", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetWorkUnitsTrend returns an endpoint that makes HTTP requests to the chat
+// service getWorkUnitsTrend server.
+func (c *Client) GetWorkUnitsTrend() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetWorkUnitsTrendRequest(c.encoder)
+		decodeResponse = DecodeGetWorkUnitsTrendResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetWorkUnitsTrendRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetWorkUnitsTrendDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "getWorkUnitsTrend", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -224,6 +258,30 @@ func (c *Client) SetPinned() goa.Endpoint {
 		resp, err := c.SetPinnedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "setPinned", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Summarize returns an endpoint that makes HTTP requests to the chat service
+// summarize server.
+func (c *Client) Summarize() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSummarizeRequest(c.encoder)
+		decodeResponse = DecodeSummarizeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSummarizeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SummarizeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "summarize", err)
 		}
 		return decodeResponse(resp)
 	}

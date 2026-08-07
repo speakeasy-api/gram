@@ -1,7 +1,16 @@
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
+import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
+
+/**
+ * Lays MetricCards flush in one bordered strip with hairline dividers — the
+ * prototype's stat-row idiom. Wrap every row of MetricCards in this (a single
+ * card still gets its border from the group).
+ */
+export const MetricCardGroup = UiMetricCard.Group;
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
-import { getValueColor, ThresholdConfig } from "./chartUtils";
+import { ThresholdConfig } from "./chartUtils";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 
@@ -25,7 +34,31 @@ export type MetricCardProps = {
   tooltip?: string;
   link?: string;
   linkText?: string;
+  /**
+   * Explicit value tone. Overrides the threshold heuristic — use for metrics
+   * without thresholds so tiles don't sit in unconsidered black ink
+   * (e.g. volume counts = "information", spend = "neutral").
+   */
+  tone?: Tone;
 };
+
+type Tone = "neutral" | "information" | "destructive" | "success" | "warning";
+
+function getValueTone(value: number, thresholds?: ThresholdConfig): Tone {
+  if (!thresholds) return "neutral";
+
+  if (thresholds.inverted) {
+    // Lower is better (e.g., latency)
+    if (value > thresholds.red) return "destructive";
+    if (value > thresholds.amber) return "warning";
+    return "success";
+  } else {
+    // Higher is better (e.g., chats, resolution rate)
+    if (value < thresholds.red) return "destructive";
+    if (value < thresholds.amber) return "warning";
+    return "success";
+  }
+}
 
 export function MetricCard(props: MetricCardProps): JSX.Element {
   const {
@@ -43,6 +76,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
     tooltip,
     link,
     linkText = "View",
+    tone,
   } = props;
   const formatValue = (v: number) => {
     switch (format) {
@@ -76,88 +110,70 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
   const delta = Math.min(Math.abs(rawDelta), 999);
   const isPositive = rawDelta > 0;
   const isGood = invertDelta ? !isPositive : isPositive;
+  const showDelta = previousValue > 0 && delta !== 0;
 
-  const valueColor = getValueColor(value, thresholds);
+  const label = (
+    <span className="inline-flex items-center gap-1.5">
+      {title}
+      {tooltip && (
+        <SimpleTooltip tooltip={tooltip}>
+          <button
+            type="button"
+            aria-label={`About ${title}`}
+            className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+          >
+            <Icon name="info" className="size-3" />
+          </button>
+        </SimpleTooltip>
+      )}
+      {icon &&
+        (isRefreshing ? (
+          <Loader2
+            aria-label={`Refreshing ${title}`}
+            className="text-muted-foreground size-3 animate-spin"
+          />
+        ) : (
+          <Icon name={icon} className="text-muted-foreground size-3" />
+        ))}
+    </span>
+  );
+
+  const deltaNode = showDelta ? (
+    <>
+      {isPositive ? "+" : "-"}
+      {delta.toFixed(1)}%
+      {comparisonLabel && (
+        <span className="text-muted"> {comparisonLabel}</span>
+      )}
+    </>
+  ) : undefined;
+
+  const description =
+    subtext || link ? (
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground">{subtext}</span>
+        {link && (
+          <Link
+            to={link}
+            aria-label={`View ${title}`}
+            className="text-primary/70 hover:text-primary flex shrink-0 items-center gap-1 text-xs no-underline"
+          >
+            {linkText}
+            <Icon name="arrow-right" />
+          </Link>
+        )}
+      </span>
+    ) : undefined;
 
   return (
-    <div className="bg-card border-border rounded-lg border p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold">{title}</span>
-          {tooltip && (
-            <SimpleTooltip tooltip={tooltip}>
-              <button
-                type="button"
-                aria-label={`About ${title}`}
-                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
-              >
-                <Icon name="info" className="size-3.5" />
-              </button>
-            </SimpleTooltip>
-          )}
-        </div>
-        {icon && (
-          <div className="bg-muted/50 rounded-lg p-2">
-            {isRefreshing ? (
-              <Loader2
-                aria-label={`Refreshing ${title}`}
-                className="text-muted-foreground size-4 animate-spin"
-              />
-            ) : (
-              <Icon name={icon} className="text-muted-foreground size-4" />
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex flex-nowrap items-end">
-        <div className="flex-1 flex flex-col gap-1">
-          <div className="flex items-end justify-between">
-            <span
-              className={`text-3xl font-semibold tracking-tight ${valueColor}`}
-            >
-              {displayValue ?? formatValue(value)}
-            </span>
-            {previousValue > 0 && delta !== 0 && (
-              <div className="flex flex-col items-end gap-0.5">
-                <div
-                  className={`flex items-center gap-1 text-xs font-medium ${
-                    isGood ? "text-emerald-600" : "text-red-500"
-                  }`}
-                >
-                  <Icon
-                    name={isPositive ? "trending-up" : "trending-down"}
-                    className="size-3"
-                  />
-                  <span>{delta.toFixed(1)}%</span>
-                </div>
-                {comparisonLabel && (
-                  <span className="text-muted-foreground text-[10px]">
-                    {comparisonLabel}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          {subtext && (
-            <span className="text-muted-foreground mt-1 block text-xs">
-              {subtext}
-            </span>
-          )}
-        </div>
-
-        {link && (
-          <div className="shrink">
-            <Link
-              to={link}
-              aria-label={`View ${title}`}
-              className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
-            >
-              {linkText}
-              <Icon name="arrow-right" />
-            </Link>
-          </div>
-        )}
-      </div>
-    </div>
+    <UiMetricCard
+      size="sm"
+      label={label}
+      value={displayValue ?? formatValue(value)}
+      tone={tone ?? getValueTone(value, thresholds)}
+      delta={deltaNode}
+      deltaTone={isGood ? "success" : "destructive"}
+      description={description}
+    />
   );
 }

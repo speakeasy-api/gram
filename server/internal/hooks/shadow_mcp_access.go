@@ -18,14 +18,14 @@ func (s *Service) enforceShadowMCPToolAccess(
 	organizationID string,
 	projectID string,
 	userID string,
-	policyID string,
+	policy *risk.ShadowMCPPolicy,
 	toolName string,
 	evidence shadowmcp.AccessEvidence,
 ) (string, bool) {
 	var detail string
 	switch {
 	case evidence.FullURL != "":
-		if s.isGramHostedMCPURLForOrg(ctx, evidence.FullURL, organizationID) {
+		if s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, evidence.FullURL, organizationID) {
 			return "", false
 		}
 		detail = fmt.Sprintf("MCP server is not Gram-hosted (URL: %s)", evidence.FullURL)
@@ -33,12 +33,36 @@ func (s *Service) enforceShadowMCPToolAccess(
 		detail = "MCP server is not Gram-hosted"
 	}
 
-	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policyID, evidence, toolName); allowed {
+	// Allow-all policies invert the default: every non-Gram-hosted server is
+	// permitted unless its URL is on the policy's blocked list. Bypass grants
+	// are a block_all concept and are never consulted here — the blocked-list
+	// membership is the whole check. Evidence without a resolvable URL (e.g. a
+	// local stdio server) cannot match a URL blocklist and falls through to an
+	// allow.
+	if policy.IsAllowAll() {
+		blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, evidence.FullURL)
+		if !blocked {
+			return "", false
+		}
+		s.logger.InfoContext(ctx, "shadow-mcp call blocked by allow-all policy blocked list",
+			attr.SlogEvent("shadow_mcp_policy_blocklist_deny"),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogValueAny(map[string]any{
+				"blocked_url": blockedURL,
+				"tool_name":   toolName,
+			}),
+		)
+		return fmt.Sprintf("MCP server is blocked by policy (URL: %s)", blockedURL), true
+	}
+
+	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policy.ID, evidence, toolName); allowed {
 		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
 			attr.SlogEvent("shadow_mcp_policy_bypass_allow"),
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProjectID(projectID),
-			attr.SlogRiskPolicyID(policyID),
+			attr.SlogRiskPolicyID(policy.ID),
 			attr.SlogValueAny(map[string]any{
 				"target_kind": target.Kind,
 				"target_key":  target.Key,
@@ -113,28 +137,50 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 			// matched entry carries the full sanitized prefix.
 			evidence.ServerIdentity = matched.ToolPrefix
 		}
-		if matched.URL != "" {
-			evidence.FullURL = matched.URL
-		}
-		if matched.Command != "" {
-			// Pin stdio identity to the launch command, mirroring the Claude
-			// guard — a bypass grant must not follow a renamed config alias.
-			evidence.ServerIdentity = matched.Command
-		}
+		applyMCPEntryToEvidence(&evidence, matched)
 	}
 	return evidence, matched
+}
+
+// applyMCPEntryToEvidence upgrades evidence to the target a matched inventory
+// entry actually routes to. Shared by the legacy Codex endpoint and the
+// canonical ingest guard so the two cannot drift on what a resolved entry
+// means — the guard's allow/deny turns on exactly this mapping.
+func applyMCPEntryToEvidence(evidence *shadowmcp.AccessEvidence, matched *MCPServerEntry) {
+	if matched == nil {
+		return
+	}
+	if matched.URL != "" {
+		evidence.FullURL = matched.URL
+	}
+	if matched.Command != "" {
+		// Pin stdio identity to the launch command, mirroring the Claude
+		// guard — a bypass grant must not follow a renamed config alias.
+		evidence.ServerIdentity = matched.Command
+	}
 }
 
 func codexMCPMetaToolServer(payload *gen.CodexPayload) (string, bool) {
 	if payload == nil {
 		return "", false
 	}
-	switch conv.PtrValOr(payload.ToolName, "") {
+	return codexMetaToolServer(conv.PtrValOr(payload.ToolName, ""), payload.ToolInput)
+}
+
+// codexMetaToolServer reports whether a tool call is one of Codex's built-in
+// MCP resource tools and, if so, the server it targets. These are the only MCP
+// calls Codex makes that carry no mcp__ prefix — the target lives in
+// tool_input.server instead — so every gate that decides "is this an MCP call"
+// has to ask here as well as checking the tool name. An unreadable input still
+// reports true with an empty server: it is an MCP call whose target could not
+// be established, which callers must treat as unproven rather than absent.
+func codexMetaToolServer(toolName string, toolInput any) (string, bool) {
+	switch toolName {
 	case "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource":
 	default:
 		return "", false
 	}
-	input, ok := payload.ToolInput.(map[string]any)
+	input, ok := toolInput.(map[string]any)
 	if !ok {
 		return "", true
 	}
@@ -153,7 +199,7 @@ func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *M
 		return ""
 	}
 	switch {
-	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
+	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
 		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", matched.Name, matched.URL)
 	case matched.URL == "" && matched.Command != "":
 		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", matched.Name, matched.Command)

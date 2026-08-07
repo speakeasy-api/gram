@@ -160,7 +160,7 @@ var HookIngestEvent = Type("HookIngestEvent", func() {
 	Description("Canonical Gram feature event.")
 	Required("type")
 	Attribute("type", String, "Canonical Gram hook event type.", func() {
-		Enum("session.started", "session.updated", "session.ended", "prompt.submitted",
+		Enum("session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted",
 			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
 			"assistant.thought", "usage.reported", "skill.activated", "notification.reported")
 	})
@@ -217,8 +217,42 @@ var HookMessageData = Type("HookMessageData", func() {
 var HookSkillData = Type("HookSkillData", func() {
 	Description("Skill activation payload.")
 	Required("name")
-	Attribute("name", String, "Activated skill name.")
-	Attribute("source", String, "Skill source or namespace, if available.")
+	Attribute("name", String, "Activated skill name.", func() { MaxLength(256) })
+	Attribute("source", String, "Skill source or namespace, if available.", func() { MaxLength(256) })
+	Attribute("source_level", String, "Scope where the skill was resolved, if available.", func() { MaxLength(64) })
+	Attribute("source_path", String, "Local path where the skill was resolved, if available.", func() { MaxLength(4096) })
+	Attribute("raw_sha256", String, "SHA-256 of the raw skill manifest, if available.", func() { MaxLength(128) })
+})
+
+var UploadSkillContentPayload = Type("UploadSkillContentPayload", func() {
+	Description("Content for a skill manifest requested by a prior hook ingest response.")
+	Required("schema_version", "raw_sha256", "content")
+	Attribute("schema_version", String, "Contract version.", func() {
+		Enum("hook.skill-content.v1")
+	})
+	Attribute("raw_sha256", String, "Lowercase SHA-256 of the raw content.", func() {
+		Pattern("^[0-9a-f]{64}$")
+	})
+	Attribute("content", String, "Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.")
+})
+
+var SkillFeedbackPayload = Type("SkillFeedbackPayload", func() {
+	Description("Agent-volunteered feedback about a distributed skill.")
+	Required("schema_version", "skill", "outcome")
+	Attribute("schema_version", String, "Contract version.", func() {
+		Enum("hook.skill-feedback.v1")
+	})
+	Attribute("skill", String, "Canonical name of the skill that was used.", func() {
+		MinLength(1)
+		MaxLength(64)
+		Pattern(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	})
+	Attribute("outcome", String, "How the skill affected the task.", func() {
+		Enum("helped", "partially_helped", "did_not_help", "misleading", "harmful")
+	})
+	Attribute("note", String, "Optional concise context about the outcome.", func() {
+		MaxLength(4000)
+	})
 })
 
 var HookNotificationData = Type("HookNotificationData", func() {
@@ -236,17 +270,35 @@ var HookMCPAttributionEntry = Type("HookMCPAttributionEntry", func() {
 	Attribute("mcp_tool", String, "Unredacted MCP tool name from the transcript.")
 })
 
+var HookPromptAttachmentEntry = Type("HookPromptAttachmentEntry", func() {
+	Description("Transcript-derived content that a provider attached to a submitted prompt, such as Claude Code @file and @directory mentions.")
+	Required("entry_uuid", "attachment_kind", "content")
+	Attribute("entry_uuid", String, "Provider transcript entry UUID. Used as the stable attachment identifier.")
+	Attribute("prompt_id", String, "Prompt identifier of the user turn this attachment belongs to, when the transcript parent chain resolves.")
+	Attribute("prompt_sha256", String, "Lowercase hex SHA-256 of the trimmed prompt text stored for the parent user message, when available.")
+	Attribute("file_path", String, "Absolute provider-reported file or directory path, when available.")
+	Attribute("display_path", String, "Provider display path for the attachment, when available.")
+	Attribute("attachment_kind", String, "Provider attachment kind, such as file or directory.")
+	Attribute("content", String, "Attachment text visible to the model.")
+	Attribute("num_lines", Int, "Number of lines included in the attachment window, when reported.")
+	Attribute("total_lines", Int, "Total source file lines, when reported.")
+	Attribute("start_line", Int, "First one-based source line included in the attachment window, when reported.")
+	Attribute("timestamp", String, "Provider transcript timestamp for this attachment, when available.")
+})
+
 var HookIngestData = Type("HookIngestData", func() {
 	Description("Feature-specific payloads. Hooks populate only the blocks needed for the event.")
 	Attribute("prompt", HookPromptData)
 	Attribute("tool_call", HookToolCallData)
 	Attribute("mcp", HookMCPData)
 	Attribute("mcp_inventory", ArrayOf(HookMCPData), "Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.")
+	Attribute("mcp_inventory_collected", Boolean, "Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.")
 	Attribute("usage", HookUsageData)
 	Attribute("message", HookMessageData)
 	Attribute("skill", HookSkillData)
 	Attribute("notification", HookNotificationData)
 	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
+	Attribute("prompt_attachments", ArrayOf(HookPromptAttachmentEntry), "Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {
@@ -394,6 +446,58 @@ var _ = Service("hooks", func() {
 		Meta("openapi:operationId", "ingestHookEvent")
 		Meta("openapi:extension:x-speakeasy-name-override", "ingest")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"IngestHookEvent"}`)
+	})
+
+	Method("uploadSkillContent", func() {
+		Description("Uploads skill manifest content requested by the unified hook ingest endpoint.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(UploadSkillContentPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/hooks.uploadSkillContent")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "uploadSkillContent")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadSkillContent")
+	})
+
+	Method("skillFeedback", func() {
+		Description("Records agent-volunteered feedback about a distributed skill.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(SkillFeedbackPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/hooks.skillFeedback")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "skillFeedback")
+		Meta("openapi:extension:x-speakeasy-name-override", "skillFeedback")
 	})
 
 	Method("logs", func() {

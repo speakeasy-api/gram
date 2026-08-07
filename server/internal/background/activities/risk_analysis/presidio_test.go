@@ -210,7 +210,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	client := infra.NewPresidioClient(t)
 
 	// Message with both a secret (AWS key) and PII (email)
-	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@globex.com"
+	content := "Here is my AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey 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 and my email is alice@globex.com"
 
 	gitleaksFindings, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)

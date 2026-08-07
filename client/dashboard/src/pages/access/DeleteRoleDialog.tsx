@@ -1,10 +1,10 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight } from "lucide-react";
 import { PropsWithChildren } from "react";
 
@@ -42,7 +42,7 @@ export const DeleteRoleDialog = ({
         </Dialog.Header>
         <div className="space-y-4 py-4">
           {hasMembers ? (
-            <Type variant="body">
+            <Text variant="body">
               Are you sure?{" "}
               {soleRoleMembers.length > 0 && defaultRole ? (
                 <>
@@ -51,7 +51,7 @@ export const DeleteRoleDialog = ({
                     : `${soleRoleMembers.length} of ${members.length} affected member${members.length === 1 ? "" : "s"}`}{" "}
                   will fall back to the default role{" "}
                   <Badge
-                    variant="outline"
+                    variant="neutral"
                     size="sm"
                     className="font-mono text-[10px] uppercase"
                   >
@@ -65,18 +65,18 @@ export const DeleteRoleDialog = ({
                   {members.length === 1 ? "" : "s"}.
                 </>
               )}
-            </Type>
+            </Text>
           ) : (
-            <Type variant="body">
-              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+            <Text variant="body">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                 {role?.name}
               </code>{" "}
               will be permanently deleted. This action cannot be undone.
-            </Type>
+            </Text>
           )}
 
           {hasMembers && (
-            <div className="border-border divide-border max-h-72 divide-y overflow-y-auto rounded-md border">
+            <div className="border-border divide-border max-h-72 divide-y overflow-y-auto border">
               {members.map((member) => {
                 const isOnlyRole = member.roleIds.length === 1;
                 return (
@@ -99,13 +99,13 @@ export const DeleteRoleDialog = ({
                     </Avatar>
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <Type variant="body" className="text-sm font-medium">
+                        <Text variant="body" className="text-sm font-medium">
                           {member.name}
-                        </Type>
+                        </Text>
                         {role && isOnlyRole && defaultRole && (
                           <div className="flex items-center gap-1">
                             <Badge
-                              variant="outline"
+                              variant="neutral"
                               size="sm"
                               className="font-mono text-[10px] uppercase line-through opacity-60"
                             >
@@ -113,7 +113,7 @@ export const DeleteRoleDialog = ({
                             </Badge>
                             <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />
                             <Badge
-                              variant="outline"
+                              variant="neutral"
                               size="sm"
                               className="border-primary text-primary font-mono text-[10px] uppercase"
                             >
@@ -122,12 +122,12 @@ export const DeleteRoleDialog = ({
                           </div>
                         )}
                       </div>
-                      <Type
+                      <Text
                         variant="body"
                         className="text-muted-foreground text-xs"
                       >
                         {member.email}
-                      </Type>
+                      </Text>
                     </div>
                   </div>
                 );

@@ -8,14 +8,13 @@ import { useRoutes } from "@/routes";
 import { Navigate } from "react-router";
 
 export default function Home(): JSX.Element {
-  const { hasAnyScope, isRbacEnabled, isLoading } = useRBAC();
+  const { hasAnyScope, isLoading } = useRBAC();
   const routes = useRoutes();
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
 
   // Redirect MCP-only users (no project:read) to the MCP page
   if (
-    isRbacEnabled &&
     !isLoading &&
     !hasAnyScope(["project:read"]) &&
     hasAnyScope(["mcp:read", "mcp:write"])
@@ -31,9 +30,19 @@ export default function Home(): JSX.Element {
       <Page.Body>
         <RequireScope scope="project:read" level="page">
           {/* Full content width so the widget lines up with the dashboard
-              below (the /chat page centers it; the home page does not). */}
+              below (the /chat page centers it; the home page does not). The
+              compact variant drops pinned/recents — history lives on /chat. */}
           <div className="w-full pt-2 pb-6">
-            <ChatLanding />
+            {/* A surface one step off the page background, tinted by a faint
+                mesh and a whisper of grain — present, but low contrast. */}
+            {/* No `overflow-hidden` here — it would clip the composer's slash
+                menu. The decorative layers round themselves instead. */}
+            {/* `z-10` lifts the card's stacking context above the dashboard
+                below, so the slash menu overlays it instead of the other way
+                round. */}
+            <div className="bg-card border-border relative isolate z-10 border p-6">
+              <ChatLanding compact />
+            </div>
           </div>
           <ProjectDashboard />
         </RequireScope>

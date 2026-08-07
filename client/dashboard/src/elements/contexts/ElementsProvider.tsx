@@ -22,6 +22,7 @@ import { compactForModel } from "@/elements/lib/contextCompaction";
 import { describeStreamError } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
+import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
 import { ElementsConfig, Model } from "@/elements/types";
 import { Plugin } from "@/elements/types/plugins";
 import {
@@ -42,9 +43,10 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
   LanguageModel,
   smoothStream,
-  stepCountIs,
+  isStepCount,
   streamText,
   ToolSet,
+  toUIMessageStream,
   type ChatTransport,
   type UIMessage,
 } from "ai";
@@ -94,7 +96,7 @@ type ExecutableTool = {
  * that contains the tool definition with execute function.
  *
  * The AI SDK's `ToolExecuteFunction<INPUT, OUTPUT>` signature is too strict on
- * its second parameter (a typed `ToolCallOptions`) and too broad on its return
+ * its second parameter (a typed `ToolExecutionOptions`) and too broad on its return
  * (`AsyncIterable | PromiseLike | OUTPUT`) to match `ExecutableTool.execute`
  * directly. The reference is copied as-is — no runtime wrapping — and only the
  * type surface is widened.
@@ -119,16 +121,6 @@ export interface ElementsProviderProps {
   config: ElementsConfig;
 }
 
-const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.
-
-Tool Result Display:
-Some tools have custom visual components that automatically render their results (you'll see a rich card/widget appear). For these, do not repeat the data - just add brief context or a follow-up question if needed.
-
-For tools WITHOUT custom components, you should present the data clearly - either as plain text for simple results, or using the UI code block format for structured data like lists of items, categories, or dashboards.
-
-UI Widget Guidelines:
-IMPORTANT: Only render ONE generative UI widget (chart, dashboard, visualization) per response. Never render multiple widgets in a single message - this causes layout shifts during streaming and overwhelms the user. If you have multiple visualizations to show, render the most important one and explicitly offer to show others as follow-ups (e.g., "Would you like to see a breakdown by status as well?").`;
-
 function mergeInternalSystemPromptWith(
   userSystemPrompt: string | undefined,
   plugins: Plugin[],
@@ -140,7 +132,7 @@ function mergeInternalSystemPromptWith(
       : "";
 
   return `
-  ${BASE_SYSTEM_PROMPT}${customToolsSection}
+  ${elementsSystemPrompt}${customToolsSection}
 
   User-provided System Prompt:
   ${userSystemPrompt ?? "None provided"}
@@ -433,9 +425,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // This works around AI SDK bug where these fields cause validation failures
           const cleanedMessages = cleanMessagesForModel(messages);
           // Filter out system messages from the UI state — the system prompt
-          // is already provided via the `system:` parameter to streamText().
+          // is already provided via the `instructions:` parameter to streamText().
           // Without this, loaded chat history includes the system message which
-          // gets sent alongside the `system:` param, causing duplication.
+          // gets sent alongside the `instructions:` param, causing duplication.
           const nonSystemMessages = cleanedMessages.filter(
             (m) => m.role !== "system",
           );
@@ -465,11 +457,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const modelMessages = compaction.messages;
 
           const result = streamText({
-            system: systemPromptRef.current,
+            instructions: systemPromptRef.current,
             model: modelToUse,
             messages: modelMessages,
             tools,
-            stopWhen: stepCountIs(10),
+            stopWhen: isStepCount(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
             onError: ({ error }) => {
@@ -506,7 +498,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // credits prompt for 402, otherwise keep the masking intact.
           return createUIMessageStream({
             execute: ({ writer }) => {
-              writer.merge(result.toUIMessageStream());
+              writer.merge(toUIMessageStream({ stream: result.stream, tools }));
             },
             originalMessages: messages,
             onError: (error) =>

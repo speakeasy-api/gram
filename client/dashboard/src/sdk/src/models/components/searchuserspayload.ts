@@ -26,6 +26,18 @@ export type SearchUsersPayloadGroupBy = ClosedEnum<
 >;
 
 /**
+ * Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'. Ignored when source='agent_metrics'.
+ */
+export const Metrics = {
+  Full: "full",
+  Basic: "basic",
+} as const;
+/**
+ * Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'. Ignored when source='agent_metrics'.
+ */
+export type Metrics = ClosedEnum<typeof Metrics>;
+
+/**
  * Sort order
  */
 export const SearchUsersPayloadSort = {
@@ -36,6 +48,18 @@ export const SearchUsersPayloadSort = {
  * Sort order
  */
 export type SearchUsersPayloadSort = ClosedEnum<typeof SearchUsersPayloadSort>;
+
+/**
+ * Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat, LiteLLM), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.
+ */
+export const Source = {
+  Logs: "logs",
+  AgentMetrics: "agent_metrics",
+} as const;
+/**
+ * Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat, LiteLLM), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.
+ */
+export type Source = ClosedEnum<typeof Source>;
 
 /**
  * Type of user identifier to group by
@@ -72,9 +96,17 @@ export type SearchUsersPayload = {
    */
   limit?: number | undefined;
   /**
+   * Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'. Ignored when source='agent_metrics'.
+   */
+  metrics?: Metrics | undefined;
+  /**
    * Sort order
    */
   sort?: SearchUsersPayloadSort | undefined;
+  /**
+   * Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat, LiteLLM), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.
+   */
+  source?: Source | undefined;
   /**
    * Type of user identifier to group by
    */
@@ -87,9 +119,19 @@ export const SearchUsersPayloadGroupBy$outboundSchema: z.ZodMiniEnum<
 > = z.enum(SearchUsersPayloadGroupBy);
 
 /** @internal */
+export const Metrics$outboundSchema: z.ZodMiniEnum<typeof Metrics> = z.enum(
+  Metrics,
+);
+
+/** @internal */
 export const SearchUsersPayloadSort$outboundSchema: z.ZodMiniEnum<
   typeof SearchUsersPayloadSort
 > = z.enum(SearchUsersPayloadSort);
+
+/** @internal */
+export const Source$outboundSchema: z.ZodMiniEnum<typeof Source> = z.enum(
+  Source,
+);
 
 /** @internal */
 export const SearchUsersPayloadUserType$outboundSchema: z.ZodMiniEnum<
@@ -102,7 +144,9 @@ export type SearchUsersPayload$Outbound = {
   filter: SearchUsersFilter$Outbound;
   group_by: string;
   limit: number;
+  metrics: string;
   sort: string;
+  source: string;
   user_type: string;
 };
 
@@ -116,7 +160,9 @@ export const SearchUsersPayload$outboundSchema: z.ZodMiniType<
     filter: SearchUsersFilter$outboundSchema,
     groupBy: z._default(SearchUsersPayloadGroupBy$outboundSchema, "employee"),
     limit: z._default(z.int(), 50),
+    metrics: z._default(Metrics$outboundSchema, "full"),
     sort: z._default(SearchUsersPayloadSort$outboundSchema, "desc"),
+    source: z._default(Source$outboundSchema, "logs"),
     userType: SearchUsersPayloadUserType$outboundSchema,
   }),
   z.transform((v) => {

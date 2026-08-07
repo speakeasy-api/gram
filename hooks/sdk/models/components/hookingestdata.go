@@ -14,12 +14,16 @@ type HookIngestData struct {
 	McpAttribution []HookMCPAttributionEntry `json:"mcp_attribution,omitzero"`
 	// Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
 	McpInventory []HookMCPData `json:"mcp_inventory,omitzero"`
+	// Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.
+	McpInventoryCollected *bool `json:"mcp_inventory_collected,omitzero"`
 	// Assistant/user message payload.
 	Message *HookMessageData `json:"message,omitzero"`
 	// Local agent notification payload.
 	Notification *HookNotificationData `json:"notification,omitzero"`
 	// Prompt feature payload.
 	Prompt *HookPromptData `json:"prompt,omitzero"`
+	// Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
+	PromptAttachments []HookPromptAttachmentEntry `json:"prompt_attachments,omitzero"`
 	// Skill activation payload.
 	Skill *HookSkillData `json:"skill,omitzero"`
 	// Tool call feature payload.
@@ -60,6 +64,13 @@ func (h *HookIngestData) GetMcpInventory() []HookMCPData {
 	return h.McpInventory
 }
 
+func (h *HookIngestData) GetMcpInventoryCollected() *bool {
+	if h == nil {
+		return nil
+	}
+	return h.McpInventoryCollected
+}
+
 func (h *HookIngestData) GetMessage() *HookMessageData {
 	if h == nil {
 		return nil
@@ -79,6 +90,13 @@ func (h *HookIngestData) GetPrompt() *HookPromptData {
 		return nil
 	}
 	return h.Prompt
+}
+
+func (h *HookIngestData) GetPromptAttachments() []HookPromptAttachmentEntry {
+	if h == nil {
+		return nil
+	}
+	return h.PromptAttachments
 }
 
 func (h *HookIngestData) GetSkill() *HookSkillData {

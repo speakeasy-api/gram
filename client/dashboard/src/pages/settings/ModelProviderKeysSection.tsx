@@ -1,7 +1,7 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { Heading } from "@/components/ui/heading";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ModelProviderKey } from "@gram/client/models/components/modelproviderkey.js";
@@ -14,18 +14,17 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useSetModelProviderKeyEnabledMutation } from "@gram/client/react-query/setModelProviderKeyEnabled.js";
 import { useUpsertModelProviderKeyMutation } from "@gram/client/react-query/upsertModelProviderKey.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { Check, MoreHorizontal } from "lucide-react";
 import { type ComponentProps, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -161,12 +160,12 @@ function ModelProviderKeysTable({
       header: "Surface",
       render: (slot) => (
         <Stack gap={1}>
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             {slot.name}
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             {slot.description}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -193,7 +192,7 @@ function ModelProviderKeysTable({
               value={draftValue}
               placeholder={key ? "••••••••••••" : "Enter key"}
               className="h-9 py-0 pr-10"
-              onChange={(event) => handleValueChange(slot, event.target.value)}
+              onChange={(value) => handleValueChange(slot, value)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter") return;
                 event.preventDefault();
@@ -207,7 +206,7 @@ function ModelProviderKeysTable({
                 type="button"
                 variant="tertiary"
                 size="sm"
-                className="border-input bg-muted hover:bg-muted/80 absolute top-0 right-0 h-9 rounded-l-none border shadow-none"
+                className="border-input bg-muted hover:bg-muted/80 absolute top-0 right-0 h-9 border shadow-none"
                 onClick={() => handleSave(slot, key)}
                 disabled={
                   isMutating ||
@@ -234,15 +233,15 @@ function ModelProviderKeysTable({
         const key = keysBySlot.get(slot.slot);
         if (!key) {
           return (
-            <Type muted small>
+            <Text muted small>
               —
-            </Type>
+            </Text>
           );
         }
         return (
-          <Type muted small className="whitespace-nowrap">
+          <Text muted small className="whitespace-nowrap">
             <HumanizeDateTime date={key.updatedAt} />
-          </Type>
+          </Text>
         );
       },
     },
@@ -305,9 +304,9 @@ function ModelProviderKeysTable({
   } else if (isError) {
     keyList = (
       <Stack direction="horizontal" gap={2} align="center">
-        <Type muted small>
+        <Text muted small>
           Failed to load provider keys.
-        </Type>
+        </Text>
         <Button variant="secondary" size="sm" onClick={() => void refetch()}>
           Retry
         </Button>
@@ -330,11 +329,11 @@ function ModelProviderKeysTable({
           <Heading variant="h4">Model Provider Keys</Heading>
           <ReleaseStageBadge stage="preview" />
         </Stack>
-        <Type muted small>
+        <Text muted small>
           Bring your own OpenRouter API key for model completions. Set a project
           default for all surfaces, or override individual surfaces. Keys are
           write-only and never displayed after saving.
-        </Type>
+        </Text>
       </div>
 
       {keyList}

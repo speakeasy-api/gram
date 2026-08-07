@@ -29,12 +29,13 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { Label } from "@/components/ui/Label";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
@@ -457,7 +458,7 @@ export function ConfigurePoliciesStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <ShieldCheck className="text-foreground h-6 w-6" />
         </div>
       }
@@ -498,7 +499,7 @@ export function ConfigurePoliciesStep({
             </RouterLink>
           </div>
 
-          <div className="border-border bg-card divide-border/60 divide-y overflow-hidden rounded-xl border">
+          <div className="border-border bg-card divide-border/60 divide-y overflow-hidden border">
             {WIZARD_CATEGORIES.map((cat) => {
               const meta = RULE_CATEGORY_META[cat];
               const cfg = configs[cat];
@@ -512,7 +513,7 @@ export function ConfigurePoliciesStep({
                 >
                   <div
                     className={cn(
-                      "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
+                      "flex h-9 w-9 flex-shrink-0 items-center justify-center transition-colors",
                       cfg.enabled
                         ? "bg-foreground/8 text-foreground"
                         : "bg-secondary text-muted-foreground/70",
@@ -580,7 +581,7 @@ export function ConfigurePoliciesStep({
               </SheetHeader>
 
               <div className="flex items-start gap-4 px-6 pt-6 pr-14">
-                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md">
+                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
                   <ActiveIcon className="text-foreground h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -674,7 +675,7 @@ export function ConfigurePoliciesStep({
                           key={t}
                           htmlFor={id}
                           className={cn(
-                            "border-border bg-secondary/20 flex items-start gap-3 rounded-md border p-3",
+                            "border-border bg-secondary/20 flex items-start gap-3 border p-3",
                             !activeConfig.enabled && "opacity-50",
                           )}
                         >
@@ -732,59 +733,14 @@ function ShadowMcpHero({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-lg backdrop-blur-xl transition-all duration-700 ease-out",
-        "bg-gradient-to-br from-slate-500/85 via-slate-600/85 to-slate-700/85",
-        "dark:from-slate-600/85 dark:via-slate-700/85 dark:to-slate-800/85",
-        "ring-1",
-        config.enabled ? "ring-emerald-500/20" : "ring-[var(--bg-warning)]/30",
-        "shadow-[0_1px_0_rgba(255,255,255,0.1)_inset,0_0_0_1px_rgba(255,255,255,0.02)_inset,0_2px_4px_rgba(15,23,42,0.12),0_12px_28px_-12px_rgba(15,23,42,0.4),0_24px_56px_-24px_rgba(15,23,42,0.5)]",
+        "border-border bg-card border border-l-2 transition-colors",
+        config.enabled
+          ? "border-l-foreground"
+          : "border-l-[var(--border-warning-default)]",
       )}
     >
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute -top-32 -right-24 h-72 w-72 rounded-full blur-3xl transition-all duration-[1100ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-          config.enabled
-            ? "translate-x-[-12%] translate-y-4 scale-150 bg-emerald-500/[0.28]"
-            : "translate-x-6 translate-y-[-8%] scale-75 bg-[var(--bg-warning)]/30",
-        )}
-      />
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute -bottom-40 -left-20 h-80 w-80 rounded-full blur-3xl transition-all duration-[1300ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-          config.enabled
-            ? "translate-x-8 translate-y-[-10%] scale-150 bg-emerald-500/[0.3]"
-            : "translate-x-[-6%] translate-y-4 scale-50 bg-[var(--bg-warning)]/25",
-        )}
-      />
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-all duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-          config.enabled
-            ? "scale-125 bg-emerald-500/[0.15] opacity-100"
-            : "scale-50 bg-[var(--bg-warning)]/15 opacity-60",
-        )}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-b from-white/[0.04] to-transparent"
-      />
-      <div className="relative flex items-start gap-5 p-6 pb-8">
-        <div
-          className={cn(
-            "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-md ring-1 backdrop-blur-md transition-all duration-500 ease-out",
-            "shadow-[0_1px_0_rgba(255,255,255,0.12)_inset,0_8px_16px_-8px_rgba(15,23,42,0.6)]",
-            config.enabled
-              ? "bg-white/60 ring-white/50"
-              : "bg-white/55 ring-white/40",
-          )}
-        >
+      <div className="flex items-start gap-5 p-6">
+        <div className="bg-secondary flex h-12 w-12 flex-shrink-0 items-center justify-center">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -793,7 +749,7 @@ function ShadowMcpHero({
             strokeLinejoin="round"
             className={cn(
               "h-7 w-7 transition-colors duration-500 ease-out",
-              config.enabled ? "text-emerald-600" : "text-[var(--bg-warning)]",
+              config.enabled ? "text-foreground" : "text-warning",
             )}
           >
             <path
@@ -816,14 +772,14 @@ function ShadowMcpHero({
         </div>
         <div className="min-w-0 flex-1 space-y-3 pt-0.5">
           <div className="flex items-center gap-2">
-            <p className="text-base font-medium tracking-tight text-slate-50">
+            <p className="text-foreground text-base font-medium tracking-tight">
               Shadow MCP enforcement
             </p>
             <Badge variant={config.enabled ? "success" : "warning"}>
               <Badge.Text>{config.enabled ? "Active" : "Off"}</Badge.Text>
             </Badge>
           </div>
-          <p className="max-w-md text-sm leading-relaxed text-slate-300/90">
+          <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
             Force every MCP tool call through Speakeasy&rsquo;s control plane.
             Unmanaged servers your team installs locally are blocked &mdash; so
             RBAC, authz, and audit trails stay enforced across every agent.
@@ -833,12 +789,7 @@ function ShadowMcpHero({
           checked={config.enabled}
           onCheckedChange={onToggle}
           aria-label="Enable shadow MCP enforcement"
-          className={cn(
-            "mt-1 shadow-[0_1px_2px_rgba(0,0,0,0.3)_inset]",
-            config.enabled
-              ? "bg-emerald-500 hover:bg-emerald-500/90"
-              : "bg-white/[0.12] hover:bg-white/[0.18]",
-          )}
+          className="mt-1"
         />
       </div>
     </div>
@@ -865,7 +816,7 @@ function ActionRadio({
     <label
       htmlFor={id}
       className={cn(
-        "border-border bg-secondary/20 flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+        "border-border bg-secondary/20 flex cursor-pointer items-start gap-3 border p-3 transition-colors",
         selected && !disabled && "border-foreground/40 bg-secondary/50",
         disabled && "cursor-not-allowed opacity-50",
       )}

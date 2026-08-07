@@ -2,20 +2,18 @@ package access
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -25,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -33,16 +30,29 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+// recordingEmailSender captures transactional sends so tests can assert on
+// access-request notification emails without a live Loops client.
+type recordingEmailSender struct {
+	mu   sync.Mutex
+	sent []loops.SendTransactionalInput
+}
+
+func (r *recordingEmailSender) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sent = append(r.sent, input)
+	return nil
+}
+
+func (r *recordingEmailSender) Sent() []loops.SendTransactionalInput {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]loops.SendTransactionalInput(nil), r.sent...)
+}
+
 var (
 	infra *testenv.Environment
 )
-
-type noopProductFeatures struct{}
-
-func (noopProductFeatures) EnableRBAC(context.Context, string) error { return nil }
-
-func (noopProductFeatures) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
-}
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
@@ -62,10 +72,12 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *Service
-	conn    *pgxpool.Pool
-	chConn  clickhouse.Conn
-	roles   *MockRoleProvider
+	service     *Service
+	conn        *pgxpool.Pool
+	chConn      clickhouse.Conn
+	roles       *MockRoleProvider
+	emailSender *recordingEmailSender
+	siteURL     *url.URL
 }
 
 func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
@@ -85,7 +97,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
@@ -98,116 +110,23 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
-	accessCache := prefixedTestCache{
-		prefix: "access-test:" + uuid.NewString() + ":",
-		cache:  cache.NewRedisCacheAdapter(redisClient),
-	}
-	accessStore := accesscontrol.NewRedisStore(accessCache, accesscontrol.AlphaTTL)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
-	noopEmailSvc := email.NewService(logger, loops.New(ctx, logger, nil, ""))
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger, "test-jwt-secret", accessStore, noopEmailSvc, url.URL{})
+	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
+	emailService := email.NewService(logger, emailSender)
+	siteURL, err := url.Parse("https://app.example.com")
+	require.NoError(t, err)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL)
 
 	return ctx, &testInstance{
-		service: svc,
-		conn:    conn,
-		chConn:  chConn,
-		roles:   roles,
+		service:     svc,
+		conn:        conn,
+		chConn:      chConn,
+		roles:       roles,
+		emailSender: emailSender,
+		siteURL:     siteURL,
 	}
-}
-
-type prefixedTestCache struct {
-	prefix string
-	cache  cache.Cache
-}
-
-func (p prefixedTestCache) key(key string) string {
-	return p.prefix + key
-}
-
-func (p prefixedTestCache) Get(ctx context.Context, key string, value any) error {
-	if err := p.cache.Get(ctx, p.key(key), value); err != nil {
-		return fmt.Errorf("get prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) GetAndDelete(ctx context.Context, key string, value any) error {
-	if err := p.cache.GetAndDelete(ctx, p.key(key), value); err != nil {
-		return fmt.Errorf("get and delete prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	if err := p.cache.Set(ctx, p.key(key), value, ttl); err != nil {
-		return fmt.Errorf("set prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
-	ok, err := p.cache.Add(ctx, p.key(key), ttl)
-	if err != nil {
-		return false, fmt.Errorf("add prefixed test cache: %w", err)
-	}
-	return ok, nil
-}
-
-func (p prefixedTestCache) Update(ctx context.Context, key string, value any) error {
-	if err := p.cache.Update(ctx, p.key(key), value); err != nil {
-		return fmt.Errorf("update prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Delete(ctx context.Context, key string) error {
-	if err := p.cache.Delete(ctx, p.key(key)); err != nil {
-		return fmt.Errorf("delete prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	if err := p.cache.Expire(ctx, p.key(key), ttl); err != nil {
-		return fmt.Errorf("expire prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
-	if err := p.cache.ListAppend(ctx, p.key(key), value, ttl); err != nil {
-		return fmt.Errorf("append prefixed test cache list: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) ListRange(ctx context.Context, key string, start, stop int64, value any) error {
-	if err := p.cache.ListRange(ctx, p.key(key), start, stop, value); err != nil {
-		return fmt.Errorf("range prefixed test cache list: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) DeleteByPrefix(ctx context.Context, prefix string) error {
-	if err := p.cache.DeleteByPrefix(ctx, p.key(prefix)); err != nil {
-		return fmt.Errorf("delete prefixed test cache by prefix: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
-	mutating, ok := p.cache.(interface {
-		Mutate(context.Context, string, any, time.Duration, func(bool) error) error
-	})
-	if !ok {
-		return fmt.Errorf("prefixed test cache does not support mutation")
-	}
-	if err := mutating.Mutate(ctx, p.key(key), value, ttl, fn); err != nil {
-		return fmt.Errorf("mutate prefixed test cache: %w", err)
-	}
-	return nil
 }
 
 func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {

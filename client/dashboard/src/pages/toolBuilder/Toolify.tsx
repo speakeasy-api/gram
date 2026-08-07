@@ -1,13 +1,15 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Spinner } from "@/components/ui/spinner";
-import { TextArea } from "@/components/ui/textarea";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Spinner } from "@/components/ui/Spinner";
+import { TextArea } from "@/components/ui/Textarea";
 import { useToolset } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
-import { generateObject } from "ai";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
+import { generateText, Output } from "ai";
 import { useState } from "react";
 import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
@@ -60,7 +62,7 @@ export const ToolifyDialog = ({
 
     setInProgress(true);
 
-    const res = await generateObject({
+    const res = await generateText({
       model,
       prompt: `
       You are a composite tool builder. You are given a purpose for a tool and a list of available tools.
@@ -106,10 +108,10 @@ export const ToolifyDialog = ({
         }),
       )}
                   `,
-      schema: SuggestionSchema,
+      output: Output.object({ schema: SuggestionSchema }),
     });
 
-    const suggestion = res.object as z.infer<typeof SuggestionSchema>;
+    const suggestion = res.output as z.infer<typeof SuggestionSchema>;
     const uniqueInputs = suggestion.inputs.filter(
       (input, index, self) =>
         index === self.findIndex((i) => i.name === input.name),
@@ -187,8 +189,14 @@ export const ToolifyDialog = ({
               onClick={() => void onSubmit()}
               disabled={!purpose || inProgress}
             >
-              {inProgress && <Spinner />}
-              {inProgress ? "Generating..." : "Toolify"}
+              {inProgress && (
+                <Button.LeftIcon>
+                  <Spinner />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {inProgress ? "Generating..." : "Toolify"}
+              </Button.Text>
             </Button>
           </div>
         </Dialog.Footer>

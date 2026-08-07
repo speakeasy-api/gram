@@ -1,9 +1,9 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
-import { Button as LocalButton } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button as LocalButton } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Sheet,
   SheetContent,
@@ -11,8 +11,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -24,7 +24,8 @@ import {
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
@@ -42,7 +43,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { useMemo, useState } from "react";
 import {
   getSelectableMembers,
@@ -582,7 +583,7 @@ export function CreateRoleDialog({
                 <button
                   type="button"
                   onClick={saveAndCloseRuleEditor}
-                  className="text-muted-foreground hover:text-foreground -ml-1 rounded-sm p-1 transition-colors"
+                  className="text-muted-foreground hover:text-foreground -ml-1 p-1 transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </button>
@@ -648,7 +649,7 @@ export function CreateRoleDialog({
                     placeholder="Describe what this role can do..."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                   />
                 )}
               />
@@ -666,12 +667,12 @@ export function CreateRoleDialog({
                       showPermissions && "rotate-90",
                     )}
                   />
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Permissions
-                  </Type>
-                  <Type variant="body" className="text-muted-foreground ml-1">
+                  </Text>
+                  <Text variant="body" className="text-muted-foreground ml-1">
                     ({grantCount} selected)
-                  </Type>
+                  </Text>
                 </button>
 
                 {showPermissions && (
@@ -687,10 +688,7 @@ export function CreateRoleDialog({
                       const someSelected = selectedInGroup > 0 && !allSelected;
 
                       return (
-                        <div
-                          key={group.label}
-                          className="border-border rounded-md border"
-                        >
+                        <div key={group.label} className="border-border border">
                           {/* Group header */}
                           <div
                             role="button"
@@ -702,7 +700,7 @@ export function CreateRoleDialog({
                                 toggleGroup(group.label);
                               }
                             }}
-                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 rounded-t-md px-3 py-2"
+                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 px-3 py-2"
                           >
                             <div className="flex items-start gap-2">
                               <Checkbox
@@ -721,23 +719,23 @@ export function CreateRoleDialog({
                               />
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <Type
+                                  <Text
                                     variant="body"
                                     className="text-sm font-medium"
                                   >
                                     {group.label}
-                                  </Type>
-                                  <Type
+                                  </Text>
+                                  <Text
                                     variant="body"
                                     className="text-muted-foreground text-sm"
                                   >
                                     ({selectedInGroup}/{group.scopes.length})
-                                  </Type>
+                                  </Text>
                                 </div>
                                 {!isExpanded && (
-                                  <Type muted small className="mt-0.5 text-xs">
+                                  <Text muted small className="mt-0.5 text-xs">
                                     {group.description}
-                                  </Type>
+                                  </Text>
                                 )}
                               </div>
                             </div>
@@ -773,24 +771,24 @@ export function CreateRoleDialog({
                                           className="bg-background mt-0.5"
                                         />
                                         <div className="min-w-0 flex-1">
-                                          <Type
+                                          <Text
                                             variant="body"
                                             className="font-mono text-sm font-medium"
                                           >
                                             {scopeDef.slug}
-                                          </Type>
-                                          <Type
+                                          </Text>
+                                          <Text
                                             variant="body"
                                             className="text-muted-foreground text-xs"
                                           >
                                             {scopeDef.description}
-                                          </Type>
+                                          </Text>
                                         </div>
                                       </label>
 
                                       {/* Static label for org/environment */}
                                       {isChecked && !isConfigurable && (
-                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center border bg-transparent px-2 py-1 text-xs">
                                           {scopeDef.resourceType ===
                                           "environment"
                                             ? "All in project"
@@ -841,8 +839,8 @@ export function CreateRoleDialog({
                                           ).length > 0 && (
                                             <LocalButton
                                               type="button"
-                                              variant="ghost"
-                                              size="inline"
+                                              variant="tertiary"
+                                              size="xs"
                                               className="text-muted-foreground text-xs"
                                               onClick={() =>
                                                 openRuleEditor(
@@ -885,16 +883,16 @@ export function CreateRoleDialog({
                         showMembers && "rotate-90",
                       )}
                     />
-                    <Type variant="body" className="font-medium">
+                    <Text variant="body" className="font-medium">
                       Assign Members
-                    </Type>
-                    <Type variant="body" className="text-muted-foreground ml-1">
+                    </Text>
+                    <Text variant="body" className="text-muted-foreground ml-1">
                       (optional, {selectedMembers.size} selected)
-                    </Type>
+                    </Text>
                   </button>
 
                   {showMembers && (
-                    <div className="border-border divide-border mt-3 divide-y rounded-md border">
+                    <div className="border-border divide-border mt-3 divide-y border">
                       {/* Select-all header */}
                       {(() => {
                         const selectableMembers = getSelectableMembers(
@@ -924,12 +922,12 @@ export function CreateRoleDialog({
                               }
                               onCheckedChange={() => toggleAllMembers()}
                             />
-                            <Type
+                            <Text
                               variant="body"
                               className="text-muted-foreground text-sm font-medium"
                             >
                               Select all
-                            </Type>
+                            </Text>
                           </label>
                         );
                       })()}
@@ -975,18 +973,18 @@ export function CreateRoleDialog({
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0 flex-1 space-y-0.5">
-                              <Type
+                              <Text
                                 variant="body"
                                 className="text-sm font-medium"
                               >
                                 {member.name}
-                              </Type>
-                              <Type
+                              </Text>
+                              <Text
                                 variant="body"
                                 className="text-muted-foreground text-xs"
                               >
                                 {member.email}
-                              </Type>
+                              </Text>
                             </div>
                           </label>
                         );
@@ -1098,7 +1096,7 @@ function RuleChip({
   const chip = (
     <span
       className={cn(
-        "border-input bg-background inline-flex items-center gap-1 overflow-hidden rounded-md border px-1 py-1 text-xs",
+        "border-input bg-background inline-flex items-center gap-1 overflow-hidden border px-1 py-1 text-xs",
         isDeny && "border-destructive/30",
       )}
     >
@@ -1107,16 +1105,16 @@ function RuleChip({
         onClick={onClick}
         disabled={readOnly && !onClick}
         className={cn(
-          "hover:bg-accent inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors",
+          "hover:bg-accent inline-flex items-center gap-1 px-2 py-1 transition-colors",
           isDeny
             ? "text-destructive hover:bg-destructive/5"
             : "text-foreground",
-          readOnly && "rounded-md",
+          readOnly && "",
           !readOnly && onClick && "cursor-pointer",
         )}
       >
         {isAllow ? (
-          <Check className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <Check className="text-default-success h-3 w-3 shrink-0" />
         ) : (
           <Ban className="h-3 w-3 shrink-0 opacity-70" />
         )}
@@ -1137,7 +1135,7 @@ function RuleChip({
             type="button"
             onClick={onRemove}
             className={cn(
-              "hover:bg-accent inline-flex items-center rounded-md px-1.5 py-1 transition-colors",
+              "hover:bg-accent inline-flex items-center px-1.5 py-1 transition-colors",
               isDeny
                 ? "text-destructive/60 hover:text-destructive hover:bg-destructive/5"
                 : "text-muted-foreground hover:text-foreground",

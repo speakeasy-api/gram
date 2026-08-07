@@ -107,16 +107,25 @@ type result struct {
 
 func main() {
 	var (
-		modelsFlag  = flag.String("models", strings.Join(defaultModels, ","), "comma-separated OpenRouter model ids (must be allowlisted)")
-		casesFile   = flag.String("cases", "server/cmd/riskjudgebench/cases.json", "path to labeled cases JSON")
-		runs        = flag.Int("runs", 1, "evaluations per (model,case)")
-		concurrency = flag.Int("concurrency", 6, "max concurrent judge calls")
-		temperature = flag.Float64("temperature", 0.0, "sampling temperature (judge default is 0)")
-		timeout     = flag.Duration("timeout", 30*time.Second, "per-call timeout (prod judgeTimeout is 10s)")
-		orgID       = flag.String("org", "5a25158b-24dc-4d49-b03d-e85acfbea59c", "OrgID label (default: speakeasy-team)")
-		outFile     = flag.String("out", "server/cmd/riskjudgebench/results.json", "write raw per-call results here ('' to skip)")
+		modelsFlag      = flag.String("models", strings.Join(defaultModels, ","), "comma-separated OpenRouter model ids (must be allowlisted)")
+		casesFile       = flag.String("cases", "server/cmd/riskjudgebench/cases.json", "path to labeled cases JSON")
+		runs            = flag.Int("runs", 1, "evaluations per (model,case)")
+		concurrency     = flag.Int("concurrency", 6, "max concurrent judge calls")
+		temperature     = flag.Float64("temperature", 0.0, "sampling temperature (judge default is 0)")
+		timeout         = flag.Duration("timeout", 30*time.Second, "per-call timeout (prod judgeTimeout is 10s)")
+		orgID           = flag.String("org", "5a25158b-24dc-4d49-b03d-e85acfbea59c", "OrgID label (default: speakeasy-team)")
+		outFile         = flag.String("out", "server/cmd/riskjudgebench/results.json", "write raw per-call results here ('' to skip)")
+		reasoningEffort = flag.String("reasoning-effort", "", "reasoning effort override; empty matches production, which disables reasoning. Routes that reject a disabled setting need an effort such as \"low\"")
 	)
 	flag.Parse()
+
+	// A route that refuses a disabled setting (Gemini 3.5+ answers "Reasoning is
+	// mandatory for this endpoint") cannot be benched against production defaults
+	// at all, so the effort is a knob rather than an assumption.
+	var reasoning *openrouter.Reasoning
+	if *reasoningEffort != "" {
+		reasoning = &openrouter.Reasoning{Effort: *reasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil}
+	}
 
 	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
 	if apiKey == "" || apiKey == "unset" {
@@ -177,7 +186,7 @@ func main() {
 		go func(i int, j job) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = evaluate(client, j.model, *orgID, projectID, j.tc, *temperature, *timeout)
+			results[i] = evaluate(client, j.model, *orgID, projectID, j.tc, *temperature, *timeout, reasoning)
 			mu.Lock()
 			done++
 			if done%20 == 0 || done == len(jobs) {
@@ -202,7 +211,7 @@ func main() {
 
 // evaluate issues one GetObjectCompletion call shaped exactly like
 // ppopenrouter.Judge.call() and records the outcome.
-func evaluate(client openrouter.CompletionClient, model, orgID, projectID string, tc testCase, temp float64, timeout time.Duration) result {
+func evaluate(client openrouter.CompletionClient, model, orgID, projectID string, tc testCase, temp float64, timeout time.Duration, reasoning *openrouter.Reasoning) result {
 	res := result{Model: model, CaseID: tc.ID, Expected: tc.Expected}
 
 	strict := true
@@ -236,6 +245,7 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 		ExternalUserID: "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      reasoning,
 	})
 	res.Latency = time.Since(t0)
 	if err != nil {
@@ -274,6 +284,9 @@ func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrout
 }
 func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
+}
+func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
+	return fmt.Errorf("not implemented in bench")
 }
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")

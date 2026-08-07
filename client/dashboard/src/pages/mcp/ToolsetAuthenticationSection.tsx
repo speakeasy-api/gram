@@ -1,13 +1,17 @@
+import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import type { Toolset } from "@/lib/toolTypes";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { PageSection } from "./MCPDetails";
+import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";
 import { useToolsetAuthTarget } from "./x/tabs/settings/sections/authentication/authTarget";
-import { UserSessionsList } from "./x/tabs/settings/sections/authentication/McpServerSessionsPanel";
-import { externalOauthIssuerUrl } from "./toolsetAuthSurface";
+import {
+  canConfigureExternalOAuth,
+  externalOauthIssuerUrl,
+} from "./toolsetAuthSurface";
 
 /**
  * User-sessions auth surface for toolset-backed MCP servers: the remote
@@ -20,6 +24,12 @@ export function ToolsetAuthenticationSection({
   toolset: Toolset;
 }): JSX.Element {
   const target = useToolsetAuthTarget(toolset);
+  const [externalOAuthOpen, setExternalOAuthOpen] = useState(false);
+  const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
+  const externalOAuthAvailable = canConfigureExternalOAuth(
+    toolset,
+    externalMcpOAuthStatus === "required-unconfigured",
+  );
 
   return (
     <>
@@ -27,16 +37,27 @@ export function ToolsetAuthenticationSection({
         heading="Authentication"
         description="Configure the upstream identity provider and user session settings for clients connecting to this server."
       >
-        <AuthenticationSectionBody target={target} />
+        <AuthenticationSectionBody
+          target={target}
+          additionalSetupAction={
+            externalOAuthAvailable ? (
+              <Button
+                variant="secondary"
+                onClick={() => setExternalOAuthOpen(true)}
+              >
+                <Button.Text>Configure External OAuth</Button.Text>
+              </Button>
+            ) : undefined
+          }
+        />
       </PageSection>
-      {target.userSessionIssuerId && (
-        <PageSection
-          heading="User sessions"
-          description="Active sessions clients hold into this server, established via OAuth."
-        >
-          <UserSessionsList issuerId={target.userSessionIssuerId} />
-        </PageSection>
-      )}
+      <ConnectOAuthModal
+        isOpen={externalOAuthOpen}
+        onClose={() => setExternalOAuthOpen(false)}
+        toolsetSlug={toolset.slug}
+        toolset={toolset}
+        initialPath="external"
+      />
     </>
   );
 }

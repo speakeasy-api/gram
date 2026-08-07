@@ -23,6 +23,25 @@ var CustomDomain = Type("CustomDomain", func() {
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
 	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
+	Attribute("health_status", String, "The latest observed domain health status. One of: unknown, healthy, unhealthy.")
+	Attribute("health_issue", String, "The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.")
+	Attribute("health_checked_at", String, func() {
+		Description("When the domain health was last checked.")
+		Format(FormatDateTime)
+	})
+	Attribute("unhealthy_since", String, func() {
+		Description("When the current unhealthy period began.")
+		Format(FormatDateTime)
+	})
+	Attribute("certificate_expires_at", String, func() {
+		Description("When the currently observed TLS certificate expires.")
+		Format(FormatDateTime)
+	})
+	Attribute("consecutive_failures", Int32, "The number of consecutive failed health checks")
+	Attribute("root_mcp_endpoint_id", String, "The MCP endpoint currently mapped to the domain root, if any", func() {
+		Format(FormatUUID)
+	})
+	Attribute("openai_apps_challenge_token", String, "The token served for OpenAI app-submission domain verification, if configured")
 
 	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist")
 })
@@ -52,6 +71,26 @@ var _ = Service("domains", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getDomain"}`)
 	})
 
+	Method("listDomains", func() {
+		Description("List the custom domains for an organization. The result is empty when no custom domain has been configured.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListCustomDomainsResult)
+
+		HTTP(func() {
+			GET("/rpc/domain.list")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDomains")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDomains")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "listDomains"}`)
+	})
+
 	Method("createDomain", func() {
 		Description("Create a custom domain for an organization")
 
@@ -74,12 +113,12 @@ var _ = Service("domains", func() {
 	})
 
 	Method("updateDomain", func() {
-		Description("Update the IP allowlist for the organization's custom domain")
+		Description("Update settings for the organization's custom domain")
 
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("ip_allowlist", ArrayOf(String), "Replacement IP allowlist. Pass an empty list to remove all restrictions.")
-			Required("ip_allowlist")
+			Attribute("openai_apps_challenge_token", String, "Replacement OpenAI app-submission verification token. Pass an empty string to clear it.")
 		})
 
 		Result(CustomDomain)
@@ -93,6 +132,53 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "updateDomain"}`)
+	})
+
+	Method("setRootMcpEndpoint", func() {
+		Description("Set or clear the MCP endpoint mapped to a custom domain's root")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("custom_domain_id", String, "The custom domain whose root mapping to change", func() {
+				Format(FormatUUID)
+			})
+			Attribute("mcp_endpoint_id", String, "The MCP endpoint to map to the domain root. Omit to clear the mapping.", func() {
+				Format(FormatUUID)
+			})
+			Required("custom_domain_id")
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.setRootMcpEndpoint")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setRootMcpEndpoint")
+		Meta("openapi:extension:x-speakeasy-name-override", "setRootMcpEndpoint")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetRootMcpEndpoint"}`)
+	})
+
+	Method("checkHealth", func() {
+		Description("Check the routing and certificate health of the organization's custom domain")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.checkHealth")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "checkDomainHealth")
+		Meta("openapi:extension:x-speakeasy-name-override", "checkHealth")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckDomainHealth"}`)
 	})
 
 	Method("deleteDomain", func() {
@@ -151,8 +237,9 @@ var CustomDomainMcpEndpoint = Type("CustomDomainMcpEndpoint", func() {
 	})
 	Attribute("mcp_server_name", String, "The display name of the parent MCP server. May be empty if the parent has no configured name.")
 	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.")
+	Attribute("is_domain_root", Boolean, "Whether this endpoint is mapped to the custom-domain root")
 
-	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id")
+	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id", "is_domain_root")
 })
 
 var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResult", func() {
@@ -160,4 +247,11 @@ var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResul
 
 	Attribute("mcp_endpoints", ArrayOf(CustomDomainMcpEndpoint))
 	Required("mcp_endpoints")
+})
+
+var ListCustomDomainsResult = Type("ListCustomDomainsResult", func() {
+	Description("Result of listing an organization's custom domains.")
+
+	Attribute("domains", ArrayOf(CustomDomain))
+	Required("domains")
 })

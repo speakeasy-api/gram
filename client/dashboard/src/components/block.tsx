@@ -1,5 +1,6 @@
-import { cn, Stack } from "@speakeasy-api/moonshine";
-import { Type } from "./ui/type";
+import { Stack } from "@/components/ui/Stack";
+import { cn } from "@/lib/utils";
+import { Text } from "@/components/ui/Text";
 
 export const Block = ({
   label,
@@ -18,7 +19,7 @@ export const Block = ({
 
   return (
     <Stack
-      className={cn("w-full rounded-md p-1", className)}
+      className={cn("w-full p-1", className)}
       align={labelRHS ? "stretch" : "start"}
     >
       <Stack
@@ -30,40 +31,28 @@ export const Block = ({
           direction="horizontal"
           align="center"
           justify="space-between"
-          className={cn(
-            "rounded-sm rounded-b-none px-2 pt-1",
-            blockBackground,
-            labelRHS && "w-full",
-          )}
+          className={cn("px-2 pt-1", blockBackground, labelRHS && "w-full")}
         >
-          <Type
+          <Text
             small
             className={cn("z-1", error && "text-destructive! text-nowrap")}
           >
             {label}
-          </Type>
+          </Text>
           {labelRHS && (
-            <Type muted variant="small" className="z-1">
+            <Text muted variant="small" className="z-1">
               {labelRHS}
-            </Type>
+            </Text>
           )}
         </Stack>
         {error && !labelRHS && (
-          <Type small italic className="text-destructive! z-1 w-full pt-1">
+          <Text small italic className="text-destructive! z-1 w-full pt-1">
             {error}
-          </Type>
+          </Text>
         )}
       </Stack>
 
-      <div
-        className={cn(
-          "h-full w-full rounded-md rounded-tl-none p-1",
-          blockBackground,
-          labelRHS && "rounded-tr-none",
-        )}
-      >
-        {children}
-      </div>
+      <div className={cn("h-full w-full p-1", blockBackground)}>{children}</div>
     </Stack>
   );
 };
@@ -78,7 +67,7 @@ export const BlockInner = ({
   return (
     <div
       className={cn(
-        "bg-card dark:bg-background rounded-sm border-1 border-stone-300 p-2 dark:border-stone-700",
+        "bg-card dark:bg-background border-1 border-stone-300 p-2 dark:border-stone-700",
         className,
       )}
     >

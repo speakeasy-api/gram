@@ -3,44 +3,38 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Switch } from "@/components/ui/switch";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import type { Action } from "@/components/ui/MoreActions";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Switch } from "@/components/ui/Switch";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
-import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import { DismissedFindingsTab } from "./DismissedFindingsTab";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
-import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
+import { type BadgeProps } from "@/components/ui/Badge";
 import {
   Plus,
   Shield,
@@ -58,7 +52,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useQueryState } from "nuqs";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
@@ -95,10 +89,8 @@ import { Outlet } from "react-router";
 import {
   ACTION_OPTIONS,
   ALL_POLICY_MESSAGE_TYPES,
-  AVAILABLE_CATEGORIES,
   categoriesToPayload,
   policyMessageTypesForForm,
-  policyToCategories,
 } from "./policy-form";
 import {
   getPolicyDeleteImpactText,
@@ -106,83 +98,7 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { SeverityBadge } from "./risk-ui";
-
-/** One built-in detector as a toggleable card (Detect step). "Customize" opens
- *  a side-sheet to pick which rules in the category are active. */
-export function DetectorCard({
-  category,
-  selected,
-  disabledRules,
-  onToggle,
-  onCustomize,
-}: {
-  category: RuleCategory;
-  selected: boolean;
-  disabledRules: Set<string>;
-  onToggle: (checked: boolean) => void;
-  onCustomize: () => void;
-}): JSX.Element {
-  const meta = RULE_CATEGORY_META[category];
-  const available = AVAILABLE_CATEGORIES.has(category);
-  const rules = DETECTION_RULES[category].filter((r) => !r.hidden);
-  const customizable = available && rules.length > 1;
-  const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
-  const customized = selected && enabledCount < rules.length;
-  return (
-    <div
-      className={cn(
-        "flex gap-3 rounded-lg border p-3 transition-colors",
-        selected ? "border-foreground bg-muted/40" : "border-border",
-      )}
-    >
-      <Icon
-        name={meta.icon as IconName}
-        className="text-muted-foreground mt-0.5 size-5 shrink-0"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{meta.label}</span>
-          {!available && (
-            <Badge variant="neutral">
-              <Badge.Text>Coming soon</Badge.Text>
-            </Badge>
-          )}
-        </div>
-        <p className="text-muted-foreground mt-0.5 text-xs">
-          {meta.description}
-        </p>
-        <div className="mt-2 flex items-center gap-3 text-xs">
-          {rules.length > 0 && (
-            <span
-              className={cn(
-                "bg-muted rounded-full px-2 py-0.5",
-                customized ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              {customized
-                ? `${enabledCount} of ${rules.length} rules`
-                : `${rules.length} rules`}
-            </span>
-          )}
-          {selected && customizable && (
-            <button
-              type="button"
-              onClick={onCustomize}
-              className="text-primary hover:underline"
-            >
-              Customize
-            </button>
-          )}
-        </div>
-      </div>
-      <Switch
-        checked={selected}
-        disabled={!available}
-        onCheckedChange={onToggle}
-      />
-    </div>
-  );
-}
+import { policySummary } from "./policy-summary";
 
 /** Per-policy config for the Non-Corporate Accounts category: the list of
  *  email domains treated as corporate. Rendered inside the category's
@@ -437,7 +353,7 @@ function RuleToggleRow({
   onToggle: (on: boolean) => void;
 }) {
   return (
-    <div className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm">
+    <div className="hover:bg-muted flex items-center justify-between gap-3 px-2 py-2 text-sm">
       <span className="min-w-0 truncate">{rule.title}</span>
       <Switch checked={checked} onCheckedChange={onToggle} />
     </div>
@@ -456,14 +372,6 @@ const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_request",
   "tool_response",
 ]);
-
-/** Map sources to display categories for the table row badges. */
-function sourcesToCategories(
-  sources: string[],
-  presidioEntities?: string[],
-): RuleCategory[] {
-  return [...policyToCategories(sources, presidioEntities)];
-}
 
 function policyMessageTypesForDisplay(
   messageTypes?: string[],
@@ -579,16 +487,43 @@ function messageTypesSummary(
   return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
-function truncatePrompt(prompt: string, maxLength = 60): string {
-  const singleLine = prompt.trim().replace(/\s+/g, " ");
-  if (singleLine.length <= maxLength) {
-    return singleLine;
-  }
-  return `${singleLine.slice(0, maxLength - 1)}…`;
-}
-
 function isPromptPolicy(policy: RiskPolicy): boolean {
   return policy.policyType === "prompt_based";
+}
+
+/** Policy name over what the policy detects. The second line is dropped when
+ *  the name already says it, which is the common case for auto-generated names
+ *  ("Secrets Exposure Flagger" over "Secrets"). */
+function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
+  const summary = policySummary(row.policy);
+
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
+      <span className="flex min-w-0 items-center gap-1.5 font-medium">
+        <span className="truncate">{row.policy.name}</span>
+        {row.kind === "prompt" && (
+          <SimpleTooltip tooltip="Prompt-based policy">
+            <Sparkles
+              aria-label="Prompt-based policy"
+              className="text-muted-foreground h-3.5 w-3.5 shrink-0"
+            />
+          </SimpleTooltip>
+        )}
+      </span>
+      {summary && (
+        <SimpleTooltip tooltip={summary.text}>
+          <span
+            className={cn(
+              "text-muted-foreground truncate text-xs",
+              summary.kind === "prompt" && "italic",
+            )}
+          >
+            {summary.text}
+          </span>
+        </SimpleTooltip>
+      )}
+    </span>
+  );
 }
 
 /** Compact relative date for the policy table's Created/Updated columns, with
@@ -601,6 +536,15 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
       </span>
     </SimpleTooltip>
   );
+}
+
+const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
+type PolicyCenterTab = (typeof POLICY_CENTER_TABS)[number];
+
+function toPolicyCenterTab(value: string): PolicyCenterTab {
+  return (POLICY_CENTER_TABS as readonly string[]).includes(value)
+    ? (value as PolicyCenterTab)
+    : "policies";
 }
 
 export default function PolicyCenter(): JSX.Element {
@@ -641,8 +585,9 @@ function PolicyCenterContent() {
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
-    "policies",
+  const [activeTab, setActiveTab] = useQueryState(
+    "tab",
+    parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
@@ -722,17 +667,17 @@ function PolicyCenterContent() {
   // page, otherwise the Exclusions tab (and global exclusions) would be
   // unreachable for projects that have no policies yet.
   const policiesEmptyState = (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center">
         <Shield className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No Risk Policies
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Risk policies scan your chat messages for secrets and sensitive data.
         Create your first policy to get started.
-      </Type>
+      </Text>
       <Button
         onClick={() => {
           const {
@@ -785,21 +730,9 @@ function PolicyCenterContent() {
   const policyColumns: Column<PolicyRow>[] = [
     {
       key: "name",
-      header: "Name",
-      width: "1fr",
-      render: (row) => (
-        <span className="flex min-w-0 items-center gap-1.5 font-medium">
-          <span className="truncate">{row.policy.name}</span>
-          {row.kind === "prompt" && (
-            <SimpleTooltip tooltip="Prompt-based policy">
-              <Sparkles
-                aria-label="Prompt-based policy"
-                className="text-muted-foreground h-3.5 w-3.5 shrink-0"
-              />
-            </SimpleTooltip>
-          )}
-        </span>
-      ),
+      header: "Policy",
+      width: "3fr",
+      render: (row) => <PolicyNameCell row={row} />,
     },
     {
       key: "action",
@@ -820,42 +753,6 @@ function PolicyCenterContent() {
           <SeverityBadge score={row.policy.score} />
         </span>
       ),
-    },
-    {
-      key: "sources",
-      header: nlEnabled ? "Categories / Prompt" : "Categories",
-      width: "2fr",
-      render: (row) => {
-        if (row.kind === "prompt") {
-          const prompt = row.policy.prompt ?? "";
-          return (
-            <SimpleTooltip tooltip={prompt}>
-              <span className="text-muted-foreground block max-w-full truncate text-sm italic">
-                {truncatePrompt(prompt)}
-              </span>
-            </SimpleTooltip>
-          );
-        }
-
-        const riskPolicy = row.policy;
-        const categories = sourcesToCategories(
-          riskPolicy.sources,
-          riskPolicy.presidioEntities,
-        );
-        if (riskPolicy.customRuleIds?.length) {
-          categories.push("custom");
-        }
-
-        if (categories.length === 0) {
-          return <span className="text-muted-foreground text-sm">—</span>;
-        }
-
-        return (
-          <span className="text-muted-foreground text-sm">
-            {categories.map((cat) => RULE_CATEGORY_META[cat].label).join(", ")}
-          </span>
-        );
-      },
     },
     {
       key: "messageTypes",
@@ -955,7 +852,7 @@ function PolicyCenterContent() {
     activeTab === "policies"
       ? { label: "New Policy", onClick: () => routes.policyCenter.new.goTo() }
       : {
-          label: "Create Exclusion",
+          label: "Set up Exclusion Rule",
           onClick: () => setExclusionSheet({ mode: "create" }),
         };
   const policyDeleteRuleListItems = policyToDelete
@@ -1031,17 +928,14 @@ function PolicyCenterContent() {
             <Tabs
               value={activeTab}
               onValueChange={(value) =>
-                setActiveTab(value as "policies" | "exclusions")
+                void setActiveTab(toPolicyCenterTab(value))
               }
             >
-              <div className="border-b">
-                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
-                  <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
-                  <PageTabsTrigger value="exclusions">
-                    Exclusions
-                  </PageTabsTrigger>
-                </TabsList>
-              </div>
+              <TabsList>
+                <TabsTrigger value="policies">Policies</TabsTrigger>
+                <TabsTrigger value="exclusions">Exclusion rules</TabsTrigger>
+                <TabsTrigger value="dismissed">False Positives</TabsTrigger>
+              </TabsList>
               <TabsContent value="policies" className="mt-6">
                 {policiesBody}
               </TabsContent>
@@ -1051,6 +945,9 @@ function PolicyCenterContent() {
                   sheet={exclusionSheet}
                   onSheetChange={setExclusionSheet}
                 />
+              </TabsContent>
+              <TabsContent value="dismissed" className="mt-6">
+                <DismissedFindingsTab />
               </TabsContent>
             </Tabs>
           </Page.Section.Body>
@@ -1080,23 +977,23 @@ function PolicyCenterContent() {
               <Dialog.Title>Delete Policy</Dialog.Title>
             </Dialog.Header>
             <Stack gap={4}>
-              <Type variant="body">
-                <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              <Text variant="body">
+                <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
                 policy will be permanently deleted.
-              </Type>
+              </Text>
               {policyDeleteImpactText && (
-                <Type variant="body">{policyDeleteImpactText}</Type>
+                <Text variant="body">{policyDeleteImpactText}</Text>
               )}
               {policyDeleteRuleListItems.length > 0 && (
                 <div className="space-y-2">
                   <ul className="list-disc space-y-1 pl-5">
                     {policyDeleteRuleListItems.map((ruleName, index) => (
                       <li key={`${ruleName}-${index}`}>
-                        <Type variant="body" muted as="span">
+                        <Text variant="body" muted as="span">
                           {ruleName}
-                        </Type>
+                        </Text>
                       </li>
                     ))}
                   </ul>
@@ -1192,7 +1089,7 @@ export function PolicyAudiencePicker({
           selectAudienceChoice(value as PolicyAudienceChoice)
         }
       >
-        <div className="border-border divide-border divide-y rounded-lg border">
+        <div className="border-border divide-border divide-y border">
           <PolicyAudienceChoiceRow
             id="policy-audience-everyone"
             value="everyone"
@@ -1225,7 +1122,7 @@ export function PolicyAudiencePicker({
       )}
 
       {audienceChoice === "roles" && (
-        <div className="border-border rounded-lg border">
+        <div className="border-border border">
           <AudiencePrincipalSection title="Roles">
             {roles.length === 0 ? (
               <p className="text-muted-foreground px-4 py-3 text-sm">
@@ -1317,7 +1214,7 @@ function SpecificUsersAudienceSection({
   const hasSearch = userSearch.trim().length > 0;
 
   return (
-    <div className="border-border rounded-lg border">
+    <div className="border-border border">
       <div className="space-y-4 p-4">
         <SearchBar
           value={userSearch}
@@ -1331,7 +1228,7 @@ function SpecificUsersAudienceSection({
             <div className="text-muted-foreground text-xs font-medium">
               Selected users
             </div>
-            <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+            <div className="border-border divide-border divide-y overflow-hidden border">
               {selectedUserOptions.map((option) => (
                 <AudiencePrincipalRow
                   key={option.principalUrn}
@@ -1405,7 +1302,7 @@ function UserSearchResults({
       <div className="text-muted-foreground text-xs font-medium">
         Search results
       </div>
-      <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+      <div className="border-border divide-border divide-y overflow-hidden border">
         {results.map((member) => {
           const principalUrn = member.principalUrn;
           return (
@@ -1576,7 +1473,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
           <>
             {/* Status + Version row */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="border-border rounded-lg border p-3">
+              <div className="border-border border p-3">
                 <p className="text-muted-foreground mb-1 text-xs font-medium">
                   Status
                 </p>
@@ -1585,8 +1482,9 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                     className={cn(
                       "inline-block h-2.5 w-2.5 rounded-full",
                       status.workflowStatus === "running" &&
-                        "animate-pulse bg-green-500",
-                      status.workflowStatus === "sleeping" && "bg-yellow-500",
+                        "bg-success-default animate-pulse",
+                      status.workflowStatus === "sleeping" &&
+                        "bg-warning-default",
                       status.workflowStatus === "not_started" &&
                         "bg-muted-foreground",
                     )}
@@ -1598,7 +1496,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                   </span>
                 </div>
               </div>
-              <div className="border-border rounded-lg border p-3">
+              <div className="border-border border p-3">
                 <p className="text-muted-foreground mb-1 text-xs font-medium">
                   Version
                 </p>
@@ -1607,7 +1505,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
             </div>
 
             {/* Progress */}
-            <div className="border-border rounded-lg border p-4">
+            <div className="border-border border p-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium">Analysis Progress</p>
                 <div className="flex items-center gap-2">
@@ -1630,9 +1528,9 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                   </span>
                 </div>
               </div>
-              <div className="bg-muted mb-2 h-2 overflow-hidden rounded-full">
+              <div className="bg-muted mb-2 h-2 overflow-hidden">
                 <div
-                  className="bg-primary h-full rounded-full transition-all duration-500"
+                  className="bg-primary h-full transition-all duration-500"
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -1649,7 +1547,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
             </div>
 
             {/* Findings */}
-            <div className="border-border rounded-lg border p-4">
+            <div className="border-border border p-4">
               <p className="text-muted-foreground mb-1 text-xs font-medium">
                 Findings
               </p>
@@ -1689,39 +1587,6 @@ function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {
   );
 }
 
-/** One session-part as a selectable card (Scope step). */
-export function ScopeCard({
-  type,
-  checked,
-  onToggle,
-}: {
-  type: PolicyMessageType;
-  checked: boolean;
-  onToggle: (checked: boolean) => void;
-}): JSX.Element {
-  const meta = POLICY_MESSAGE_TYPE_META[type];
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-        checked
-          ? "border-foreground bg-muted/40"
-          : "border-border hover:bg-muted/30",
-      )}
-    >
-      <Checkbox
-        checked={checked}
-        onCheckedChange={(next) => onToggle(!!next)}
-        className="mt-0.5"
-      />
-      <div className="min-w-0">
-        <div className="text-sm font-medium">{meta.label}</div>
-        <div className="text-muted-foreground text-xs">{meta.description}</div>
-      </div>
-    </label>
-  );
-}
-
 export function ActionPicker({
   formAction,
   setFormAction,
@@ -1756,7 +1621,7 @@ export function ActionPicker({
             key={opt.value}
             htmlFor={`action-${opt.value}`}
             className={cn(
-              "flex items-start gap-3 rounded-lg border p-3.5 transition-colors",
+              "flex items-start gap-3 border p-3.5 transition-colors",
               disabled
                 ? "border-border cursor-not-allowed opacity-60"
                 : selected
@@ -1844,7 +1709,7 @@ export function RuleSelectList({
         )}
       </button>
       {expanded && (
-        <div className="border-border divide-border divide-y rounded-lg border">
+        <div className="border-border divide-border divide-y border">
           <p className="text-muted-foreground px-4 py-3 text-xs">
             {description}
           </p>

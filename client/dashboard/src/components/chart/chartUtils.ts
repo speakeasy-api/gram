@@ -78,27 +78,21 @@ export function unixNanoToDate(value: string): Date {
   return new Date(millis);
 }
 
+/**
+ * The same conversion as {@link unixNanoToDate}, as epoch milliseconds — for
+ * bucket math. Unlike the Date variant it swallows malformed input (returns
+ * 0) so a bad timestamp degrades a chart axis instead of crashing the page.
+ */
+export function unixNanoToMs(nano: string): number {
+  try {
+    return Number(BigInt(nano) / 1_000_000n);
+  } catch {
+    return 0;
+  }
+}
+
 export type ThresholdConfig = {
   red: number;
   amber: number;
   inverted?: boolean; // Set to true if lower is better (like latency)
 };
-
-export function getValueColor(
-  value: number,
-  thresholds?: ThresholdConfig,
-): string {
-  if (!thresholds) return "";
-
-  if (thresholds.inverted) {
-    // Lower is better (e.g., latency)
-    if (value > thresholds.red) return "text-red-500";
-    if (value > thresholds.amber) return "text-amber-500";
-    return "text-emerald-600";
-  } else {
-    // Higher is better (e.g., chats, resolution rate)
-    if (value < thresholds.red) return "text-red-500";
-    if (value < thresholds.amber) return "text-amber-500";
-    return "text-emerald-600";
-  }
-}

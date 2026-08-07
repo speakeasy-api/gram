@@ -44,3 +44,33 @@ var OrganizationIssuerDeletePreflight = Type("OrganizationIssuerDeletePreflight"
 
 	Required("client_count", "mcp_server_names")
 })
+
+// OrganizationIssuerMigratePreflight describes the impact of consolidating a
+// source issuer onto a target issuer so the confirmation dialog can list every
+// blocker before the mutation runs. can_migrate is FALSE exactly when
+// endpoint_mismatches or conflicting_mcp_server_names is non-empty — the same
+// two conditions the migrate mutation rejects with 409.
+var OrganizationIssuerMigratePreflight = Type("OrganizationIssuerMigratePreflight", func() {
+	Description("Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.")
+
+	Attribute("client_count", Int, "Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.")
+	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers attached to the source issuer's clients.")
+	Attribute("endpoint_mismatches", ArrayOf(String), "Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.")
+	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
+	Attribute("warnings", ArrayOf(String), "Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.")
+	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.")
+
+	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "can_migrate")
+})
+
+// MigrateOrganizationRemoteSessionIssuerResult reports the outcome of a
+// consolidation: the surviving target issuer plus what happened to the source.
+var MigrateOrganizationRemoteSessionIssuerResult = Type("MigrateOrganizationRemoteSessionIssuerResult", func() {
+	Description("Outcome of consolidating a source remote_session_issuer onto a target issuer: the surviving target issuer, how many clients were re-pointed, and whether the source was soft-deleted.")
+
+	Attribute("issuer", RemoteSessionIssuer, "The surviving target remote_session_issuer.")
+	Attribute("clients_migrated", Int, "Number of remote_session_clients re-pointed from the source issuer to the target issuer. Zero when the source had no active clients.")
+	Attribute("source_deleted", Boolean, "TRUE when the source issuer was soft-deleted.")
+
+	Required("issuer", "clients_migrated", "source_deleted")
+})

@@ -13,6 +13,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+func TestClientDefaultsToMaximumUsageEventsPageSize(t *testing.T) {
+	t.Parallel()
+
+	client := New(testGuardianPolicy(t), WithAPIKey("cursor-key"))
+	require.Equal(t, 1000, client.pageSize)
+}
+
 func TestFetchUsageEventsPageSendsAuthAndRequest(t *testing.T) {
 	t.Parallel()
 

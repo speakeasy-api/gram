@@ -2,7 +2,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@/components/ui/Collapsible";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
@@ -11,11 +11,12 @@ import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components/deployment.js";
 import { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
-import { Alert, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Stack } from "@/components/ui/Stack";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
-import { Spinner } from "../ui/spinner";
-import { Type } from "../ui/type";
+import { Spinner } from "@/components/ui/Spinner";
+import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
@@ -169,10 +170,10 @@ export default function DeployStep(): React.JSX.Element | null {
     return (
       <Stack direction="horizontal" gap={1} align="center">
         <Spinner />
-        <Type>
+        <Text>
           The platform is generating tools for your API. This may take a few
           seconds.
-        </Type>
+        </Text>
       </Stack>
     );
   }
@@ -206,7 +207,7 @@ function DeployCompletedMessage({
     return (
       <Stack direction="horizontal" gap={1} align="center">
         <Spinner />
-        <Type>Checking generated tools...</Type>
+        <Text>Checking generated tools...</Text>
       </Stack>
     );
   }
@@ -264,7 +265,7 @@ function DeploymentDetailsCollapsible({
         Deployment details
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2">
-        <div className="bg-muted/30 space-y-2 rounded-md border p-3">
+        <div className="bg-muted/30 space-y-2 border p-3">
           <div className="max-h-60 space-y-1 overflow-y-scroll font-mono text-xs">
             {logs.map((log) => (
               <div

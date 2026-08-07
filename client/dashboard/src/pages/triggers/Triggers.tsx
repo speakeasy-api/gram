@@ -1,20 +1,20 @@
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@/components/ui/Collapsible";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useCreateTriggerMutation } from "@gram/client/react-query/createTrigger.js";
 import { useDeleteTriggerMutation } from "@gram/client/react-query/deleteTrigger.js";
@@ -30,13 +30,10 @@ import { TriggerInstance } from "@gram/client/models/components/triggerinstance.
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
-import {
-  Button,
-  type Column,
-  Icon,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet } from "react-router";
@@ -89,22 +86,22 @@ function isTriggerTargetKind(value: string): value is TriggerTargetKindValue {
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
     case "active":
-      return <Badge variant="default">Active</Badge>;
+      return <Badge variant="neutral">Active</Badge>;
     case "fired":
-      return <Badge variant="secondary">Fired</Badge>;
+      return <Badge variant="neutral">Fired</Badge>;
     case "cancelled":
-      return <Badge variant="secondary">Cancelled</Badge>;
+      return <Badge variant="neutral">Cancelled</Badge>;
     case "paused":
     default:
-      return <Badge variant="secondary">Paused</Badge>;
+      return <Badge variant="neutral">Paused</Badge>;
   }
 }
 
 function KindBadge({ kind }: { kind: string }) {
   if (kind === "webhook") {
-    return <Badge variant="outline">Webhook</Badge>;
+    return <Badge variant="neutral">Webhook</Badge>;
   }
-  return <Badge variant="outline">Schedule</Badge>;
+  return <Badge variant="neutral">Schedule</Badge>;
 }
 
 function WebhookUrlPill({ url }: { url: string }) {
@@ -138,17 +135,17 @@ function WebhookUrlPill({ url }: { url: string }) {
 
 function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="zap" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No triggers yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Triggers let you connect external events to your assistants. Set up a
         cron schedule or a webhook to get started.
-      </Type>
+      </Text>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
           <Icon name="plus" className="h-4 w-4" />
@@ -288,14 +285,14 @@ function ConfigField({
     };
     return (
       <div>
-        <Type variant="body" className="mb-1 font-medium">
+        <Text variant="body" className="mb-1 font-medium">
           {label}
           {isRequired && " *"}
-        </Type>
+        </Text>
         {description && (
-          <Type small muted className="mb-2">
+          <Text small muted className="mb-2">
             {description}
-          </Type>
+          </Text>
         )}
         <div className="flex flex-wrap gap-2">
           {options.map((opt) => (
@@ -305,8 +302,8 @@ function ConfigField({
               onClick={() => toggle(opt)}
               className={
                 selected.includes(opt)
-                  ? "border-primary bg-primary/5 rounded-md border px-3 py-1 text-sm"
-                  : "border-border hover:border-muted-foreground/30 rounded-md border px-3 py-1 text-sm"
+                  ? "border-primary bg-primary/5 border px-3 py-1 text-sm"
+                  : "border-border hover:border-muted-foreground/30 border px-3 py-1 text-sm"
               }
             >
               {opt}
@@ -319,14 +316,14 @@ function ConfigField({
 
   return (
     <div>
-      <Type variant="body" className="mb-1 font-medium">
+      <Text variant="body" className="mb-1 font-medium">
         {label}
         {isRequired && " *"}
-      </Type>
+      </Text>
       {description && (
-        <Type small muted className="mb-1">
+        <Text small muted className="mb-1">
           {description}
-        </Type>
+        </Text>
       )}
       <Input
         value={typeof config[fieldKey] === "string" ? config[fieldKey] : ""}
@@ -351,9 +348,9 @@ function TriggerConfigFields({
     schema = JSON.parse(definition.configSchema) as TriggerConfigSchema;
   } catch {
     return (
-      <Type small muted>
+      <Text small muted>
         Unable to parse config schema.
-      </Type>
+      </Text>
     );
   }
 
@@ -584,17 +581,17 @@ function TriggerDialog({
         <div className="min-h-0 overflow-y-auto">
           <Stack gap={4}>
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Name
-              </Type>
+              </Text>
               <Input value={name} onChange={setName} placeholder="My Trigger" />
             </div>
 
             {!isEditing && (
               <div>
-                <Type variant="body" className="mb-1 font-medium">
+                <Text variant="body" className="mb-1 font-medium">
                   Trigger Type
-                </Type>
+                </Text>
                 <Select
                   value={definitionSlug}
                   onValueChange={(val) => {
@@ -622,13 +619,13 @@ function TriggerDialog({
 
             {needsEnvironment && (
               <div>
-                <Type variant="body" className="mb-1 font-medium">
+                <Text variant="body" className="mb-1 font-medium">
                   Environment
-                </Type>
-                <Type small muted className="mb-1">
+                </Text>
+                <Text small muted className="mb-1">
                   This trigger type requires environment variables. Select an
                   environment that has them configured.
-                </Type>
+                </Text>
                 <Select value={environmentId} onValueChange={setEnvironmentId}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select an environment..." />
@@ -645,11 +642,11 @@ function TriggerDialog({
             )}
 
             {missingEnvVars.length > 0 && selectedEnvironment && (
-              <div className="border-warning-default bg-warning-softest rounded-md border p-3">
-                <Type variant="body" className="mb-1 font-medium">
+              <div className="border-warning-default bg-warning-softest border p-3">
+                <Text variant="body" className="mb-1 font-medium">
                   Missing environment variables
-                </Type>
-                <Type small className="text-warning-foreground">
+                </Text>
+                <Text small className="text-warning-foreground">
                   The selected environment is missing required variables. The
                   trigger will be created but will fail at runtime until these
                   are configured in{" "}
@@ -660,14 +657,14 @@ function TriggerDialog({
                     {selectedEnvironment.name}
                   </routes.environments.environment.Link>
                   :
-                </Type>
+                </Text>
                 <ul className="mt-2 space-y-1">
                   {missingEnvVars.map((req) => (
                     <li
                       key={req.name}
                       className="flex items-center gap-2 text-sm"
                     >
-                      <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
+                      <code className="bg-muted px-1.5 py-0.5 text-xs">
                         {req.name}
                       </code>
                       {req.description && (
@@ -690,9 +687,9 @@ function TriggerDialog({
             )}
 
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Target Kind
-              </Type>
+              </Text>
               <Select
                 value={targetKind}
                 onValueChange={(value) =>
@@ -717,9 +714,9 @@ function TriggerDialog({
             </div>
 
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Target Display Name
-              </Type>
+              </Text>
               <Input
                 value={targetDisplay}
                 onChange={setTargetDisplay}
@@ -728,9 +725,9 @@ function TriggerDialog({
             </div>
 
             <div>
-              <Type variant="body" className="mb-1 font-medium">
+              <Text variant="body" className="mb-1 font-medium">
                 Target Reference
-              </Type>
+              </Text>
               <Input
                 value={targetRef}
                 onChange={setTargetRef}

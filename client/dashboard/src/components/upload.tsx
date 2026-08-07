@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
 import { Asset } from "@gram/client/models/components/asset.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { Loader2, UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
-import { Type } from "./ui/type";
+import { Text } from "@/components/ui/Text";
 
 export function ImageUpload({
   onUpload,
@@ -123,21 +123,25 @@ export function FullWidthUpload({
     }
   };
 
-  const handlers = useFileDropZoneHandlers(onUpload, allowedExtensions);
+  // isValidFile is state, not a DOM prop — keep it out of the spread.
+  const { isValidFile, ...dropHandlers } = useFileDropZoneHandlers(
+    onUpload,
+    allowedExtensions,
+  );
   return (
     <div
       tabIndex={0}
       className={cn("grid w-full max-w-2xl gap-4", className)}
-      {...(isLoading ? {} : handlers)}
+      {...(isLoading ? {} : dropHandlers)}
     >
       <div className="flex w-full items-center justify-center">
         <label
           htmlFor="dropzone-file"
           className={cn(
-            "trans flex w-full flex-col items-center justify-center rounded-lg border-1 border-dashed p-10",
+            "trans flex w-full flex-col items-center justify-center border-1 border-dashed p-10",
             isLoading
               ? "border-primary/50 bg-primary/5 cursor-default"
-              : !handlers.isValidFile
+              : !isValidFile
                 ? "border-destructive bg-destructive/10 cursor-pointer"
                 : "border-muted-foreground/50 hover:bg-input/20 cursor-pointer",
           )}
@@ -148,9 +152,9 @@ export function FullWidthUpload({
               <p className="text-card-foreground my-2 text-sm font-semibold">
                 Uploading and validating...
               </p>
-              <Type small mono muted>
+              <Text small mono muted>
                 This may take a few seconds
-              </Type>
+              </Text>
             </Stack>
           ) : (
             <Stack align={"center"} justify={"center"} gap={3}>
@@ -163,10 +167,10 @@ export function FullWidthUpload({
                   </>
                 )}
               </p>
-              <Type small mono muted>
+              <Text small mono muted>
                 {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max
                 8MiB)
-              </Type>
+              </Text>
             </Stack>
           )}
           <input

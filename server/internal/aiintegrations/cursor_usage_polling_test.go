@@ -16,15 +16,34 @@ func TestBuildCursorUsageEventIncludesIntegrationConfigID(t *testing.T) {
 
 	configID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	cfg := Config{
-		ID:             configID,
-		OrganizationID: "org_123",
-		Provider:       ProviderCursor,
-		ProjectID:      uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		ID:                     configID,
+		SyncID:                 uuid.Nil,
+		OrganizationID:         "org_123",
+		Provider:               ProviderCursor,
+		ProjectID:              uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		ExternalOrganizationID: nil,
+		BillingMode:            "",
+		APIKey:                 "",
+		Enabled:                false,
+		PollWatermarkAt:        time.Time{},
+		PollCheckpoint:         emptyConfig("", "").PollCheckpoint,
+		NextPollAfter:          time.Time{},
+		LastPollError:          "",
+		LastPollFailedAt:       time.Time{},
+		LastPollSuccessAt:      time.Time{},
+		ConsecutiveFailures:    0,
+		LastCursor:             "",
+		CreatedAt:              time.Time{},
+		UpdatedAt:              time.Time{},
 	}
 	event := cursorapi.UsageEvent{
-		Timestamp: time.Date(2026, 5, 20, 12, 30, 0, 0, time.UTC),
-		Model:     "claude-4",
-		Kind:      "usage",
+		Timestamp:        time.Date(2026, 5, 20, 12, 30, 0, 0, time.UTC),
+		Model:            "claude-4",
+		Kind:             "usage",
+		ChargedCents:     0,
+		MaxMode:          false,
+		IsHeadless:       false,
+		IsTokenBasedCall: false,
 		TokenUsage: cursorapi.TokenUsage{
 			InputTokens:      10,
 			OutputTokens:     20,
@@ -35,7 +54,7 @@ func TestBuildCursorUsageEventIncludesIntegrationConfigID(t *testing.T) {
 		UserEmail: "User@Example.com",
 	}
 
-	logParam := (&UsagePollService{}).buildCursorUsageEvent(cfg, event)
+	logParam := buildCursorUsageEvent(cfg, event)
 
 	require.Equal(t, configID.String(), logParam.Attributes[attr.AIIntegrationConfigIDKey])
 	require.Equal(t, "cursor", logParam.Attributes[attr.HookSourceKey])

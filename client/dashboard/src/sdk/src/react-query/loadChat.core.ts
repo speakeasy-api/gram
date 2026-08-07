@@ -58,6 +58,7 @@ export function buildLoadChatQuery(
       gramSession: request.gramSession,
       gramProject: request.gramProject,
       gramChatSession: request.gramChatSession,
+      gramKey: request.gramKey,
     }),
     queryFn: async function loadChatQueryFn(ctx): Promise<LoadChatQueryData> {
       const sig = combineSignals(
@@ -94,6 +95,7 @@ export function queryKeyLoadChat(
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;
+    gramKey?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "chat", "load", parameters];
