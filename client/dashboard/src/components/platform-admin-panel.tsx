@@ -236,23 +236,6 @@ function ProductFeaturesSection(): ReactElement {
       />
 
       <FeatureToggle
-        label="AI Platform Push Integrations"
-        description="Allows this organization to provision project-bound ingestion credentials for AI platforms such as LiteLLM."
-        icon={ArrowRightLeft}
-        featureName={FeatureName.AiPlatformPushIntegrations}
-        enabled={features.aiPlatformPushIntegrationsEnabled}
-        isPending={
-          isPending && pendingFeature === FeatureName.AiPlatformPushIntegrations
-        }
-        onToggle={handleToggle}
-        error={
-          pendingFeature === FeatureName.AiPlatformPushIntegrations
-            ? mutError?.message
-            : undefined
-        }
-      />
-
-      <FeatureToggle
         label="Automatic Remote Session Refresh"
         description="Shows the Auto refresh opt-in on remote-session consent screens."
         icon={RefreshCw}

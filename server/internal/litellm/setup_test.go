@@ -43,14 +43,6 @@ func (captureEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 	return feature == productfeatures.FeatureSessionCapture, nil
 }
 
-type testProductFeatures struct {
-	enabled bool
-}
-
-func (f *testProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
-	return feature == productfeatures.FeatureAIPlatformPushIntegrations && f.enabled, nil
-}
-
 func TestMain(m *testing.M) {
 	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
@@ -71,7 +63,6 @@ type realTestInstance struct {
 	chConn    clickhouse.Conn
 	telemetry *telemetry.Logger
 	observer  *recordingMessageObserver
-	features  *testProductFeatures
 	keys      *keysservice.Service
 }
 
@@ -186,9 +177,8 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		require.NoError(t, metricProcessor.Shutdown(shutdownCtx))
 		require.NoError(t, healthProcessor.Shutdown(shutdownCtx))
 	})
-	features := &testProductFeatures{enabled: false}
 	auditLogger := audit.NewLogger()
-	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, features, auditLogger, "local")
+	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, auditLogger, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
@@ -196,7 +186,6 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		chConn:    chConn,
 		telemetry: telemetryLogger,
 		observer:  observer,
-		features:  features,
 		keys:      keysservice.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger),
 	}
 }
