@@ -947,10 +947,9 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
-	require.NotNil(t, cursorManifest.Metadata)
-	require.Equal(t, "cursor-plugins", cursorManifest.Metadata.PluginRoot)
-	require.Equal(t, "a-cursor", cursorManifest.Plugins[0].Source)
-	require.Equal(t, "b-cursor", cursorManifest.Plugins[1].Source)
+	require.Nil(t, cursorManifest.Metadata)
+	require.Equal(t, "agent-plugins/a", cursorManifest.Plugins[0].Source)
+	require.Equal(t, "agent-plugins/b", cursorManifest.Plugins[1].Source)
 }
 
 func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {

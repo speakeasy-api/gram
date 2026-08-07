@@ -96,7 +96,7 @@ func TestRestoreSkillVersionUpdatesCurrentResolversWithoutMovingPins(t *testing.
 	}
 	require.Equal(t, first.Version.ID, resolvedByPlugin[trackedPlugin.ID.String()])
 	require.Equal(t, third.Version.ID, resolvedByPlugin[pinnedPlugin.ID.String()])
-	pluginSkills, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, ti.projectID)
+	pluginSkills, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, pluginsrepo.ListPluginSkillsForProjectParams{ProjectID: ti.projectID, PluginIds: nil})
 	require.NoError(t, err)
 	contentByPlugin := map[uuid.UUID]string{}
 	for _, row := range pluginSkills {
@@ -246,7 +246,7 @@ func TestRestoreSkillVersionPromotesCurrentCapturedTargetToManual(t *testing.T) 
 	runtimeVersionID, err = ti.repo.GetLatestValidSkillVersion(ctx, repo.GetLatestValidSkillVersionParams{ProjectID: ti.projectID, SkillID: captured.SkillID})
 	require.NoError(t, err)
 	require.Equal(t, captured.SkillVersionID, runtimeVersionID)
-	pluginSkills, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, ti.projectID)
+	pluginSkills, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, pluginsrepo.ListPluginSkillsForProjectParams{ProjectID: ti.projectID, PluginIds: nil})
 	require.NoError(t, err)
 	require.Len(t, pluginSkills, 1)
 	require.Equal(t, capturedManifest("restore-current-captured", "Captured.", "captured"), pluginSkills[0].SkillContent)
