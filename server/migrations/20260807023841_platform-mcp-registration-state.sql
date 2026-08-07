@@ -46,10 +46,22 @@ CREATE TABLE "platform_mcp_catalog_registrations" (
 );
 -- Create index "platform_mcp_catalog_registrations_active_identity_key" to table: "platform_mcp_catalog_registrations"
 CREATE UNIQUE INDEX "platform_mcp_catalog_registrations_active_identity_key" ON "platform_mcp_catalog_registrations" ("organization_id", "project_id", "source_kind", "catalog_provider", "catalog_reference") WHERE (deleted IS FALSE);
+-- Create index "platform_mcp_catalog_registrations_org_connection_idx" to table: "platform_mcp_catalog_registrations"
+CREATE INDEX "platform_mcp_catalog_registrations_org_connection_idx" ON "platform_mcp_catalog_registrations" ("organization_id", "connection_id");
 -- Create index "platform_mcp_catalog_registrations_organization_connection_idx" to table: "platform_mcp_catalog_registrations"
 CREATE INDEX "platform_mcp_catalog_registrations_organization_connection_idx" ON "platform_mcp_catalog_registrations" ("organization_id", "connection_id", "connection_generation") WHERE (deleted IS FALSE);
+-- Create index "platform_mcp_catalog_registrations_organization_project_idx" to table: "platform_mcp_catalog_registrations"
+CREATE INDEX "platform_mcp_catalog_registrations_organization_project_idx" ON "platform_mcp_catalog_registrations" ("organization_id", "project_id");
 -- Create index "platform_mcp_catalog_registrations_project_id_id_key" to table: "platform_mcp_catalog_registrations"
 CREATE UNIQUE INDEX "platform_mcp_catalog_registrations_project_id_id_key" ON "platform_mcp_catalog_registrations" ("project_id", "id");
+-- Create index "platform_mcp_catalog_registrations_project_mcp_endpoint_idx" to table: "platform_mcp_catalog_registrations"
+CREATE INDEX "platform_mcp_catalog_registrations_project_mcp_endpoint_idx" ON "platform_mcp_catalog_registrations" ("project_id", "mcp_endpoint_id");
+-- Create index "platform_mcp_catalog_registrations_project_mcp_server_idx" to table: "platform_mcp_catalog_registrations"
+CREATE INDEX "platform_mcp_catalog_registrations_project_mcp_server_idx" ON "platform_mcp_catalog_registrations" ("project_id", "mcp_server_id");
+-- Create index "platform_mcp_catalog_registrations_project_remote_server_idx" to table: "platform_mcp_catalog_registrations"
+CREATE INDEX "platform_mcp_catalog_registrations_project_remote_server_idx" ON "platform_mcp_catalog_registrations" ("project_id", "remote_mcp_server_id");
+-- Create index "platform_mcp_catalog_registrations_project_session_issuer_idx" to table: "platform_mcp_catalog_registrations"
+CREATE INDEX "platform_mcp_catalog_registrations_project_session_issuer_idx" ON "platform_mcp_catalog_registrations" ("project_id", "user_session_issuer_id");
 -- Create "platform_mcp_operation_receipts" table
 CREATE TABLE "platform_mcp_operation_receipts" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -80,6 +92,10 @@ CREATE TABLE "platform_mcp_operation_receipts" (
 CREATE UNIQUE INDEX "platform_mcp_operation_receipts_connection_operation_key" ON "platform_mcp_operation_receipts" ("organization_id", "project_id", "connection_id", "operation", "idempotency_key");
 -- Create index "platform_mcp_operation_receipts_expires_at_idx" to table: "platform_mcp_operation_receipts"
 CREATE INDEX "platform_mcp_operation_receipts_expires_at_idx" ON "platform_mcp_operation_receipts" ("expires_at");
+-- Create index "platform_mcp_operation_receipts_organization_connection_idx" to table: "platform_mcp_operation_receipts"
+CREATE INDEX "platform_mcp_operation_receipts_organization_connection_idx" ON "platform_mcp_operation_receipts" ("organization_id", "connection_id");
+-- Create index "platform_mcp_operation_receipts_project_registration_idx" to table: "platform_mcp_operation_receipts"
+CREATE INDEX "platform_mcp_operation_receipts_project_registration_idx" ON "platform_mcp_operation_receipts" ("project_id", "registration_id");
 -- Create "platform_mcp_readiness" table
 CREATE TABLE "platform_mcp_readiness" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -107,6 +123,10 @@ CREATE TABLE "platform_mcp_readiness" (
 CREATE UNIQUE INDEX "platform_mcp_readiness_binding_key" ON "platform_mcp_readiness" ("registration_id", "connection_id", "connection_generation", "provider_authorization_fingerprint");
 -- Create index "platform_mcp_readiness_expires_at_idx" to table: "platform_mcp_readiness"
 CREATE INDEX "platform_mcp_readiness_expires_at_idx" ON "platform_mcp_readiness" ("expires_at") WHERE (expires_at IS NOT NULL);
+-- Create index "platform_mcp_readiness_organization_connection_idx" to table: "platform_mcp_readiness"
+CREATE INDEX "platform_mcp_readiness_organization_connection_idx" ON "platform_mcp_readiness" ("organization_id", "connection_id");
+-- Create index "platform_mcp_readiness_organization_project_idx" to table: "platform_mcp_readiness"
+CREATE INDEX "platform_mcp_readiness_organization_project_idx" ON "platform_mcp_readiness" ("organization_id", "project_id");
 -- Create index "platform_mcp_readiness_registration_checked_at_idx" to table: "platform_mcp_readiness"
 CREATE INDEX "platform_mcp_readiness_registration_checked_at_idx" ON "platform_mcp_readiness" ("registration_id", "checked_at" DESC);
 -- Create "platform_mcp_setup_handoffs" table
@@ -140,3 +160,9 @@ CREATE UNIQUE INDEX "platform_mcp_setup_handoffs_active_binding_key" ON "platfor
 CREATE INDEX "platform_mcp_setup_handoffs_expires_at_idx" ON "platform_mcp_setup_handoffs" ("expires_at");
 -- Create index "platform_mcp_setup_handoffs_handoff_hash_key" to table: "platform_mcp_setup_handoffs"
 CREATE UNIQUE INDEX "platform_mcp_setup_handoffs_handoff_hash_key" ON "platform_mcp_setup_handoffs" ("handoff_hash");
+-- Create index "platform_mcp_setup_handoffs_organization_connection_idx" to table: "platform_mcp_setup_handoffs"
+CREATE INDEX "platform_mcp_setup_handoffs_organization_connection_idx" ON "platform_mcp_setup_handoffs" ("organization_id", "connection_id");
+-- Create index "platform_mcp_setup_handoffs_organization_project_idx" to table: "platform_mcp_setup_handoffs"
+CREATE INDEX "platform_mcp_setup_handoffs_organization_project_idx" ON "platform_mcp_setup_handoffs" ("organization_id", "project_id");
+-- Create index "platform_mcp_setup_handoffs_project_registration_idx" to table: "platform_mcp_setup_handoffs"
+CREATE INDEX "platform_mcp_setup_handoffs_project_registration_idx" ON "platform_mcp_setup_handoffs" ("project_id", "registration_id");
