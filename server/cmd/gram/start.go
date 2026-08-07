@@ -83,6 +83,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
@@ -1306,6 +1307,7 @@ func newStartCommand() *cli.Command {
 					telemetryrepo.New(chDB),
 					remoteprobe.New(logger, guardianPolicy),
 					remoteprobe.New(logger, guardianPolicy),
+					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
 				)))
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)

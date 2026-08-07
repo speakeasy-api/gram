@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
@@ -108,6 +109,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	assembler := evidence.NewAssembler(
 		packagemeta.NewClient(notFoundRegistry{}),
 		telemetryrepo.New(chConn),
+		quietProbes{},
 		quietProbes{},
 		quietProbes{},
 	)
@@ -314,6 +316,10 @@ func (quietProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.De
 }
 
 func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	return nil, nil
+}
+
+func (quietProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
 	return nil, nil
 }
 

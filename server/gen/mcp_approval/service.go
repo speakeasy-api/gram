@@ -26,6 +26,9 @@ type Service interface {
 	// Promote a risk-policy bypass request into an approval request, carrying its
 	// requester and justification into the review queue.
 	Promote(context.Context, *PromotePayload) (res *ApprovalRequestSummary, err error)
+	// Re-run every evidence source for a request and replace its current evidence
+	// with the fresh gather. Frozen decision snapshots are never touched.
+	RefreshEvidence(context.Context, *RefreshEvidencePayload) (res *ApprovalRequestDetail, err error)
 	// Approve or deny an MCP approval request, recording the rationale and who it
 	// applies to.
 	RecordDecision(context.Context, *RecordDecisionPayload) (res *ApprovalDecision, err error)
@@ -51,7 +54,7 @@ const ServiceName = "mcpApproval"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"listRequests", "getRequest", "createRequest", "promote", "recordDecision"}
+var MethodNames = [6]string{"listRequests", "getRequest", "createRequest", "promote", "refreshEvidence", "recordDecision"}
 
 // ApprovalDecision is the result type of the mcpApproval service
 // recordDecision method.
@@ -215,6 +218,16 @@ type RecordDecisionPayload struct {
 	// A research report this decision cites. Must belong to the request being
 	// decided.
 	ResearchReportID *string
+}
+
+// RefreshEvidencePayload is the payload type of the mcpApproval service
+// refreshEvidence method.
+type RefreshEvidencePayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The approval request ID.
+	ID string
 }
 
 // One research-agent run over a request's server. Findings are gathered and

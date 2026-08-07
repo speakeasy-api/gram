@@ -15,9 +15,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/provenance"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -59,6 +61,10 @@ func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabili
 	return nil, nil
 }
 
+func (quietProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+	return nil, nil
+}
+
 func decode(t *testing.T, raw []byte) map[string]any {
 	t.Helper()
 
@@ -79,7 +85,7 @@ func TestAssemble_PackageReference(t *testing.T) {
 			VersionCount:  3, MaintainerCount: 2, Deprecated: false, DeprecationReason: "",
 		},
 		err: nil,
-	}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{})
+	}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
@@ -117,7 +123,7 @@ func TestAssemble_RemoteReferenceCarriesExposure(t *testing.T) {
 			FirstCalled: &first, LastCalled: &last, CallCount: 42, UserCount: 7, TopUsers: nil,
 		}},
 		rowErr: nil, usageErr: nil,
-	}, quietProbes{}, quietProbes{})
+	}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/sse"))
 	require.NoError(t, err)
@@ -138,14 +144,14 @@ func TestAssemble_NotPublishedVersusGap(t *testing.T) {
 
 	reference := identity.Resolve("npx -y @scope/unknown-server")
 
-	clean := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{})
+	clean := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 	raw, err := clean.Assemble(t.Context(), uuid.New(), reference)
 	require.NoError(t, err)
 	doc := decode(t, raw)
 	require.Equal(t, true, doc["package_not_published"])
 	require.NotContains(t, doc, "gaps")
 
-	failing := evidence.NewAssembler(&fakePackages{metadata: nil, err: errors.New("registry down")}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{})
+	failing := evidence.NewAssembler(&fakePackages{metadata: nil, err: errors.New("registry down")}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 	raw, err = failing.Assemble(t.Context(), uuid.New(), reference)
 	require.NoError(t, err, "one source failing must not lose the gather")
 	doc = decode(t, raw)
@@ -161,7 +167,7 @@ func TestAssemble_ExposureFailureIsAGap(t *testing.T) {
 
 	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{
 		row: nil, usage: nil, rowErr: errors.New("clickhouse down"), usageErr: nil,
-	}, quietProbes{}, quietProbes{})
+	}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/sse"))
 	require.NoError(t, err)
@@ -177,7 +183,7 @@ func TestAssemble_ExposureFailureIsAGap(t *testing.T) {
 func TestAssemble_UnresolvedIsStillADocument(t *testing.T) {
 	t.Parallel()
 
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("./run-my-server --local"))
 	require.NoError(t, err)
@@ -205,7 +211,7 @@ func TestAssemble_MCPRemoteCommandReachesExposure(t *testing.T) {
 			LastCalledUnixNano: 0, UpdatedAt: time.Time{},
 		},
 		usage: nil, rowErr: nil, usageErr: nil,
-	}, quietProbes{}, quietProbes{})
+	}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y mcp-remote https://mcp.example.com/sse"))
 	require.NoError(t, err)
@@ -227,7 +233,7 @@ func TestAssemble_WithRealPackageClient(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
-	assembler := evidence.NewAssembler(client, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(client, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y p@1.0.0"))
 	require.NoError(t, err)
@@ -243,7 +249,7 @@ func TestAssemble_WithRealPackageClient(t *testing.T) {
 func TestDecodeDocument_RoundTripAndVersionGate(t *testing.T) {
 	t.Parallel()
 
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
 
@@ -275,6 +281,7 @@ func TestAssemble_UnreachableSourceIsBoundedAndBecomesAGap(t *testing.T) {
 	assembler := evidence.NewAssembler(
 		blockingPackages{},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{},
 		quietProbes{},
 		quietProbes{},
 		evidence.WithSourceTimeout(50*time.Millisecond),
@@ -333,6 +340,10 @@ func (failingProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabi
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
+func (failingProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+	return nil, errors.New("registry unreachable")
+}
+
 // declaringProbes stands in for a server that publishes OAuth metadata and
 // answers tools/list without credentials.
 type declaringProbes struct{}
@@ -363,12 +374,121 @@ func (declaringProbes) ListToolDeclarations(_ context.Context, _ string) ([]capa
 	}, nil
 }
 
+func (declaringProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+	return &catalog.Match{
+		Registry:  "Test Registry",
+		Specifier: "com.example/server",
+		Provenance: provenance.Provenance{
+			Catalogued: true, Official: true, Status: "active", IsLatest: true,
+			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
+		},
+		Tools: nil,
+	}, nil
+}
+
+// cataloguedOnlyProbes stands in for an OAuth-protected server that refuses
+// unauthenticated tools/list while its registry entry carries the tool list.
+type cataloguedOnlyProbes struct{}
+
+func (cataloguedOnlyProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
+	return nil, nil
+}
+
+func (cataloguedOnlyProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	return nil, errors.New("server refused unauthenticated tools/list")
+}
+
+func (cataloguedOnlyProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+	readOnly := true
+	return &catalog.Match{
+		Registry:  "Test Registry",
+		Specifier: "com.example/server",
+		Provenance: provenance.Provenance{
+			Catalogued: true, Official: true, Status: "active", IsLatest: true,
+			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
+		},
+		Tools: []capability.Declaration{
+			{
+				Name: "search_docs", Description: "Search documentation", InputSchema: "",
+				ReadOnly: &readOnly, Destructive: nil, Idempotent: nil, OpenWorld: nil,
+			},
+		},
+	}, nil
+}
+
+// A server that refuses unauthenticated tools/list but is catalogued gets its
+// capability section from the registry's copy, labeled as such, with no
+// tool-declarations gap: the declarations were consulted, one step removed.
+func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		cataloguedOnlyProbes{},
+		cataloguedOnlyProbes{},
+		cataloguedOnlyProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	require.Equal(t, "registry", doc["capabilities_source"])
+	capabilities, ok := doc["capabilities"].([]any)
+	require.True(t, ok)
+	require.Len(t, capabilities, 1)
+	first, ok := capabilities[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "search_docs", first["tool"])
+
+	prov, ok := doc["provenance"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, true, prov["catalogued"])
+	require.Equal(t, true, prov["official"])
+	require.Equal(t, "Test Registry", prov["registry"])
+
+	gaps, _ := doc["gaps"].([]any)
+	require.NotContains(t, gaps, "tool_declarations_probe_failed")
+}
+
+// A catalog lookup that finds no entry is checked-and-absent: the provenance
+// section says not catalogued, and a refusing server still yields the
+// tool-declarations gap because no source supplied declarations.
+func TestAssemble_UncataloguedServerReadsAsCheckedAndAbsent(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{},
+		failingProbes{},
+		quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	prov, ok := doc["provenance"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, false, prov["catalogued"])
+
+	gaps, ok := doc["gaps"].([]any)
+	require.True(t, ok)
+	require.Contains(t, gaps, "tool_declarations_probe_failed")
+	require.NotContains(t, gaps, "catalog_lookup_failed")
+}
+
 func TestAssemble_RemoteProbesFillAuthorityAndCapabilities(t *testing.T) {
 	t.Parallel()
 
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		declaringProbes{},
 		declaringProbes{},
 		declaringProbes{},
 	)
@@ -382,6 +502,7 @@ func TestAssemble_RemoteProbesFillAuthorityAndCapabilities(t *testing.T) {
 	require.Equal(t, "oauth", authoritySection["mode"])
 	require.Equal(t, true, authoritySection["dynamic_registration"])
 
+	require.Equal(t, "server", doc["capabilities_source"], "a direct answer outranks the registry's copy")
 	capabilities, ok := doc["capabilities"].([]any)
 	require.True(t, ok)
 	require.Len(t, capabilities, 2)
@@ -402,6 +523,7 @@ func TestAssemble_FailedProbesAreGaps(t *testing.T) {
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		failingProbes{},
 		failingProbes{},
 		failingProbes{},
 	)
