@@ -42,6 +42,7 @@ const (
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
+	ScopeChatWrite               Scope = "chat:write"
 )
 
 type scopeVisibility int
@@ -68,10 +69,13 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
-	// chat:read is intentionally NOT a default for any system role: reading
-	// other members' session transcripts is sensitive, so it must be granted
-	// explicitly (via a custom role grant). Everyone reads their own sessions
-	// via owner-matching in the chat handlers regardless.
+	// chat:read and chat:write are intentionally NOT defaults for any system
+	// role: reading other members' session transcripts is sensitive, and
+	// mutating them (pin, rename, feedback, delete) is destructive, so both
+	// must be granted explicitly via a custom role grant. Everyone reads and
+	// mutates their own sessions via owner-matching in the chat handlers
+	// regardless. chat:write satisfies chat:read via scopeExpansions, so a
+	// session reviewer who should not be able to delete gets chat:read alone.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed
@@ -105,6 +109,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
+	ScopeChatWrite:               scopeVisibilityUserVisible,
 }
 
 var memberScopes = []Scope{
@@ -190,7 +195,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
-	ScopeChatRead:                nil,
+	ScopeChatRead:                {ScopeChatWrite},
+	ScopeChatWrite:               nil,
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -224,6 +230,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
+	ScopeChatWrite:               "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the

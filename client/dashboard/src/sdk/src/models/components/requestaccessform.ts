@@ -24,6 +24,7 @@ export const RequestAccessFormScope = {
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
+  ChatWrite: "chat:write",
 } as const;
 /**
  * The scope being requested.

@@ -61679,6 +61679,7 @@ components:
             - risk_policy:bypass
             - risk_policy:block
             - chat:read
+            - chat:write
         selectors:
           type: array
           items:
@@ -61715,6 +61716,7 @@ components:
               - risk_policy:bypass
               - risk_policy:block
               - chat:read
+              - chat:write
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -66019,6 +66021,7 @@ components:
             - risk_policy:evaluate
             - risk_policy:bypass
             - chat:read
+            - chat:write
       description: Form for requesting access to a scope.
       required:
         - scope
@@ -67288,6 +67291,7 @@ components:
             - risk_policy:bypass
             - risk_policy:block
             - chat:read
+            - chat:write
         selectors:
           type: array
           items:
@@ -67450,6 +67454,7 @@ components:
             - risk_policy:bypass
             - risk_policy:block
             - chat:read
+            - chat:write
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.

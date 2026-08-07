@@ -49,12 +49,18 @@ type GetUserFeedbackForChatResult struct {
 }
 
 func (g *GetUserFeedbackForChat) Do(ctx context.Context, args GetUserFeedbackForChatArgs) (*GetUserFeedbackForChatResult, error) {
-	generation, err := g.repo.GetMaxGenerationForChat(ctx, args.ChatID)
+	generation, err := g.repo.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    args.ChatID,
+		ProjectID: args.ProjectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get max generation for chat: %w", err)
 	}
 
-	feedback, err := g.repo.ListUserFeedbackForChat(ctx, args.ChatID)
+	feedback, err := g.repo.ListUserFeedbackForChat(ctx, repo.ListUserFeedbackForChatParams{
+		ChatID:    args.ChatID,
+		ProjectID: args.ProjectID,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &GetUserFeedbackForChatResult{
