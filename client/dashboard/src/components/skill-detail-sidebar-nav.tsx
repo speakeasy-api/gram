@@ -4,6 +4,7 @@ import {
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
 import { Text } from "@/components/ui/Text";
+import { useActiveSectionOnScroll } from "@/hooks/useActiveSectionOnScroll";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
@@ -55,20 +56,41 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
   // Drained so the count reflects every distribution, not the first page.
   useDrainInfiniteQuery(distributionsQuery, !!skillId);
 
-  if (!skillId) return null;
-
   const skill = skillQuery.data?.skill;
   const latestVersion = skillQuery.data?.latestVersion;
-  const distributionCount =
-    distributionsQuery.data?.pages.flatMap((page) => page.result.distributions)
-      .length ?? 0;
   const hasFrontmatter =
     Object.keys(latestVersion?.frontmatter ?? {}).filter(
       (key) => key !== "name" && key !== "description",
     ).length > 0;
 
+  // Kept in document order so the scrollspy can pick the topmost visible
+  // section; mirrors the sections rendered by SkillDetail.
+  const sectionIds = React.useMemo(() => {
+    const ids = [
+      SKILL_ADOPTION_SECTION_ID,
+      SKILL_TIMELINE_SECTION_ID,
+      SKILL_INSIGHTS_SECTION_ID,
+      SKILL_MANIFEST_SECTION_ID,
+    ];
+    if (hasFrontmatter) ids.push(SKILL_FRONTMATTER_SECTION_ID);
+    if (latestVersion) {
+      ids.push(SKILL_DISTRIBUTIONS_SECTION_ID, SKILL_VERSIONS_SECTION_ID);
+    }
+    return ids;
+  }, [hasFrontmatter, latestVersion]);
+
+  const scrolledSectionId = useActiveSectionOnScroll(sectionIds);
+
+  if (!skillId) return null;
+
+  const distributionCount =
+    distributionsQuery.data?.pages.flatMap((page) => page.result.distributions)
+      .length ?? 0;
+
   const detailHref = routes.skills.detail.href(skillId);
-  const activeSectionId = location.hash.replace("#", "");
+  // As the reader scrolls, the section in view drives the highlight; the hash
+  // only seeds it before the first scroll (e.g. deep-linking to a section).
+  const activeSectionId = scrolledSectionId ?? location.hash.replace("#", "");
   const sectionItem = (
     sectionId: string,
     title: string,
