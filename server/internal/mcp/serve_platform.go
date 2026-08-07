@@ -435,11 +435,7 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
-		var shareableErr *oops.ShareableError
-		if errors.As(err, &shareableErr) {
-			return nil, fmt.Errorf("execute platform tool: %w", err)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
 	}
 	outputBytes = int64(rw.body.Len())
 
@@ -460,6 +456,19 @@ func (s *Service) callPlatformToolsetTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	return bs, nil
+}
+
+func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) error {
+	if rejected, ok := toolCallRejection(ctx, logger, err, args...); ok {
+		return rejected
+	}
+
+	var shareableErr *oops.ShareableError
+	if errors.As(err, &shareableErr) {
+		return fmt.Errorf("execute platform tool: %w", err)
+	}
+
+	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

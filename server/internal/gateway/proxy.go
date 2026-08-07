@@ -172,7 +172,7 @@ func (tp *ToolProxy) Do(
 		attr.ToolCallSource(string(tp.source)),
 	))
 	defer func() {
-		if err != nil {
+		if err != nil && !oops.IsClientFault(err) {
 			span.SetStatus(codes.Error, err.Error())
 		}
 		span.End()
