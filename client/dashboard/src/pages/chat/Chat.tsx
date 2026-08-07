@@ -35,6 +35,7 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
+import { BrandMeshLayers } from "@/components/brand-mesh";
 import { getIdentityTint } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
@@ -72,7 +73,13 @@ export function ChatRoot(): ReactElement {
 export function ChatHome(): ReactElement {
   const routes = useRoutes();
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto">
+    // Same brand-mesh surface as the project home assistant card, scaled to
+    // the page: neutral theme-following gradient with the rainbow edge and
+    // grain. Scrolling lives on an inner wrapper so the mesh (and the back
+    // affordance) stay pinned to the viewport instead of scrolling away with
+    // the content.
+    <div className="from-card to-background relative isolate flex h-full flex-col bg-gradient-to-br">
+      <BrandMeshLayers />
       <div className="absolute top-4 left-4 z-10">
         <Link
           to={routes.home.href()}
@@ -83,8 +90,10 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </div>
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
-        <ChatLanding autoFocusInput />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+          <ChatLanding autoFocusInput />
+        </div>
       </div>
     </div>
   );
