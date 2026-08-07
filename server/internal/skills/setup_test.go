@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -133,7 +134,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
-	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler)
+	siteURL, err := url.Parse("https://app.getgram.test")
+	require.NoError(t, err)
+	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler, siteURL)
 
 	ti := &testInstance{
 		service:        service,
