@@ -371,7 +371,7 @@ func seedEndpointFor(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proj
 	_, err := mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.MustParse(mcpServerID),
+		McpServerID:    uuid.NullUUID{UUID: uuid.MustParse(mcpServerID), Valid: true},
 		Slug:           "attach-test-" + uuid.NewString(),
 	})
 	require.NoError(t, err)

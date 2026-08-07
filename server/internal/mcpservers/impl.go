@@ -562,7 +562,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	var affectedDomainIDs []uuid.UUID
 	if payload.Visibility == VisibilityDisabled {
 		affectedDomainIDs, err = mcpendpointsrepo.New(dbtx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
-			McpServerID: serverID,
+			McpServerID: conv.ToNullUUID(serverID),
 			ProjectID:   *authCtx.ProjectID,
 		})
 		if err != nil {
@@ -575,7 +575,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	if payload.Visibility == VisibilityDisabled {
 		_, err = mcpendpointsrepo.New(dbtx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{
-			McpServerID: serverID,
+			McpServerID: conv.ToNullUUID(serverID),
 			ProjectID:   *authCtx.ProjectID,
 		})
 		if err != nil {
@@ -704,7 +704,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	var clearedRootEndpoints []mcpendpointsrepo.McpEndpoint
 	if updated.Visibility == VisibilityDisabled {
 		clearedRootEndpoints, err = mcpendpointsrepo.New(dbtx).ClearRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ClearRootMCPEndpointsByMCPServerIDParams{
-			McpServerID: updated.ID,
+			McpServerID: conv.ToNullUUID(updated.ID),
 			ProjectID:   *authCtx.ProjectID,
 		})
 		if err != nil {
@@ -756,7 +756,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, error) {
 	endpoints, err := mcpendpointsrepo.New(dbtx).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
 		ProjectID:   *authCtx.ProjectID,
-		McpServerID: server.ID,
+		McpServerID: conv.ToNullUUID(server.ID),
 	})
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
@@ -839,7 +839,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	txRepo := repo.New(dbtx)
 
 	affectedDomainIDs, err := mcpendpointsrepo.New(dbtx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
-		McpServerID: serverID,
+		McpServerID: conv.ToNullUUID(serverID),
 		ProjectID:   *authCtx.ProjectID,
 	})
 	if err != nil {
@@ -850,7 +850,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
 	}
 	if _, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
-		McpServerID: serverID,
+		McpServerID: conv.ToNullUUID(serverID),
 		ProjectID:   *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock mcp endpoints").LogError(ctx, logger)
@@ -866,7 +866,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 	// Post-server-lock read is the authoritative root set: the server FOR SHARE in root selection means no new root can commit past this point, and rows here carry pre-delete is_domain_root.
 	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
-		McpServerID: serverID,
+		McpServerID: conv.ToNullUUID(serverID),
 		ProjectID:   *authCtx.ProjectID,
 	})
 	if err != nil {
@@ -891,7 +891,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// fires for hard deletes. Soft-delete endpoints explicitly so callers don't
 	// resolve to a tombstoned mcp server after this commits.
 	deletedEndpoints, err := mcpendpointsrepo.New(dbtx).SoftDeleteMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMCPServerIDParams{
-		McpServerID: deleted.ID,
+		McpServerID: conv.ToNullUUID(deleted.ID),
 		ProjectID:   *authCtx.ProjectID,
 	})
 	if err != nil {

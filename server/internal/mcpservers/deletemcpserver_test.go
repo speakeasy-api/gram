@@ -286,7 +286,7 @@ func TestDeleteMcpServer_CascadesSoftDeleteToSlugs(t *testing.T) {
 		_, err := slugRepo.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 			ProjectID:      *authCtx.ProjectID,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			McpServerID:    frontendUUID,
+			McpServerID:    uuid.NullUUID{UUID: frontendUUID, Valid: true},
 			Slug:           authCtx.OrganizationSlug + v,
 		})
 		require.NoError(t, err)

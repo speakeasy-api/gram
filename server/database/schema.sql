@@ -4139,18 +4139,22 @@ CREATE TABLE IF NOT EXISTS mcp_environment_configs (
   CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
 );
 
--- MCP Endpoints: addressable slugs for an MCP server. A NULL custom_domain_id
--- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
--- custom_domain_id represents a custom-domain endpoint (resolved by the
--- composite (custom_domain_id, slug)).
+-- MCP Endpoints: addressable slugs for an MCP backend — either an MCP server
+-- or a plugin-backed gateway (exactly one, enforced by the exclusivity check
+-- below). A NULL custom_domain_id represents a Gram-hosted endpoint (resolved
+-- by slug alone); a non-NULL custom_domain_id represents a custom-domain
+-- endpoint (resolved by the composite (custom_domain_id, slug)).
 CREATE TABLE IF NOT EXISTS mcp_endpoints (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
 
   custom_domain_id uuid,
-  mcp_server_id uuid NOT NULL,
+  mcp_server_id uuid,
+  plugin_id uuid,
+  user_session_issuer_id uuid,
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 128),
   is_domain_root BOOLEAN,
+  disabled boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4160,8 +4164,20 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   CONSTRAINT mcp_endpoints_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_endpoints_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_endpoints_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  -- Composite FK pins the endpoint and its plugin to the same project
+  -- (targets plugins_project_id_id_key). RESTRICT is intentional: SET NULL
+  -- would violate the backend-exclusivity check below. Plugins soft-delete,
+  -- so RESTRICT only blocks manual hard deletes; plugin deletion cascades
+  -- the soft-delete to its gateway endpoints manually in-tx.
+  CONSTRAINT mcp_endpoints_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_endpoints_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_endpoints_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_endpoints_domain_root_requires_custom_domain_check CHECK (is_domain_root IS NOT TRUE OR custom_domain_id IS NOT NULL)
+  CONSTRAINT mcp_endpoints_domain_root_requires_custom_domain_check CHECK (is_domain_root IS NOT TRUE OR custom_domain_id IS NOT NULL),
+  -- Exactly one backend must be set: either an mcp_server or a plugin.
+  CONSTRAINT mcp_endpoints_backend_exclusivity_check CHECK (num_nonnulls(mcp_server_id, plugin_id) = 1),
+  -- Plugin-backed gateway endpoints must be issuer-gated: auth happens via
+  -- the OAuth issuer, so a gateway row must always carry one.
+  CONSTRAINT mcp_endpoints_gateway_issuer_required_check CHECK (plugin_id IS NULL OR user_session_issuer_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_endpoints_project_id_idx
@@ -4187,6 +4203,11 @@ WHERE custom_domain_id IS NULL AND deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_root_key
 ON mcp_endpoints (custom_domain_id)
 WHERE is_domain_root IS TRUE AND deleted IS FALSE;
+
+-- At most one live gateway endpoint per plugin.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_plugin_id_key
+ON mcp_endpoints (plugin_id)
+WHERE plugin_id IS NOT NULL AND deleted IS FALSE;
 
 -- MCP servers attached directly to an assistant. The legacy toolset
 -- attachment path lives in assistant_toolsets; this table covers

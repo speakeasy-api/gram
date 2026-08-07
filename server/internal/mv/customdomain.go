@@ -50,13 +50,19 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 func BuildCustomDomainMcpEndpointListView(rows []mcpendpointsrepo.ListMCPEndpointsByCustomDomainIDRow) []*domains.CustomDomainMcpEndpoint {
 	result := make([]*domains.CustomDomainMcpEndpoint, len(rows))
 	for i, r := range rows {
+		// mcp_server_id is NULL on plugin-backed gateway rows; empty string
+		// until the API surface grows gateway fields.
+		mcpServerID := ""
+		if r.McpServerID.Valid {
+			mcpServerID = r.McpServerID.UUID.String()
+		}
 		result[i] = &domains.CustomDomainMcpEndpoint{
 			ID:            r.ID.String(),
 			Slug:          r.Slug,
 			ProjectID:     r.ProjectID.String(),
 			ProjectName:   r.ProjectName,
 			ProjectSlug:   r.ProjectSlug,
-			McpServerID:   r.McpServerID.String(),
+			McpServerID:   mcpServerID,
 			McpServerName: conv.FromPGText[string](r.McpServerName),
 			McpServerSlug: conv.FromPGText[string](r.McpServerSlug),
 			IsDomainRoot:  r.IsDomainRoot.Valid && r.IsDomainRoot.Bool,

@@ -312,7 +312,7 @@ func TestCollectionsService_ListServers_SkipsDanglingCustomDomainEndpoint(t *tes
 	_, err := mcpendpointsRepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    server.id,
+		McpServerID:    uuid.NullUUID{UUID: server.id, Valid: true},
 		Slug:           platformSlug,
 	})
 	require.NoError(t, err)

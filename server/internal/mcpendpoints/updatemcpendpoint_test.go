@@ -80,7 +80,7 @@ func TestUpdateMcpEndpoint_RootSlugRenameRetainsMapping(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    serverID,
+		McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:           "before",
 	})
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestUpdateMcpEndpoint_RootMoveAndDisabledServerClearMapping(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    activeServerID,
+		McpServerID:    uuid.NullUUID{UUID: activeServerID, Valid: true},
 		Slug:           "root",
 	})
 	require.NoError(t, err)

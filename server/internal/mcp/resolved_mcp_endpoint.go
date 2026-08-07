@@ -334,8 +334,13 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
 		}
+		// Plugin-backed gateway rows carry no mcp_server_id and have no
+		// server-backed OAuth surface to resume against.
+		if !mcpEndpoint.McpServerID.Valid {
+			return nil, oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
+		}
 		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
-			ID:        mcpEndpoint.McpServerID,
+			ID:        mcpEndpoint.McpServerID.UUID,
 			ProjectID: mcpEndpoint.ProjectID,
 		})
 		switch {

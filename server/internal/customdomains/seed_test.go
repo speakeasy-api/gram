@@ -89,7 +89,7 @@ func seedMcpEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proj
 	row, err := mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{UUID: customDomainID, Valid: true},
-		McpServerID:    serverID,
+		McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)

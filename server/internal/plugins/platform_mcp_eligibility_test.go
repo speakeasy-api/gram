@@ -53,7 +53,7 @@ func TestPostgresNewModelEligibilityExcludesDisabledServer(t *testing.T) {
 
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   *authCtx.ProjectID,
-		McpServerID: serverID,
+		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:        "platform-mcp-eligibility",
 	})
 	require.NoError(t, err)

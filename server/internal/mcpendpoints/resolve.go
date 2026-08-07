@@ -44,8 +44,14 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
 	}
 
+	// Plugin-backed gateway rows carry no mcp_server_id; they become servable
+	// when the gateway backend lands. Until then such rows do not resolve.
+	if !endpoint.McpServerID.Valid {
+		return nil, nil, oops.C(oops.CodeNotFound)
+	}
+
 	server, err := mcpservers_repo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
-		ID:        endpoint.McpServerID,
+		ID:        endpoint.McpServerID.UUID,
 		ProjectID: endpoint.ProjectID,
 	})
 	switch {

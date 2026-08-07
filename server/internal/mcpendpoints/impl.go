@@ -136,7 +136,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	created, err := txRepo.CreateMCPEndpoint(ctx, repo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: customDomainID,
-		McpServerID:    mcpServerID,
+		McpServerID:    conv.ToNullUUID(mcpServerID),
 		Slug:           slug,
 	})
 	if err != nil {
@@ -314,7 +314,7 @@ func (s *Service) ListMcpEndpoints(ctx context.Context, payload *gen.ListMcpEndp
 
 		rows, err := r.ListMCPEndpointsByMCPServerID(ctx, repo.ListMCPEndpointsByMCPServerIDParams{
 			ProjectID:   *authCtx.ProjectID,
-			McpServerID: serverID,
+			McpServerID: conv.ToNullUUID(serverID),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list mcp endpoints by server").LogError(ctx, s.logger)
@@ -403,9 +403,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	beforeView := mv.BuildMcpEndpointView(existing)
 
-	serverIDs := []uuid.UUID{existing.McpServerID}
-	if existing.McpServerID != mcpServerID {
-		serverIDs = append(serverIDs, mcpServerID)
+	serverIDs := []uuid.UUID{mcpServerID}
+	if existing.McpServerID.Valid && existing.McpServerID.UUID != mcpServerID {
+		serverIDs = append(serverIDs, existing.McpServerID.UUID)
 	}
 	slices.SortFunc(serverIDs, func(a, b uuid.UUID) int {
 		return strings.Compare(a.String(), b.String())
@@ -442,7 +442,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	updated, err := txRepo.UpdateMCPEndpoint(ctx, repo.UpdateMCPEndpointParams{
 		CustomDomainID: customDomainID,
-		McpServerID:    mcpServerID,
+		McpServerID:    conv.ToNullUUID(mcpServerID),
 		Slug:           slug,
 		IsDomainRoot:   rootMarker,
 		ID:             endpointID,
