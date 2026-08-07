@@ -18,8 +18,19 @@ const Rule = "prompt_injection"
 // LabelInjection is the positive class an engine returns for a flagged message.
 const LabelInjection = "INJECTION"
 
-// LabelSafe is the fail-open verdict when an engine cannot reach a decision.
+// LabelSafe is a judgement: the engine looked at the content and cleared it.
 const LabelSafe = "SAFE"
+
+// LabelUnavailable is the fail-open verdict when an engine cannot reach a
+// decision at all — outage, timeout, rate limit, cancellation, no judge wired.
+// It yields no finding just like LabelSafe, so gating still fails open, but it
+// stays distinguishable so ScanStrict can refuse to let a caller record it as
+// a clean judgement. (cubic)
+const LabelUnavailable = "UNAVAILABLE"
+
+// ErrNoVerdict reports that the judge never reached a decision. Distinct from
+// a clean verdict: nothing was judged, so nothing may be recorded as clean.
+var ErrNoVerdict = errors.New("pi judge reached no verdict")
 
 type Request struct {
 	Messages  []judgemessage.Message
@@ -39,10 +50,12 @@ type Result struct {
 
 type Classifier func(ctx context.Context, req Request) ([]Result, error)
 
+// NoopClassifier stands in when no judge is configured. It reaches no verdict
+// rather than clearing content nothing looked at.
 func NoopClassifier(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
-		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: ""}
+		results[i] = Result{Label: LabelUnavailable, Score: 0, Rationale: ""}
 	}
 	return results, nil
 }
@@ -92,6 +105,9 @@ func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID
 	}
 	if len(results) != 1 {
 		return nil, fmt.Errorf("pi judge returned %d results for 1 message", len(results))
+	}
+	if results[0].Label == LabelUnavailable {
+		return nil, ErrNoVerdict
 	}
 
 	if f := s.findingFromResult(text, results[0]); f != nil {
