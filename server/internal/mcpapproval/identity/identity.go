@@ -216,11 +216,27 @@ func canonicalHostname(u *url.URL) string {
 // rebuilding a URL.
 func canonicalHostPort(u *url.URL) string {
 	host := canonicalHostname(u)
-	if port := u.Port(); port != "" {
+
+	// A port equal to the scheme's default is redundant: `https://h:443/x` and
+	// `https://h/x` are the same endpoint and must not key as two artifacts.
+	if port := u.Port(); port != "" && port != defaultPorts[u.Scheme] {
 		return net.JoinHostPort(host, port)
 	}
 
+	// Hostname() strips the brackets from an IPv6 literal, and a URL is
+	// malformed without them. JoinHostPort is not usable here because an empty
+	// port still emits a trailing colon.
+	if strings.Contains(host, ":") {
+		return "[" + host + "]"
+	}
+
 	return host
+}
+
+// defaultPorts is the port each scheme implies, which canonicalisation drops.
+var defaultPorts = map[string]string{
+	"http":  "80",
+	"https": "443",
 }
 
 // registrableDomain reduces a hostname to its effective TLD plus one label,
@@ -269,10 +285,12 @@ func resolveCommand(command string) Identity {
 		return unresolved
 	}
 
-	// The launcher may be an absolute path (`/usr/local/bin/npx`). Windows
-	// commands arrive with backslash separators and an extension, and
-	// path.Base only understands forward slashes, so normalise first.
-	launcher := strings.TrimSuffix(path.Base(strings.ReplaceAll(fields[0], `\`, "/")), ".exe")
+	fields = unwrapShell(fields)
+	if len(fields) == 0 {
+		return unresolved
+	}
+
+	launcher := normalizeLauncher(fields[0])
 	rest := fields[1:]
 
 	switch {
@@ -295,6 +313,44 @@ func resolveCommand(command string) Identity {
 	return firstPackageSpec(rest[1:], reg)
 }
 
+// normalizeLauncher reduces a launcher token to a bare comparable name.
+//
+// The launcher may be an absolute path (`/usr/local/bin/npx`), and on Windows
+// it arrives with backslash separators, a shim extension, and any casing —
+// path.Base only understands forward slashes, so separators are normalised
+// first. npx ships as `npx.cmd` on Windows, not `npx.exe`.
+func normalizeLauncher(field string) string {
+	name := strings.ToLower(path.Base(strings.ReplaceAll(field, `\`, "/")))
+	for _, ext := range []string{".exe", ".cmd", ".bat", ".ps1"} {
+		if trimmed, ok := strings.CutSuffix(name, ext); ok {
+			return trimmed
+		}
+	}
+
+	return name
+}
+
+// unwrapShell strips a Windows command-processor prefix so the real launcher
+// is examined. The canonical Windows MCP stdio config is
+// `"command": "cmd", "args": ["/c", "npx", "-y", "<pkg>"]`, which would
+// otherwise resolve to the shell rather than the package.
+//
+// Only cmd is unwrapped. A POSIX `sh -c` passes its script as one quoted
+// argument, which whitespace splitting has already destroyed, so there is
+// nothing reliable left to read.
+func unwrapShell(fields []string) []string {
+	if len(fields) < 2 || normalizeLauncher(fields[0]) != "cmd" {
+		return fields
+	}
+
+	switch strings.ToLower(fields[1]) {
+	case "/c", "/k":
+		return fields[2:]
+	default:
+		return fields
+	}
+}
+
 // firstPackageSpec takes the first non-flag argument as the package spec.
 // Flags before it belong to the launcher (`-y`, `--yes`), and first-wins means
 // a trailing argument cannot displace the real package. Real configurations
@@ -307,102 +363,101 @@ func resolveCommand(command string) Identity {
 // from it, so the bare word after them is a binary name, not a package.
 // mcp-remote's own documented invocation takes that form.
 func firstPackageSpec(args []string, registry Registry) Identity {
-	// The selector is npx-specific. uv spells -p as --python and uses it to
-	// choose an interpreter, so reading it as a package there would resolve
-	// `uvx -p 3.12 mcp-server` to the Python version.
-	if registry == RegistryNPM {
-		spec, rest, count := npmPackageSelector(args)
-		switch {
-		case count > 1, count == 1 && spec == "":
-			// Repeated selectors install several packages and the binary may
-			// come from any of them; a selector with no value names nothing.
-			// Both are unidentifiable offline, and guessing would attach
-			// evidence to the wrong artifact.
-			return unresolved
-		case count == 1:
-			return packageSpec(spec, rest, registry)
-		}
-	}
-
-	// uv's own selector. `uvx --from <pkg> <bin>` is the counterpart of npx's
-	// -p: the package is named by the flag and the bare word after it is a
-	// binary.
-	if registry == RegistryPyPI {
-		for i, arg := range args {
-			if value, ok := strings.CutPrefix(arg, "--from="); ok && value != "" {
-				return packageSpec(value, args[i+1:], registry)
-			}
-			if arg == "--from" && i+1 < len(args) {
-				return packageSpec(args[i+1], args[i+2:], registry)
-			}
-		}
-	}
+	var (
+		selected  string
+		rest      []string
+		selectors int
+	)
 
 	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if takesSeparateValue(arg, registry) {
-			// Skip the flag's value so it is not mistaken for the package.
-			// `uvx -p 3.12 mcp-server` names an interpreter, not a package.
-			i++
-			continue
-		}
-		if strings.HasPrefix(arg, "-") {
-			continue
+		name, value, joined := splitFlag(args[i])
+
+		if !strings.HasPrefix(args[i], "-") {
+			// The first bare word ends the launcher's own arguments.
+			// Everything after it belongs to the package or the binary, so a
+			// selector appearing later is the server's own flag rather than
+			// the launcher's — which is what keeps `npx -y some-server -p 8080`
+			// resolving to the server instead of to its port, and stops a
+			// trailing `--package=@trusted/thing` from renaming what ran.
+			if selectors == 0 {
+				return packageSpec(args[i], args[i+1:], registry)
+			}
+
+			break
 		}
 
-		return packageSpec(arg, args[i+1:], registry)
+		switch {
+		case isSelectorFlag(name, registry):
+			selectors++
+			if !joined {
+				if i+1 >= len(args) {
+					// A trailing selector names nothing. Leaving selected
+					// empty makes the final switch resolve to unknown.
+					break
+				}
+				value = args[i+1]
+				i++
+			}
+			if selectors == 1 {
+				selected, rest = value, args[i+1:]
+			}
+
+		case takesSeparateValue(name, registry) && !joined:
+			// Skip the value so it is not mistaken for the package.
+			// `uvx -p 3.12 mcp-server` names an interpreter.
+			i++
+		}
+	}
+
+	switch {
+	case selectors > 1, selectors == 1 && selected == "":
+		// Repeated selectors install several packages and the binary may come
+		// from any of them; a selector with no value names nothing. Both are
+		// unidentifiable offline, and guessing would attach evidence to the
+		// wrong artifact.
+		return unresolved
+	case selectors == 1:
+		return packageSpec(selected, rest, registry)
 	}
 
 	return unresolved
+}
+
+// splitFlag separates a flag from an inline value, so `--package=foo` yields
+// ("--package", "foo", true) and `-y` yields ("-y", "", false).
+func splitFlag(arg string) (string, string, bool) {
+	name, value, found := strings.Cut(arg, "=")
+	return name, value, found
+}
+
+// isSelectorFlag reports whether a flag names the package to install rather
+// than describing how to install it. `npx -p <pkg> <bin>` and
+// `uvx --from <pkg> <bin>` both run a binary out of the named package, so the
+// bare word after them is a command name.
+//
+// npx spells it -p; uv spells -p as --python and means an interpreter, so the
+// two must not be shared.
+func isSelectorFlag(name string, registry Registry) bool {
+	switch registry {
+	case RegistryNPM:
+		return name == "-p" || name == "--package"
+	case RegistryPyPI:
+		return name == "--from"
+	default:
+		return false
+	}
 }
 
 // takesSeparateValue reports whether a launcher flag consumes the argument
 // after it. Only the flags that could otherwise be misread as a package are
 // listed; an unknown value-taking flag degrades to naming its own value as the
 // package, which resolution treats as any other unrecognised spec.
-func takesSeparateValue(arg string, registry Registry) bool {
+func takesSeparateValue(name string, registry Registry) bool {
 	if registry != RegistryPyPI {
 		return false
 	}
 
-	return arg == "-p" || arg == "--python" || arg == "--with"
-}
-
-// npmPackageSelector finds npx's package selector in both its spellings,
-// `-p <pkg>` / `--package <pkg>` and `-p=<pkg>` / `--package=<pkg>`.
-//
-// It returns the first selector's value, the arguments following it, and how
-// many selectors appeared in total. The count is what lets the caller reject
-// an invocation naming several packages rather than picking one arbitrarily.
-func npmPackageSelector(args []string) (string, []string, int) {
-	spec := ""
-	var rest []string
-	count := 0
-
-	record := func(value string, remaining []string) {
-		count++
-		if count == 1 {
-			spec = value
-			rest = remaining
-		}
-	}
-
-	for i, arg := range args {
-		switch {
-		case arg == "-p", arg == "--package":
-			if i+1 >= len(args) {
-				record("", nil)
-				continue
-			}
-			record(args[i+1], args[i+2:])
-		case strings.HasPrefix(arg, "-p="):
-			record(strings.TrimPrefix(arg, "-p="), args[i+1:])
-		case strings.HasPrefix(arg, "--package="):
-			record(strings.TrimPrefix(arg, "--package="), args[i+1:])
-		}
-	}
-
-	return spec, rest, count
+	return name == "-p" || name == "--python" || name == "--with"
 }
 
 // packageSpec resolves a package spec, diverting to the proxy's target when
@@ -518,11 +573,31 @@ func splitPackageSpec(spec string, registry Registry) (string, string) {
 // resolve to different content over time, so a scan of whatever they point at
 // today says nothing about what runs tomorrow.
 func isExactVersion(version string) bool {
-	if version == "" {
+	// npm accepts a leading v on an otherwise exact version.
+	v := strings.TrimPrefix(version, "v")
+	if v == "" {
 		return false
 	}
-	if version[0] < '0' || version[0] > '9' {
+
+	// A dist-tag or a range operator never starts with a digit.
+	if v[0] < '0' || v[0] > '9' {
 		return false
 	}
-	return !strings.ContainsAny(version, "^~><=|* ") && !strings.Contains(version, "x")
+	if strings.ContainsAny(v, "^~><=|* ") {
+		return false
+	}
+
+	// A wildcard is only a range when it stands as a whole component: `1.2.x`
+	// floats, while the x in a prerelease or build tag such as `1.0.0-linux`
+	// is part of an exact version. Testing for the letter anywhere would drop
+	// every platform-suffixed release.
+	core, _, _ := strings.Cut(v, "+")
+	core, _, _ = strings.Cut(core, "-")
+	for part := range strings.SplitSeq(core, ".") {
+		if part == "x" || part == "X" || part == "*" {
+			return false
+		}
+	}
+
+	return true
 }
