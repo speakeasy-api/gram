@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -32,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -67,6 +69,12 @@ const (
 // statusRequested is the status a raised or reopened request carries.
 const statusRequested = "requested"
 
+// gatherTimeout bounds evidence gathering at intake. Gathering reaches
+// package registries over the network, and an admission must not be hostage
+// to a slow one — a source that misses the window lands in the document's
+// gaps rather than blocking the request.
+const gatherTimeout = 10 * time.Second
+
 // statusFor maps a decision onto the status its request moves to.
 var statusFor = map[string]string{
 	decisionApproved: "approved",
@@ -81,6 +89,7 @@ type Service struct {
 	authz    *authz.Engine
 	features *productfeatures.Client
 	audit    *audit.Logger
+	evidence *evidence.Assembler
 }
 
 var (
@@ -88,7 +97,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, features *productfeatures.Client, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, features *productfeatures.Client, auditLogger *audit.Logger, assembler *evidence.Assembler) *Service {
 	logger = logger.With(attr.SlogComponent("mcpapproval"))
 
 	return &Service{
@@ -99,6 +108,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:    authzEngine,
 		features: features,
 		audit:    auditLogger,
+		evidence: assembler,
 	}
 }
 
@@ -206,6 +216,17 @@ type admission struct {
 func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID string, adm admission) (*gen.ApprovalRequestSummary, error) {
 	resolved := identity.Resolve(adm.targetRaw)
 
+	// Evidence is gathered before the transaction — it does network and
+	// ClickHouse I/O that must not run under a database transaction — and it
+	// is best-effort: an admission is never lost to a flaky source, and the
+	// per-source failures are recorded inside the document itself as gaps.
+	gatherCtx, cancelGather := context.WithTimeout(ctx, gatherTimeout)
+	defer cancelGather()
+	document, gatherErr := s.evidence.Assemble(gatherCtx, projectID, resolved)
+	if gatherErr != nil {
+		s.logger.ErrorContext(ctx, "failed to assemble approval evidence", attr.SlogError(gatherErr))
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording approval request").LogError(ctx, s.logger)
@@ -227,6 +248,17 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording approval request").LogError(ctx, s.logger)
+	}
+
+	if gatherErr == nil {
+		if err := queries.SetApprovalRequestEvidence(ctx, repo.SetApprovalRequestEvidenceParams{
+			CurrentEvidence: document,
+			EvidenceVersion: evidence.Version,
+			ID:              request.ID,
+			ProjectID:       projectID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
+		}
 	}
 
 	if adm.requesterID != "" {
