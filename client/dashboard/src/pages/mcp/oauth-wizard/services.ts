@@ -33,7 +33,8 @@ function narrowTokenEndpointAuthMethod(
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
     value ===
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
+    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
   ) {
     return value;
   }
@@ -58,6 +59,7 @@ export type ProvisionUserSessionInput = {
   tokenAuthMethod: string;
   clientId: string;
   clientSecret: string;
+  audience: string;
 };
 
 export type RegisterClientInput = {
@@ -200,6 +202,7 @@ export function createWizardServices(
             tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(
               input.tokenAuthMethod,
             ),
+            audience: input.audience || undefined,
           },
         },
         ...opts,

@@ -455,6 +455,7 @@ export const oauthWizardMachine = setup({
               tokenAuthMethod: context.proxy.tokenAuthMethod,
               clientId: context.proxy.clientId,
               clientSecret: context.proxy.clientSecret,
+              audience: context.proxy.audience,
             }),
             onDone: {
               target: "#oauthWizard.result.success",

@@ -121,7 +121,9 @@ export function mustConvertOAuthBeforePrivate({
  */
 export function externalOauthIssuerUrl(toolset: Toolset): string | undefined {
   const metadata = toolset.externalOauthServer?.metadata as
-    Record<string, unknown> | undefined | null;
+    | Record<string, unknown>
+    | undefined
+    | null;
   const issuer = metadata?.["issuer"];
   return typeof issuer === "string" && issuer.trim() ? issuer : undefined;
 }
