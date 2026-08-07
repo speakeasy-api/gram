@@ -124,7 +124,24 @@ func handleToolsCall(
 		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
-	if payload.mode != ToolModeStatic {
+	// The consent-screen tool selection narrows the same slice before any
+	// resolution, so a deselected tool surfaces as method-not-found exactly
+	// like a ?tags=-filtered one.
+	if payload.toolSelection != nil {
+		before := len(toolset.Tools)
+		toolset.Tools = toolfilter.FilterToolsBySelection(toolset.Tools, payload.toolSelection)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
+	}
+
+	// Mirror tools/list: a zero-tool restrictive session exposes no dynamic
+	// facade, so its search/describe/execute calls fall through to the name
+	// lookup below and surface as method-not-found.
+	dynamicFacade := payload.mode != ToolModeStatic
+	if payload.toolSelection != nil && len(toolset.Tools) == 0 {
+		dynamicFacade = false
+	}
+
+	if dynamicFacade {
 		switch params.Name {
 		case searchToolsToolName:
 			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporalEnv)

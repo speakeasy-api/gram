@@ -43,6 +43,18 @@ const (
 	// server-side per organization with distinctID = the issuer's org ID and
 	// no groups.
 	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
+	// FlagConsentToolFiltering gates the consent-screen tool picker island
+	// and its consent-scoped MCP transport. The enforcement path — persisting
+	// user_sessions.tool_selection and filtering tools/list and tools/call by
+	// it — is always on; the flag only controls whether new approvals can
+	// author a restrictive selection. Staged this way so every runtime pod
+	// enforces selections before any pod's consent screen can create one: a
+	// one-step activation would let a restrictive token minted mid-rollout
+	// reach an old pod that ignores the policy and serves every tool.
+	// Evaluated server-side per organization with distinctID = the issuer's
+	// org ID and no groups, like FlagUserSessionCIMD. Removed once the picker
+	// is GA.
+	FlagConsentToolFiltering Flag = "gram-consent-tool-filtering"
 	// FlagPlatformMCPRollout gates the organization-targeted Platform MCP rollout.
 	// It is evaluated in addition to the durable Platform MCP product capability.
 	FlagPlatformMCPRollout Flag = "platform-mcp-rollout"

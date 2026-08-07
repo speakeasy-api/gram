@@ -259,3 +259,77 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	require.Contains(t, script, "}, 3000);")
 	require.Contains(t, script, `guardActionButtons("button[data-refresh-link]", "Refreshing…")`)
 }
+
+func TestConsentTemplateToolAccessIsland(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:            "Demo",
+		MCPSlug:               "example",
+		MCPRouteBase:          "mcp",
+		State:                 "state",
+		CSRFToken:             "csrf",
+		SubjectDisplay:        "user@example.com",
+		RedirectURI:           "http://127.0.0.1/cb",
+		ScriptURL:             "/mcp/consent-page-test.js",
+		ConsentEnabled:        true,
+		FirstParty:            false,
+		ShowToolsIsland:       true,
+		ConsentToolsURL:       "/mcp/example/connect/tools",
+		ConsentToolsScriptURL: "/mcp/consent-tools-test.js",
+		ConsentToolsPrefill:   `{"tools":["reader"]}`,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "Tool access")
+	require.Contains(t, html, `id="consent-tools-root"`)
+	require.Contains(t, html, `data-tools-url="/mcp/example/connect/tools"`)
+	require.Contains(t, html, `data-state="state"`)
+	require.Contains(t, html, `data-csrf-token="csrf"`)
+	require.Contains(t, html, `data-form-id="consent-approve-form"`)
+	require.Contains(t, html, `data-approve-button-id="consent-approve-button"`)
+	require.Contains(t, html, `data-consent-enabled="true"`)
+	require.Contains(t, html, `data-prefill=`)
+	require.Contains(t, html, `src="/mcp/consent-tools-test.js"`)
+	// The approve button always renders disabled; only the island enables
+	// it, so a missing or failed bundle fails closed. Anchor on the submit
+	// value to skip the mount's data-approve-button-id attribute.
+	buttonStart := strings.Index(html, `value="approve"`)
+	require.NotEqual(t, -1, buttonStart)
+	buttonRegion := html[buttonStart:]
+	buttonEnd := strings.Index(buttonRegion, ">")
+	require.NotEqual(t, -1, buttonEnd)
+	require.Contains(t, buttonRegion[:buttonEnd], `id="consent-approve-button"`)
+	require.Contains(t, buttonRegion[:buttonEnd], "disabled")
+	// The server-rendered picker markup is gone; the island owns the form
+	// fields.
+	require.NotContains(t, html, `name="tool_filtering"`)
+	require.NotContains(t, html, `data-tools-panel`)
+	require.NotContains(t, html, `data-scope-tools`)
+	// No inline script or JSON bootstrap beyond escaped data attributes.
+	require.NotContains(t, html, "<script>")
+}
+
+func TestConsentTemplateToolAccessOmittedOnFirstParty(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:      "Demo",
+		MCPSlug:         "example",
+		MCPRouteBase:    "mcp",
+		State:           "state",
+		CSRFToken:       "csrf",
+		SubjectDisplay:  "user@example.com",
+		ScriptURL:       "/mcp/consent-page-test.js",
+		ConsentEnabled:  true,
+		FirstParty:      true,
+		ShowToolsIsland: false,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, page.String(), "Tool access")
+	require.NotContains(t, page.String(), "consent-tools-root")
+	require.NotContains(t, page.String(), "consent-tools-")
+}

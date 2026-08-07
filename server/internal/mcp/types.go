@@ -101,5 +101,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
 		tags:                  nil,
+		toolSelection:         nil,
 	}
 }

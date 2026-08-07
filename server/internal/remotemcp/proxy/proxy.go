@@ -239,6 +239,17 @@ type Proxy struct {
 	// forward token) against an upstream-controlled URL.
 	DisableRedirects bool
 
+	// StrictToolSelection hardens typed tools handling for sessions carrying
+	// a restrictive tool selection, where the default relay-verbatim
+	// treatment of undecodable traffic would bypass the selection
+	// interceptors: a tools/call whose params fail to decode is rejected
+	// before forwarding, and a 2xx terminal tools/list response that cannot
+	// be decoded into a typed view fails closed with a sanitized JSON-RPC
+	// error instead of relaying unfiltered bytes. Non-2xx responses still
+	// relay verbatim — they signal errors and carry no usable inventory, and
+	// converting them would break WWW-Authenticate challenge relay.
+	StrictToolSelection bool
+
 	// WWWAuthenticate is the challenge relayed to the client when the
 	// upstream rejects a request (401/403), replacing the upstream's own
 	// WWW-Authenticate — the upstream challenge names the upstream's
@@ -504,6 +515,30 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
+	// Strict sessions authorize from the decoded message but forward the
+	// original bytes, so the two must be unambiguously the same: exactly one
+	// parsed message per POST (an empty body would pass every per-message
+	// check vacuously yet still be forwarded authenticated) and no JSON that
+	// a first-wins parser would read differently than Go's last-wins decoder.
+	if p.StrictToolSelection {
+		if len(userReq.JSONRPCMessages) != 1 {
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+				Code:    RejectCodeInvalidRequest,
+				Message: "exactly one JSON-RPC message is required",
+				Data:    nil,
+			})
+			return nil
+		}
+		if verr := ValidateStrictJSONRPCBody(userReq.body); verr != nil {
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+				Code:    RejectCodeInvalidRequest,
+				Message: "ambiguous JSON-RPC message: " + verr.Error(),
+				Data:    nil,
+			})
+			return nil
+		}
+	}
+
 	if err := p.runUserRequestInterceptors(ctx, userReq); err != nil {
 		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 	}
@@ -531,6 +566,16 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		if err := p.runToolsCallRequestInterceptors(ctx, toolsCallReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
+	} else if p.StrictToolSelection && userRequestMethod(userReq) == methodToolsCall {
+		// A tools/call whose params fail to decode would forward without the
+		// selection interceptor establishing a tool name. Reject it here
+		// rather than let upstream validation decide.
+		responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+			Code:    RejectCodeInvalidParams,
+			Message: "malformed tools/call request",
+			Data:    nil,
+		})
+		return nil
 	}
 
 	toolsListReq, _ := toolsListRequestFromUserRequest(userReq)
@@ -652,6 +697,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	// Empty bodies skip interceptor invocation but still relay through to
 	// the client (preserves status-only responses).
+	toolsListTypedHandled := false
 	if msg != nil {
 		remoteMsg := &RemoteMessage{
 			UserHTTPRequest:    r,
@@ -679,6 +725,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 		if toolsListReq != nil {
 			if toolsListResp, ok := toolsListResponseFromRemoteMessage(toolsListReq, remoteMsg); ok {
+				toolsListTypedHandled = true
 				if err := p.runToolsListResponseInterceptors(ctx, toolsListResp); err != nil {
 					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 				}
@@ -712,6 +759,24 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			p.infoContextWithIdentity(ctx, "relaying mutated response body to client",
 				attr.SlogComponent("remotemcp.proxy"))
 		}
+	}
+
+	// A 2xx tools/list reply that never produced a typed view (empty body,
+	// undecodable message, or a non-list payload) would relay unfiltered
+	// bytes past the selection interceptors. The undecodable valid-id 2xx
+	// case has already returned a synthesized error above; this closes the
+	// remaining shapes.
+	if p.StrictToolSelection && toolsListReq != nil && !toolsListTypedHandled &&
+		upstreamStatus >= 200 && upstreamStatus < 300 {
+		p.Logger.WarnContext(ctx, "failing closed on unreadable tools/list response under strict tool selection",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(upstreamStatus))
+		responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+			Code:    RejectCodeInternalError,
+			Message: "remote MCP server returned an unreadable tools/list response",
+			Data:    nil,
+		})
+		return nil
 	}
 
 	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes), p.WWWAuthenticate)
@@ -934,6 +999,17 @@ func (p *Proxy) relaySSEStream(
 			}
 		}
 
+		// Undecodable data events on a strict tools/list stream are dropped
+		// rather than relayed: one of them may be the terminal response, and
+		// relaying it verbatim would hand the client unfiltered inventory the
+		// selection interceptors never saw. Comments and keepalives carry no
+		// data and still relay below.
+		if msg == nil && len(data) > 0 && p.StrictToolSelection && toolsListReq != nil {
+			p.Logger.WarnContext(ctx, "dropping undecodable SSE event on tools/list under strict tool selection",
+				attr.SlogComponent("remotemcp.proxy"))
+			return nil
+		}
+
 		// 2. If we have a parseable JSON-RPC message, run interceptors
 		//    BEFORE relaying to the client. Interceptors that return an
 		//    error reject the message — its bytes are not written to the
@@ -976,6 +1052,16 @@ func (p *Proxy) relaySSEStream(
 						if typedResp, typedOK := toolsListResponseFromRemoteMessage(toolsListReq, remoteMsg); typedOK {
 							if err := p.runToolsListResponseInterceptors(ctx, typedResp); err != nil {
 								rejectionErr = err
+							}
+						} else if p.StrictToolSelection {
+							// The terminal event failed to decode as a list
+							// result or error: substituting a correlated
+							// JSON-RPC error beats relaying inventory the
+							// selection interceptor never saw.
+							rejectionErr = &RejectError{
+								Code:    RejectCodeInternalError,
+								Message: "remote MCP server returned an unreadable tools/list response",
+								Data:    nil,
 							}
 						}
 					case resourcesReadReq != nil:
