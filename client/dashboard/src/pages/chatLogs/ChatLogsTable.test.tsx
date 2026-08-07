@@ -24,10 +24,10 @@ vi.mock("@/components/ui/Tooltip", () => ({
     tooltip,
     children,
   }: {
-    tooltip: ReactNode;
+    tooltip: string;
     children: ReactNode;
   }) => (
-    <div data-testid="tooltip-content" data-tooltip={String(tooltip)}>
+    <div data-testid="tooltip-content" data-tooltip={tooltip}>
       {children}
     </div>
   ),
