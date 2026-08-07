@@ -129,64 +129,55 @@ export function SkillActivitySections({
             Activation coverage and version convergence over the last 30 days.
           </SettingsSection.Description>
         </SettingsSection.Header>
-        <SettingsSection.Panel>
-          <SettingsSection.Body>
-            <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
-              <Metric
-                label="Versions"
-                value={metricValue(skill.versionCount)}
-              />
-              <Metric
-                label="Active machines"
-                value={metricValue(adoption.distinctHostnames)}
-              />
-              <Metric
-                label="30-day activations"
-                value={metricValue(adoption.activationsInWindow)}
-              />
-              <Metric
-                label="Drifted"
-                value={metricValue(drift.driftedMachines)}
-              />
-            </dl>
+        <div className="space-y-3">
+          <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Versions" value={metricValue(skill.versionCount)} />
+            <Metric
+              label="Active machines"
+              value={metricValue(adoption.distinctHostnames)}
+            />
+            <Metric
+              label="30-day activations"
+              value={metricValue(adoption.activationsInWindow)}
+            />
+            <Metric
+              label="Drifted"
+              value={metricValue(drift.driftedMachines)}
+            />
+          </dl>
+          <Text small muted>
+            {drift.targetState === "single" && (
+              <>
+                {metricValue(drift.onTargetMachines)}{" "}
+                {machineLabel(drift.onTargetMachines)}{" "}
+                {drift.onTargetMachines === 1 ? "is" : "are"} on the distributed
+                version. {metricValue(drift.indeterminateMachines)}{" "}
+                {machineLabel(drift.indeterminateMachines)}{" "}
+                {drift.indeterminateMachines === 1 ? "has" : "have"} an unknown
+                version.
+              </>
+            )}
+            {drift.targetState === "not_distributed" &&
+              "No plugin distribution target is configured, so drift is indeterminate."}
+            {drift.targetState === "ambiguous" &&
+              "Multiple plugin distribution targets are configured, so drift is indeterminate."}
+          </Text>
+          {(skill.firstSeenAt || skill.lastSeenAt) && (
             <Text small muted>
-              {drift.targetState === "single" && (
+              {skill.firstSeenAt && (
                 <>
-                  {metricValue(drift.onTargetMachines)}{" "}
-                  {machineLabel(drift.onTargetMachines)}{" "}
-                  {drift.onTargetMachines === 1 ? "is" : "are"} on the
-                  distributed version.{" "}
-                  {metricValue(drift.indeterminateMachines)}{" "}
-                  {machineLabel(drift.indeterminateMachines)}{" "}
-                  {drift.indeterminateMachines === 1 ? "has" : "have"} an
-                  unknown version.
+                  First activated <HumanizeDateTime date={skill.firstSeenAt} />
                 </>
               )}
-              {drift.targetState === "not_distributed" &&
-                "No plugin distribution target is configured, so drift is indeterminate."}
-              {drift.targetState === "ambiguous" &&
-                "Multiple plugin distribution targets are configured, so drift is indeterminate."}
+              {skill.firstSeenAt && skill.lastSeenAt && " · "}
+              {skill.lastSeenAt && (
+                <>
+                  Last activated <HumanizeDateTime date={skill.lastSeenAt} />
+                </>
+              )}
             </Text>
-          </SettingsSection.Body>
-          {(skill.firstSeenAt || skill.lastSeenAt) && (
-            <SettingsSection.Footer>
-              <SettingsSection.FooterHint>
-                {skill.firstSeenAt && (
-                  <>
-                    First activated{" "}
-                    <HumanizeDateTime date={skill.firstSeenAt} />
-                  </>
-                )}
-                {skill.firstSeenAt && skill.lastSeenAt && " · "}
-                {skill.lastSeenAt && (
-                  <>
-                    Last activated <HumanizeDateTime date={skill.lastSeenAt} />
-                  </>
-                )}
-              </SettingsSection.FooterHint>
-            </SettingsSection.Footer>
           )}
-        </SettingsSection.Panel>
+        </div>
       </SettingsSection>
 
       <SettingsSection id={SKILL_TIMELINE_SECTION_ID}>
@@ -196,39 +187,35 @@ export function SkillActivitySections({
             Daily activation volume for the rolling 30-day window.
           </SettingsSection.Description>
         </SettingsSection.Header>
-        <SettingsSection.Panel>
-          <SettingsSection.Body>
-            <ChartCard
-              title="Activations by version"
-              chartId="skill-activation-timeline"
-              expandedChart={null}
-              onExpand={() => undefined}
-              expandable={false}
-              hasData={sightingTimeline.length > 0}
-              loading={versionsLoading}
-            >
-              {sightingTimeline.length === 0 ? (
-                <div className="flex h-56 items-center justify-center">
-                  <Text small muted>
-                    No activations captured in the last 30 days.
-                  </Text>
-                </div>
-              ) : (
-                <div className="h-64">
-                  <Line
-                    data={{
-                      labels: buckets.map((bucket) =>
-                        utcMonthDayFormatter.format(bucket),
-                      ),
-                      datasets,
-                    }}
-                    options={chartOptions}
-                  />
-                </div>
-              )}
-            </ChartCard>
-          </SettingsSection.Body>
-        </SettingsSection.Panel>
+        <ChartCard
+          title="Activations by version"
+          chartId="skill-activation-timeline"
+          expandedChart={null}
+          onExpand={() => undefined}
+          expandable={false}
+          hasData={sightingTimeline.length > 0}
+          loading={versionsLoading}
+        >
+          {sightingTimeline.length === 0 ? (
+            <div className="flex h-56 items-center justify-center">
+              <Text small muted>
+                No activations captured in the last 30 days.
+              </Text>
+            </div>
+          ) : (
+            <div className="h-64">
+              <Line
+                data={{
+                  labels: buckets.map((bucket) =>
+                    utcMonthDayFormatter.format(bucket),
+                  ),
+                  datasets,
+                }}
+                options={chartOptions}
+              />
+            </div>
+          )}
+        </ChartCard>
       </SettingsSection>
     </>
   );

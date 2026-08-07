@@ -552,8 +552,8 @@ function VersionHistory({
   });
 
   return (
-    <SettingsSection.Panel>
-      <SettingsSection.Body>
+    <>
+      <div className="space-y-4">
         {comparable && (
           <Text small muted>
             Select one version to compare it with current, or select any two
@@ -591,14 +591,14 @@ function VersionHistory({
           </Button>
         )}
         <VersionDiff versions={diffVersions} />
-      </SettingsSection.Body>
+      </div>
       <RestoreSkillVersionDialog
         skillId={skillId}
         version={restoreTarget?.version ?? null}
         direction={restoreTarget?.direction ?? null}
         onClose={() => setRestoreTarget(null)}
       />
-    </SettingsSection.Panel>
+    </>
   );
 }
 
