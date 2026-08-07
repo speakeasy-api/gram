@@ -1248,7 +1248,7 @@ func ParseEndpoint(
 		mcpApprovalPromoteProjectSlugInputFlag = mcpApprovalPromoteFlags.String("project-slug-input", "", "")
 
 		mcpApprovalRefreshEvidenceFlags                = flag.NewFlagSet("refresh-evidence", flag.ExitOnError)
-		mcpApprovalRefreshEvidenceBodyFlag             = mcpApprovalRefreshEvidenceFlags.String("body", "REQUIRED", "")
+		mcpApprovalRefreshEvidenceIDFlag               = mcpApprovalRefreshEvidenceFlags.String("id", "REQUIRED", "")
 		mcpApprovalRefreshEvidenceSessionTokenFlag     = mcpApprovalRefreshEvidenceFlags.String("session-token", "", "")
 		mcpApprovalRefreshEvidenceApikeyTokenFlag      = mcpApprovalRefreshEvidenceFlags.String("apikey-token", "", "")
 		mcpApprovalRefreshEvidenceProjectSlugInputFlag = mcpApprovalRefreshEvidenceFlags.String("project-slug-input", "", "")
@@ -6745,7 +6745,7 @@ func ParseEndpoint(
 				data, err = mcpapprovalc.BuildPromotePayload(*mcpApprovalPromoteBodyFlag, *mcpApprovalPromoteSessionTokenFlag, *mcpApprovalPromoteApikeyTokenFlag, *mcpApprovalPromoteProjectSlugInputFlag)
 			case "refresh-evidence":
 				endpoint = c.RefreshEvidence()
-				data, err = mcpapprovalc.BuildRefreshEvidencePayload(*mcpApprovalRefreshEvidenceBodyFlag, *mcpApprovalRefreshEvidenceSessionTokenFlag, *mcpApprovalRefreshEvidenceApikeyTokenFlag, *mcpApprovalRefreshEvidenceProjectSlugInputFlag)
+				data, err = mcpapprovalc.BuildRefreshEvidencePayload(*mcpApprovalRefreshEvidenceIDFlag, *mcpApprovalRefreshEvidenceSessionTokenFlag, *mcpApprovalRefreshEvidenceApikeyTokenFlag, *mcpApprovalRefreshEvidenceProjectSlugInputFlag)
 			case "record-decision":
 				endpoint = c.RecordDecision()
 				data, err = mcpapprovalc.BuildRecordDecisionPayload(*mcpApprovalRecordDecisionBodyFlag, *mcpApprovalRecordDecisionSessionTokenFlag, *mcpApprovalRecordDecisionApikeyTokenFlag, *mcpApprovalRecordDecisionProjectSlugInputFlag)
@@ -12755,7 +12755,7 @@ func mcpApprovalPromoteUsage() {
 func mcpApprovalRefreshEvidenceUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval refresh-evidence", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -12766,14 +12766,14 @@ func mcpApprovalRefreshEvidenceUsage() {
 	fmt.Fprintln(os.Stderr, `Re-run every evidence source for a request and replace its current evidence with the fresh gather. Frozen decision snapshots are never touched.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval refresh-evidence --body '{\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval refresh-evidence --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpApprovalRecordDecisionUsage() {

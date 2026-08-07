@@ -31,13 +31,6 @@ type PromoteRequestBody struct {
 	RiskPolicyBypassRequestID *string `form:"risk_policy_bypass_request_id,omitempty" json:"risk_policy_bypass_request_id,omitempty" xml:"risk_policy_bypass_request_id,omitempty"`
 }
 
-// RefreshEvidenceRequestBody is the type of the "mcpApproval" service
-// "refreshEvidence" endpoint HTTP request body.
-type RefreshEvidenceRequestBody struct {
-	// The approval request ID.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-}
-
 // RecordDecisionRequestBody is the type of the "mcpApproval" service
 // "recordDecision" endpoint HTTP request body.
 type RecordDecisionRequestBody struct {
@@ -2462,10 +2455,9 @@ func NewPromotePayload(body *PromoteRequestBody, sessionToken *string, apikeyTok
 
 // NewRefreshEvidencePayload builds a mcpApproval service refreshEvidence
 // endpoint payload.
-func NewRefreshEvidencePayload(body *RefreshEvidenceRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RefreshEvidencePayload {
-	v := &mcpapproval.RefreshEvidencePayload{
-		ID: *body.ID,
-	}
+func NewRefreshEvidencePayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RefreshEvidencePayload {
+	v := &mcpapproval.RefreshEvidencePayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2519,15 +2511,6 @@ func ValidateCreateRequestRequestBody(body *CreateRequestRequestBody) (err error
 func ValidatePromoteRequestBody(body *PromoteRequestBody) (err error) {
 	if body.RiskPolicyBypassRequestID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risk_policy_bypass_request_id", "body"))
-	}
-	return
-}
-
-// ValidateRefreshEvidenceRequestBody runs the validations defined on
-// RefreshEvidenceRequestBody
-func ValidateRefreshEvidenceRequestBody(body *RefreshEvidenceRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	return
 }

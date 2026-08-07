@@ -1028,10 +1028,9 @@ func EncodeRefreshEvidenceRequest(encoder func(*http.Request) goahttp.Encoder) f
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewRefreshEvidenceRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("mcpApproval", "refreshEvidence", err)
-		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

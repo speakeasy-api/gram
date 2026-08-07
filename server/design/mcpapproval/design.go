@@ -141,6 +141,11 @@ var _ = Service("mcpApproval", func() {
 
 		HTTP(func() {
 			POST("/rpc/mcpApproval.refreshEvidence")
+			// The id travels as a query parameter, leaving the POST bodyless:
+			// an id-only JSON body is structurally identical to other one-field
+			// forms and the OpenAPI generator dedupes it into whichever named
+			// type hashed first, which mislabels the SDK surface.
+			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
