@@ -49,23 +49,31 @@ export function usePluginPackageDownload(
   isDownloading: boolean;
   download: (platform: PluginPackagePlatform) => Promise<void>;
 } {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const isDownloadingRef = useRef(false);
+  const [downloadingPluginId, setDownloadingPluginId] = useState<string | null>(
+    null,
+  );
+  const activeRequestRef = useRef<{
+    pluginId: string;
+    request: symbol;
+  } | null>(null);
 
   const download = async (platform: PluginPackagePlatform): Promise<void> => {
-    if (isDownloadingRef.current) return;
-    isDownloadingRef.current = true;
+    if (activeRequestRef.current?.pluginId === pluginId) return;
+    const request = Symbol();
+    activeRequestRef.current = { pluginId, request };
     onMenuOpenChange(false);
-    setIsDownloading(true);
+    setDownloadingPluginId(pluginId);
     try {
       await downloadPluginPackage(client, pluginId, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     } finally {
-      isDownloadingRef.current = false;
-      setIsDownloading(false);
+      if (activeRequestRef.current?.request === request) {
+        activeRequestRef.current = null;
+        setDownloadingPluginId(null);
+      }
     }
   };
 
-  return { isDownloading, download };
+  return { isDownloading: downloadingPluginId === pluginId, download };
 }

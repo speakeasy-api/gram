@@ -80,4 +80,54 @@ describe("downloadPluginPackage", () => {
     );
     expect(result.current.isDownloading).toBe(false);
   });
+
+  it("isolates in-flight state when the plugin changes", async () => {
+    let rejectFirst!: (error: Error) => void;
+    let rejectSecond!: (error: Error) => void;
+    const firstRequest = new Promise<never>((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+    const secondRequest = new Promise<never>((_resolve, reject) => {
+      rejectSecond = reject;
+    });
+    const download = vi
+      .fn()
+      .mockReturnValueOnce(firstRequest)
+      .mockReturnValueOnce(secondRequest);
+    const client = { plugins: { downloadPluginPackage: download } } as never;
+    const onMenuOpenChange = vi.fn<(open: boolean) => void>();
+    const { result, rerender } = renderHook(
+      ({ pluginId }) =>
+        usePluginPackageDownload(client, pluginId, onMenuOpenChange),
+      { initialProps: { pluginId: "first-plugin" } },
+    );
+
+    let firstDownload!: Promise<void>;
+    await act(async () => {
+      firstDownload = result.current.download("agent-plugin");
+    });
+    expect(result.current.isDownloading).toBe(true);
+
+    rerender({ pluginId: "second-plugin" });
+    expect(result.current.isDownloading).toBe(false);
+
+    let secondDownload!: Promise<void>;
+    await act(async () => {
+      secondDownload = result.current.download("agent-plugin");
+    });
+    expect(download).toHaveBeenCalledTimes(2);
+    expect(result.current.isDownloading).toBe(true);
+
+    await act(async () => {
+      rejectFirst(new Error("first failed"));
+      await firstDownload;
+    });
+    expect(result.current.isDownloading).toBe(true);
+
+    await act(async () => {
+      rejectSecond(new Error("second failed"));
+      await secondDownload;
+    });
+    expect(result.current.isDownloading).toBe(false);
+  });
 });
