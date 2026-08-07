@@ -24,8 +24,12 @@ var (
 )
 
 type Client struct {
-	ID        string
-	RevokedAt *time.Time
+	ID              string
+	SecretHash      string
+	Name            string
+	RedirectURIs    []string
+	SecretExpiresAt *time.Time
+	RevokedAt       *time.Time
 }
 
 type Connection struct {
@@ -47,11 +51,12 @@ type Grant struct {
 }
 
 type ConsumeGrantInput struct {
-	Code         string
-	ClientID     string
-	RedirectURI  string
-	CodeVerifier string
-	Now          time.Time
+	OrganizationID string
+	Code           string
+	ClientID       string
+	RedirectURI    string
+	CodeVerifier   string
+	Now            time.Time
 }
 
 type Session struct {
@@ -66,25 +71,38 @@ type Session struct {
 }
 
 type RotateSessionInput struct {
-	RefreshHash string
-	ClientID    string
-	Generation  string
-	Now         time.Time
-	Replacement Session
+	OrganizationID string
+	RefreshHash    string
+	ClientID       string
+	Generation     string
+	Now            time.Time
+	Replacement    Session
 }
 
-// Store defines the state transitions the Platform authorization server requires.
+type AuthorizeConnectionInput struct {
+	Connection Connection
+	Grant      Grant
+	Now        time.Time
+}
+
+// Store defines the state transitions the Platform MCP authorization server requires.
 type Store interface {
 	RegisterClient(ctx context.Context, client Client) error
+	GetClient(ctx context.Context, clientID string) (Client, error)
 	RevokeClient(ctx context.Context, clientID string, now time.Time) error
 	RegisterConnection(ctx context.Context, connection Connection) error
-	RevokeConnection(ctx context.Context, connectionID string, now time.Time) error
+	GetConnection(ctx context.Context, organizationID, subject, clientID string) (Connection, error)
+	AuthorizeConnection(ctx context.Context, input AuthorizeConnectionInput) (Connection, error)
+	RevokeConnection(ctx context.Context, organizationID, connectionID string, now time.Time) error
 	IssueGrant(ctx context.Context, grant Grant) error
 	ConsumeGrant(ctx context.Context, input ConsumeGrantInput) (Grant, error)
 	CreateSession(ctx context.Context, session Session) error
+	GetSessionByRefreshHash(ctx context.Context, organizationID, refreshHash string) (Session, error)
+	DetectRefreshReuse(ctx context.Context, organizationID, refreshHash string, now time.Time) (bool, error)
 	RotateSession(ctx context.Context, input RotateSessionInput) (Session, error)
-	RevokeSession(ctx context.Context, refreshHash, clientID string, now time.Time) (Session, error)
-	RotateConnectionGeneration(ctx context.Context, connectionID, generation string, now time.Time) (Connection, error)
+	RevokeSession(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (Session, error)
+	RevokeAccessSession(ctx context.Context, organizationID, jti, clientID string, now time.Time) (Session, error)
+	RotateConnectionGeneration(ctx context.Context, organizationID, connectionID, generation string, now time.Time) (Connection, error)
 }
 
 // InMemoryStore is a concurrency-safe contract implementation for Platform OAuth.
@@ -119,6 +137,20 @@ func (s *InMemoryStore) RegisterClient(_ context.Context, client Client) error {
 	return nil
 }
 
+func (s *InMemoryStore) GetClient(_ context.Context, clientID string) (Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, ok := s.clients[clientID]
+	if !ok {
+		return Client{}, ErrNotFound
+	}
+	if client.RevokedAt != nil {
+		return Client{}, ErrRevoked
+	}
+	return client, nil
+}
+
 func (s *InMemoryStore) RevokeClient(_ context.Context, clientID string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -129,13 +161,6 @@ func (s *InMemoryStore) RevokeClient(_ context.Context, clientID string, now tim
 	}
 	client.RevokedAt = &now
 	s.clients[clientID] = client
-	for connectionID, connection := range s.connections {
-		if connection.ClientID == clientID {
-			connection.RevokedAt = &now
-			s.connections[connectionID] = connection
-			s.revokeGeneration(connectionID, connection.Generation, now)
-		}
-	}
 	return nil
 }
 
@@ -149,16 +174,71 @@ func (s *InMemoryStore) RegisterConnection(_ context.Context, connection Connect
 	if _, exists := s.connections[connection.ID]; exists {
 		return ErrAlreadyUsed
 	}
+	if connection.RevokedAt == nil {
+		for _, existing := range s.connections {
+			if existing.OrganizationID == connection.OrganizationID && existing.Subject == connection.Subject && existing.ClientID == connection.ClientID && existing.RevokedAt == nil {
+				return ErrAlreadyUsed
+			}
+		}
+	}
 	s.connections[connection.ID] = connection
 	return nil
 }
 
-func (s *InMemoryStore) RevokeConnection(_ context.Context, connectionID string, now time.Time) error {
+func (s *InMemoryStore) GetConnection(_ context.Context, organizationID, subject, clientID string) (Connection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.validateClient(clientID); err != nil {
+		return Connection{}, err
+	}
+	for _, connection := range s.connections {
+		if connection.OrganizationID == organizationID && connection.Subject == subject && connection.ClientID == clientID && connection.RevokedAt == nil {
+			return connection, nil
+		}
+	}
+	return Connection{}, ErrNotFound
+}
+
+func (s *InMemoryStore) AuthorizeConnection(_ context.Context, input AuthorizeConnectionInput) (Connection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.validateClient(input.Connection.ClientID); err != nil {
+		return Connection{}, err
+	}
+	if input.Grant.ClientID != input.Connection.ClientID {
+		return Connection{}, ErrClientMismatch
+	}
+	if _, exists := s.grants[input.Grant.Code]; exists {
+		return Connection{}, ErrAlreadyUsed
+	}
+	connection := input.Connection
+	for id, existing := range s.connections {
+		if existing.OrganizationID != connection.OrganizationID || existing.Subject != connection.Subject || existing.ClientID != connection.ClientID || existing.RevokedAt != nil {
+			continue
+		}
+		s.revokeGeneration(id, existing.Generation, input.Now)
+		existing.Generation = connection.Generation
+		s.connections[id] = existing
+		connection = existing
+		break
+	}
+	if _, exists := s.connections[connection.ID]; !exists {
+		s.connections[connection.ID] = connection
+	}
+	grant := input.Grant
+	grant.Connection = connection
+	s.grants[grant.Code] = grant
+	return connection, nil
+}
+
+func (s *InMemoryStore) RevokeConnection(_ context.Context, organizationID, connectionID string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	connection, ok := s.connections[connectionID]
-	if !ok {
+	if !ok || connection.OrganizationID != organizationID {
 		return ErrNotFound
 	}
 	connection.RevokedAt = &now
@@ -195,6 +275,9 @@ func (s *InMemoryStore) ConsumeGrant(_ context.Context, input ConsumeGrantInput)
 	if grant.ClientID != input.ClientID {
 		return Grant{}, ErrClientMismatch
 	}
+	if grant.Connection.OrganizationID != input.OrganizationID {
+		return Grant{}, ErrNotFound
+	}
 	if !input.Now.Before(grant.ExpiresAt) {
 		delete(s.grants, input.Code)
 		return Grant{}, ErrExpired
@@ -222,8 +305,39 @@ func (s *InMemoryStore) CreateSession(_ context.Context, session Session) error 
 	if _, exists := s.sessions[session.RefreshHash]; exists {
 		return ErrAlreadyUsed
 	}
+	for _, existing := range s.sessions {
+		if existing.JTI == session.JTI {
+			return ErrAlreadyUsed
+		}
+	}
 	s.sessions[session.RefreshHash] = session
 	return nil
+}
+
+func (s *InMemoryStore) GetSessionByRefreshHash(_ context.Context, organizationID, refreshHash string) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[refreshHash]
+	if !ok || session.Connection.OrganizationID != organizationID {
+		return Session{}, ErrNotFound
+	}
+	return session, nil
+}
+
+func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, organizationID, refreshHash string, now time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[refreshHash]
+	if !ok || session.Connection.OrganizationID != organizationID {
+		return false, ErrNotFound
+	}
+	if session.RevokedAt == nil {
+		return false, nil
+	}
+	s.revokeGeneration(session.Connection.ID, session.Connection.Generation, now)
+	return true, nil
 }
 
 func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInput) (Session, error) {
@@ -233,6 +347,9 @@ func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInpu
 	session, ok := s.sessions[input.RefreshHash]
 	if !ok {
 		return Session{}, ErrAlreadyUsed
+	}
+	if session.Connection.OrganizationID != input.OrganizationID || input.Replacement.Connection.OrganizationID != input.OrganizationID {
+		return Session{}, ErrNotFound
 	}
 	if session.ClientID != input.ClientID || input.Replacement.ClientID != input.ClientID {
 		return Session{}, ErrClientMismatch
@@ -268,12 +385,12 @@ func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInpu
 	return session, nil
 }
 
-func (s *InMemoryStore) RevokeSession(_ context.Context, refreshHash, clientID string, now time.Time) (Session, error) {
+func (s *InMemoryStore) RevokeSession(_ context.Context, organizationID, refreshHash, clientID string, now time.Time) (Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	session, ok := s.sessions[refreshHash]
-	if !ok || session.ClientID != clientID {
+	if !ok || session.Connection.OrganizationID != organizationID || session.ClientID != clientID {
 		return Session{}, ErrNotFound
 	}
 	session.RevokedAt = &now
@@ -281,12 +398,32 @@ func (s *InMemoryStore) RevokeSession(_ context.Context, refreshHash, clientID s
 	return session, nil
 }
 
-func (s *InMemoryStore) RotateConnectionGeneration(_ context.Context, connectionID, generation string, now time.Time) (Connection, error) {
+func (s *InMemoryStore) RevokeAccessSession(_ context.Context, organizationID, jti, clientID string, now time.Time) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var revoked Session
+	var found bool
+	for hash, session := range s.sessions {
+		if session.Connection.OrganizationID == organizationID && session.JTI == jti && session.ClientID == clientID && session.RevokedAt == nil {
+			session.RevokedAt = &now
+			s.sessions[hash] = session
+			revoked = session
+			found = true
+		}
+	}
+	if !found {
+		return Session{}, ErrNotFound
+	}
+	return revoked, nil
+}
+
+func (s *InMemoryStore) RotateConnectionGeneration(_ context.Context, organizationID, connectionID, generation string, now time.Time) (Connection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	connection, ok := s.connections[connectionID]
-	if !ok {
+	if !ok || connection.OrganizationID != organizationID {
 		return Connection{}, ErrNotFound
 	}
 	if connection.RevokedAt != nil {

@@ -59578,6 +59578,9 @@ components:
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
+                platform_mcp_enabled:
+                    type: boolean
+                    description: Whether the organization is eligible for the Gram Platform MCP capability
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
@@ -59609,6 +59612,7 @@ components:
                 - skills_enabled
                 - skill_capture_metadata_only
                 - ai_platform_push_integrations_enabled
+                - platform_mcp_enabled
                 - customer_managed_encryption_keys_enabled
                 - device_agent
         GetProjectForm:
@@ -68653,6 +68657,7 @@ components:
                         - skills
                         - skill_capture_metadata_only
                         - ai_platform_push_integrations
+                        - platform_mcp
                         - customer_managed_encryption_keys
                     maxLength: 60
             required:
