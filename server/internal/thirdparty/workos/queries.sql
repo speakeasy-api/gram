@@ -130,7 +130,9 @@ ON CONFLICT (workos_directory_user_id) DO UPDATE SET
 RETURNING id;
 
 -- name: GetDirectoryUserSyncStateByWorkOSID :one
-SELECT workos_updated_at, workos_last_event_id
+-- Includes soft-deleted rows so snapshot reconciliation can read the cursor
+-- and stored user linkage even after a deactivation soft-deleted the row.
+SELECT user_id, workos_updated_at, workos_last_event_id
 FROM directory_users
 WHERE workos_directory_user_id = @workos_directory_user_id;
 

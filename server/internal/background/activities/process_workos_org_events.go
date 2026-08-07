@@ -165,15 +165,15 @@ type postCommitEffects struct {
 	invalidateUserInfoCacheUserID string
 }
 
-func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
+func runPostCommitEffects(ctx context.Context, logger *slog.Logger, workosClient WorkOSClient, userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo], effects postCommitEffects) {
 	if update := effects.updateWorkOSExternalID; update != nil {
-		if err := p.workosClient.UpdateOrganizationExternalID(ctx, update.workosOrgID, update.externalID); err != nil {
+		if err := workosClient.UpdateOrganizationExternalID(ctx, update.workosOrgID, update.externalID); err != nil {
 			logger.WarnContext(ctx, "failed to update WorkOS organization external ID", attr.SlogError(err))
 		}
 	}
 
 	if userID := effects.invalidateUserInfoCacheUserID; userID != "" {
-		if err := p.userInfoCache.Delete(ctx, sessions.CachedUserInfo{
+		if err := userInfoCache.Delete(ctx, sessions.CachedUserInfo{
 			UserID:             userID,
 			Admin:              false,
 			Email:              "",
@@ -246,7 +246,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 		return "", fmt.Errorf("commit transaction: %w", err)
 	}
 
-	p.runPostCommitEffects(ctx, logger, effects)
+	runPostCommitEffects(ctx, logger, p.workosClient, p.userInfoCache, effects)
 
 	return event.ID, nil
 }

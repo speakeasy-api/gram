@@ -2,6 +2,7 @@ package workos
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/sso"
@@ -88,6 +89,59 @@ func (wc *Client) ListDirectories(ctx context.Context, organizationID string) ([
 		})
 	}
 	return out, nil
+}
+
+// DirectoryUser represents a WorkOS Directory Sync user.
+type DirectoryUser struct {
+	ID               string
+	DirectoryID      string
+	OrganizationID   string
+	Email            string
+	State            string // "active", "inactive"
+	CustomAttributes json.RawMessage
+	CreatedAt        string
+	UpdatedAt        string
+}
+
+// ListDirectoryUsers fetches all provisioned users for a directory from WorkOS.
+// https://workos.com/docs/reference/directory-sync/directory-user/list
+func (wc *Client) ListDirectoryUsers(ctx context.Context, directoryID string) ([]DirectoryUser, error) {
+	var all []DirectoryUser
+	after := ""
+
+	for {
+		resp, err := wc.dsync.ListUsers(ctx, directorysync.ListUsersOpts{
+			Directory: directoryID,
+			Group:     "",
+			Limit:     100,
+			Order:     "",
+			Before:    "",
+			After:     after,
+		})
+		if err != nil {
+			return nil, wrapSDKError(err, "list directory users")
+		}
+
+		for _, u := range resp.Data {
+			all = append(all, DirectoryUser{
+				ID:               u.ID,
+				DirectoryID:      u.DirectoryID,
+				OrganizationID:   u.OrganizationID,
+				Email:            u.Email,
+				State:            string(u.State),
+				CustomAttributes: u.CustomAttributes,
+				CreatedAt:        u.CreatedAt,
+				UpdatedAt:        u.UpdatedAt,
+			})
+		}
+
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
+	}
+
+	return all, nil
 }
 
 // HasActiveConnection returns true if the organization has at least one active SSO connection.
