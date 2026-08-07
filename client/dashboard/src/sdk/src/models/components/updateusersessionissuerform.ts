@@ -55,7 +55,7 @@ export type UpdateUserSessionIssuerForm = {
    */
   id: string;
   /**
-   * Issued user session lifetime, in hours.
+   * Maximum issued user session lifetime, in hours.
    */
   sessionDurationHours?: number | undefined;
   /**

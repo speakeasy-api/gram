@@ -258,6 +258,9 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 // project and is not already bound to another client for the same remote
 // issuer. Returns the issuer row so callers that need its capabilities (the
 // CIMD pre-flight) can use it. Must run inside the create transaction.
+// sanitizedCapabilityPatch maps an optional capability patch onto the update
+// query's narg: nil leaves the stored value unchanged; a provided value is
+// sanitized before persisting.
 func (s *Service) validateNewClientIssuers(
 	ctx context.Context,
 	logger *slog.Logger,
