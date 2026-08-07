@@ -6,6 +6,7 @@ import { useSessionInfo } from "@gram/client/react-query/sessionInfo.js";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";
+import { clearLegacyUserStorage } from "@/lib/logout-storage";
 import {
   initializeFermat,
   setFermatProperties,
@@ -200,6 +201,8 @@ export const useIsSpeakeasyStaff = (): boolean => {
 
 export function usePylonInAppChat(user: User | undefined): void {
   useEffect(() => {
+    clearLegacyUserStorage();
+
     if (!user || !import.meta.env.PROD) {
       return;
     }
@@ -223,10 +226,6 @@ export function usePylonInAppChat(user: User | undefined): void {
     // is idempotent; re-running it just refreshes chat_settings.
     initializePylon(chatSettings);
     window.Pylon?.("setNewIssueCustomFields", { gram: true });
-
-    // This is for the marketing site
-    localStorage.setItem("pylon_user_email", email);
-    localStorage.setItem("pylon_user_display_name", displayName);
   }, [user]);
 }
 
