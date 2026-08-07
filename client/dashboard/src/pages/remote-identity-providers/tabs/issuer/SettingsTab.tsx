@@ -291,7 +291,7 @@ export function SettingsTab({
         </RequireScope>
       </div>
 
-      <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
+      <div className="border-destructive/30 flex flex-col gap-2 border p-4">
         <Text className="font-medium">Danger Zone</Text>
         <Text small muted>
           Deleting this provider is permanent. All clients must be deleted

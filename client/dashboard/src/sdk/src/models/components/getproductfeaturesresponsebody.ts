@@ -46,6 +46,10 @@ export type GetProductFeaturesResponseBody = {
    */
   platformMcpEnabled: boolean;
   /**
+   * Whether consent screens expose automatic remote-session refresh for the organization
+   */
+  remoteSessionAutoRefreshEnabled: boolean;
+  /**
    * Whether SCIM/directory sync setup is enabled for the organization
    */
   scimEnabled: boolean;
@@ -86,6 +90,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
+    remote_session_auto_refresh_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     skill_capture_metadata_only: z.boolean(),
@@ -106,6 +111,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
       "platform_mcp_enabled": "platformMcpEnabled",
+      "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "skill_capture_metadata_only": "skillCaptureMetadataOnly",

@@ -61,16 +61,17 @@ type oauthProtectedResourceMetadata struct {
 // the legacy package's wellknown.OAuthServerMetadata for the same reason as
 // above.
 type oauthAuthorizationServerMetadata struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	RevocationEndpoint                string   `json:"revocation_endpoint"`
-	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
+	Issuer                               string   `json:"issuer"`
+	AuthorizationEndpoint                string   `json:"authorization_endpoint"`
+	TokenEndpoint                        string   `json:"token_endpoint"`
+	RegistrationEndpoint                 string   `json:"registration_endpoint"`
+	RevocationEndpoint                   string   `json:"revocation_endpoint"`
+	ScopesSupported                      []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported               []string `json:"response_types_supported"`
+	GrantTypesSupported                  []string `json:"grant_types_supported"`
+	TokenEndpointAuthMethodsSupported    []string `json:"token_endpoint_auth_methods_supported"`
+	CodeChallengeMethodsSupported        []string `json:"code_challenge_methods_supported"`
+	RefreshTokenExpirationTypesSupported []string `json:"refresh_token_expiration_types_supported"`
 	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
 	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true
 	// only when the issuer organization's gram-user-session-cimd flag is
@@ -442,6 +443,9 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		GrantTypesSupported:               usersessions.SupportedGrantTypes,
 		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
 		CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
+		RefreshTokenExpirationTypesSupported: []string{
+			"authorization",
+		},
 		ClientIDMetadataDocumentSupported: cimdSupported,
 	})
 }

@@ -261,7 +261,7 @@ function PolicySelection({
   const selectedPolicyIDSet = new Set(selectedPolicyIDs);
 
   return (
-    <section className="border-border space-y-3 rounded-md border p-3">
+    <section className="border-border space-y-3 border p-3">
       <Text variant="small" className="font-medium">
         Policies
       </Text>
@@ -276,7 +276,7 @@ function PolicySelection({
           return (
             <label
               key={policy.id}
-              className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors"
+              className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors"
             >
               <Checkbox
                 checked={checked}
@@ -384,7 +384,7 @@ export function ShadowMCPInventoryActionSheet({
         </SheetHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
-          <section className="border-border rounded-md border px-4 py-3">
+          <section className="border-border border px-4 py-3">
             <Text variant="small" className="font-medium">
               {server.serverName || server.urlHost}
             </Text>
@@ -417,11 +417,11 @@ export function ShadowMCPInventoryActionSheet({
             <RadioGroup
               value={decision}
               onValueChange={(value) => setDecision(value as ReviewDecision)}
-              className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
+              className="border-border grid grid-cols-2 gap-4 border p-3"
             >
               <label
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                   decision === "allow" && "border-border bg-card shadow-xs",
                 )}
               >
@@ -439,7 +439,7 @@ export function ShadowMCPInventoryActionSheet({
               </label>
               <label
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                   decision === "deny" && "border-border bg-card shadow-xs",
                 )}
               >

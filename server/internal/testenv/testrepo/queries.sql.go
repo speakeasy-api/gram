@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
@@ -342,6 +343,34 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 	return i, err
 }
 
+const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+`
+
+type GetPrincipalGrantEffectFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPrincipalGrantEffectFixtureParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantEffectFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var effect pgtype.Text
+	err := row.Scan(&effect)
+	return effect, err
+}
+
 const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, enqueued_at, created_at
@@ -572,6 +601,29 @@ type InsertDeviceAgentSyncFixtureParams struct {
 
 func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDeviceAgentSyncFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertDeviceAgentSyncFixture, arg.OrganizationID, arg.Email, arg.SeenAt)
+	return err
+}
+
+const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, $2, $3, 'deny', $4)
+`
+
+type InsertLegacyDenyPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+// Test-only fixture for exercising allow-only writes against legacy rows.
+func (q *Queries) InsertLegacyDenyPrincipalGrantFixture(ctx context.Context, arg InsertLegacyDenyPrincipalGrantFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertLegacyDenyPrincipalGrantFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
 	return err
 }
 
@@ -1061,6 +1113,22 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const setProjectSlugFixture = `-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = $1
+WHERE id = $2
+`
+
+type SetProjectSlugFixtureParams struct {
+	Slug string
+	ID   uuid.UUID
+}
+
+func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
 	return err
 }
 

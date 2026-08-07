@@ -418,7 +418,7 @@ export function HeadersSection({
   )}#settings`;
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Text variant="subheading" className="mb-1">
         Upstream Headers
       </Text>
@@ -591,7 +591,7 @@ function HeaderDraftRow({
   const showRevealToggle = draft.isSecret && !isSavedSecret;
 
   return (
-    <div className="rounded-md border p-4">
+    <div className="border p-4">
       <Stack gap={3}>
         <Stack direction="horizontal" gap={3} align="start">
           <div className="min-w-0 flex-1">

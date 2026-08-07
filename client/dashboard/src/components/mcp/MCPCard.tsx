@@ -1,5 +1,5 @@
 import { CopyButton } from "@/components/ui/CopyButton";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
@@ -77,7 +77,7 @@ export function MCPCard({
   );
 
   return (
-    <DotCard
+    <Card.Entity
       className="cursor-pointer"
       onClick={handleClick}
       overlay={
@@ -168,24 +168,24 @@ export function MCPCard({
           </div>
         )}
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }
 
 export function MCPCardSkeleton(): JSX.Element {
   return (
-    <DotCard>
+    <Card.Entity>
       <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="bg-muted h-5 w-2/3 animate-pulse rounded" />
+        <div className="bg-muted h-5 w-2/3 animate-pulse" />
         <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
       </div>
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-2">
           <div className="bg-muted h-2.5 w-2.5 animate-pulse rounded-full" />
-          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
+          <div className="bg-muted h-3.5 w-12 animate-pulse" />
         </div>
-        <div className="bg-muted h-3.5 w-10 animate-pulse rounded" />
+        <div className="bg-muted h-3.5 w-10 animate-pulse" />
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }

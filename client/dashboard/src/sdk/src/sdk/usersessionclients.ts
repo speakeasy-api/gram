@@ -66,7 +66,7 @@ export class UserSessionClients extends ClientSDK {
    * revokeUserSessionClient userSessionClients
    *
    * @remarks
-   * Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.
+   * Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.
    */
   async revoke(
     request: RevokeUserSessionClientRequest,

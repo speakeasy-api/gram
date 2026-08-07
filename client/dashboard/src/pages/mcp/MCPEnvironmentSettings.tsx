@@ -734,7 +734,7 @@ export function MCPAuthenticationTab({
 
         <div className="space-y-4">
           {envVars.length > 0 ? (
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-hidden border">
               <EnvironmentSwitcher
                 environments={environments}
                 selectedEnvironmentView={selectedEnvironmentView}
@@ -784,7 +784,7 @@ export function MCPAuthenticationTab({
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed p-8 text-center">
+            <div className="border border-dashed p-8 text-center">
               <p className="text-muted-foreground mb-2">
                 No environment variables configured yet.
               </p>
@@ -1175,7 +1175,7 @@ function OAuthStatusDisplay({
 
   if (loginSecured) {
     return (
-      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
+      <div className="border-success-softest bg-success-softest border border-dashed p-8 text-center">
         <p className="text-success-foreground mb-1">
           <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
           Login Secured
@@ -1190,7 +1190,7 @@ function OAuthStatusDisplay({
 
   if (isOAuthConnected && oauthParadigm) {
     return (
-      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
+      <div className="border-success-softest bg-success-softest border border-dashed p-8 text-center">
         <p className="text-success-foreground mb-1">
           <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
           {PARADIGM_LABELS[oauthParadigm]} is configured
@@ -1224,7 +1224,7 @@ function OAuthStatusDisplay({
 
   if (externalMcpRequiresOAuth) {
     return (
-      <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 rounded-lg border border-dashed px-6 py-8 text-center">
+      <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 border border-dashed px-6 py-8 text-center">
         <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
         <p className="text-warning-foreground mb-1 font-bold">
           OAuth setup required
@@ -1243,7 +1243,7 @@ function OAuthStatusDisplay({
 
   if (isOAuthEligible) {
     return (
-      <div className="rounded-lg border border-dashed p-4 text-center">
+      <div className="border border-dashed p-4 text-center">
         <p className="text-muted-foreground mb-1">
           <Shield className="text-muted-foreground mx-auto mb-1 h-5 w-5" />
           OAuth is available but not configured
@@ -1262,7 +1262,7 @@ function OAuthStatusDisplay({
   }
 
   return (
-    <div className="rounded-lg border border-dashed px-6 py-8 text-center">
+    <div className="border border-dashed px-6 py-8 text-center">
       <Shield className="text-muted-foreground mx-auto mb-3 h-6 w-6" />
       <p className="text-muted-foreground mb-2 font-medium">
         OAuth is not applicable

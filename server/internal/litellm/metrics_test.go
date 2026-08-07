@@ -33,15 +33,15 @@ func TestMetricHTTPAcceptsLiteLLMJSONAndProtobuf(t *testing.T) {
 	})
 	instanceID := uuid.New()
 	service.instances.Remember(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.APIKeyID, instanceID)
-	mux := mountedTraceMux(service)
+	handler := service.metricHTTPHandler()
 	jsonBody := testenv.ReadFixture(t, contractFixtureDir+"otlp-metrics.json")
 	protobufBody := testenv.ReadFixture(t, contractFixtureDir+"otlp-metrics.pb")
 
 	responses := []*httptest.ResponseRecorder{
-		serveMetricRequest(t, mux, jsonBody, "application/json", "", "valid-key", "project-test"),
-		serveMetricRequest(t, mux, gzipBody(t, jsonBody), "application/json", "gzip", "valid-key", "project-test"),
-		serveMetricRequest(t, mux, protobufBody, "application/x-protobuf", "", "valid-key", "project-test"),
-		serveMetricRequest(t, mux, gzipBody(t, protobufBody), "application/protobuf", "gzip", "valid-key", "project-test"),
+		serveMetricRequest(t, handler, jsonBody, "application/json", "", "valid-key", "project-test"),
+		serveMetricRequest(t, handler, gzipBody(t, jsonBody), "application/json", "gzip", "valid-key", "project-test"),
+		serveMetricRequest(t, handler, protobufBody, "application/x-protobuf", "", "valid-key", "project-test"),
+		serveMetricRequest(t, handler, gzipBody(t, protobufBody), "application/protobuf", "gzip", "valid-key", "project-test"),
 	}
 	for _, response := range responses {
 		require.Equal(t, http.StatusAccepted, response.Code)
@@ -128,10 +128,10 @@ func TestMetricHTTPAuthenticatesBeforeReadingBody(t *testing.T) {
 
 	service, _ := newTraceTestService(t, &traceTestAuthorizer{authCtx: testAuthContext(), key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}, testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error { return nil })
 	reader := &trackingReader{}
-	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/metrics", reader)
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.otel/v1/metrics", reader)
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
-	mountedTraceMux(service).ServeHTTP(recorder, req)
+	service.metricHTTPHandler().ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusUnauthorized, recorder.Code)
 	require.Zero(t, reader.reads)
 }
@@ -182,9 +182,9 @@ func TestMetricProcessorCannotConsumeTraceQueueCapacity(t *testing.T) {
 	require.NoError(t, metricProcessor.Shutdown(t.Context()))
 }
 
-func serveMetricRequest(t *testing.T, mux http.Handler, body []byte, contentType, contentEncoding, key, project string) *httptest.ResponseRecorder {
+func serveMetricRequest(t *testing.T, handler http.Handler, body []byte, contentType, contentEncoding, key, project string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/rpc/litellm.otel/v1/metrics", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.otel/v1/metrics", bytes.NewReader(body))
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -198,7 +198,7 @@ func serveMetricRequest(t *testing.T, mux http.Handler, body []byte, contentType
 		req.Header.Set("Gram-Project", project)
 	}
 	recorder := httptest.NewRecorder()
-	mux.ServeHTTP(recorder, req)
+	handler.ServeHTTP(recorder, req)
 	return recorder
 }
 

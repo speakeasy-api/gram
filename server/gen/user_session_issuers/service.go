@@ -68,7 +68,7 @@ type CreateUserSessionIssuerPayload struct {
 	Slug string
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode string
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int
 }
 
@@ -146,7 +146,7 @@ type UpdateUserSessionIssuerPayload struct {
 	Slug *string
 	// chain | interactive.
 	AuthnChallengeMode *string
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int
 	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
 	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;

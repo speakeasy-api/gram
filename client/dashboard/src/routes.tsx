@@ -34,6 +34,7 @@ import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import ExploreDemo from "./pages/demo/ExploreDemo";
+import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
@@ -201,6 +202,12 @@ const ROUTE_STRUCTURE = {
     title: "Explore demo",
     url: "/explore-demo",
     component: ExploreDemo,
+    unauthenticated: true,
+  },
+  signUp: {
+    title: "Sign up",
+    url: "/sign-up",
+    component: SignUp,
     unauthenticated: true,
   },
   home: {
@@ -431,6 +438,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          sessions: {
+            title: "MCP Server Clients and Sessions",
+            url: "sessions",
+          },
           settings: {
             title: "MCP Server Settings",
             url: "settings",
@@ -469,6 +480,10 @@ const ROUTE_STRUCTURE = {
           teamAccess: {
             title: "MCP Team Access",
             url: "team-access",
+          },
+          sessions: {
+            title: "MCP Clients and Sessions",
+            url: "sessions",
           },
           settings: {
             title: "MCP Settings",

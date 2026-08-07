@@ -71,7 +71,7 @@ export function CreateMarketplaceStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <GitBranch className="text-foreground h-6 w-6" />
         </div>
       }
@@ -95,9 +95,9 @@ export function CreateMarketplaceStep({
             onManageCollaborators={openManageDialog}
           />
         ) : (
-          <div className="bg-card border-border rounded-lg border p-4">
+          <div className="bg-card border-border border p-4">
             <div className="flex items-start gap-3">
-              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <GitBranch className="text-muted-foreground h-4 w-4" />
               </div>
               <div>

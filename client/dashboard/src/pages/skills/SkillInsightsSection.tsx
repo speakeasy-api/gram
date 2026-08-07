@@ -1,6 +1,6 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { CHART_COLORS } from "@/components/stacked-time-series";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import {
   Alert,
   AlertDescription,
@@ -138,40 +138,31 @@ export function SkillInsightsSection({
           estimated time saved over the last 30 days.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          {query.error && !query.data && (
-            <ErrorAlert
-              title="Unable to load skill insights"
-              error={query.error}
-            />
-          )}
-          {versionsError && (
-            <ErrorAlert
-              title="Unable to load skill versions"
-              error={versionsError}
-            />
-          )}
-          {(query.isPending || (query.data && versionsLoading)) && (
-            <InsightsLoading />
-          )}
-          {query.data && !versionsLoading && !versionsError && (
-            <InsightsContent
-              insight={query.data.result.insights[0]}
-              skillId={data.skill.id}
-              canReadChats={canReadChats}
-              versionLabels={versionLabels}
-            />
-          )}
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Efficacy and estimated savings cover sampled scored sessions.
-            Session cost is attributed in full to each activated skill version,
-            so totals are not additive.
-          </SettingsSection.FooterHint>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
+      {query.error && !query.data && (
+        <ErrorAlert title="Unable to load skill insights" error={query.error} />
+      )}
+      {versionsError && (
+        <ErrorAlert
+          title="Unable to load skill versions"
+          error={versionsError}
+        />
+      )}
+      {(query.isPending || (query.data && versionsLoading)) && (
+        <InsightsLoading />
+      )}
+      {query.data && !versionsLoading && !versionsError && (
+        <InsightsContent
+          insight={query.data.result.insights[0]}
+          skillId={data.skill.id}
+          canReadChats={canReadChats}
+          versionLabels={versionLabels}
+        />
+      )}
+      <Text small muted>
+        Efficacy and estimated savings cover sampled scored sessions. Session
+        cost is attributed in full to each activated skill version, so totals
+        are not additive.
+      </Text>
     </SettingsSection>
   );
 }
@@ -200,7 +191,7 @@ function InsightsContent({
           signal={insight.regressionSignal}
         />
       )}
-      <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="grid gap-px overflow-hidden border sm:grid-cols-2 xl:grid-cols-4">
         <InsightMetric
           label="30-day activations"
           value={formatCount(insight.metrics.activations)}
@@ -310,7 +301,7 @@ function ScoredSessions({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="overflow-hidden rounded-lg border"
+      className="overflow-hidden border"
     >
       <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-4 text-left">
         <span className="block">
@@ -483,6 +474,7 @@ function TrendChart({
   versions: SkillVersionInsight[];
   versionLabels: Map<string, string>;
 }): JSX.Element {
+  const chartColors = useSeriesColors();
   const timestamps = Array.from(
     new Set(
       versions.flatMap((version) =>
@@ -501,7 +493,7 @@ function TrendChart({
     const points = new Map(
       version.trend.map((point) => [point.bucketStart.getTime(), point]),
     );
-    const color = CHART_COLORS[index % CHART_COLORS.length];
+    const color = chartColors[index % chartColors.length];
     return {
       label: `Since ${
         versionLabels.get(version.skillVersionId) ??
@@ -675,10 +667,10 @@ function InsightsLoading(): JSX.Element {
     <div className="space-y-4" aria-label="Loading skill insights">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-28 rounded-lg" />
+          <Skeleton key={index} className="h-28" />
         ))}
       </div>
-      <Skeleton className="h-64 rounded-lg" />
+      <Skeleton className="h-64" />
       <SkeletonTable />
     </div>
   );

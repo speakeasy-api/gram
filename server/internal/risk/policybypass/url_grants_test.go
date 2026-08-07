@@ -96,7 +96,6 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{principal},
 		Selector:   mixedSelector,
 	}))
@@ -106,7 +105,6 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{principal},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	}))
@@ -129,7 +127,6 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 	require.Contains(t, grants, authz.Grant{
 		PrincipalUrn: principal.String(),
 		Scope:        authz.ScopeRiskPolicyBypass,
-		Effect:       authz.PolicyEffectAllow,
 		Selector:     authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	})
 }
@@ -149,7 +146,6 @@ func TestReconcilePolicyURLsNormalizesMixedSelectorForRetainedURL(t *testing.T) 
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, "old-user")},
 		Selector:   mixedSelector,
 	}))
@@ -167,7 +163,6 @@ func TestReconcilePolicyURLsNormalizesMixedSelectorForRetainedURL(t *testing.T) 
 		{
 			PrincipalUrn: newPrincipal.String(),
 			Scope:        authz.ScopeRiskPolicyBypass,
-			Effect:       authz.PolicyEffectAllow,
 			Selector:     URLSelector(authz.ScopeRiskPolicyBypass, policyID, serverURL),
 		},
 	}, policyURLGrants(t, ctx, conn, organizationID, policyID))
@@ -211,7 +206,6 @@ func TestRevokePolicyURLPreservesUnrelatedGrants(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{principal},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	}))
@@ -232,7 +226,6 @@ func TestRevokePolicyURLPreservesUnrelatedGrants(t *testing.T) {
 	require.Contains(t, grants, authz.Grant{
 		PrincipalUrn: principal.String(),
 		Scope:        authz.ScopeRiskPolicyBypass,
-		Effect:       authz.PolicyEffectAllow,
 		Selector:     authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	})
 }
@@ -279,7 +272,7 @@ func policyURLGrants(
 
 	result := make([]authz.Grant, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow || grant.Selector[authz.SelectorKeyServerURL] == "" {
+		if grant.Selector[authz.SelectorKeyServerURL] == "" {
 			continue
 		}
 		result = append(result, grant)

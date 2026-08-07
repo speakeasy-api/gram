@@ -121,6 +121,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 		audit.NewLogger(),
 		serverURL,
 		cache.NewRedisCacheAdapter(redisClient),
+		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, cache.NewRedisCacheAdapter(redisClient)),
 	)
 
 	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager
@@ -273,6 +274,28 @@ func seedUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed user session client: %w", err)
+	}
+	return row, nil
+}
+
+// seedCimdUserSessionClient inserts a CIMD-resolved user_session_clients row.
+// It has to go through the CIMD upsert rather than seedUserSessionClient
+// because CreateUserSessionClient cannot write client_id_metadata_uri at all --
+// that column is only ever set by the authorize-time CIMD path. documentURL
+// becomes both client_id and client_id_metadata_uri, which the
+// user_session_clients_client_id_metadata_uri_match_check constraint requires.
+func seedCimdUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, documentURL string) (repo.UserSessionClient, error) {
+	t.Helper()
+
+	r := repo.New(conn)
+	row, err := r.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID: issuerID,
+		ClientID:            documentURL,
+		ClientName:          "test-cimd-" + documentURL,
+		RedirectUris:        []string{"https://example.com/cb"},
+	})
+	if err != nil {
+		return repo.UserSessionClient{}, fmt.Errorf("seed cimd user session client: %w", err)
 	}
 	return row, nil
 }

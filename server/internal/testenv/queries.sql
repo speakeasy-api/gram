@@ -16,6 +16,11 @@ UPDATE chat_messages
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = @slug
+WHERE id = @id;
+
 -- name: UpdateRiskResultCreatedAt :exec
 UPDATE risk_results
 SET created_at = @created_at
@@ -269,6 +274,19 @@ WHERE s.device_integration_schedule_id = sch.id
 UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
+
+-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+-- Test-only fixture for exercising allow-only writes against legacy rows.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
+
+-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors;
 
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a

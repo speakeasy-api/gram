@@ -1,4 +1,7 @@
 import { ChartCard } from "@/components/chart/ChartCard";
+import { Page } from "@/components/page-layout";
+import { GOOD_GREEN, OTHER_SERIES, TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { smoothData } from "@/components/chart/chartUtils";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { RequireScope } from "@/components/require-scope";
@@ -66,6 +69,7 @@ function WorkDoneChart({
   onExpand: (id: string | null) => void;
 }): JSX.Element {
   const hasData = buckets.some((b) => b.scoredSessions > 0);
+  const seriesColors = useSeriesColors();
 
   const chartData = useMemo<{
     labels: string[];
@@ -77,14 +81,16 @@ function WorkDoneChart({
     const bars: ChartDataset<"bar", number[]> = {
       label: "Work delivered",
       data: buckets.map((b) => b.workUnits),
-      backgroundColor: "rgba(96, 165, 250, 0.35)",
+      // Lightest neutral so the bars recede behind the ink trend line.
+      backgroundColor: OTHER_SERIES,
       order: 2,
     };
     const trend: ChartDataset<"line", number[]> = {
       label: "Trend",
       data: smoothData(buckets.map((b) => b.workUnits)),
       type: "line",
-      borderColor: "#3b82f6",
+      // Ink from the theme-resolved editorial chart palette.
+      borderColor: seriesColors[0]!,
       backgroundColor: "transparent",
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -94,7 +100,7 @@ function WorkDoneChart({
       order: 1,
     };
     return { labels, datasets: [bars, trend] };
-  }, [buckets]);
+  }, [buckets, seriesColors]);
 
   const options = useMemo<ChartOptions<"bar">>(
     () => ({
@@ -113,14 +119,7 @@ function WorkDoneChart({
           },
         },
         tooltip: {
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          titleColor: "#fff",
-          bodyColor: "#e5e7eb",
-          borderColor: "rgba(255, 255, 255, 0.1)",
-          borderWidth: 1,
-          padding: 12,
-          boxPadding: 4,
-          usePointStyle: true,
+          ...TOOLTIP,
           callbacks: {
             label: (item) =>
               ` ${item.dataset.label}: ${formatCompact(Number(item.parsed.y ?? 0))}`,
@@ -186,6 +185,7 @@ function EfficiencyChart({
   const hasData = buckets.some(
     (b) => b.costPerUnit !== undefined || b.tokensPerUnit !== undefined,
   );
+  const seriesColors = useSeriesColors();
 
   const chartData = useMemo<{
     labels: string[];
@@ -198,7 +198,8 @@ function EfficiencyChart({
         {
           label: "Cost efficiency",
           data: buckets.map((b) => b.costPerUnit ?? null),
-          borderColor: "#34d399",
+          // Warm neutral from the theme-resolved editorial series ramp.
+          borderColor: seriesColors[1]!,
           backgroundColor: "transparent",
           pointRadius: 2,
           pointHoverRadius: 4,
@@ -210,7 +211,7 @@ function EfficiencyChart({
         {
           label: "Token efficiency",
           data: buckets.map((b) => b.tokensPerUnit ?? null),
-          borderColor: "#a78bfa",
+          borderColor: GOOD_GREEN,
           backgroundColor: "transparent",
           pointRadius: 2,
           pointHoverRadius: 4,
@@ -221,7 +222,7 @@ function EfficiencyChart({
         },
       ],
     };
-  }, [buckets]);
+  }, [buckets, seriesColors]);
 
   const options = useMemo<ChartOptions<"line">>(
     () => ({
@@ -239,14 +240,7 @@ function EfficiencyChart({
           },
         },
         tooltip: {
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          titleColor: "#fff",
-          bodyColor: "#e5e7eb",
-          borderColor: "rgba(255, 255, 255, 0.1)",
-          borderWidth: 1,
-          padding: 12,
-          boxPadding: 4,
-          usePointStyle: true,
+          ...TOOLTIP,
           callbacks: {
             label: (item) => {
               const value = Number(item.parsed.y ?? 0);
@@ -340,8 +334,9 @@ function OrgMemoryContent(): JSX.Element {
     <div className="h-full w-full overflow-y-auto">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6 pb-24">
         <div>
+          <Page.Eyebrow className="mb-1" />
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold">Org Memory</h1>
+            <h1 className="text-display-sm font-thin">Org Memory</h1>
             <ReleaseStageBadge stage="preview" />
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -351,7 +346,7 @@ function OrgMemoryContent(): JSX.Element {
         </div>
 
         {!isLoading && !error && !scoresAvailable ? (
-          <div className="border-border bg-card flex h-64 items-center justify-center rounded-lg border">
+          <div className="border-border bg-card flex h-64 items-center justify-center border">
             <WidgetEmptyState message="No work analysis data yet. Sessions appear here once work analysis is enabled for your organization." />
           </div>
         ) : (

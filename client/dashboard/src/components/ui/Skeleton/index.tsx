@@ -19,9 +19,9 @@ export interface SkeletonProps {
    *
    * @example
    * <Skeleton>
-   *   <div className="h-5 w-48 rounded-lg" />
-   *   <div className="h-5 w-96 rounded-lg" />
-   *   <div className="h-5 w-48 rounded-lg" />
+   *   <div className="h-5 w-48" />
+   *   <div className="h-5 w-96" />
+   *   <div className="h-5 w-48" />
    * </Skeleton>
    */
   children?: React.ReactNode;
@@ -42,7 +42,7 @@ export function Skeleton({
     return (
       <div
         className={cn(
-          "skeleton block h-5 rounded-lg text-transparent select-none",
+          "skeleton block h-5 text-transparent select-none",
           className,
         )}
       />
@@ -56,7 +56,7 @@ export function Skeleton({
           return (
             <div
               key={index}
-              className="skeleton h-5 max-w-max min-w-36 rounded-lg text-transparent"
+              className="skeleton h-5 max-w-max min-w-36 text-transparent"
             >
               {child}
             </div>
@@ -66,7 +66,7 @@ export function Skeleton({
         if (isValidElement<{ className?: string }>(child))
           return cloneElement(child, {
             className: cn(
-              "skeleton h-5 max-w-full rounded-lg text-transparent",
+              "skeleton h-5 max-w-full text-transparent",
               className,
               child.props.className,
             ),
@@ -177,7 +177,7 @@ export function SkeletonCode({
   };
 
   return (
-    <div className="rounded-lg border p-4">
+    <div className="border p-4">
       <Stack gap={2}>
         {Array.from({ length: importLines }).map((_, i) => (
           <CodeLine key={`import-${i}`} width="w-36" />

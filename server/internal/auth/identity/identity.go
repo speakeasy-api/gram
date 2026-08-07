@@ -46,6 +46,14 @@ type AuthorizationURLParams struct {
 	Scope           string
 	State           string
 	ScopesSupported []string
+
+	// LoginHint pre-fills the email field on the identity provider's screen.
+	// Optional; omitted from the URL when empty.
+	LoginHint string
+
+	// ScreenHint selects which AuthKit screen to land on. Only "sign-up" is
+	// used, and only while provider is "authkit". Omitted when empty.
+	ScreenHint string
 }
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
@@ -578,6 +586,14 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
+	// Both hints are AuthKit features and both are sign-up only, so an
+	// ordinary login produces the same URL it always has.
+	if params.LoginHint != "" {
+		q.Set("login_hint", params.LoginHint)
+	}
+	if params.ScreenHint != "" {
+		q.Set("screen_hint", params.ScreenHint)
+	}
 
 	authorizeBase := workosAuthorizeEndpoint
 	if !strings.HasPrefix(r.idpClientID, "client_") {

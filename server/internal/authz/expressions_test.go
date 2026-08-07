@@ -54,71 +54,12 @@ func TestEvaluateGrantCheck_rootGrantNotSelfExcluded(t *testing.T) {
 		t.Run(string(tc.scope), func(t *testing.T) {
 			t.Parallel()
 
-			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false})
+			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal})
 			require.NoError(t, err)
 			require.False(t, eval.Denied)
 			require.NotNil(t, eval.Grant)
 		})
 	}
-}
-
-func TestGrantExpressionEvaluate_rejectsDenyGrantForBaseScope(t *testing.T) {
-	t.Parallel()
-
-	policyID := "policy_123"
-	grants := []Grant{
-		NewGrant(ScopeRiskPolicyEvaluate, policyID),
-		NewDenyGrant(ScopeRiskPolicyEvaluate, policyID),
-	}
-
-	result, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrUnsupportedMixedGrantSemantics)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonError, result.Reason)
-}
-
-func TestGrantExpressionEvaluate_rejectsDenyGrantForExceptionScope(t *testing.T) {
-	t.Parallel()
-
-	policyID := "policy_123"
-	grants := []Grant{
-		NewDenyGrant(ScopeRiskPolicyBypass, policyID),
-	}
-
-	result, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrUnsupportedMixedGrantSemantics)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonError, result.Reason)
-}
-
-func TestGrantExpressionEvaluate_ignoresDenyGrantForUnreferencedScope(t *testing.T) {
-	t.Parallel()
-
-	policyID := "policy_123"
-	grants := []Grant{
-		NewGrant(ScopeRiskPolicyEvaluate, policyID),
-		NewDenyGrant(ScopeProjectRead, "project_123"),
-	}
-
-	result, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
-}
-
-func TestGrantExpressionEvaluate_rejectsWrappedMixedSemanticsError(t *testing.T) {
-	t.Parallel()
-
-	policyID := "policy_123"
-	grants := []Grant{
-		NewGrant(ScopeRiskPolicyEvaluate, policyID),
-		NewDenyGrant(ScopeRiskPolicyBypass, policyID),
-	}
-
-	_, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
-	require.ErrorIs(t, err, ErrUnsupportedMixedGrantSemantics)
 }
 
 func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
@@ -128,8 +69,8 @@ func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
 
 	result, err := GrantDifference{
 		Base:      GrantCheck{Check: readCheck, Instance: nil},
@@ -140,21 +81,6 @@ func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_allowsDenyGrantForExpandedScope(t *testing.T) {
-	t.Parallel()
-
-	grants := []Grant{
-		NewGrant(ScopeProjectWrite, "proj_123"),
-		NewDenyGrant(ScopeProjectWrite, "proj_123"),
-	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
-
-	result, err := GrantCheck{Check: readCheck, Instance: nil}.Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
-}
-
 func TestGrantExpressionEvaluate_differenceKeepsNonMatchingSetKey(t *testing.T) {
 	t.Parallel()
 
@@ -162,8 +88,8 @@ func TestGrantExpressionEvaluate_differenceKeepsNonMatchingSetKey(t *testing.T) 
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
 
 	result, err := GrantDifference{
 		Base: GrantCheck{
@@ -187,9 +113,9 @@ func TestGrantExpressionEvaluate_nestedDifferencePreservesExclusionReason(t *tes
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
-	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal}
+	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, selectorMatch: selectorMatchNormal}
 	instance := Selector{SelectorKeyResourceKind: ResourceKindProject, SelectorKeyResourceID: "proj_123"}
 
 	result, err := GrantDifference{
@@ -222,7 +148,6 @@ func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelecto
 		ResourceID:    projectID,
 		Dimensions:    nil,
 		selectorMatch: selectorMatchNormal,
-		expanded:      false,
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
@@ -234,7 +159,6 @@ func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelecto
 		ResourceID:    "project_other",
 		Dimensions:    nil,
 		selectorMatch: selectorMatchNormal,
-		expanded:      false,
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
@@ -256,7 +180,6 @@ func TestGrantExpressionEvaluate_projectReadBlocklistSubtractsProjectWrite(t *te
 		ResourceID:    projectID,
 		Dimensions:    nil,
 		selectorMatch: selectorMatchNormal,
-		expanded:      false,
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
@@ -292,7 +215,6 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 		ResourceID:    "dimensionless_probe",
 		Dimensions:    nil,
 		selectorMatch: selectorMatchNormal,
-		expanded:      false,
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
@@ -338,7 +260,6 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistSubtractsMCPWrite(t *testing
 		ResourceID:    serverID,
 		Dimensions:    nil,
 		selectorMatch: selectorMatchNormal,
-		expanded:      false,
 	}).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)

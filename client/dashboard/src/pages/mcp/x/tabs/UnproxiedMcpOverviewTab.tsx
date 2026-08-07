@@ -114,7 +114,7 @@ export function UnproxiedMcpOverviewTab({
           }}
         />
 
-        <div className="border-neutral-softest rounded-lg border p-6">
+        <div className="border-neutral-softest border p-6">
           <Heading variant="h4">Tool calls over time</Heading>
           <Text small muted className="mt-1">
             Sourced from Shadow MCP activity in the last {USAGE_WINDOW_DAYS}{" "}
@@ -145,7 +145,7 @@ export function UnproxiedMcpOverviewTab({
                   >
                     <div className="flex h-24 w-full items-end">
                       <div
-                        className="bg-primary/70 w-full rounded-t"
+                        className="bg-primary/70 w-full"
                         style={{
                           height:
                             bucket.callCount === 0
@@ -168,7 +168,7 @@ export function UnproxiedMcpOverviewTab({
         </div>
 
         {server?.url && (
-          <div className="border-neutral-softest rounded-lg border p-6">
+          <div className="border-neutral-softest border p-6">
             <Heading variant="h4">Usage breakdown</Heading>
             <Text small muted className="mt-1">
               Same Shadow MCP-sourced activity as the chart above, broken down

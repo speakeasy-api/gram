@@ -188,7 +188,7 @@ function AssignmentsEditor({
           placeholder="Add roles, users, or emails"
           // Selections here are names and email addresses, so the badge's
           // default mono/uppercase token styling has to be undone.
-          badgeClassName="h-6 gap-1.5 rounded-sm px-1.5 font-sans text-xs normal-case tracking-normal"
+          badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
           creatable
           searchable
           hideSelectAll

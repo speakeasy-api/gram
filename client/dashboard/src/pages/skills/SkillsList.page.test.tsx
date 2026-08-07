@@ -201,6 +201,13 @@ vi.mock("@gram/client/react-query/skillTags.js", () => ({
   }),
   invalidateAllSkillTags: vi.fn(),
 }));
+vi.mock("@/hooks/useToolsetUrl", () => ({
+  useCustomDomain: () => ({
+    domain: undefined,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   useUnknownSkillActivationsInfinite: () => ({
     data: {

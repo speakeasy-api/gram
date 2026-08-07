@@ -84,6 +84,28 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestPrepareContext_sessionWithoutActiveOrganizationGetsNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	ctx, err = engine.PrepareContext(ctx)
+	require.NoError(t, err)
+
+	grants, ok := GrantsFromContext(ctx)
+	require.True(t, ok)
+	require.Empty(t, grants)
+}
+
 func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 	t.Parallel()
 

@@ -93,7 +93,6 @@ func newTraceTestService(t *testing.T, authorizer authorizer, meterProvider metr
 		telemetry: nil,
 		instances: resolver,
 		authz:     nil,
-		features:  nil,
 		audit:     nil,
 		keyPrefix: "",
 	}, processor
@@ -807,7 +806,6 @@ func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 		telemetry: nil,
 		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
 		authz:     nil,
-		features:  nil,
 		audit:     nil,
 		keyPrefix: "",
 	}

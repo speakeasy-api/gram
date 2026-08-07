@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import {
   ReleaseStageBadge,
   type ReleaseStage,
@@ -6,6 +7,8 @@ import {
 import type React from "react";
 
 export interface LogWorkbenchProps {
+  /** Mono uppercase micro-label rendered as an overline above the title. */
+  eyebrow?: React.ReactNode;
   title: React.ReactNode;
   stage?: ReleaseStage;
   description?: React.ReactNode;
@@ -24,6 +27,7 @@ export interface LogWorkbenchProps {
 }
 
 export function LogWorkbench({
+  eyebrow,
   title,
   stage,
   description,
@@ -51,8 +55,10 @@ export function LogWorkbench({
         <div className="shrink-0">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
+              <PageEyebrow area={eyebrow} />
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">{title}</h1>
+                {/* Page title: thin display serif per the editorial idiom. */}
+                <h1 className="text-display-sm font-thin">{title}</h1>
                 {stage ? <ReleaseStageBadge stage={stage} /> : null}
               </div>
               {description ? (

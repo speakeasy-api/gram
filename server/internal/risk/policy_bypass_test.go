@@ -208,7 +208,6 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     allUsersPolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   selector,
 	}))
@@ -254,7 +253,6 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     rolePolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{rolePrincipal},
 		Selector:   roleSelector,
 	}))
@@ -299,7 +297,6 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
 		Selector:   selector,
 	}))
@@ -336,7 +333,6 @@ func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *te
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     scopedPolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
 		Selector:   scopedSelector,
 	}))
@@ -348,7 +344,6 @@ func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *te
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     wholePolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, wholePolicyID),
 	}))

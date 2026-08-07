@@ -16,7 +16,7 @@ export function SectionEmptyState({
   return (
     <Stack
       gap={2}
-      className="border-border rounded-xl border py-8"
+      className="border-border border py-8"
       align="center"
       justify="center"
     >

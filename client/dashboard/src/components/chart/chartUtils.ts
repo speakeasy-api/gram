@@ -96,29 +96,3 @@ export type ThresholdConfig = {
   amber: number;
   inverted?: boolean; // Set to true if lower is better (like latency)
 };
-
-// Design-system feedback colors, matching the weight of destructive/success
-// tokens elsewhere — not raw Tailwind palette classes.
-const VALUE_RED = "text-destructive";
-const VALUE_AMBER =
-  "text-[var(--color-feedback-orange-700)] dark:text-[var(--color-feedback-orange-500)]";
-const VALUE_GREEN = "text-success-foreground";
-
-export function getValueColor(
-  value: number,
-  thresholds?: ThresholdConfig,
-): string {
-  if (!thresholds) return "";
-
-  if (thresholds.inverted) {
-    // Lower is better (e.g., latency)
-    if (value > thresholds.red) return VALUE_RED;
-    if (value > thresholds.amber) return VALUE_AMBER;
-    return VALUE_GREEN;
-  } else {
-    // Higher is better (e.g., chats, resolution rate)
-    if (value < thresholds.red) return VALUE_RED;
-    if (value < thresholds.amber) return VALUE_AMBER;
-    return VALUE_GREEN;
-  }
-}

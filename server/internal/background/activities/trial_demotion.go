@@ -89,7 +89,7 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 		return fmt.Errorf("demote organization to free: %w", err)
 	}
 
-	if err := d.audit.LogOrganizationTrialDemoted(ctx, dbtx, audit.LogOrganizationTrialDemotedEvent{
+	if err := d.audit.LogOrganizationEnterpriseTrialDemoted(ctx, dbtx, audit.LogOrganizationEnterpriseTrialDemotedEvent{
 		OrganizationID:      args.OrganizationID,
 		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
 		ActorDisplayName:    nil,

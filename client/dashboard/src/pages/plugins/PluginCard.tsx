@@ -1,5 +1,5 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -113,7 +113,7 @@ export function PluginCard({
   return (
     <CardContextMenu actions={actions}>
       <div>
-        <DotCard
+        <Card.Entity
           className="cursor-pointer"
           onClick={() => {
             void navigate(detailHref);
@@ -237,7 +237,7 @@ export function PluginCard({
               </Link>
             </div>
           </div>
-        </DotCard>
+        </Card.Entity>
         {installTarget && (
           <div onClick={(e) => e.stopPropagation()}>
             <InstallInstructionsDialog

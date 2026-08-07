@@ -38,8 +38,8 @@ const revocationPushBudget = 5 * time.Second
 // record and span attribute.
 const maxReportedRevocationFailures = 20
 
-// Lists DCR-registered clients; keyset paginated by id (descending).
-// client_secret_hash is stripped from the view.
+// Lists registered clients, DCR and CIMD alike; keyset paginated by id
+// (descending). client_secret_hash is stripped from the view.
 func (s *Service) ListUserSessionClients(ctx context.Context, payload *gen.ListUserSessionClientsPayload) (*gen.ListUserSessionClientsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

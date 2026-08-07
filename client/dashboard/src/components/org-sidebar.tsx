@@ -24,6 +24,7 @@ import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { TrialStatusCard } from "./trial-status-card";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -177,9 +178,7 @@ export function OrgSidebar({
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
-                  ...(productFeatures?.skillsEnabled === true
-                    ? [{ item: orgRoutes.skills, scope: "org:admin" as Scope }]
-                    : []),
+                  { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
@@ -255,6 +254,7 @@ export function OrgSidebar({
         )}
       </SidebarContent>
       <SidebarFooter className="border-t">
+        <TrialStatusCard />
         <OnboardingResumeButton />
         <SidebarUserMenu />
       </SidebarFooter>

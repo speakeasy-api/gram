@@ -377,6 +377,7 @@ components:
             - session.started
             - session.updated
             - session.ended
+            - mcp.inventory
             - prompt.submitted
             - tool.requested
             - tool.completed
@@ -878,7 +879,7 @@ tags:
   - name: usage
     description: Read usage for gram.
   - name: userSessionClients
-    description: Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.
+    description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuers

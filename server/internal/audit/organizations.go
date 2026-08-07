@@ -25,7 +25,9 @@ const (
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
-	ActionOrganizationTrialDemoted Action = "organization:trial_demoted"
+	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
+
+	ActionOrganizationEnterpriseTrialDemoted Action = "organization:enterprise_trial_demoted"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -325,7 +327,54 @@ func (l *Logger) LogOrganizationDeviceAgentConfigurationUpdated(
 	})
 }
 
-type LogOrganizationTrialDemotedEvent struct {
+type LogOrganizationEnterpriseTrialArmedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	TrialEndsAt time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialArmed(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialArmedEvent) error {
+	action := ActionOrganizationEnterpriseTrialArmed
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+type LogOrganizationEnterpriseTrialDemotedEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
@@ -339,8 +388,8 @@ type LogOrganizationTrialDemotedEvent struct {
 	TrialEndsAt         time.Time
 }
 
-func (l *Logger) LogOrganizationTrialDemoted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationTrialDemotedEvent) error {
-	action := ActionOrganizationTrialDemoted
+func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialDemotedEvent) error {
+	action := ActionOrganizationEnterpriseTrialDemoted
 
 	metadata, err := marshalAuditPayload(map[string]any{
 		"previous_account_type": event.PreviousAccountType,
@@ -371,5 +420,5 @@ func (l *Logger) LogOrganizationTrialDemoted(ctx context.Context, dbtx repo.DBTX
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationTrialV1})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
 }

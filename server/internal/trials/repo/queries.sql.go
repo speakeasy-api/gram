@@ -22,9 +22,8 @@ type CreateTrialParams struct {
 	EndsAt         pgtype.Timestamptz
 }
 
-// Arms a trial on an organization the signup transaction just created. One row
-// per organization forever: a trial is extended by moving ends_at forward, not
-// by inserting a second row.
+// One row per organization forever: extend a trial by moving ends_at forward,
+// never by inserting a second row.
 func (q *Queries) CreateTrial(ctx context.Context, arg CreateTrialParams) error {
 	_, err := q.db.Exec(ctx, createTrial, arg.OrganizationID, arg.Tier, arg.EndsAt)
 	return err
@@ -50,14 +49,34 @@ type DemoteOrganizationToFreeRow struct {
 	PreviousAccountType string
 }
 
-// Locks the organization out and drops it out of the enterprise alert cohort.
-// A trial only ever belongs to an organization the signup transaction created,
-// so 'free' is the account type the organization would have had without it.
-// Returns the pre-update account type for the audit entry.
+// Drops the organization to the free tier and out of the enterprise alert
+// cohort. Returns the pre-update account type.
 func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID string) (DemoteOrganizationToFreeRow, error) {
 	row := q.db.QueryRow(ctx, demoteOrganizationToFree, organizationID)
 	var i DemoteOrganizationToFreeRow
 	err := row.Scan(&i.Name, &i.Slug, &i.PreviousAccountType)
+	return i, err
+}
+
+const getActiveTrial = `-- name: GetActiveTrial :one
+SELECT organization_id, created_at, ends_at
+FROM trials
+WHERE organization_id = $1
+  AND converted_at IS NULL
+  AND demoted_at IS NULL
+  AND ends_at > now()
+`
+
+type GetActiveTrialRow struct {
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetActiveTrial(ctx context.Context, organizationID string) (GetActiveTrialRow, error) {
+	row := q.db.QueryRow(ctx, getActiveTrial, organizationID)
+	var i GetActiveTrialRow
+	err := row.Scan(&i.OrganizationID, &i.CreatedAt, &i.EndsAt)
 	return i, err
 }
 
@@ -82,6 +101,38 @@ func (q *Queries) GetTrial(ctx context.Context, organizationID string) (Trial, e
 	return i, err
 }
 
+const insertTrialFixture = `-- name: InsertTrialFixture :exec
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
+VALUES (
+    $1,
+    'enterprise',
+    $2,
+    $3,
+    $4::timestamptz,
+    $5::timestamptz
+)
+`
+
+type InsertTrialFixtureParams struct {
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture for exercising active trial lifecycle states.
+func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertTrialFixture,
+		arg.OrganizationID,
+		arg.CreatedAt,
+		arg.EndsAt,
+		arg.ConvertedAt,
+		arg.DemotedAt,
+	)
+	return err
+}
+
 const listExpiredTrials = `-- name: ListExpiredTrials :many
 SELECT organization_id
 FROM trials
@@ -92,9 +143,6 @@ ORDER BY ends_at
 `
 
 // Trials past their end date that neither converted nor were already demoted.
-// The table gains one row per trial signup ever and demoted_at bounds each row
-// to a single demotion, so the result set stays small enough to sweep in one
-// pass without a cursor.
 func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
 	rows, err := q.db.Query(ctx, listExpiredTrials)
 	if err != nil {
@@ -123,9 +171,8 @@ WHERE organization_id = $1
   AND converted_at IS NULL
 `
 
-// Records that the trial became a signed contract. The first conversion wins,
-// and a converted trial is out of the sweeper's reach for good. Zero rows means
-// the trial already converted.
+// Records that the trial became a signed contract. The first conversion wins.
+// Zero rows means the trial already converted.
 func (q *Queries) MarkTrialConverted(ctx context.Context, organizationID string) (int64, error) {
 	result, err := q.db.Exec(ctx, markTrialConverted, organizationID)
 	if err != nil {
@@ -145,9 +192,8 @@ WHERE organization_id = $1
 RETURNING organization_id, tier, ends_at, converted_at, demoted_at, created_at, updated_at
 `
 
-// Repeats the sweep predicate so a conversion or a manual reinstatement that
-// lands between the list and this write wins, and so a retried sweep cannot
-// demote the same trial twice. No rows means another writer got there first.
+// Demotes a trial that is expired, unconverted, and not already demoted. No
+// rows means the trial no longer meets those conditions.
 func (q *Queries) MarkTrialDemoted(ctx context.Context, organizationID string) (Trial, error) {
 	row := q.db.QueryRow(ctx, markTrialDemoted, organizationID)
 	var i Trial

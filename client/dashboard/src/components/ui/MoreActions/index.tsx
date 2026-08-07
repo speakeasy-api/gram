@@ -59,7 +59,7 @@ export function MoreActions({
       <DropdownMenuTrigger asChild>
         {triggerLabel ? (
           <Button
-            variant="secondary"
+            variant="tertiary"
             size="sm"
             disabled={triggerLoading}
             aria-busy={triggerLoading}

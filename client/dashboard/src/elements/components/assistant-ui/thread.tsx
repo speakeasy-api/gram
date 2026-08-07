@@ -1504,7 +1504,7 @@ const UserMessage: FC = () => {
           <UserMessageHeader />
           <div
             className={cn(
-              "aui-user-message-content ml-auto w-fit bg-blue-500 px-5 py-2.5 wrap-break-word text-white",
+              "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
               r("xl"),
             )}
           >

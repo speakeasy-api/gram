@@ -34,6 +34,157 @@ func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Conte
 	return err
 }
 
+const claimDueRemoteSessionRefreshCandidates = `-- name: ClaimDueRemoteSessionRefreshCandidates :many
+
+WITH due AS (
+  SELECT s.id, s.updated_at, p.organization_id, i.token_endpoint
+  FROM remote_sessions AS s
+  JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
+  JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  WHERE s.deleted IS FALSE
+    AND s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $1::timestamptz)
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $1::timestamptz)
+    AND s.updated_at <= $2::timestamptz
+    AND (
+      s.last_refresh_attempt_at IS NULL
+      OR s.last_refresh_attempt_at <= $3::timestamptz
+    )
+    AND s.auto_refresh IS TRUE
+    AND EXISTS (
+      SELECT 1 FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+        AND link.user_session_issuer_id = s.user_session_issuer_id
+    )
+    AND EXISTS (
+      SELECT 1 FROM user_sessions AS gs
+      WHERE gs.project_id = usi.project_id
+        AND gs.user_session_issuer_id = s.user_session_issuer_id
+        AND gs.subject_urn = s.subject_urn
+        AND gs.deleted IS FALSE
+        AND gs.refresh_expires_at > $1::timestamptz
+    )
+  ORDER BY s.updated_at, s.id
+  LIMIT $4
+  FOR UPDATE OF s SKIP LOCKED
+),
+claimed AS (
+  UPDATE remote_sessions AS s
+  SET last_refresh_attempt_at = $1::timestamptz
+  FROM due
+  WHERE s.id = due.id
+  RETURNING s.id, due.updated_at, due.organization_id, due.token_endpoint
+)
+SELECT id, organization_id, token_endpoint
+FROM claimed
+ORDER BY updated_at, id
+`
+
+type ClaimDueRemoteSessionRefreshCandidatesParams struct {
+	NowTs           pgtype.Timestamptz
+	KeepaliveCutoff pgtype.Timestamptz
+	AttemptCutoff   pgtype.Timestamptz
+	LimitValue      int32
+}
+
+type ClaimDueRemoteSessionRefreshCandidatesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	TokenEndpoint  pgtype.Text
+}
+
+// Best-effort refresh-grant keepalive. Each hourly workflow chain drains
+// cross-project batches. Claiming stamps an independent attempt clock before
+// any network call, so failed sessions rotate out for 24 hours instead of
+// pinning the oldest batch. The organization product feature is UI-only; the
+// persisted per-session preference is the runtime opt-in.
+func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, arg ClaimDueRemoteSessionRefreshCandidatesParams) ([]ClaimDueRemoteSessionRefreshCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, claimDueRemoteSessionRefreshCandidates,
+		arg.NowTs,
+		arg.KeepaliveCutoff,
+		arg.AttemptCutoff,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimDueRemoteSessionRefreshCandidatesRow
+	for rows.Next() {
+		var i ClaimDueRemoteSessionRefreshCandidatesRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.TokenEndpoint); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const clearRemoteSessionRefreshTokenAfterInvalidGrant = `-- name: ClearRemoteSessionRefreshTokenAfterInvalidGrant :one
+UPDATE remote_sessions
+SET
+  refresh_token_encrypted = NULL,
+  refresh_expires_at = NULL,
+  updated_at = clock_timestamp()
+WHERE id = $1
+  AND subject_urn = $2
+  AND user_session_issuer_id = $3
+  AND remote_session_client_id = $4
+  AND deleted IS FALSE
+  AND updated_at = $5
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearRemoteSessionRefreshTokenAfterInvalidGrantParams struct {
+	ID                    uuid.UUID
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// A definitive upstream invalid_grant invalidates the refresh grant, not
+// necessarily the current access token. Clear the dead grant so scheduled
+// refresh does not retry it; a known-expired access token will then fail the
+// lazy gate and prompt for re-authentication.
+// Compare-and-swap against the snapshot used for the refresh so a delayed
+// failure cannot clear tokens that a concurrent refresh already rotated.
+func (q *Queries) ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx context.Context, arg ClearRemoteSessionRefreshTokenAfterInvalidGrantParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, clearRemoteSessionRefreshTokenAfterInvalidGrant,
+		arg.ID,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const countActiveRemoteSessionsByClientID = `-- name: CountActiveRemoteSessionsByClientID :one
 SELECT COUNT(*)
 FROM remote_sessions
@@ -691,7 +842,7 @@ func (q *Queries) DetachRemoteSessionClientFromUserSessionIssuer(ctx context.Con
 }
 
 const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one
-SELECT id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+SELECT id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, created_at, updated_at, deleted_at, deleted
 FROM remote_sessions
 WHERE subject_urn = $1
   AND remote_session_client_id = $2
@@ -717,12 +868,90 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 		&i.AccessTokenEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getDueRemoteSessionRefreshCandidate = `-- name: GetDueRemoteSessionRefreshCandidate :one
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
+JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+WHERE s.id = $1
+  AND p.organization_id = $2
+  AND s.deleted IS FALSE
+  AND s.refresh_token_encrypted IS NOT NULL
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $3::timestamptz)
+  AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $3::timestamptz)
+  AND s.updated_at <= $4::timestamptz
+  AND s.auto_refresh IS TRUE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_client_user_session_issuers AS link
+    WHERE link.remote_session_client_id = c.id
+      AND link.user_session_issuer_id = s.user_session_issuer_id
+  )
+  AND EXISTS (
+    SELECT 1 FROM user_sessions AS gs
+    WHERE gs.project_id = usi.project_id
+      AND gs.user_session_issuer_id = s.user_session_issuer_id
+      AND gs.subject_urn = s.subject_urn
+      AND gs.deleted IS FALSE
+      AND gs.refresh_expires_at > $3::timestamptz
+  )
+`
+
+type GetDueRemoteSessionRefreshCandidateParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	NowTs           pgtype.Timestamptz
+	KeepaliveCutoff pgtype.Timestamptz
+}
+
+type GetDueRemoteSessionRefreshCandidateRow struct {
+	RemoteSession RemoteSession
+}
+
+// Authoritative re-check immediately before a scheduled refresh: the row was
+// claimed earlier in the pass and may have been refreshed, revoked, or re-linked
+// since. No row means "no longer due" — the activity records a skip.
+func (q *Queries) GetDueRemoteSessionRefreshCandidate(ctx context.Context, arg GetDueRemoteSessionRefreshCandidateParams) (GetDueRemoteSessionRefreshCandidateRow, error) {
+	row := q.db.QueryRow(ctx, getDueRemoteSessionRefreshCandidate,
+		arg.ID,
+		arg.OrganizationID,
+		arg.NowTs,
+		arg.KeepaliveCutoff,
+	)
+	var i GetDueRemoteSessionRefreshCandidateRow
+	err := row.Scan(
+		&i.RemoteSession.ID,
+		&i.RemoteSession.SubjectUrn,
+		&i.RemoteSession.UserSessionIssuerID,
+		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessExpiresAt,
+		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.AuthorizationExpiresAt,
+		&i.RemoteSession.RefreshExpiresAt,
+		&i.RemoteSession.Scopes,
+		&i.RemoteSession.Resource,
+		&i.RemoteSession.AutoRefresh,
+		&i.RemoteSession.LastRefreshAttemptAt,
+		&i.RemoteSession.CreatedAt,
+		&i.RemoteSession.UpdatedAt,
+		&i.RemoteSession.DeletedAt,
+		&i.RemoteSession.Deleted,
 	)
 	return i, err
 }
@@ -965,7 +1194,7 @@ func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAut
 }
 
 const getOrganizationRemoteSessionByID = `-- name: GetOrganizationRemoteSessionByID :one
-SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.created_at, s.updated_at, s.deleted_at, s.deleted,
   c.project_id AS client_project_id,
   u.display_name AS subject_display_name,
   u.email AS subject_email
@@ -1009,8 +1238,12 @@ func (q *Queries) GetOrganizationRemoteSessionByID(ctx context.Context, arg GetO
 		&i.RemoteSession.AccessTokenEncrypted,
 		&i.RemoteSession.AccessExpiresAt,
 		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.AuthorizationExpiresAt,
 		&i.RemoteSession.RefreshExpiresAt,
 		&i.RemoteSession.Scopes,
+		&i.RemoteSession.Resource,
+		&i.RemoteSession.AutoRefresh,
+		&i.RemoteSession.LastRefreshAttemptAt,
 		&i.RemoteSession.CreatedAt,
 		&i.RemoteSession.UpdatedAt,
 		&i.RemoteSession.DeletedAt,
@@ -1198,7 +1431,7 @@ func (q *Queries) GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx context.Co
 }
 
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
-SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
@@ -1224,8 +1457,12 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 		&i.AccessTokenEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1632,59 +1869,6 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const insertRemoteSession = `-- name: InsertRemoteSession :one
-INSERT INTO remote_sessions (
-    subject_urn,
-    user_session_issuer_id,
-    remote_session_client_id,
-    access_token_encrypted,
-    access_expires_at
-)
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5
-)
-RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
-`
-
-type InsertRemoteSessionParams struct {
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
-	AccessExpiresAt       pgtype.Timestamptz
-}
-
-func (q *Queries) InsertRemoteSession(ctx context.Context, arg InsertRemoteSessionParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, insertRemoteSession,
-		arg.SubjectUrn,
-		arg.UserSessionIssuerID,
-		arg.RemoteSessionClientID,
-		arg.AccessTokenEncrypted,
-		arg.AccessExpiresAt,
-	)
-	var i RemoteSession
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.UserSessionIssuerID,
-		&i.RemoteSessionClientID,
-		&i.AccessTokenEncrypted,
-		&i.AccessExpiresAt,
-		&i.RefreshTokenEncrypted,
-		&i.RefreshExpiresAt,
-		&i.Scopes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
 
 const listConflictingClientBindingsForIssuerMigration = `-- name: ListConflictingClientBindingsForIssuerMigration :many
@@ -2255,7 +2439,7 @@ func (q *Queries) ListOrganizationRemoteSessionIssuers(ctx context.Context, arg 
 }
 
 const listOrganizationRemoteSessionsByClientID = `-- name: ListOrganizationRemoteSessionsByClientID :many
-SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.created_at, s.updated_at, s.deleted_at, s.deleted,
   u.display_name AS subject_display_name,
   u.email AS subject_email
 FROM remote_sessions AS s
@@ -2309,8 +2493,12 @@ func (q *Queries) ListOrganizationRemoteSessionsByClientID(ctx context.Context, 
 			&i.RemoteSession.AccessTokenEncrypted,
 			&i.RemoteSession.AccessExpiresAt,
 			&i.RemoteSession.RefreshTokenEncrypted,
+			&i.RemoteSession.AuthorizationExpiresAt,
 			&i.RemoteSession.RefreshExpiresAt,
 			&i.RemoteSession.Scopes,
+			&i.RemoteSession.Resource,
+			&i.RemoteSession.AutoRefresh,
+			&i.RemoteSession.LastRefreshAttemptAt,
 			&i.RemoteSession.CreatedAt,
 			&i.RemoteSession.UpdatedAt,
 			&i.RemoteSession.DeletedAt,
@@ -2781,28 +2969,47 @@ func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg L
 
 const listRemoteSessionStatusesForSubject = `-- name: ListRemoteSessionStatusesForSubject :many
 SELECT
-  remote_session_client_id,
+  s.remote_session_client_id,
+  s.auto_refresh,
+  s.access_expires_at,
+  s.authorization_expires_at,
+  s.refresh_expires_at,
+  (s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
   (CASE
-    WHEN access_expires_at > now()
-      OR (access_expires_at IS NULL AND refresh_token_encrypted IS NULL)
-      OR (refresh_token_encrypted IS NOT NULL
-          AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
+    WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (
+        s.access_expires_at IS NULL
+        OR s.access_expires_at > now()
+        OR (s.refresh_token_encrypted IS NOT NULL
+            AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))
+      ) THEN 'active'
     ELSE 'expired'
   END)::text AS status
-FROM remote_sessions
-WHERE subject_urn = $1
-  AND user_session_issuer_id = $2
-  AND deleted IS FALSE
+FROM remote_sessions AS s
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.subject_urn = $1
+  AND s.user_session_issuer_id = $2
+  AND usi.project_id = $3
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
 `
 
 type ListRemoteSessionStatusesForSubjectParams struct {
 	SubjectUrn          urn.SessionSubject
 	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
 }
 
 type ListRemoteSessionStatusesForSubjectRow struct {
-	RemoteSessionClientID uuid.UUID
-	Status                string
+	RemoteSessionClientID  uuid.UUID
+	AutoRefresh            bool
+	AccessExpiresAt        pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	CanRefresh             bool
+	Status                 string
 }
 
 // Bulk lookup for the consent renderer: returns each non-deleted
@@ -2814,19 +3021,16 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 //
 // The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
-// session is usable when its access token is unexpired, or it is a NULL-expiry
-// token with no refresh path (non-expiring, e.g. Slack non-rotating xoxp), or
-// it carries a refresh token that is not itself known-expired to renew with. A
-// NULL access_expires_at counts as usable on its own ONLY when there is no
-// refresh token: with a refresh token present the gate re-validates on an
-// hourly cadence, so usability defers to the refresh-token clause. A
-// refresh_expires_at of NULL is a non-expiring refresh token. A
+// session is usable while the upstream authorization remains valid and its
+// access token is unexpired, has no reported expiry, or can be renewed with a
+// refresh token whose idle timeout is still valid. NULL deadlines mean only
+// that the provider did not report that lifetime. A
 // present-but-unusable row is 'expired' rather than dropped, so the consent UI
 // can distinguish "reconnect this expired link" from "never connected" — and
 // so the runtime gate (which rejects the same row as ErrNoValidToken) stops
 // disagreeing with a green "Connected" badge.
 func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.UserSessionIssuerID)
+	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.UserSessionIssuerID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -2834,7 +3038,15 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 	var items []ListRemoteSessionStatusesForSubjectRow
 	for rows.Next() {
 		var i ListRemoteSessionStatusesForSubjectRow
-		if err := rows.Scan(&i.RemoteSessionClientID, &i.Status); err != nil {
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.AutoRefresh,
+			&i.AccessExpiresAt,
+			&i.AuthorizationExpiresAt,
+			&i.RefreshExpiresAt,
+			&i.CanRefresh,
+			&i.Status,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2846,7 +3058,7 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 }
 
 const listRemoteSessionsByProjectID = `-- name: ListRemoteSessionsByProjectID :many
-SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.created_at, s.updated_at, s.deleted_at, s.deleted,
   u.display_name AS subject_display_name,
   u.email AS subject_email
 FROM remote_sessions AS s
@@ -2905,8 +3117,12 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 			&i.RemoteSession.AccessTokenEncrypted,
 			&i.RemoteSession.AccessExpiresAt,
 			&i.RemoteSession.RefreshTokenEncrypted,
+			&i.RemoteSession.AuthorizationExpiresAt,
 			&i.RemoteSession.RefreshExpiresAt,
 			&i.RemoteSession.Scopes,
+			&i.RemoteSession.Resource,
+			&i.RemoteSession.AutoRefresh,
+			&i.RemoteSession.LastRefreshAttemptAt,
 			&i.RemoteSession.CreatedAt,
 			&i.RemoteSession.UpdatedAt,
 			&i.RemoteSession.DeletedAt,
@@ -3047,7 +3263,7 @@ WHERE s.id = $1
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
-RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.project_id AS client_project_id
+RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.project_id AS client_project_id
 `
 
 type RevokeOrganizationRemoteSessionParams struct {
@@ -3056,20 +3272,24 @@ type RevokeOrganizationRemoteSessionParams struct {
 }
 
 type RevokeOrganizationRemoteSessionRow struct {
-	ID                    uuid.UUID
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
-	AccessExpiresAt       pgtype.Timestamptz
-	RefreshTokenEncrypted pgtype.Text
-	RefreshExpiresAt      pgtype.Timestamptz
-	Scopes                []string
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
-	ClientProjectID       uuid.NullUUID
+	ID                     uuid.UUID
+	SubjectUrn             urn.SessionSubject
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientID  uuid.UUID
+	AccessTokenEncrypted   string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	Resource               pgtype.Text
+	AutoRefresh            bool
+	LastRefreshAttemptAt   pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+	ClientProjectID        uuid.NullUUID
 }
 
 // Soft-delete a single session. Returns the owning client's project_id so the
@@ -3087,8 +3307,12 @@ func (q *Queries) RevokeOrganizationRemoteSession(ctx context.Context, arg Revok
 		&i.AccessTokenEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3108,7 +3332,7 @@ WHERE s.id = $1
   AND usi.project_id = $2
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
-RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type RevokeRemoteSessionParams struct {
@@ -3131,58 +3355,12 @@ func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessi
 		&i.AccessTokenEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const revokeRemoteSessionAfterInvalidGrant = `-- name: RevokeRemoteSessionAfterInvalidGrant :one
-UPDATE remote_sessions
-SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND subject_urn = $2
-  AND user_session_issuer_id = $3
-  AND remote_session_client_id = $4
-  AND deleted IS FALSE
-  AND updated_at = $5
-RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
-`
-
-type RevokeRemoteSessionAfterInvalidGrantParams struct {
-	ID                    uuid.UUID
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	ExpectedUpdatedAt     pgtype.Timestamptz
-}
-
-// A definitive upstream invalid_grant means this session can no longer renew.
-// Compare-and-swap against the snapshot used for the refresh so a delayed
-// failure cannot evict tokens that a concurrent refresh already rotated.
-func (q *Queries) RevokeRemoteSessionAfterInvalidGrant(ctx context.Context, arg RevokeRemoteSessionAfterInvalidGrantParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, revokeRemoteSessionAfterInvalidGrant,
-		arg.ID,
-		arg.SubjectUrn,
-		arg.UserSessionIssuerID,
-		arg.RemoteSessionClientID,
-		arg.ExpectedUpdatedAt,
-	)
-	var i RemoteSession
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.UserSessionIssuerID,
-		&i.RemoteSessionClientID,
-		&i.AccessTokenEncrypted,
-		&i.AccessExpiresAt,
-		&i.RefreshTokenEncrypted,
-		&i.RefreshExpiresAt,
-		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3244,6 +3422,70 @@ func (q *Queries) SetOrganizationRemoteSessionIssuerProject(ctx context.Context,
 	return i, err
 }
 
+const setRemoteSessionAccessExpiresAt = `-- name: SetRemoteSessionAccessExpiresAt :exec
+UPDATE remote_sessions s
+SET access_expires_at = $1
+FROM remote_session_clients c
+WHERE s.id = $2
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = $3
+`
+
+type SetRemoteSessionAccessExpiresAtParams struct {
+	AccessExpiresAt pgtype.Timestamptz
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+}
+
+// Test helper for exercising lazy refresh without waiting for a real token
+// lifetime. Scoped through the owning remote_session_client's project.
+func (q *Queries) SetRemoteSessionAccessExpiresAt(ctx context.Context, arg SetRemoteSessionAccessExpiresAtParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionAccessExpiresAt, arg.AccessExpiresAt, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setRemoteSessionAutoRefresh = `-- name: SetRemoteSessionAutoRefresh :execrows
+UPDATE remote_sessions AS s
+SET auto_refresh = $1
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = $2
+  AND s.remote_session_client_id = $3
+  AND s.user_session_issuer_id = $4
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = $5
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+`
+
+type SetRemoteSessionAutoRefreshParams struct {
+	AutoRefresh           bool
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Records the subject's consent-screen auto-refresh choice. Deliberately does
+// NOT touch updated_at: that column doubles as the refresh CAS token-version
+// signal and keepalive clock, and a preference toggle must not perturb either.
+// Scoped through the endpoint's user_session_issuer project so the write
+// cannot cross tenant boundaries. A client may be bound to several
+// user_session_issuers; the issuer predicate pins the write to the binding the
+// consent screen displayed (reads filter by issuer the same way).
+func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemoteSessionAutoRefreshParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh,
+		arg.AutoRefresh,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setRemoteSessionUpdatedAt = `-- name: SetRemoteSessionUpdatedAt :exec
 UPDATE remote_sessions s
 SET updated_at = $1
@@ -3261,12 +3503,47 @@ type SetRemoteSessionUpdatedAtParams struct {
 
 // Sets updated_at on a remote session. Scoped through the owning
 // remote_session_client's project so the write cannot cross tenant boundaries.
-// Currently used by tests to backdate updated_at and exercise the
-// application-layer refresh cadence in validateAndRefresh (NULL
-// access_expires_at with a refresh token) without waiting wall-clock time.
+// Used by refresh-sweep tests to make a session due without waiting.
 func (q *Queries) SetRemoteSessionUpdatedAt(ctx context.Context, arg SetRemoteSessionUpdatedAtParams) error {
 	_, err := q.db.Exec(ctx, setRemoteSessionUpdatedAt, arg.UpdatedAt, arg.ID, arg.ProjectID)
 	return err
+}
+
+const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :execrows
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND s.user_session_issuer_id = $3
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = $4
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+`
+
+type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Consent-screen disconnect: soft-deletes the subject's own binding for one
+// upstream client. Subject, client and issuer all derived server-side from
+// the challenge state and the endpoint's bindings, never from the form;
+// scoped through the issuer's project so the write cannot cross tenants.
+func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionBySubjectAndClient,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const softDeleteRemoteSessionsByClientID = `-- name: SoftDeleteRemoteSessionsByClientID :execrows
@@ -4042,27 +4319,29 @@ SET
     access_token_encrypted = $1,
     access_expires_at = $2,
     refresh_token_encrypted = $3,
-    refresh_expires_at = $4,
-    scopes = $5,
+    authorization_expires_at = $4,
+    refresh_expires_at = $5,
+    scopes = $6,
     updated_at = clock_timestamp()
-WHERE subject_urn = $6
-  AND user_session_issuer_id = $7
-  AND remote_session_client_id = $8
+WHERE subject_urn = $7
+  AND user_session_issuer_id = $8
+  AND remote_session_client_id = $9
   AND deleted IS FALSE
-  AND updated_at = $9
-RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+  AND updated_at = $10
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionTokensIfUnchangedParams struct {
-	AccessTokenEncrypted  string
-	AccessExpiresAt       pgtype.Timestamptz
-	RefreshTokenEncrypted pgtype.Text
-	RefreshExpiresAt      pgtype.Timestamptz
-	Scopes                []string
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	ExpectedUpdatedAt     pgtype.Timestamptz
+	AccessTokenEncrypted   string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	SubjectUrn             urn.SessionSubject
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientID  uuid.UUID
+	ExpectedUpdatedAt      pgtype.Timestamptz
 }
 
 // Compare-and-swap write for the refresh path. Update-only on purpose: an
@@ -4073,6 +4352,7 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.RefreshTokenEncrypted,
+		arg.AuthorizationExpiresAt,
 		arg.RefreshExpiresAt,
 		arg.Scopes,
 		arg.SubjectUrn,
@@ -4089,8 +4369,12 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 		&i.AccessTokenEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -4107,8 +4391,11 @@ INSERT INTO remote_sessions (
     access_token_encrypted,
     access_expires_at,
     refresh_token_encrypted,
+    authorization_expires_at,
     refresh_expires_at,
-    scopes
+    scopes,
+    resource,
+    auto_refresh
 )
 VALUES (
     $1,
@@ -4118,28 +4405,36 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10,
+    $11
 )
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    authorization_expires_at = EXCLUDED.authorization_expires_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     scopes = EXCLUDED.scopes,
+    resource = EXCLUDED.resource,
     updated_at = clock_timestamp()
-RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertRemoteSessionParams struct {
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
-	AccessExpiresAt       pgtype.Timestamptz
-	RefreshTokenEncrypted pgtype.Text
-	RefreshExpiresAt      pgtype.Timestamptz
-	Scopes                []string
+	SubjectUrn             urn.SessionSubject
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientID  uuid.UUID
+	AccessTokenEncrypted   string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	Resource               pgtype.Text
+	AutoRefresh            bool
 }
 
 // Used by /mcp/remote_login_callback to materialise (or refresh) the
@@ -4156,8 +4451,11 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.RefreshTokenEncrypted,
+		arg.AuthorizationExpiresAt,
 		arg.RefreshExpiresAt,
 		arg.Scopes,
+		arg.Resource,
+		arg.AutoRefresh,
 	)
 	var i RemoteSession
 	err := row.Scan(
@@ -4168,8 +4466,12 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 		&i.AccessTokenEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

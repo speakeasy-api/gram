@@ -40,10 +40,11 @@ import (
 // `scope` field here would assert token state we don't hold. Restore it
 // when /token mints scope-bearing access tokens.
 type tokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int64  `json:"expires_in"`
-	RefreshToken string `json:"refresh_token,omitempty"`
+	AccessToken            string `json:"access_token"`
+	TokenType              string `json:"token_type"`
+	ExpiresIn              int64  `json:"expires_in"`
+	RefreshToken           string `json:"refresh_token,omitempty"`
+	AuthorizationExpiresIn int64  `json:"authorization_expires_in"`
 }
 
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
@@ -236,7 +237,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
-	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, baseURL, logger); err != nil {
+	var desiredSessionDuration *time.Duration
+	if grant.DesiredSessionDurationHours > 0 {
+		d := time.Duration(grant.DesiredSessionDurationHours) * time.Hour
+		desiredSessionDuration = &d
+	}
+	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, desiredSessionDuration, nil, baseURL, logger); err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
 		// lookup, session_duration validation, signing, or persisting the
 		// user_sessions row — so no token reached the client and failed is
@@ -306,7 +312,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
 	}
 
-	if oldSession.RefreshExpiresAt.Valid && time.Now().After(oldSession.RefreshExpiresAt.Time) {
+	if !oldSession.RefreshExpiresAt.Valid || !oldSession.RefreshExpiresAt.Time.After(time.Now()) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
 	}
@@ -318,13 +324,17 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		logger.WarnContext(ctx, "failed to revoke old access token jti on refresh", attr.SlogError(err))
 	}
 
-	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, baseURL, logger)
+	// Session length is an absolute authorization lifetime. Rotation carries
+	// that deadline forward verbatim; it never opens a fresh authorization
+	// window merely because the client exchanged its refresh token.
+	authorizationExpiresAt := oldSession.RefreshExpiresAt.Time
+	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, nil, &authorizationExpiresAt, baseURL, logger)
 }
 
 // accessTokenLifetime is the wall-clock validity of a minted access-token
 // JWT. Hardcoded because OAuth 2.1 best practice is short access tokens
-// regardless of session policy; the per-issuer SessionDuration controls
-// the refresh-token lifetime instead.
+// regardless of session policy. mintSessionAndRespond caps it to the remaining
+// authorization lifetime.
 const accessTokenLifetime = 1 * time.Hour
 
 // mintSessionAndRespond mints a new access-token JWT (HS256) and an opaque
@@ -333,65 +343,88 @@ const accessTokenLifetime = 1 * time.Hour
 // grant handlers since both produce identical token responses.
 //
 // Lifetimes:
-//   - access token: accessTokenLifetime (hardcoded, ~hour-scale).
-//   - refresh token: now + issuer.SessionDuration. This is sliding (per-
-//     rotation) rather than absolute: every successful refresh resets the
-//     refresh-token clock. Matches OAuth 2.1 / Auth0 / Okta convention.
-//     A leaked refresh token still expires after SessionDuration of
-//     inactivity; an active client keeps the session alive indefinitely
-//     by refreshing inside the window.
+//   - authorization: the subject's consent choice, capped by the issuer's
+//     session_duration, and fixed for the lifetime of the grant.
+//   - refresh token: the remaining authorization lifetime. Gram does not
+//     impose a separate refresh-token idle timeout.
+//   - access token: min(accessTokenLifetime, remaining authorization).
 //
 // `iss` / audience: the JWT issuer claim is built from baseURL (which the
 // caller computes from custom-domain context so it matches what the AS
 // metadata document advertises). The audience is the toolset URN
 // `toolset:<UUID>`, globally unique even when slugs collide across
 // projects — prevents cross-project replay.
+// desiredSessionDuration is used only for an initial authorization: nil means
+// "no explicit choice", falling back to the issuer's session_duration.
+// authorizationExpiresAt is used only for rotation and is carried from the
+// prior row. Exactly one is normally non-nil.
 func (s *Service) mintSessionAndRespond(
 	ctx context.Context,
 	w http.ResponseWriter,
 	endpoint *ResolvedMcpEndpoint,
 	clientRow *usersessions_repo.UserSessionClient,
 	subject urn.SessionSubject,
+	desiredSessionDuration *time.Duration,
+	authorizationExpiresAt *time.Time,
 	baseURL string,
 	logger *slog.Logger,
 ) error {
-	// Resolve the issuer's session_duration — the refresh-token (i.e. total
-	// session) lifetime. Microseconds-only: the issuer create handler stores
-	// via conv.PtrToPGInterval which never sets Months/Days; if we ever see
-	// those here, raw SQL bypassed the writer and the conversion is
-	// calendar-dependent — fail with 500 rather than silently approximate.
-	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-		ID:        endpoint.UserSessionIssuerID,
-		ProjectID: endpoint.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+	now := time.Now()
+	if authorizationExpiresAt == nil {
+		// Resolve the issuer's session_duration — the maximum absolute
+		// authorization lifetime. Microseconds-only: the issuer create handler
+		// stores via conv.PtrToPGInterval which never sets Months/Days; if we
+		// ever see those here, raw SQL bypassed the writer and the conversion
+		// is calendar-dependent — fail rather than silently approximate.
+		issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+			ID:        endpoint.UserSessionIssuerID,
+			ProjectID: endpoint.ProjectID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+			}
+			return oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
+		if !issuer.SessionDuration.Valid {
+			return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").LogError(ctx, logger)
+		}
+		if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
+			return oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").LogError(ctx, logger)
+		}
+		maxLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
+		if maxLifetime <= 0 {
+			return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, logger)
+		}
+		authorizationLifetime := maxLifetime
+		if desiredSessionDuration != nil && *desiredSessionDuration > 0 {
+			authorizationLifetime = min(*desiredSessionDuration, maxLifetime)
+		}
+		deadline := now.Add(authorizationLifetime)
+		authorizationExpiresAt = &deadline
 	}
-	if !issuer.SessionDuration.Valid {
-		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").LogError(ctx, logger)
+	authorizationLifetime := authorizationExpiresAt.Sub(now)
+	if authorizationLifetime <= 0 {
+		return oops.E(oops.CodeUnauthorized, nil, "user authorization has expired").LogError(ctx, logger)
 	}
-	if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
-		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").LogError(ctx, logger)
+	accessExpiresAt := now.Add(accessTokenLifetime)
+	if authorizationExpiresAt.Before(accessExpiresAt) {
+		accessExpiresAt = *authorizationExpiresAt
 	}
-	refreshLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
-	if refreshLifetime <= 0 {
-		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, logger)
-	}
+	accessLifetime := accessExpiresAt.Sub(now)
 
 	issuerURL, err := endpoint.RootURL(baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
 	access, jti, err := s.userSessionSigner.Mint(sessiontokens.MintParams{
-		Subject:  subject,
-		Audience: endpoint.AudienceURN,
-		Issuer:   issuerURL,
-		Lifetime: accessTokenLifetime,
-		ClientID: clientRow.ClientID,
-		JTI:      "",
+		Subject:   subject,
+		Audience:  endpoint.AudienceURN,
+		Issuer:    issuerURL,
+		Lifetime:  0,
+		ExpiresAt: &accessExpiresAt,
+		ClientID:  clientRow.ClientID,
+		JTI:       "",
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)
@@ -402,24 +435,24 @@ func (s *Service) mintSessionAndRespond(
 		return oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
 	}
 
-	now := time.Now()
 	if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
 		SubjectUrn:          subject,
 		Jti:                 jti,
 		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
-		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(accessTokenLifetime), InfinityModifier: 0, Valid: true},
-		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: *authorizationExpiresAt, InfinityModifier: 0, Valid: true},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}
 
 	body, err := json.Marshal(tokenResponse{
-		AccessToken:  access,
-		TokenType:    "Bearer",
-		ExpiresIn:    int64(accessTokenLifetime.Seconds()),
-		RefreshToken: refreshTokenRaw,
+		AccessToken:            access,
+		TokenType:              "Bearer",
+		ExpiresIn:              int64(accessLifetime.Seconds()),
+		RefreshToken:           refreshTokenRaw,
+		AuthorizationExpiresIn: int64(authorizationLifetime.Seconds()),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "marshal token response").LogError(ctx, logger)

@@ -37,7 +37,7 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Enforcement.** Inside a handler, authorization is an explicit one-line check: the handler names the scope (and resource, if project-scoped) it needs, and the RBAC engine either allows the call or returns a forbidden error.
 
-**Auth context invariant.** By the time a handler runs, the auth context's `ActiveOrganizationID` is always populated — RBAC does not defensively check for an empty org id.
+**Auth context invariant.** Organization-scoped handlers can assume `ActiveOrganizationID` is populated. During login, session authentication can briefly produce an org-less context; `Engine.PrepareContext` handles that middleware boundary by installing zero grants instead of trying organization-scoped principal resolution. Endpoints already exposed during login keep their explicit org-less behavior: for example, `access.ListGrants` returns no grants, `productfeatures.GetProductFeatures` returns unauthorized, and `auth.Info` continues the login flow. Do not spread defensive empty-org checks into other handlers.
 
 ## Server
 

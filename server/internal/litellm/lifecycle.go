@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -37,14 +36,6 @@ func (s *Service) CreateInstance(ctx context.Context, payload *gen.CreateInstanc
 	authCtx, projectID, err := s.requireInstanceAdmin(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureAIPlatformPushIntegrations)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check AI platform push integrations feature").LogError(ctx, s.logger)
-	}
-	if !enabled {
-		return nil, oops.E(oops.CodeForbidden, nil, "AI platform push integrations are not enabled for this organization")
 	}
 
 	name := strings.TrimSpace(payload.Name)

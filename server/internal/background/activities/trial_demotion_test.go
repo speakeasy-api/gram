@@ -111,7 +111,7 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 	endsAt := time.Now().Add(-time.Hour).UTC()
 	orgID := newTrialOrg(t, ctx, ti, endsAt)
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
 
 	expired, err := ti.activity.List(ctx)
@@ -131,11 +131,11 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 
 	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabled)
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 
-	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, "organization", entry.SubjectType)
 	require.Equal(t, orgID, entry.SubjectSlug)
@@ -212,7 +212,7 @@ func TestDemoteExpiredTrials_DemoteIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	firstDemotedAt := trial.DemotedAt.Time
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
 
 	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
@@ -221,7 +221,7 @@ func TestDemoteExpiredTrials_DemoteIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, firstDemotedAt, trial.DemotedAt.Time)
 
-	again, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
+	again, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, after, again)
 }

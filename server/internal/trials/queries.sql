@@ -1,15 +1,36 @@
 -- name: CreateTrial :exec
--- Arms a trial on an organization the signup transaction just created. One row
--- per organization forever: a trial is extended by moving ends_at forward, not
--- by inserting a second row.
+-- One row per organization forever: extend a trial by moving ends_at forward,
+-- never by inserting a second row.
 INSERT INTO trials (organization_id, tier, ends_at)
 VALUES (@organization_id, @tier, @ends_at);
 
+-- name: GetTrial :one
+SELECT *
+FROM trials
+WHERE organization_id = @organization_id;
+
+-- name: GetActiveTrial :one
+SELECT organization_id, created_at, ends_at
+FROM trials
+WHERE organization_id = @organization_id
+  AND converted_at IS NULL
+  AND demoted_at IS NULL
+  AND ends_at > now();
+
+-- name: InsertTrialFixture :exec
+-- Test-only fixture for exercising active trial lifecycle states.
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
+VALUES (
+    @organization_id,
+    'enterprise',
+    @created_at,
+    @ends_at,
+    sqlc.narg('converted_at')::timestamptz,
+    sqlc.narg('demoted_at')::timestamptz
+);
+
 -- name: ListExpiredTrials :many
 -- Trials past their end date that neither converted nor were already demoted.
--- The table gains one row per trial signup ever and demoted_at bounds each row
--- to a single demotion, so the result set stays small enough to sweep in one
--- pass without a cursor.
 SELECT organization_id
 FROM trials
 WHERE ends_at < clock_timestamp()
@@ -18,24 +39,17 @@ WHERE ends_at < clock_timestamp()
 ORDER BY ends_at;
 
 -- name: MarkTrialConverted :execrows
--- Records that the trial became a signed contract. The first conversion wins,
--- and a converted trial is out of the sweeper's reach for good. Zero rows means
--- the trial already converted.
+-- Records that the trial became a signed contract. The first conversion wins.
+-- Zero rows means the trial already converted.
 UPDATE trials
 SET converted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND converted_at IS NULL;
 
--- name: GetTrial :one
-SELECT *
-FROM trials
-WHERE organization_id = @organization_id;
-
 -- name: MarkTrialDemoted :one
--- Repeats the sweep predicate so a conversion or a manual reinstatement that
--- lands between the list and this write wins, and so a retried sweep cannot
--- demote the same trial twice. No rows means another writer got there first.
+-- Demotes a trial that is expired, unconverted, and not already demoted. No
+-- rows means the trial no longer meets those conditions.
 UPDATE trials
 SET demoted_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -46,10 +60,8 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: DemoteOrganizationToFree :one
--- Locks the organization out and drops it out of the enterprise alert cohort.
--- A trial only ever belongs to an organization the signup transaction created,
--- so 'free' is the account type the organization would have had without it.
--- Returns the pre-update account type for the audit entry.
+-- Drops the organization to the free tier and out of the enterprise alert
+-- cohort. Returns the pre-update account type.
 WITH previous AS (
     SELECT organization_metadata.gram_account_type
     FROM organization_metadata
