@@ -105,7 +105,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authCtx.ActiveOrganizationID = orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	svc := externalkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, features)

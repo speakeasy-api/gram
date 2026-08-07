@@ -14,6 +14,8 @@ pin = true
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
 "github:speakeasy-api/openapi" = "1.24.0"
+# Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
+# installed version and the version generation runs on can mismatch.
 "github:speakeasy-api/speakeasy" = "1.791.1"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"

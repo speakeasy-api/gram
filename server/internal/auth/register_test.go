@@ -21,9 +21,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{} // User has no organizations
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		// Create and store a session with no active organization
 		session := sessions.Session{
@@ -230,9 +228,7 @@ func TestService_Register(t *testing.T) {
 				// can run in parallel without racing on shared Redis state.
 				userInfo := defaultMockUserInfo()
 				userInfo.Organizations = []MockOrganizationEntry{}
-				ctx, instance := newTestAuthService(t, userInfo)
-
-				require.NoError(t, instance.createTestUser(ctx, userInfo))
+				ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 				sessionID := "session-" + tc.name
 				session := sessions.Session{
@@ -319,9 +315,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{} // no orgs yet
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		session := sessions.Session{
 			SessionID:            "workos-register-test",
@@ -356,9 +350,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		session := sessions.Session{
 			SessionID:            "slug-no-collision",
@@ -393,9 +385,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		// Pre-create an org that occupies the slug "collide-me".
 		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{

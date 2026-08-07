@@ -200,7 +200,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 
 	payloads := findingCreatedPayloads(rows, time.Now())
 	if len(payloads) > 0 {
-		if _, err := outbox.AppendBatch(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, payloads); err != nil {
+		if _, err := outbox.PublishWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, payloads); err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
 			return false, fmt.Errorf("append risk findings to outbox: %w", err)
 		}

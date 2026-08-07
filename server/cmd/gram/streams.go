@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -25,6 +28,7 @@ import (
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -53,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
 
 func newStreamsCommand() *cli.Command {
@@ -194,6 +199,7 @@ func newStreamsCommand() *cli.Command {
 	}
 
 	flags = append(flags, gcpFlags()...)
+	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskFlags()...)
 	flags = append(flags, clickHouseFlags()...)
@@ -214,8 +220,11 @@ func newStreamsCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 
-			ctx, cancel := context.WithCancel(c.Context)
-			defer cancel()
+			// Without a signal handler the runtime kills the process on SIGTERM,
+			// so the Action never returns and the After hook never runs the
+			// shutdownFuncs registered below.
+			ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+			defer stop()
 
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 				ServiceName:    serviceName,
@@ -403,6 +412,14 @@ func newStreamsCommand() *cli.Command {
 				broker:     psbroker,
 			}
 
+			svixClient, svixShutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if err != nil {
+				return fmt.Errorf("failed to create svix client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, svixShutdown)
+
+			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
+
 			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
 
 			// Start subscription receivers in this block
@@ -415,6 +432,8 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
+
+				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, svixRelayHandler)
 
 				if enableCHRiskWrites {
 					mustReceiveBatch(
@@ -438,6 +457,8 @@ func newStreamsCommand() *cli.Command {
 			if err := group.Wait(); err != nil {
 				return fmt.Errorf("streaming error: %w", err)
 			}
+
+			logger.InfoContext(c.Context, "shutdown signal received, all receivers stopped")
 
 			return nil
 		},

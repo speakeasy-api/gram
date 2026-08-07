@@ -5,6 +5,7 @@ server:
   - "agents/**"
   - "ci/**"
   - "server/**"
+  - "infra/**"
   - ".mise-tasks/test/ci.sh"
   - ".mise-tasks/test/server.sh"
 

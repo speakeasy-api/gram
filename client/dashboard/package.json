@@ -9,7 +9,7 @@
     "prebuild": "if command -v mise >/dev/null 2>&1; then pnpm build:cel-wasm; else echo 'mise/Go unavailable; skipping cel.wasm build (CEL editor falls back to server-side validation)'; fi",
     "build": "vite build",
     "lint": "pnpm lint:format && pnpm lint:no-barrels && pnpm lint:oxlint && pnpm type-check",
-    "lint:oxlint": "oxlint --type-aware",
+    "lint:oxlint": "oxlint --type-aware --ignore-pattern 'src/sdk/**'",
     "lint:fix": "oxlint --type-aware --fix",
     "lint:format": "oxfmt --check .",
     "lint:no-barrels": "! grep -rEn '^export \\*' src --include='*.ts' --include='*.tsx' --exclude-dir=sdk || (echo 'Barrel re-exports (export *) are not allowed. Re-export named symbols instead.' && exit 1)",

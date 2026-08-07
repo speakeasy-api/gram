@@ -159,7 +159,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 		ti.serverURL,
 		ti.siteURL,
 		ti.cacheAdapter,
-		authz.NewEngine(ti.logger, ti.conn, chConn, nil, nil, workos.NewStubClient()),
+		authz.NewEngine(ti.logger, ti.conn, chConn, nil, workos.NewStubClient()),
 		ti.audit,
 	)
 

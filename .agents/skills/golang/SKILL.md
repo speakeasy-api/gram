@@ -28,6 +28,42 @@ This codebases uses features from Go 1.25 and above.
 - Always run linters as part of finalizing your code changes. Use `mise lint:server` to run the linters on the server codebase.
 - The `exhaustruct` linter requires all struct fields to be explicitly set in struct literals. When adding new fields to a type, update ALL call sites — including places that construct the struct with zero values (e.g., `MyStruct{}` → `MyStruct{NewField: nil}`).
 
+## Comments
+
+- Write comments that describe current intent and behavior. Do NOT leave "intermediate" comments narrating the edit you just made (e.g. "previously this returned X, now it returns Y", "renamed from Foo"). That commentary, when appropriate, belongs in the commit message or pull request body, where it stays attached to the change instead of aging in the source. Markers that state current status are not narration and stay: `Deprecated: use X instead` on a symbol kept for compatibility (as its own trailing paragraph, which is the form `gopls` and pkg.go.dev surface to callers), build tags, `//go:` directives, and `TODO(TICKET-123)` notes. Write the rest of a deprecated symbol's doc in the present tense, describing what it still does today.
+- Do NOT write "see X" comments that point at a comment somewhere else (e.g. "see the note on `Foo` above", "see `handler.go` for details"). The target moves or gets rewritten and the pointer silently goes stale. The test is what the comment does with the name it mentions: stating the fact where the reader needs it is fine ("callers must hold `Registry.mu`"), sending the reader elsewhere to go find it is not ("see `Registry` for locking rules"). Referencing a symbol, package, ticket, or external spec that the comment is actually about is fine. Repeating a sentence or two to keep an explanation local is fine; when the full explanation is too long to restate, document it on the type or package that owns the invariant and give each use site the one-line consequence it needs.
+- Document struct fields one per field, at least on exported types. A comment placed above only the first field of a group documents just that field: `go doc <Type>.<Field>` and editor hovers show nothing for the rest. Grouped `const` and `var` blocks and interface methods follow the same attachment rule, and a comment above the `const (` line documents the block rather than any spec in it. Put a blank line between the previous field and the next field's comment: attachment survives without it, but the blank line keeps the boundary obvious. Never leave a blank line between a comment and the field it documents, which silently detaches it. The first field in a block needs no blank line before its comment, and `gofmt` flags none of these mistakes.
+
+<bad-example>
+
+```go
+type Config struct {
+    // Timeouts applied to outbound requests. Previously these were a single
+    // Timeout field. See the note on Client above for retry interactions.
+    ReadTimeout  time.Duration
+    WriteTimeout time.Duration
+}
+```
+
+Three problems in four lines: the comment narrates a past refactor, it defers to a comment that can move or disappear, and `WriteTimeout` ends up with no documentation at all.
+
+</bad-example>
+
+<good-example>
+
+```go
+type Config struct {
+    // ReadTimeout bounds how long the client waits for response headers.
+    // Retries each get a fresh budget, so a request can exceed this in total.
+    ReadTimeout time.Duration
+
+    // WriteTimeout bounds how long the client spends sending the request body.
+    WriteTimeout time.Duration
+}
+```
+
+</good-example>
+
 ## Updating the API
 
 We use Goa to design our API and generate server code. All Goa code lives in `server/design`. The Goa DSL is documented in `https://pkg.go.dev/goa.design/goa/v3/dsl`.

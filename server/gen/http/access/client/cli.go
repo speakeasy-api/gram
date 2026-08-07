@@ -771,51 +771,6 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 	return v, nil
 }
 
-// BuildGetRBACStatusPayload builds the payload for the access getRBACStatus
-// endpoint from CLI flags.
-func BuildGetRBACStatusPayload(accessGetRBACStatusSessionToken string) (*access.GetRBACStatusPayload, error) {
-	var sessionToken *string
-	{
-		if accessGetRBACStatusSessionToken != "" {
-			sessionToken = &accessGetRBACStatusSessionToken
-		}
-	}
-	v := &access.GetRBACStatusPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildEnableRBACPayload builds the payload for the access enableRBAC endpoint
-// from CLI flags.
-func BuildEnableRBACPayload(accessEnableRBACSessionToken string) (*access.EnableRBACPayload, error) {
-	var sessionToken *string
-	{
-		if accessEnableRBACSessionToken != "" {
-			sessionToken = &accessEnableRBACSessionToken
-		}
-	}
-	v := &access.EnableRBACPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildDisableRBACPayload builds the payload for the access disableRBAC
-// endpoint from CLI flags.
-func BuildDisableRBACPayload(accessDisableRBACSessionToken string) (*access.DisableRBACPayload, error) {
-	var sessionToken *string
-	{
-		if accessDisableRBACSessionToken != "" {
-			sessionToken = &accessDisableRBACSessionToken
-		}
-	}
-	v := &access.DisableRBACPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
 // BuildListChallengesPayload builds the payload for the access listChallenges
 // endpoint from CLI flags.
 func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
