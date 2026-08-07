@@ -86,6 +86,13 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// at the resolved endpoint's canonical slug for the flow-metric dimension.
 	mcpSlug = endpoint.Slug
 
+	// This handler is registered at a global URL and so has no
+	// customdomains.Context of its own; every URL it emits hangs off the
+	// mint-time origin instead. Both responses it can produce — the forwarded
+	// IDP error and the consent redirect — use this one value, so the client
+	// sees the same origin whichever way the flow goes.
+	baseURL := challengeState.mintOriginOr(s.serverURL.String())
+
 	// If the IDP returned an error (user cancelled at the IDP, IDP refused
 	// to authenticate, etc.) per OAuth 2.0, forward it back to the MCP
 	// client with the same error code so the client can render an
@@ -113,7 +120,23 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			}
 			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
 		}
-		clientRedirect := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, idpErr, errDescription)
+		issuer, err := endpoint.RootURL(baseURL)
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
+		}
+		clientRedirect, err := buildClientRedirect(clientRedirectParams{
+			RedirectURI:      challengeState.RedirectURI,
+			Issuer:           issuer,
+			Code:             "",
+			State:            challengeState.State,
+			ErrorCode:        idpErr,
+			ErrorDescription: errDescription,
+		})
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
+		}
 		http.Redirect(w, r, clientRedirect, http.StatusFound)
 		return nil
 	}
@@ -165,17 +188,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
 	}
 
-	// challengeState.Endpoint.BaseURL was stamped at mint time. New
-	// mints always populate it; the IDP callback can rebuild the
-	// consent redirect from cache alone without a fresh custom_domains
-	// lookup (the callback is registered at a global URL and loses the
-	// request's customdomains.Context). Empty value falls back to the
-	// server default for in-flight states minted before this field
-	// landed.
-	baseURL := challengeState.Endpoint.BaseURL
-	if baseURL == "" {
-		baseURL = s.serverURL.String()
-	}
+	// The mint-time origin puts the consent page back on the host the user
+	// started on, without a fresh custom_domains lookup.
 	consentURL, err := endpoint.ConsentURL(baseURL, challengeState.ID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)

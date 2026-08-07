@@ -152,6 +152,12 @@ func TestHandleGetAuthorizationServer_ToolsetBackendWithProxy(t *testing.T) {
 	scopes, ok := metadata["scopes_supported"].([]any)
 	require.True(t, ok)
 	require.Contains(t, scopes, "offline_access")
+
+	// The same route serves two different metadata shapes. Authorization
+	// responses on this legacy oauth-proxy shape carry no `iss`, so it must
+	// not advertise support: advertising without emitting is the one
+	// combination MCP clients treat as fatal.
+	require.NotContains(t, metadata, "authorization_response_iss_parameter_supported")
 }
 
 func TestHandleGetAuthorizationServer_ToolsetBackendWithExternalOAuth(t *testing.T) {
@@ -248,6 +254,11 @@ func TestHandleGetAuthorizationServer_IssuerGatedToolsetBackend(t *testing.T) {
 	expectedIssuer := "http://0.0.0.0/mcp/" + slug
 	require.Equal(t, expectedIssuer, metadata["issuer"])
 	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
+
+	// RFC 9207 §3. Asserted per surface because the route base is baked into
+	// the issuer that the `iss` authorization-response parameter has to match,
+	// so a regression can land on one surface while the other stays correct.
+	require.Equal(t, true, metadata["authorization_response_iss_parameter_supported"])
 }
 
 // TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend_DanglingIssuerFK
