@@ -1,5 +1,178 @@
 # server
 
+## 1.5.0
+
+### Minor Changes
+
+- 546c449: Collect a work email on the sign-up page and hand it to the hosted AuthKit
+  screen. `auth.login` takes an optional `email`; when a login carries a company
+  name — the marker that it began on `/sign-up` — the server sets WorkOS's
+  `login_hint` so the email field arrives pre-filled, and `screen_hint=sign-up` so
+  the user lands on the sign-up screen rather than sign-in. The email is validated
+  before the login nonce is minted and is never stored. The call to action now
+  reads "Start Trial"; it previously named a single identity provider, which
+  misdescribed a hand-off that has always been generic.
+- 0afb752: Import ChatGPT conversations from the OpenAI Compliance Logs Platform. A new `chatgpt_compliance` AI-integration provider polls workspace-scoped `CONVERSATION_MESSAGE` log files (the supported successor to the deprecated stateful conversations endpoint) and persists them as external chats and messages — the same tables and Agent Sessions surface the Anthropic compliance import feeds. The provider is separate from `codex_compliance` because the scopes differ: COSTS files are per API organization while conversation logs are per ChatGPT workspace, so the new config takes a workspace UUID. Includes the workspace-scoped compliance client, Temporal schedule wiring, and a "ChatGPT Conversations" integration card in org settings.
+- 2a6e703: Gram Session OAuth issuers can now control which OAuth Client ID Metadata Document clients they accept, decided before any document is fetched. An issuer can admit Gram's curated catalog of verified MCP clients (Claude Code, Claude, VS Code, Zed, Goose, ChatGPT, Codex CLI, Notion, MCPJam, Factory Droid, ToolHive) plus any URLs configured on it, admit any spec-valid client, or admit none at all; the new `userSessionIssuersCimdClients` service lists the catalog and manages per-issuer URLs, and the admission mode is readable and writable on the existing `userSessionIssuers` endpoints. Issuers that have not chosen a mode currently record what the curated policy would have decided without enforcing it, so nothing changes for existing clients while the platform gathers evidence that enforcement is safe to make the default. Separately, a metadata document that omits `token_endpoint_auth_method` is now accepted as a public client rather than rejected, matching the spec and unblocking clients such as ChatGPT and Codex CLI whose documents omit it.
+- 7fd5e1a: Classify Codex account identity and billing mode (DNO-734). Codex sessions on
+  every capture path (legacy hooks, OTEL logs, ingest adapter) now stamp
+  account_type from email resolution — resolved work email is team, anything
+  else personal — and team sessions resolve the org-level billing mode declared
+  on the codex_compliance integration config (the session provider "openai" now
+  maps to that config, fixing the mapping bug that made the config's
+  billing_mode unreachable). Compliance COSTS import rows (codex and
+  ChatGPT/Work) carry account_type=team and the config's billing mode directly.
+  The estimated-cost tooltip copy mentions ChatGPT plans alongside Claude's.
+- b9590ce: Meter Codex cloud usage (GitHub code review, web tasks) from the compliance
+  COSTS feed — those surfaces have no OTEL stream, so their token counts now
+  promote to `gen_ai.usage.*` and count toward TUM. Device clients keep
+  metering via OTEL, and unrecognized clients stay un-metered so a new surface
+  cannot silently double count.
+- 49e00bb: Import Codex cloud task transcripts as agent sessions (DNO-752). A new
+  codex_cloud_sessions schedule on the chatgpt_compliance integration polls the
+  workspace-scoped CODEX_LOG compliance feed and persists cloud web-task
+  prompts and responses as external chats + messages under the new codex-web
+  chat source, with prompt-derived titles and idempotent replays. Only
+  CODEX_WEB client events are imported (desktop-app events are counted and
+  skipped pending the unified-app verification), and the feed's per-turn token
+  counts are deliberately not persisted — cloud tokens meter through the
+  compliance COSTS promotion, so carrying them here would double count.
+  Enforcement over cloud runs remains impossible (post-hoc batch feed); this
+  provides visibility and post-hoc review only. Also fixes a latent
+  multi-schedule reset gap: a key or external-scope change on an integration
+  now resets every synced sibling schedule's watermark (previously only the
+  provider-named schedule reset, so a workspace/org change could leave a
+  sibling feed silently skipping the new scope's history).
+- c44a461: Extend spend-gate enforcement to Codex and Cursor at parity with Claude. Over-budget actors are now denied on the legacy provider endpoints (`hooks.codex`: PreToolUse, PermissionRequest, UserPromptSubmit; `hooks.cursor`: preToolUse, beforeMCPExecution, beforeSubmitPrompt) and on the unified `hooks.ingest` path for the codex and cursor adapters (case-insensitive match) — previously the ingest spend gate was Claude-only even though risk scanning already ran adapter-agnostically there. Cursor MCP calls are spend-gated exactly once (at beforeMCPExecution, mirroring the risk-scan dedup), tool-call spend denies mint a durable block page whose link rides the deny reason, idempotent redeliveries keep the deny without minting duplicate block rows, and the block page headline falls back to spend-rule framing instead of rendering an empty policy name. The gate keeps running before any risk-policy evaluation and failing open on infrastructure errors; opencode still passes through pending a product decision on its enforcement surface.
+- 21f99b0: Add `GET /v1/install/device-agent-macos.pkg`, a stable redirect to the current signed macOS device-agent installer. Resolves the current version from the public device-agent releases manifest server-side and 302s to the versioned pkg, so docs and IT-admin instructions can link to one URL instead of hardcoding a version that goes stale every release.
+- 54755b5: Add organization-level device-agent remote configuration to the existing agent
+  policy response, with admin management endpoints, versioning, validation, and
+  audit logging.
+- 28150a9: Add authenticated OTLP trace ingestion for LiteLLM telemetry.
+- 13301b5: Add a self-serve path into the shared read-only demo organization. A new `auth.enterDemo` endpoint switches any authenticated session into the demo org (no membership required); request auth, grant resolution, and member/role listings gain demo carve-outs; the demo org always enforces a fixed read-only scope set with a verb-based write guard as backstop. The dashboard gains an `/explore-demo` entry route, an "explore a live demo org" link on the book-a-demo gate, and a demo banner whose exit switches back to the user's own organization without logging out.
+- 07b95b5: Expose health and attribution diagnostics for provisioned LiteLLM integrations.
+- f926dc1: Add project-scoped LiteLLM integration provisioning, key rotation, revocation, and lifecycle metadata APIs.
+- 544c23a: Accept opt-in LiteLLM OTLP operational metrics without adding them to usage billing or sessions.
+- 9081d00: Add Microsoft Teams as an assistant trigger source. Bot Framework activities (messages, reactions, membership and installation updates) posted to a trigger webhook are verified against Microsoft's signing keys and dispatched to assistants with the same filtering (event type allowlist + CEL) as other webhook triggers.
+- 1d0aafd: Add an OpenRouter platform key lockdown. A locked-down key fails at key resolution with a distinct `inference_disabled` error rather than an upstream rejection, and a limit refresh reinstates it.
+- 909b466: The External Services page is now organization-scoped: org admins register how Gram authenticates into their own cloud account, behind a new `customer_managed_encryption_keys` entitlement enforced on both `externalCredentials` and `externalKeys`. The platform-admin UI is removed, though its endpoints remain for HTTP-only management. Two new methods support verification: `externalCredentials.verifyGcpIam` probes that Gram can actually impersonate the named service account, and `externalCredentials.getGcpSetupInfo` reports the Gram service account a customer must grant `roles/iam.serviceAccountTokenCreator` to.
+- f95d50f: Platform admins can now curate the shared remote identity provider catalog from the dashboard, under a new Platform Admin section in the sidebar: list, create, edit, refresh discoverable metadata, and delete the providers that every organization inherits. The listing reports platform-owned and tenant-owned client counts separately, so a delete that will be refused says up front which blockers the admin can clear and which belong to an organization. `adminRemoteSessions.listGlobalIssuers` and `adminRemoteSessions.getGlobalIssuer` now return both counts alongside the issuer. Organizations can register a client against an inherited platform provider straight from their own provider list.
+- 869a89b: Substitute the OAuth callback URL into the setup guide content that `mcpRegistries.getSetupDocs` returns. Published guides ship with a `{{ gram.oauth.callback_url }}` template key wherever the reader has to register a redirect URI on an upstream provider's OAuth app. The endpoint now replaces that key with this deployment's remote-login callback URL, so `external_markdown` and `speakeasy_markdown` carry a value the reader can paste directly.
+- 546c449: Add a `/sign-up` page that collects the company name before handing off to the
+  identity provider. `auth.login` takes an optional `org_name` param; when set, the
+  server validates it and stashes a signup intent against the login nonce, then
+  creates the organization during the auth callback once the identity provider has
+  answered. The name never travels through a redirect param or the address bar, and
+  a failed signup returns to `/sign-up` rather than `/register`. Signup attempts and
+  the resulting org creation are captured as `onboarding_event` / `new_org_created`
+  with `created_via: "signup"` so the funnel can be measured end to end.
+
+### Patch Changes
+
+- 02da0b1: Apply shadow-MCP policy to Codex's built-in MCP resource tools. Codex reaches
+  MCP servers through three meta-tools — `list_mcp_resources`,
+  `list_mcp_resource_templates` and `read_mcp_resource` — that carry no `mcp__`
+  prefix and name their target in `tool_input.server`. The unified ingest
+  endpoint decides whether a call is an MCP call from resolved MCP data or an
+  MCP-shaped tool name, and neither recognizes these, so they were classified as
+  ordinary tool calls: the risk scan ran but the shadow-MCP policy never did. A
+  `block_all` policy therefore did not stop a Codex session from reading any MCP
+  server's resources, while the legacy Codex endpoint denied the same call.
+
+  The gate now recognizes them for the codex adapter, and the named server is
+  resolved against the session's MCP inventory so a Gram-hosted target is still
+  allowed and a denied one is named. A meta-tool whose server cannot be resolved
+  is denied rather than allowed — an unproven target is not an absent one.
+  Sessions now cache their MCP inventory on the ingest path under the same key
+  and TTL the legacy per-provider endpoints use.
+
+  Rolled out on client capability rather than deploy order: releases before this
+  one report no adapter version and no MCP inventory, so enforcing on them would
+  deny every meta-tool call — including reads of Gram-hosted servers that work
+  today. Those clients keep their current behavior and are counted in the logs
+  until they upgrade.
+
+  A capable client that reports no inventory is denied. That can mean no MCP
+  servers are configured, but collection is best-effort and also comes back empty
+  when the codex binary cannot be located, `codex mcp list` fails, or the
+  session's inventory never reached the cache — in which case a meta-tool call is
+  denied even though servers are configured. That is the intended fail-closed
+  posture rather than an accident: the guard cannot clear a target it cannot see.
+
+- 5fb7ccb: Classify Codex OTEL rows as provider OTel telemetry, matching Claude's. The
+  canonical event URN had cases for `claude-code:otel:logs` but none for
+  `codex:otel:logs` or `codex:otel:metrics`, so Codex's provider-native stream
+  fell through to the agent-hook default and was typed
+  `urn:telemetry:agent_hook:log:unknown` — with no event name, since those rows
+  carry a producer `event.name` rather than a Gram hook event. Any filter that
+  selects provider-OTel rows by URN prefix therefore excluded Codex while
+  including the equivalent Claude traffic. Codex OTEL logs now type on their
+  producer event name (`codex.sse_event`, ...) and metric points on their
+  metric name.
+- 5fb7ccb: Route Codex OTEL telemetry from every client mode to the Codex stream, not
+  just the interactive CLI. Codex reports a different OTEL `service.name` per
+  mode and does not use one separator convention — `codex_exec` for headless
+  `codex exec` (what CI and scripted runs use), `codex_tui`, `codex_mcp`, and
+  `codex-app-server` for Codex mode in the unified ChatGPT desktop app — but
+  the ingest matched only `codex_cli_rs`. Those payloads were not dropped: they fell through to the
+  Claude path and were persisted as `claude-code:otel:logs` rows carrying
+  Claude's hook source and account attribution, so Codex traffic silently
+  inflated Claude surfaces while never being metered as Codex usage. The
+  ingest now matches the whole Codex service-name family, both separators
+  included.
+
+  Routing is also now per OTEL resource rather than per payload: a collector
+  that fans several clients into one export previously had the whole batch
+  routed by whichever client matched first, mislabeling the other client's
+  records.
+
+- e062cd3: Probe the unified ChatGPT desktop app when installing the Codex plugin
+  (DNO-737). OpenAI merged the standalone Codex app into the ChatGPT desktop
+  app, which ships the codex CLI at
+  `/Applications/ChatGPT.app/Contents/Resources/codex`; the install script only
+  probed the legacy `/Applications/Codex.app` path, so on any machine with just
+  the post-merge app it failed to find the binary and degraded to printing
+  manual instructions. The unified bundle is now probed first, with the legacy
+  path kept for pre-merge installs.
+- a3735b7: Stop rejecting current Codex clients at the Figma MCP allowlist (DNO-765).
+  Codex renamed its MCP client User-Agent — 0.144 sent `codex_cli_rs/…`, the
+  0.146 unified-app build sends `codex-mcp-client/…` — and the allowlist only
+  carried the old token, so every Codex → Figma MCP call proxied through Gram
+  was rejected as an unapproved client. Both tokens are now listed so neither
+  older deployed clients nor current ones are blocked.
+- 5b97690: Serve the hooks@0.3.13 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 82a0689: Stop reading an unreadable MCP inventory as proof a session has no MCP servers.
+
+  The Codex meta-tool shadow-MCP guard denies a call it cannot clear against the
+  session's inventory, so an empty inventory decides whether legitimate traffic is
+  blocked. But "the agent has no MCP servers configured" and "we could not read
+  the list" both arrive as zero entries, and only the sender can tell them apart —
+  collection is best-effort and comes back empty when the agent binary cannot be
+  located or the probe fails. Hook events now carry `mcp_inventory_collected`, and
+  the guard enforces only on a list that was actually read. Senders predating the
+  field omit it and keep their current behavior until they upgrade.
+
+- 0ea5ffd: Classify idle-timeout terminations of proxied MCP SSE streams correctly. The standalone GET listen stream ending on the proxy's 60s idle bound is now a clean close (200, no error log) instead of a 500 "unexpected error" — clients reconnect per spec, so quiet upstreams no longer produce one spurious 5xx per minute per connected client. A POST response stream going idle mid-reply now returns a 502 gateway error naming the idle bound instead of a bare context cancellation. Access logs also no longer relabel an already-committed response's status when a late error-path WriteHeader fires.
+- 4491521: Scope the shared LLM judge rate limiter to the OpenRouter key a call spends: platform-key calls share one bucket per model (matching OpenRouter's account-wide shared-capacity limits), while BYOK calls bucket per customer key. This stops chat analysis and risk judges from exhausting OpenRouter's per-model capacity and failing with 429s.
+- 0eed8b8: Accept dedicated MCP inventory events and cache explicit empty snapshots.
+- 817174d: Make RBAC always on, provision built-in roles and grants for new organizations,
+  and assign the first organization user the Admin role.
+- 81ba8cf: Search agent sessions by resolved member and AI account email addresses.
+- 68f1afa: Internal changes to risk finding reveal.
+- 9c784b9: Keep an enforcement block even when its optional links cannot be resolved. The
+  block URL is handed to the agent before the row is written, so a rejected
+  insert leaves the user opening a page that does not exist. Enforcement runs
+  before the hook's chat and finding rows are persisted, so a block early in a
+  session races its own chat row and the foreign key rejects — silently, since
+  the insert is detached and only logged. The write now drops whichever link the
+  database names and retries, so the block always lands and only its enrichment
+  is lost. Applies to every provider: all block paths share this writer.
+- a2da454: Fix a live tool-listing probe for unproxied MCP servers taking up to a minute or more against an unreachable vendor server instead of the intended ~10 second bound. Two independent retry layers (HTTP-transport retries and the MCP SDK's own reconnect retries) compounded on top of each other, and the SDK's own cleanup after a context deadline could itself run well past that deadline. The probe now disables both retry layers for this one-shot check and time-boxes the response to the caller independently of how long the SDK's internal cleanup takes.
+- c61c3f2: Fix a credential leak in published plugin configs: an unproxied MCP server (one whose URL points directly at a vendor, never through the platform's own gateway) could have the org's API key attached as a static Authorization header, sending it straight to the third-party vendor's server instead of the platform. Unproxied servers now carry no Gram-managed credential in any generated client config (Claude, Cursor, Codex, OpenCode), and no longer trigger an unnecessary API-key prompt during install.
+- ba561ad: Webhooks are now available to every organization, marked Beta. The Webhooks page
+  no longer shows a preview gate, and delivery is controlled solely by the
+  organization's own webhooks toggle.
+
 ## 1.4.0
 
 ### Minor Changes
