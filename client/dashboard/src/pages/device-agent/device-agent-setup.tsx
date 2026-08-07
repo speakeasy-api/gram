@@ -603,9 +603,51 @@ function GenerateInlineButton({
   );
 }
 
+// ConfigurationProfileNote surfaces the macOS-preferred alternative to the
+// script-dropped managed.json below: a native Configuration Profile (Custom
+// Settings payload) targeting the com.speakeasy.agent preference domain,
+// materialized by the OS at /Library/Managed Preferences/com.speakeasy.agent.plist.
+// Fields mirror managed.json's identity subset (no org_name/auto_update — MDM
+// tooling generally handles naming/update policy itself for profiles). Both
+// delivery methods work; if both are present, the profile wins per field.
+function ConfigurationProfileNote() {
+  return (
+    <div className="bg-secondary/30 border-border rounded-md border p-4">
+      <SubHeading>Configuration Profile (preferred on macOS)</SubHeading>
+      <Text small muted className="mt-1 mb-3">
+        Most macOS MDMs can deliver identity as a native Configuration Profile
+        instead of dropping a file — no script needed. Create a Custom Settings
+        payload for the preference domain <code>com.speakeasy.agent</code>; the
+        OS materializes it at{" "}
+        <code>/Library/Managed Preferences/com.speakeasy.agent.plist</code>.
+      </Text>
+      <CodeBlock language="xml">{`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>v</key><integer>1</integer>
+  <key>email</key><string>jane.doe@example.com</string>
+  <key>org_token</key><string>spk_org_…</string>
+  <key>org_slug</key><string>example-corp</string>
+</dict>
+</plist>`}</CodeBlock>
+      <Text small muted className="mt-2">
+        Same fields as <code>managed.json</code> below, minus{" "}
+        <code>org_name</code>/<code>auto_update</code>. The script-dropped file
+        (below) still works on macOS too — use whichever your MDM supports more
+        easily.
+      </Text>
+    </div>
+  );
+}
+
 // FleetIdentity is the MDM identity path: deploy a managed.json so IT sets
-// identity centrally. Includes inline org_token generation/rotation.
-function FleetIdentity() {
+// identity centrally. Includes inline org_token generation/rotation. On
+// macOS, a native Configuration Profile is also available and preferred
+// over the script-dropped managed.json (see ConfigurationProfileNote) —
+// both work, and the profile wins per field if both are present.
+function FleetIdentity({ os }: { os: OsKey }) {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
@@ -685,10 +727,12 @@ function FleetIdentity() {
     <div className="flex flex-col gap-8">
       <Text muted>
         On an MDM-managed device the agent reads its identity from a{" "}
-        <code>managed.json</code> that IT deploys (Kandji, Jamf, Intune, ...)
-        with no per-user enrollment. IT owns this file; the agent only reads it,
-        and it wins over anything a user sets locally.
+        <code>managed.json</code> that IT deploys (Jamf, Iru (formerly Kandji),
+        Intune, ...) with no per-user enrollment. IT owns this file; the agent
+        only reads it, and it wins over anything a user sets locally.
       </Text>
+
+      {os === "macos" && <ConfigurationProfileNote />}
 
       <div>
         <SubHeading>File location</SubHeading>
@@ -719,7 +763,7 @@ function FleetIdentity() {
         <Text small muted className="mt-2">
           <code>org_slug</code> and <code>org_name</code> are pre-filled for
           this org. <code>email</code> is per-user; have your MDM substitute its
-          per-user email variable (Kandji / Jamf <code>$EMAIL</code>, or your
+          per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
           platform's equivalent) so one profile serves the whole fleet, or omit{" "}
           <code>email</code> and have each user run{" "}
           <code>speakeasy enroll</code>. Click{" "}
@@ -903,7 +947,7 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
           </ExternalLink>
           :{" "}
           <code>.../v&lt;version&gt;/speakeasy-agent_&lt;version&gt;.pkg</code>.
-          Upload it to your MDM (Jamf, Kandji, Intune, …) as a{" "}
+          Upload it to your MDM (Jamf, Iru (formerly Kandji), Intune, …) as a{" "}
           <strong className="font-medium">Package</strong>, then scope a policy
           to install it once per computer — no script needed. The pkg installs
           the daemon, CLI, menu-bar UI, and privileged helper together, and its
@@ -965,7 +1009,7 @@ function IdentityStep({ os }: { os: OsKey }) {
           />
         </TabsList>
         <TabsContent value="fleet" className="pt-2">
-          <FleetIdentity />
+          <FleetIdentity os={os} />
         </TabsContent>
         <TabsContent value="personal" className="pt-2">
           <ManualIdentity os={os} />
@@ -1222,9 +1266,10 @@ export function DeviceAgentSetup(): React.JSX.Element {
             <p className="text-eyebrow mb-2">Fleet rollout</p>
             <Text small muted>
               Rolling out to more than a few machines? We recommend deploying
-              the agent through your MDM (Kandji, Jamf, Intune, or similar). It
-              installs the binaries and drops a <code>managed.json</code> so
-              identity and enrollment are set centrally — no per-user setup. The{" "}
+              the agent through your MDM (Jamf, Iru (formerly Kandji), Intune,
+              or similar). It installs the binaries and drops a{" "}
+              <code>managed.json</code> so identity and enrollment are set
+              centrally — no per-user setup. The{" "}
               <strong className="text-foreground font-medium">
                 Fleet (MDM)
               </strong>{" "}
